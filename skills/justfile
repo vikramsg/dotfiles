@@ -10,9 +10,28 @@ uninstall skill:
     @rm -f "$HOME/.config/opencode/skills/{{skill}}"
     @echo "Skill '{{skill}}' removed from global config."
 
+# Create a new skill directory and SKILL.md template
+create name:
+    @mkdir -p "{{name}}"
+    @printf -- "---\nname: %s\ndescription: Describe what this skill does here.\n---\n\n# %s\n\n## What I do\n- Feature 1\n- Feature 2\n\n## When to use me\nUse this skill when...\n" "{{name}}" "{{name}}" > "{{name}}/SKILL.md"
+    @echo "Created skill template in {{name}}/SKILL.md"
+
 # List all available and installed skills
 list:
     @echo "Available skills in this repo:"
     @ls -d */ | cut -f1 -d'/'
     @echo "\nCurrently installed in global config:"
     @ls -l ~/.config/opencode/skills | grep "^l" | awk '{print $9 " -> " $11}'
+
+# Test a skill's discovery and usage
+test skill:
+    @echo "Installing {{skill}}..."
+    @just install {{skill}}
+    @echo "Running OpenCode test prompt for '{{skill}}'..."
+    @OUTPUT=$(opencode run "Load the '{{skill}}' skill and explain its purpose." --format json); \
+    if echo "$OUTPUT" | grep -q '"tool":"skill"' && echo "$OUTPUT" | grep -q '"name":"{{skill}}"'; then \
+        echo "✅ Skill '{{skill}}' discovery and loading verified."; \
+    else \
+        echo "❌ Skill '{{skill}}' NOT discovered or used."; \
+        exit 1; \
+    fi

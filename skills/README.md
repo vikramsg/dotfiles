@@ -9,13 +9,26 @@ To make a skill available to OpenCode agents, it must be symlinked into the glob
 
 ## Management with `just`
 
-The `justfile` provides a simple way to manage these symlinks.
+The `justfile` provides a simple way to manage and test skills.
+
+### Create a new skill
+Scaffold a new skill directory and template:
+```bash
+just create <skill-name>
+```
 
 ### Install a skill
 To "activate" a skill globally:
 ```bash
 just install <skill-name>
 ```
+
+### Test skill discovery
+Verify that OpenCode can discover and use a specific skill correctly:
+```bash
+just test <skill-name>
+```
+This command installs the skill, triggers an OpenCode prompt to load it, and verifies the tool call in the trace.
 
 ### List skills
 To see what is available and what is currently linked:
@@ -28,6 +41,8 @@ To remove the symlink:
 ```bash
 just uninstall <skill-name>
 ```
+
+## Creating a Skill manually
 
 ## Manual Example (OpenCode)
 
