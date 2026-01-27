@@ -15,10 +15,22 @@ You can generate complex PDFs with text, images, and tables using a JSON configu
 pdfcpu create content.json output.pdf
 ```
 
-**JSON Schema for Table:**
+**JSON Schema for PDF Creation:**
 (Note: pdfcpu does not support comments in JSON files. Remove them before use.)
 ```json
 {
+  "paper": "A4", // Optional: A4, Letter, A4L, etc.
+  "margin": { "width": 20 }, // Optional: global page margin
+  "header": { // Optional: Page header
+    "font": { "name": "Helvetica", "size": 10 },
+    "center": "Report Header",
+    "height": 30
+  },
+  "footer": { // Optional: Page footer
+    "font": { "name": "Helvetica", "size": 10 },
+    "center": "Page %p of %P",
+    "height": 30
+  },
   "pages": { // Define content per page
     "1": {
       "content": {
@@ -30,6 +42,8 @@ pdfcpu create content.json output.pdf
             "width": 400, // Total table width in points
             "anchor": "center", // Table positioning (center, left, right, etc.)
             "lheight": 20, // Line height for cells
+            "grid": true, // Toggle internal grid lines (true/false)
+            "bgCol": "#FFFFFF", // Background color for the whole table
             "border": {
               "width": 1, // Border thickness
               "col": "#000000" // Border color in Hex
