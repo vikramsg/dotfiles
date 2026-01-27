@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 import json
 import os
 import logging
+import subprocess
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -47,13 +49,32 @@ def send_notification(message):
     )
 
 
+def get_local_wifi_signal():
+    """Probes the local Wi-Fi RSSI (Signal Strength) on macOS."""
+    try:
+        # system_profiler is more reliable on modern macOS than the deprecated airport utility
+        cmd = "system_profiler SPAirPortDataType | awk '/Current Network Information:/, /Signal \\/ Noise:/' | grep 'Signal / Noise'"
+        output = subprocess.check_output(cmd, shell=True).decode("utf-8")
+        # Example output: "Signal / Noise: -62 dBm / -96 dBm"
+        match = re.search(r"Signal / Noise: (-?\d+) dBm", output)
+        if match:
+            return f"{match.group(1)} dBm"
+    except Exception as e:
+        logger.debug(f"Failed to get local Wi-Fi signal: {e}")
+    return "Unknown"
+
+
 def check_battery():
     if not all([ROUTER_IP, ROUTER_USER, ROUTER_PASS]):
         logger.error("ROUTER_IP, ROUTER_USER, and ROUTER_PASS must be set in .env")
         return
 
+    # Ensure credentials are strings for HTTPDigestAuth
+    user = str(ROUTER_USER)
+    passwd = str(ROUTER_PASS)
+
     url = f"http://{ROUTER_IP}/sl4a"
-    auth = HTTPDigestAuth(ROUTER_USER, ROUTER_PASS)
+    auth = HTTPDigestAuth(user, passwd)
     payload = {"id": 1, "method": "getDeviceState", "params": []}
 
     try:
@@ -78,7 +99,8 @@ def check_battery():
 
         level = int(result.get("BatteryLevel", 0))
         status = result.get("BatteryStatus", "Unknown")
-        signal = result.get("Signal", "Unknown")
+        router_signal = result.get("Signal", "Unknown")
+        local_signal = get_local_wifi_signal()
 
         # Fetch session data
         rx_session = (
@@ -104,7 +126,8 @@ def check_battery():
 
         logger.info(f"Battery Level: {level}%")
         logger.info(f"Status: {status}")
-        logger.info(f"Signal Strength: {signal}/5 bars")
+        logger.info(f"Router Signal (Cellular): {router_signal}/5 bars")
+        logger.info(f"Local Signal (Wi-Fi): {local_signal}")
         logger.info(f"Session Download: {rx_session}")
         logger.info(f"Session Upload: {tx_session}")
 
