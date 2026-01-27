@@ -1,0 +1,18 @@
+# Install a skill by symlinking it to the OpenCode global config
+install skill:
+    @if [ ! -d "{{skill}}" ]; then echo "Error: Skill folder '{{skill}}' not found."; exit 1; fi
+    @mkdir -p ~/.config/opencode/skills
+    @ln -sfn "$(pwd)/{{skill}}" "$HOME/.config/opencode/skills/{{skill}}"
+    @echo "Skill '{{skill}}' installed to ~/.config/opencode/skills/{{skill}}"
+
+# Uninstall a skill by removing the symlink
+uninstall skill:
+    @rm -f "$HOME/.config/opencode/skills/{{skill}}"
+    @echo "Skill '{{skill}}' removed from global config."
+
+# List all available and installed skills
+list:
+    @echo "Available skills in this repo:"
+    @ls -d */ | cut -f1 -d'/'
+    @echo "\nCurrently installed in global config:"
+    @ls -l ~/.config/opencode/skills | grep "^l" | awk '{print $9 " -> " $11}'
