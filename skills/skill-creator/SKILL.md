@@ -1,8 +1,6 @@
 ---
 name: skill-creator
 description: Helps the user create, install, and test new OpenCode skills with a self-correction feedback loop.
-license: MIT
-compatibility: opencode
 ---
 
 # Skill Creator
