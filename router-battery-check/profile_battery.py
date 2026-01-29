@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run --python 3.13
+#!/usr/bin/env -S uv run --python 3.14t
 # /// script
 # dependencies = [
 #   "requests",
@@ -18,17 +18,22 @@ logging.getLogger().setLevel(logging.WARNING)
 
 
 def run_profile():
-    # Targets for profiling: Comparing Sync vs Threaded
+    # Targets for profiling: Top-level and sub-functions
     targets = [
         check_battery.check_battery_sync,
         check_battery.check_battery_threaded,
+        check_battery.fetch_router_data,
+        check_battery.get_local_wifi_signal,
     ]
 
-    print("🎯 Comparing Synchronous vs Threaded execution (5 iterations)...")
-
-    with tprof(*targets, compare=True):
-        for i in range(5):
+    print("🎯 Profiling Synchronous execution (5 iterations)...", flush=True)
+    with tprof(*targets):
+        for _ in range(5):
             check_battery.check_battery_sync()
+
+    print("\n🎯 Profiling Threaded execution (5 iterations)...", flush=True)
+    with tprof(*targets):
+        for _ in range(5):
             check_battery.check_battery_threaded()
 
 
