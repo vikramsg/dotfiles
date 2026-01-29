@@ -23,6 +23,7 @@ import os
 import logging
 import subprocess
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 # Configure logging
 logging.basicConfig(
@@ -64,82 +65,81 @@ def get_local_wifi_signal():
     return "Unknown"
 
 
-def check_battery():
+def fetch_router_data(auth, url, method):
+    """Generic function to fetch data from the router API."""
+    payload = {"id": 1, "method": method, "params": []}
+    try:
+        response = requests.post(url, json=payload, auth=auth, timeout=5)
+        response.raise_for_status()
+        return response.json().get("result")
+    except Exception as e:
+        logger.error(f"Error fetching {method}: {e}")
+        return None
+
+
+def process_results(results):
+    """Common logic to process and log the results from both sync and threaded versions."""
+    device_state, rx_session, tx_session, local_signal = results
+
+    if not device_state:
+        logger.error("Failed to retrieve device state")
+        return
+
+    level = int(device_state.get("BatteryLevel", 0))
+    status = device_state.get("BatteryStatus", "Unknown")
+    router_signal = device_state.get("Signal", "Unknown")
+
+    logger.info(f"Battery Level: {level}%")
+    logger.info(f"Status: {status}")
+    logger.info(f"Router Signal (Cellular): {router_signal}/5 bars")
+    logger.info(f"Local Signal (Wi-Fi): {local_signal}")
+    logger.info(f"Session Download: {rx_session or '0 B'}")
+    logger.info(f"Session Upload: {tx_session or '0 B'}")
+
+    if level <= LOW_BATTERY_THRESHOLD and status != "Charging":
+        send_notification(f"Battery Low: {level}% ({status})")
+    else:
+        logger.info("Battery is sufficient or charging. No alert sent.")
+
+
+def check_battery_sync():
+    """Synchronous version of the battery check."""
     if not all([ROUTER_IP, ROUTER_USER, ROUTER_PASS]):
         logger.error("ROUTER_IP, ROUTER_USER, and ROUTER_PASS must be set in .env")
         return
 
-    # Ensure credentials are strings for HTTPDigestAuth
-    user = str(ROUTER_USER)
-    passwd = str(ROUTER_PASS)
+    url = f"http://{ROUTER_IP}/sl4a"
+    auth = HTTPDigestAuth(str(ROUTER_USER), str(ROUTER_PASS))
+
+    results = (
+        fetch_router_data(auth, url, "getDeviceState"),
+        fetch_router_data(auth, url, "getMobileCurrentRxBytes"),
+        fetch_router_data(auth, url, "getMobileCurrentTxBytes"),
+        get_local_wifi_signal(),
+    )
+    process_results(results)
+
+
+def check_battery_threaded():
+    """Threaded version of the battery check."""
+    if not all([ROUTER_IP, ROUTER_USER, ROUTER_PASS]):
+        logger.error("ROUTER_IP, ROUTER_USER, and ROUTER_PASS must be set in .env")
+        return
 
     url = f"http://{ROUTER_IP}/sl4a"
-    auth = HTTPDigestAuth(user, passwd)
-    payload = {"id": 1, "method": "getDeviceState", "params": []}
+    auth = HTTPDigestAuth(str(ROUTER_USER), str(ROUTER_PASS))
 
-    try:
-        # Using digest auth as discovered during probing
-        response = requests.post(
-            url,
-            json=payload,
-            auth=auth,
-            timeout=5,
-        )
-        response.raise_for_status()
-        data = response.json()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        f1 = executor.submit(fetch_router_data, auth, url, "getDeviceState")
+        f2 = executor.submit(fetch_router_data, auth, url, "getMobileCurrentRxBytes")
+        f3 = executor.submit(fetch_router_data, auth, url, "getMobileCurrentTxBytes")
+        f4 = executor.submit(get_local_wifi_signal)
 
-        if data is None:
-            logger.error("Received empty response from router")
-            return
+        results = (f1.result(), f2.result(), f3.result(), f4.result())
 
-        result = data.get("result")
-        if result is None:
-            logger.error(f"No 'result' field in router response. Response: {data}")
-            return
-
-        level = int(result.get("BatteryLevel", 0))
-        status = result.get("BatteryStatus", "Unknown")
-        router_signal = result.get("Signal", "Unknown")
-        local_signal = get_local_wifi_signal()
-
-        # Fetch session data
-        rx_session = (
-            requests.post(
-                url,
-                json={"id": 1, "method": "getMobileCurrentRxBytes", "params": []},
-                auth=auth,
-                timeout=5,
-            )
-            .json()
-            .get("result", "0 B")
-        )
-        tx_session = (
-            requests.post(
-                url,
-                json={"id": 1, "method": "getMobileCurrentTxBytes", "params": []},
-                auth=auth,
-                timeout=5,
-            )
-            .json()
-            .get("result", "0 B")
-        )
-
-        logger.info(f"Battery Level: {level}%")
-        logger.info(f"Status: {status}")
-        logger.info(f"Router Signal (Cellular): {router_signal}/5 bars")
-        logger.info(f"Local Signal (Wi-Fi): {local_signal}")
-        logger.info(f"Session Download: {rx_session}")
-        logger.info(f"Session Upload: {tx_session}")
-
-        # Send notification only if battery is below threshold and NOT currently charging
-        if level <= LOW_BATTERY_THRESHOLD and status != "Charging":
-            send_notification(f"Battery Low: {level}% ({status})")
-        else:
-            logger.info("Battery is sufficient or charging. No alert sent.")
-
-    except Exception as e:
-        logger.error(f"Error checking battery: {e}")
+    process_results(results)
 
 
 if __name__ == "__main__":
-    check_battery()
+    # Defaulting to threaded for normal use
+    check_battery_threaded()
