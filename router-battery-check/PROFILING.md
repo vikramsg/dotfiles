@@ -1,55 +1,73 @@
-# Profiling Results: Synchronous vs. Threaded Execution
+# Profiling Results: Evolution of Performance
 
-This document details the performance comparison between sequential (synchronous) and parallel (threaded) execution in `check_battery.py`.
+This document tracks the performance optimizations of `check_battery.py`, demonstrating the impact of concurrency and native API integration.
 
 ## Methodology
 
-The profiling was performed using [tprof](https://github.com/adamchainz/tprof), which leverages Python 3.12's `sys.monitoring` for low-overhead targeted profiling.
+Profiling was performed using [tprof](https://github.com/adamchainz/tprof), leveraging Python 3.12+'s `sys.monitoring`. All results are based on 5 iterations.
 
-### Comparison Focus
-We compared two orchestration methods for data collection:
-1. **Synchronous**: Executes router API calls and the local Wi-Fi probe one after another.
-2. **Threaded**: Executes all API calls and the local Wi-Fi probe concurrently using `concurrent.futures.ThreadPoolExecutor`.
+---
 
-### Tooling
-- **Profiler**: `tprof`
-- **Runtime Manager**: `uv`
-- **Execution**: Both versions were executed 5 times to generate reliable averages.
+## Phase 1: The Bottleneck Discovery (system_profiler)
 
-## Results
-
-Executed on: 2026-01-29
-Environment: Python 3.14.2 (freethreaded)
+Initial profiling revealed that the script was dominated by a single system call.
 
 ### 1. Synchronous Execution Breakdown
-Total time for 5 iterations.
+Executed with `system_profiler` for Wi-Fi probing.
 
-| Function | Calls | Total Time | Mean ± σ | Min … Max |
-| :--- | :--- | :--- | :--- | :--- |
-| `check_battery_sync()` | 5 | 22s | 4.4s ± 98ms | 4.4s … 4.4s |
-| `get_local_wifi_signal()` | 5 | 20s | 4.1s ± 95ms | 4.1s … 4.1s |
-| `fetch_router_data()` | 15 | 1.35s | 90ms ± 73ms | 11ms … 207ms |
+| Function | Calls | Total Time | Mean ± σ |
+| :--- | :--- | :--- | :--- |
+| `check_battery_sync()` | 5 | 22.0s | **4.4s** ± 98ms |
+| `get_local_wifi_signal()` | 5 | 20.5s | **4.1s** ± 95ms |
+| `fetch_router_data()` | 15 | 1.35s | 90ms ± 73ms |
 
 ### 2. Threaded Execution Breakdown
-Total time for 5 iterations.
+Executed with `system_profiler` for Wi-Fi probing.
 
-| Function | Calls | Total Time | Mean ± σ | Min … Max |
-| :--- | :--- | :--- | :--- | :--- |
-| `check_battery_threaded()` | 5 | 20.5s | 4.1s ± 147ms | 4.1s … 4.1s |
-| `get_local_wifi_signal()` | 5 | 20.5s | 4.1s ± 148ms | 4.1s … 4.1s |
-| `fetch_router_data()` | 15 | 3.9s | 261ms ± 117ms | 63ms … 590ms |
+| Function | Calls | Total Time | Mean ± σ |
+| :--- | :--- | :--- | :--- |
+| `check_battery_threaded()` | 5 | 20.5s | **4.1s** ± 147ms |
+| `get_local_wifi_signal()` | 5 | 20.5s | **4.1s** ± 148ms |
+| `fetch_router_data()` | 15 | 3.90s | 261ms ± 117ms |
 
-## Analysis & Insights
+**Insight**: Threading "hid" the router API latency, but the script could never be faster than the 4.1s `system_profiler` call.
 
-### 1. The Bottleneck: Local Wi-Fi Probe
-The detailed function profiling confirms that `get_local_wifi_signal()` is the primary bottleneck in both versions.
-- **Duration**: It consistently takes ~4.1 seconds.
-- **Impact**: In the synchronous version, it accounts for ~93% of the total execution time.
+---
 
-### 2. Concurrency Efficiency
-In the threaded version, the router API calls (`fetch_router_data`) and the Wi-Fi probe run concurrently.
-- **Overlap**: Even though `fetch_router_data` latency increased in the threaded environment (likely due to thread management or network contention), it is entirely "hidden" behind the 4.1s execution time of the Wi-Fi probe.
-- **Wall-clock Gain**: The total time for `check_battery_threaded` matches the time of `get_local_wifi_signal` almost exactly, proving that all other tasks finished within that window.
+## Phase 2: WLAN Optimization (CoreWLAN)
 
-## Conclusion
-Threading provides a cleaner architectural separation and ensures network latency doesn't stack on top of system latency. However, to achieve significant speed improvements, the local Wi-Fi probing mechanism itself would need to be replaced with a faster alternative.
+We replaced the shell-based `system_profiler` with the native macOS `CoreWLAN` framework.
+
+| Method | Avg. Time | Speedup |
+| :--- | :--- | :--- |
+| `system_profiler` (Shell) | 4,100ms | Baseline |
+| `CoreWLAN` (Native) | **4ms** | **1,025x Faster** |
+
+---
+
+## Phase 3: Final Optimized Results
+
+With the WLAN bottleneck removed, the script is now limited only by network I/O.
+
+### 1. Synchronous Execution (Optimized)
+| Function | Calls | Total Time | Mean ± σ |
+| :--- | :--- | :--- | :--- |
+| `check_battery_sync()` | 5 | 1.42s | **284ms** ± 14ms |
+| `get_local_wifi_signal()` | 5 | 30ms | 6ms ± 5ms |
+
+### 2. Threaded Execution (Optimized)
+| Function | Calls | Total Time | Mean ± σ |
+| :--- | :--- | :--- | :--- |
+| `check_battery_threaded()` | 5 | 1.17s | **235ms** ± 51ms |
+| `get_local_wifi_signal()` | 5 | 21ms | 4ms ± 0.7ms |
+
+---
+
+## Analysis & Conclusion
+
+### Summary of Gains
+- **Total Execution**: Reduced from **4,400ms** to **235ms**.
+- **Efficiency**: Threading provides a ~17% improvement even in the optimized state by overlapping concurrent router API requests.
+- **Architectural Shift**: Moving from shell-scraping to native APIs (`CoreWLAN`) provided the most significant performance leap (98% reduction in wall-clock time).
+
+The project now maintains a high-performance profile suitable for frequent background execution.

@@ -8,12 +8,7 @@
 # ///
 
 """
-This script checks the battery status of a router via its API and sends a native macOS
-notification if the battery level falls below a specified threshold and the device is
-not currently charging.
-
-Usage:
-    ./check_battery.py (directly via uv)
+Synchronous version of the router battery check script.
 """
 
 import requests
@@ -24,9 +19,7 @@ import os
 import logging
 import subprocess
 import re
-from concurrent.futures import ThreadPoolExecutor
 import CoreWLAN
-
 
 # Configure logging
 logging.basicConfig(
@@ -87,7 +80,7 @@ def fetch_router_data(auth, url, method):
 
 
 def process_results(results):
-    """Common logic to process and log the results from both sync and threaded versions."""
+    """Common logic to process and log the results."""
     device_state, rx_session, tx_session, local_signal = results
 
     if not device_state:
@@ -111,8 +104,8 @@ def process_results(results):
         logger.info("Battery is sufficient or charging. No alert sent.")
 
 
-def check_battery():
-    """Version of the battery check using concurrency."""
+def check_battery_sync():
+    """Synchronous version of the battery check."""
     if not all([ROUTER_IP, ROUTER_USER, ROUTER_PASS]):
         logger.error("ROUTER_IP, ROUTER_USER, and ROUTER_PASS must be set in .env")
         return
@@ -120,17 +113,14 @@ def check_battery():
     url = f"http://{ROUTER_IP}/sl4a"
     auth = HTTPDigestAuth(str(ROUTER_USER), str(ROUTER_PASS))
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        f1 = executor.submit(fetch_router_data, auth, url, "getDeviceState")
-        f2 = executor.submit(fetch_router_data, auth, url, "getMobileCurrentRxBytes")
-        f3 = executor.submit(fetch_router_data, auth, url, "getMobileCurrentTxBytes")
-        f4 = executor.submit(get_local_wifi_signal)
-
-        results = (f1.result(), f2.result(), f3.result(), f4.result())
-
+    results = (
+        fetch_router_data(auth, url, "getDeviceState"),
+        fetch_router_data(auth, url, "getMobileCurrentRxBytes"),
+        fetch_router_data(auth, url, "getMobileCurrentTxBytes"),
+        get_local_wifi_signal(),
+    )
     process_results(results)
 
 
 if __name__ == "__main__":
-    # Defaulting to concurrent version for normal use
-    check_battery()
+    check_battery_sync()
