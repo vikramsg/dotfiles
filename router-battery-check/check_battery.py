@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run --script
+#!/usr/bin/env -S uv run --python 3.14t
 # /// script
 # dependencies = [
 #   "requests",
