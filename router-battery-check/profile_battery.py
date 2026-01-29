@@ -1,4 +1,3 @@
-#!/usr/bin/env -S uv run --python 3.14t
 # /// script
 # requires-python = ">=3.14"
 # dependencies = [
