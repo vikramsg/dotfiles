@@ -5,6 +5,7 @@
 ------------------------------------------------------------------------------
 -- General & Navigation:
 --   Space (Leader) : The prefix for most custom commands
+--   <leader>1..9   : Jump to visible buffer 1 through 9 (Lualine index)
 --   <C-h,j,k,l>    : Navigate between splits
 --   <leader>d      : Delete without yanking
 --   <leader>a      : Toggle Autocomplete (nvim-cmp)
@@ -90,6 +91,13 @@ vim.g.mapleader = " "
 ------------------------------------------------------------------------------
 -- Vim keybindings
 ------------------------------------------------------------------------------
+
+-- Jump to buffers based on their visual order (1-9) in Lualine
+for i = 1, 9 do
+	vim.keymap.set("n", "<leader>" .. i, function()
+		require("lualine.components.buffers").buffer_jump(i)
+	end, { desc = "Jump to visual buffer " .. i })
+end
 
 -- Keybinds to make split navigation easier.
 --  Use CTRL+<hjkl> to switch between windows
@@ -790,7 +798,12 @@ require("lazy").setup({
 					-- Setting the letter after lualine decides which position the status is at.
 					-- Only a,b,c x,y,z are available
 					lualine_a = { "branch" },
-					lualine_b = { "buffers" },
+					lualine_b = {
+						{
+							"buffers",
+							mode = 2, -- Shows buffer index + buffer name
+						},
+					},
 					lualine_x = {
 						{
 							function()
