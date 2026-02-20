@@ -12,8 +12,9 @@ nvim:
 # Set up Tmux symlink
 tmux:
     @echo "Setting up Tmux symlink..."
-    ln -sf {{justfile_directory()}}/tmux/.tmux.conf ~/.tmux.conf
-    @echo "Tmux symlink created at ~/.tmux.conf -> {{justfile_directory()}}/tmux/.tmux.conf"
+    mkdir -p ~/.config
+    ln -sfn {{justfile_directory()}}/tmux ~/.config/tmux
+    @echo "Tmux symlink created at ~/.config/tmux -> {{justfile_directory()}}/tmux"
 
 # Set up all symlinks
 all: nvim tmux
