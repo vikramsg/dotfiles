@@ -14,6 +14,8 @@ tmux:
     @echo "Setting up Tmux symlink..."
     ln -sf {{justfile_directory()}}/tmux/.tmux.conf ~/.tmux.conf
     @echo "Tmux symlink created at ~/.tmux.conf -> {{justfile_directory()}}/tmux/.tmux.conf"
+    @echo "Installing Tmux Plugin Manager (TPM)..."
+    @if [ ! -d ~/.tmux/plugins/tpm ]; then git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm; else echo "TPM is already installed."; fi
 
 # Set up all symlinks
 all: nvim tmux
