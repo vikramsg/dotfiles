@@ -11,13 +11,18 @@
 --   <leader>a      : Toggle Autocomplete (nvim-cmp)
 --   <leader>f      : Format current buffer (Conform)
 --
+--
 -- Git (Diffview & LazyGit):
 --   <leader>gs : Open Diffview (against index/HEAD)
 --   <leader>gm : Open Diffview (against main branch)
 --   <leader>gS : Close Diffview
+--   <leader>gM : Close Diffview
 --   <leader>gh : File History (Diffview)
 --   <leader>gH : Close File History
 --   <leader>lg : LazyGit (Floating terminal)
+--   In Diffview (working tree):
+--     do : Diff Obtain (Pull hunk from other split to revert/stage)
+--     X  : Restore file (in file panel)
 --
 -- Search (Telescope):
 --   <leader>sf : Search Files
@@ -907,9 +912,15 @@ require("lazy").setup({
 
 			-- Close Diffview
 			vim.keymap.set("n", "<leader>gS", "<cmd>DiffviewClose<CR>", { desc = "Close Git status (Diffview)" })
+			vim.keymap.set("n", "<leader>gM", "<cmd>DiffviewClose<CR>", { desc = "Close Git status (Diffview)" })
 
 			-- Open current file history
-			vim.keymap.set("n", "<leader>gh", "<cmd>DiffviewFileHistory %<CR>", { desc = "Git history for current file" })
+			vim.keymap.set(
+				"n",
+				"<leader>gh",
+				"<cmd>DiffviewFileHistory %<CR>",
+				{ desc = "Git history for current file" }
+			)
 
 			-- Close current file history
 			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewFileHistoryClose<CR>", { desc = "Close Git history" })
