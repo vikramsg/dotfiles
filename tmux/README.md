@@ -1,35 +1,38 @@
-# Install
+# Tmux Setup Guide
 
-Install plugin manager from herei https://github.com/tmux-plugins/tpm
+This directory contains the configuration files for Tmux, a terminal multiplexer.
 
-Put the following lines in ~/.tmux.conf
+## Prerequisites & macOS Compatibility Note
 
-Then do
+macOS ships with an outdated version of Bash (`bash 3.2.57`) due to GPLv3 licensing issues. Many modern Tmux plugins and themes (such as `janoamaral/tokyo-night-tmux` and `fabioluciano/tmux-powerkit`) rely on features introduced in newer versions of Bash (specifically associative arrays `declare -A` and global declarations `declare -g`).
 
-```
-tmux conf ~/.tmux.conf
-```
+If you are using macOS, **you must install a modern version of bash** for these themes to load their color palettes correctly. If you do not upgrade bash, the theme scripts will crash silently or fallback to default, often ugly, colors (e.g., a solid mustard yellow background).
 
-and then finally from inside a tmux session do
+### Installing Modern Bash
 
-```
-ctrl + b + I
-```
+You can install a modern version of Bash using Homebrew. This will not change your default interactive shell (which remains `zsh`), but it will make modern bash available in your `PATH` for scripts to use.
 
-This can also be done using 
-
-```
-tmux source-file ~/.tmux.conf
+```bash
+brew install bash
 ```
 
-## Linking
+After installing, you **must restart the tmux server** completely for it to pick up the new bash executable.
 
-We are going to link the `.tmux.conf` from here to our default config file to make it easy to manage config from git.
+1. Save your sessions (if using `tmux-resurrect`): `<prefix> + Ctrl-s`
+2. Kill the server: `tmux kill-server`
+3. Restart tmux: `tmux`
+4. Restore your sessions: `<prefix> + Ctrl-r`
 
-```sh
-ln -s /Users/vikramsingh/Projects/Personal/Experiments/conf/tmux/.tmux.conf ~/.tmux.conf
-```
+## Current Setup
 
-## TODO
+*   **Plugin Manager:** TPM (`~/.tmux/plugins/tpm`)
+*   **Theme:** `janoamaral/tokyo-night-tmux` (Configured for a Lualine-style "bubbles/powerline" aesthetic with the 'night' variant).
+*   **Session Management:** `tmux-resurrect` & `tmux-continuum`
+*   **Navigation:** `vim-tmux-navigator` (Seamless navigation between Neovim splits and Tmux panes).
 
-`tmux` is still not showing the git branch on the status line!
+### Managing Plugins
+
+1.  Add new plugin to `~/.tmux.conf` with `set -g @plugin '...'`
+2.  Press `prefix` + `I` (capital i) to install plugins.
+3.  Press `prefix` + `U` to update plugins.
+4.  Press `prefix` + `alt` + `u` to remove/uninstall plugins not on the plugin list.
