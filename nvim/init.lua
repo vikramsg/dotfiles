@@ -11,16 +11,13 @@
 --   <leader>a      : Toggle Autocomplete (nvim-cmp)
 --   <leader>f      : Format current buffer (Conform)
 --
--- Git (Fugitive & LazyGit):
---   <leader>gs : Git Status (Fugitive)
---   <leader>gd : Side-by-side Diff (against index)
+-- Git (Diffview & LazyGit):
+--   <leader>gs : Open Diffview (against index/HEAD)
+--   <leader>gm : Open Diffview (against main branch)
+--   <leader>gS : Close Diffview
+--   <leader>gh : File History (Diffview)
+--   <leader>gH : Close File History
 --   <leader>lg : LazyGit (Floating terminal)
---   In Status/Diff:
---     -     : Stage / Unstage
---     =     : Toggle inline diff
---     gf    : Jump to real file & close diff
---     dp/do : Diff Put / Obtain (Stage hunk)
---     cc    : Commit
 --
 -- Search (Telescope):
 --   <leader>sf : Search Files
@@ -127,6 +124,17 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 	group = vim.api.nvim_create_augroup("kickstart-highlight-yank", { clear = true }),
 	callback = function()
 		vim.highlight.on_yank()
+	end,
+})
+
+-- Automatically equalize splits when terminal window resizes (e.g. tmux zoom)
+vim.api.nvim_create_autocmd("VimResized", {
+	desc = "Automatically equalize splits when terminal window resizes (e.g. tmux zoom)",
+	group = vim.api.nvim_create_augroup("resize_splits", { clear = true }),
+	callback = function()
+		local current_tab = vim.api.nvim_get_current_tabpage()
+		vim.cmd("tabdo wincmd =")
+		vim.api.nvim_set_current_tabpage(current_tab)
 	end,
 })
 
@@ -886,45 +894,25 @@ require("lazy").setup({
 		end,
 	},
 
-	-- vim-fugitive
+	-- Diffview.nvim for VS Code-like Git Diff sidebar
 	{
-		"tpope/vim-fugitive",
+		"sindrets/diffview.nvim",
+		dependencies = { "nvim-tree/nvim-web-devicons" },
 		config = function()
-			-- Modern Fugitive uses :Git (or :G) instead of :Gstatus
-			vim.keymap.set("n", "<leader>gs", vim.cmd.Git, { desc = "Git status" })
-			vim.keymap.set("n", "<leader>gd", ":Gdiffsplit<CR>", { desc = "Git diff current file" })
+			-- Open Diffview (against index/HEAD)
+			vim.keymap.set("n", "<leader>gs", "<cmd>DiffviewOpen<CR>", { desc = "Git status (Diffview)" })
 
-			-- Custom Fugitive mappings
-			vim.api.nvim_create_autocmd("FileType", {
-				pattern = "fugitive",
-				callback = function()
-					-- In the status window, make 'Enter' on a hunk jump to the file at that line
-					vim.keymap.set("n", "<CR>", function()
-						local line = vim.fn.getline(".")
-						if line:match("^@@") or line:match("^[+-]") then
-							return "o"
-						end
-						return "<CR>"
-					end, { buffer = true, expr = true, remap = true })
-				end,
-			})
+			-- Open Diffview against main branch
+			vim.keymap.set("n", "<leader>gm", "<cmd>DiffviewOpen main<CR>", { desc = "Git diff against main branch" })
 
-			-- Global mapping: make 'gf' jump to the real file and close the diff
-			vim.keymap.set("n", "gf", function()
-				if vim.wo.diff then
-					-- FugitiveReal() returns the path to the actual file on disk
-					local real_file = vim.fn.FugitiveReal()
-					vim.cmd("edit " .. real_file)
-					vim.cmd("only")
-				else
-					-- Fallback to built-in gf
-					-- We use pcall to catch 'File not found' errors and print them cleanly
-					local ok, _ = pcall(vim.cmd.normal, { "gf", bang = true })
-					if not ok then
-						print("gf: File not found in path")
-					end
-				end
-			end, { desc = "Jump to working tree file and close diff" })
+			-- Close Diffview
+			vim.keymap.set("n", "<leader>gS", "<cmd>DiffviewClose<CR>", { desc = "Close Git status (Diffview)" })
+
+			-- Open current file history
+			vim.keymap.set("n", "<leader>gh", "<cmd>DiffviewFileHistory %<CR>", { desc = "Git history for current file" })
+
+			-- Close current file history
+			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewFileHistoryClose<CR>", { desc = "Close Git history" })
 		end,
 	},
 })
