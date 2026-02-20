@@ -12,5 +12,10 @@
   },
   "experimental": {
     "plan": true
+  },
+  "general": {
+    "plan": {
+      "directory": ".gemini/plans"
+    }
   }
 }
