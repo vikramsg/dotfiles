@@ -15,6 +15,12 @@ tmux:
     mkdir -p ~/.config
     ln -sfn {{justfile_directory()}}/tmux ~/.config/tmux
     @echo "Tmux symlink created at ~/.config/tmux -> {{justfile_directory()}}/tmux"
+    @if [ ! -d ~/.tmux/plugins/tpm ]; then \
+        echo "Installing Tmux Plugin Manager (TPM)..."; \
+        git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm; \
+    else \
+        echo "TPM is already installed."; \
+    fi
 
 # Set up all symlinks
 all: nvim tmux
