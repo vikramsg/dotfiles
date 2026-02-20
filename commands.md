@@ -42,3 +42,9 @@ To remove those, use:
 brew autoremove
 
 ```
+
+## Gemini
+
+```
+npm install -g @google/gemini-cli
+```

@@ -1,5 +1,5 @@
-#!/usr/bin/env -S uv run --python 3.14t
 # /// script
+# requires-python = ">=3.14"
 # dependencies = [
 #   "requests",
 #   "python-dotenv",
@@ -8,10 +8,11 @@
 # ]
 # ///
 
+import logging
+
 import check_battery
 import check_battery_sync
 from tprof import tprof
-import logging
 
 # Silence the main scripts' logs to keep the profiling output clean
 logging.getLogger("check_battery").setLevel(logging.WARNING)

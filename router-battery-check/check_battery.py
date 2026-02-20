@@ -1,5 +1,6 @@
 #!/usr/bin/env -S uv run --python 3.14t
 # /// script
+# requires-python = ">=3.14"
 # dependencies = [
 #   "requests",
 #   "python-dotenv",
@@ -16,17 +17,16 @@ Usage:
     ./check_battery.py (directly via uv)
 """
 
-import requests
-from requests.auth import HTTPDigestAuth
-from dotenv import load_dotenv
-import json
-import os
 import logging
-import subprocess
+import os
 import re
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
-import CoreWLAN
 
+import CoreWLAN
+import requests
+from dotenv import load_dotenv
+from requests.auth import HTTPDigestAuth
 
 # Configure logging
 logging.basicConfig(
