@@ -16,17 +16,8 @@ ET solves the roaming problem by establishing a custom TCP connection (default p
 
 `et` must be installed on both your local Mac and your remote VM.
 
-### Local (macOS)
 ```bash
-brew install eternalterminal
-```
-
-### Remote (Ubuntu/Debian VM)
-SSH into your VM one last time and run:
-```bash
-sudo add-apt-repository ppa:jgmath2000/et
-sudo apt-get update
-sudo apt-get install et
+brew install MisterTea/et/et
 ```
 
 **⚠️ Important Firewall Note:**
@@ -44,15 +35,12 @@ Add a block like this to your local SSH config file to create a short alias (`vm
 ```ssh-config
 Host vm
     # Your actual GCP VM IP or hostname
-    HostName 34.89.152.146 
-    IdentityFile /Users/vikramsingh/.ssh/google_compute_engine
-    UserKnownHostsFile=/Users/vikramsingh/.ssh/google_compute_known_hosts
-    HostKeyAlias=compute.3281124291587027778
-    IdentitiesOnly=yes
+    HostName <ip> 
+    IdentityFile /path/to/key 
     # Force SSH to allocate a TTY (required for Tmux)
     RequestTTY yes
     # Automatically attach or create the dotfiles session
-    RemoteCommand tmux new -A -s dotfiles
+    RemoteCommand tmux new -A -s <session-name> 
 ```
 
 *Note: If you just run standard `ssh vm` now, it will connect and drop you right into the Tmux session.*
@@ -74,8 +62,3 @@ alias vm="et vm -c 'tmux new -A -s dotfiles'"
 4.  Close your laptop, go to a coffee shop, open it back up.
 5.  Start typing. ET resumes the connection in milliseconds.
 
-## Tmux Quality of Life Settings (Already Applied)
-To ensure copy/pasting and git pushes work seamlessly inside this remote Tmux session, your `tmux.conf` already includes two critical settings:
-
-1.  **`set -g set-clipboard on`**: Enables OSC52. When you copy text inside Neovim/Tmux on the remote VM, it is securely forwarded over the connection directly into your local Mac's clipboard.
-2.  **`set -g update-environment "SSH_AUTH_SOCK"`**: Ensures that if you detach and reattach (or ET resumes a session), your local SSH keys (like your GitHub key) are correctly forwarded into the Tmux environment so `git push` continues to work without permission denied errors.
