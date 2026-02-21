@@ -1,0 +1,10 @@
+{
+  "permission": {
+    "bash": "allow",
+    "edit": "allow",
+    "write": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "read": "allow"
+  }
+}

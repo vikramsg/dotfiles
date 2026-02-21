@@ -22,19 +22,10 @@ To achieve a true "YOLO mode" where OpenCode can run autonomously without any pe
 
 Instead of permanently altering your default `opencode.json` to be unsafe, you can use the `OPENCODE_CONFIG` environment variable to launch a specific configuration file on demand.
 
-1.  **Create a YOLO config file (`yolo.json`):**
-    Place this file in `~/.config/opencode/yolo.json`
-    ```json
-    {
-      "permission": {
-        "bash": "allow",
-        "edit": "allow",
-        "write": "allow",
-        "glob": "allow",
-        "grep": "allow",
-        "read": "allow"
-      }
-    }
+1.  **Use the YOLO config file (`yolo.json`):**
+    This dotfiles repository contains a `yolo.json` configuration file ready to use. Symlink it to your config directory:
+    ```bash
+    ln -s ~/Projects/Personal/dotfiles/opencode/yolo.json ~/.config/opencode/yolo.json
     ```
 
 2.  **Launch OpenCode with the YOLO config:**
