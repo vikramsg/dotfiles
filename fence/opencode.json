@@ -1,0 +1,11 @@
+{
+  "extends": "code",
+  "network": {
+    "allowedDomains": [
+      "localhost"
+    ]
+  },
+  "filesystem": {
+    "allowWrite": ["."]
+  }
+}
