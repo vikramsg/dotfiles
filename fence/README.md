@@ -65,3 +65,13 @@ To watch the logs live while OpenCode is running, simply open a second terminal 
 ```bash
 tail -f ~/.config/fence/sandbox.log
 ```
+
+## 🍎 macOS Specifics
+
+Since you are running on macOS, Fence uses Apple's native **`sandbox-exec`** (Seatbelt) engine under the hood rather than Linux's `bubblewrap`. 
+
+There are a few macOS-specific configuration details to be aware of if you ever need to customize the `opencode.json` file:
+
+1.  **PTY Allocation (`allowPty`):** OpenCode is an interactive TUI, which means it requires a Pseudo-Terminal (PTY) to render correctly. Fence has a macOS-specific setting called `"allowPty": true`. (This is automatically included and set to `true` by the `code` template we are extending, so you don't need to add it manually).
+2.  **Unix Sockets (`allowUnixSockets`):** If you ever need OpenCode to interact with local services running via Unix sockets (e.g., Docker daemon or a local database), macOS requires explicit permission for this. You can add `"allowAllUnixSockets": true` to your network config, or allow specific paths via `"allowUnixSockets": ["/var/run/docker.sock"]`.
+3.  **Config Path:** While `~/.config/fence/` works perfectly fine (and matches standard Linux XDG paths), the *native* macOS default configuration path for Fence is actually `~/Library/Application Support/fence/fence.json`. Either path works seamlessly.
