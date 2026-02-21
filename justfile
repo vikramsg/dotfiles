@@ -22,6 +22,15 @@ tmux:
         echo "TPM is already installed."; \
     fi
 
+# Set up Tmux symlink
+opencode:
+    @echo "Setting up Opencode symlink..."
+    mkdir -p ~/.config
+    mkdir -p ~/.config/opencode
+    ln -sfn {{justfile_directory()}}/opencode/opencode.json ~/.config/opencode/opencode.json
+    @echo "Tmux symlink created at ~/.config/tmux -> {{justfile_directory()}}/tmux"
+
+
 # Set up all symlinks
 all: nvim tmux
     @echo "All dotfiles symlinked successfully!"
