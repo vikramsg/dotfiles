@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-websearch-cited@1.2.0"],
+  "lsp": false,
+  "formatter": false,
+  "provider": {
+    "google": {
+      "options": {
+        "websearch_cited": {
+          "model": "gemini-3-flash-preview"
+        }
+      }
+    }
+  }
+}

@@ -49,6 +49,13 @@
 --   rn : Rename variable
 --   ca : Code Action
 --   K  : Hover documentation
+--
+-- OpenCode AI:
+--   <leader>oa : Ask OpenCode about current selection/file
+--   <leader>ox : Execute OpenCode action menu
+--   <leader>ot : Toggle OpenCode window
+--   <leader>oo : OpenCode operator (e.g., <leader>ooip for paragraph)
+--   <leader>ol : Add current line to OpenCode
 ------------------------------------------------------------------------------
 
 -- hacky way to ignore the vim global warnings issue
@@ -656,6 +663,8 @@ require("lazy").setup({
 			end,
 			formatters_by_ft = {
 				json = { "prettier" },
+				jsonc = { "prettier" },
+				json5 = { "prettier" },
 				lua = { "stylua" },
 				-- Conform can also run multiple formatters sequentially
 				python = { -- To fix auto-fixable lint errors.
@@ -928,6 +937,69 @@ require("lazy").setup({
 
 			-- Close current file history
 			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewFileHistoryClose<CR>", { desc = "Close Git history" })
+		end,
+	},
+
+	-- OpenCode AI Integration
+	{
+		"nickjvandyke/opencode.nvim",
+		version = "*", -- Latest stable release
+		dependencies = {
+			{
+				"folke/snacks.nvim",
+				optional = true,
+				opts = {
+					input = {},
+					picker = {
+						actions = {
+							opencode_send = function(...)
+								return require("opencode").snacks_picker_send(...)
+							end,
+						},
+						win = {
+							input = {
+								keys = {
+									["<a-a>"] = { "opencode_send", mode = { "n", "i" } },
+								},
+							},
+						},
+					},
+					terminal = {},
+				},
+			},
+		},
+		config = function()
+			---@type opencode.Opts
+			vim.g.opencode_opts = {
+				provider = {
+					enabled = "tmux",
+					tmux = {},
+				},
+			}
+
+			vim.o.autoread = true -- Required for opts.events.reload
+
+			-- Leader focused keymaps
+			vim.keymap.set({ "n", "x" }, "<leader>oa", function()
+				require("opencode").ask("@this: ", { submit = true })
+			end, { desc = "Ask OpenCode…" })
+
+			vim.keymap.set({ "n", "x" }, "<leader>ox", function()
+				require("opencode").select()
+			end, { desc = "Execute OpenCode action menu" })
+
+			vim.keymap.set({ "n", "t" }, "<leader>ot", function()
+				require("opencode").toggle()
+			end, { desc = "Toggle OpenCode window" })
+
+			-- Vim operators
+			vim.keymap.set({ "n", "x" }, "<leader>oo", function()
+				return require("opencode").operator("@this ")
+			end, { desc = "Add range to OpenCode", expr = true })
+
+			vim.keymap.set("n", "<leader>ol", function()
+				return require("opencode").operator("@this ") .. "_"
+			end, { desc = "Add line to OpenCode", expr = true })
 		end,
 	},
 })
