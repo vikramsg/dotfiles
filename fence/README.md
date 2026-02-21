@@ -51,8 +51,17 @@ alias opencode-yolo-safe='OPENCODE_CONFIG="$HOME/Projects/Personal/dotfiles/open
 
 ### 4. Auditing Mode (Optional)
 
-If you want to see exactly what OS-level violations Fence is blocking while the AI operates autonomously, you can run Fence in monitor mode (`-m`):
+Because OpenCode runs an interactive TUI, printing sandbox logs directly to the terminal can disrupt the interface. The best way to audit the AI's behavior and see exactly what Fence is allowing or blocking is to redirect Fence's debug logs to a separate file.
+
+You can set up an audit alias that runs Fence in debug mode (`-d`) and redirects standard error (`2>`) to a log file:
 
 ```bash
-alias opencode-yolo-audit='OPENCODE_CONFIG="$HOME/Projects/Personal/dotfiles/opencode/yolo.json" fence -m --settings "$HOME/.config/fence/opencode.json" -- opencode'
+# Run OpenCode in YOLO mode and redirect Fence debug logs to a file
+alias opencode-yolo-audit='OPENCODE_CONFIG="$HOME/Projects/Personal/dotfiles/opencode/yolo.json" fence -d --settings "$HOME/.config/fence/opencode.json" -- opencode 2> ~/.config/fence/sandbox.log'
+```
+
+To watch the logs live while OpenCode is running, simply open a second terminal window and tail the log file:
+
+```bash
+tail -f ~/.config/fence/sandbox.log
 ```
