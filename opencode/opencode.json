@@ -1,5 +1,18 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "~/.config/opencode/rules.md"
+  ],
+  "permission": {
+    "edit": {
+      "**/*.sqlite": "deny",
+      "**/*.db": "deny"
+    },
+    "write": {
+      "**/*.sqlite": "deny",
+      "**/*.db": "deny"
+    }
+  },
   "plugin": ["opencode-websearch-cited@1.2.0"],
   "lsp": false,
   "formatter": false,
