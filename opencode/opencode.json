@@ -4,13 +4,9 @@
     "~/.config/opencode/rules.md"
   ],
   "permission": {
-    "edit": {
-      "**/*.sqlite": "deny",
-      "**/*.db": "deny"
-    },
-    "write": {
-      "**/*.sqlite": "deny",
-      "**/*.db": "deny"
+    "bash": {
+      "*rm*.sqlite*": "deny",
+      "*rm*.db*": "deny"
     }
   },
   "plugin": ["opencode-websearch-cited@1.2.0"],
