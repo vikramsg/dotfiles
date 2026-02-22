@@ -14,7 +14,7 @@
 --
 -- Git (Diffview & LazyGit):
 --   <leader>gs : Open Diffview (against index/HEAD)
---   <leader>gm : Open Diffview (against main branch)
+--   <leader>gm : Open Diffview (against main or master branch)
 --   <leader>gS : Close Diffview
 --   <leader>gM : Close Diffview
 --   <leader>gh : File History (Diffview)
@@ -920,8 +920,22 @@ require("lazy").setup({
 			-- Open Diffview (against index/HEAD)
 			vim.keymap.set("n", "<leader>gs", "<cmd>DiffviewOpen<CR>", { desc = "Git status (Diffview)" })
 
-			-- Open Diffview against main branch
-			vim.keymap.set("n", "<leader>gm", "<cmd>DiffviewOpen main<CR>", { desc = "Git diff against main branch" })
+			-- Open Diffview against main or master branch
+			vim.keymap.set("n", "<leader>gm", function()
+				vim.fn.system("git rev-parse --verify main 2>/dev/null")
+				if vim.v.shell_error == 0 then
+					vim.cmd("DiffviewOpen main")
+					return
+				end
+
+				vim.fn.system("git rev-parse --verify master 2>/dev/null")
+				if vim.v.shell_error == 0 then
+					vim.cmd("DiffviewOpen master")
+					return
+				end
+
+				vim.api.nvim_err_writeln("Failed: Neither 'main' nor 'master' branch found")
+			end, { desc = "Git diff against main or master branch" })
 
 			-- Close Diffview
 			vim.keymap.set("n", "<leader>gS", "<cmd>DiffviewClose<CR>", { desc = "Close Git status (Diffview)" })
