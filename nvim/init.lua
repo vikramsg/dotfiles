@@ -251,7 +251,12 @@ require("lazy").setup({
 				if ext == "" then
 					return
 				end
-				builtin.live_grep({ glob_pattern = "*." .. ext })
+				builtin.live_grep({
+					glob_pattern = "*." .. ext,
+					additional_args = function()
+						return { "--hidden" }
+					end,
+				})
 			end, { desc = "[S]earch by Grep in File [T]ype" })
 			vim.keymap.set("n", "<leader>sd", builtin.diagnostics, { desc = "[S]earch [D]iagnostics" })
 			vim.keymap.set("n", "<leader>sr", builtin.resume, { desc = "[S]earch [R]esume" })
