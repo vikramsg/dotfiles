@@ -10,6 +10,7 @@
 --   <leader>d      : Delete without yanking
 --   <leader>a      : Toggle Autocomplete (nvim-cmp)
 --   <leader>f      : Format current buffer (Conform)
+--   <leader>cp     : Copy absolute path of current file to clipboard
 --
 --
 -- Git (Diffview & LazyGit):
@@ -128,6 +129,13 @@ vim.keymap.set("x", "p", "P", { desc = "Paste without overwriting register" })
 
 -- Delete without yanking (to the black hole register)
 vim.keymap.set({ "n", "v" }, "<leader>d", [["_x]], { desc = "Delete character/selection without yanking" })
+
+-- Copy absolute path of current file to clipboard
+vim.keymap.set("n", "<leader>cp", function()
+	local path = vim.fn.expand("%:p")
+	vim.fn.setreg("+", path)
+	vim.notify('Copied "' .. path .. '" to clipboard')
+end, { desc = "Copy absolute path of current file to clipboard" })
 
 --  Try it with `yap` in normal mode
 --  See `:help vim.highlight.on_yank()`
