@@ -29,6 +29,7 @@
 --   <leader>sf : Search Files
 --   <leader>sF : Search ALL Files (including git-ignored)
 --   <leader>sg : Search by Grep (Live)
+--   <leader>st : Search by Grep in File Type (prompts for extension)
 --   <leader>sG : Search by Grep ALL (including git-ignored)
 --   <leader><leader> : Search Open Buffers
 --   <leader>sw : Search current Word
@@ -245,6 +246,13 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>ss", builtin.builtin, { desc = "[S]earch [S]elect Telescope" })
 			vim.keymap.set("n", "<leader>sw", builtin.grep_string, { desc = "[S]earch current [W]ord" })
 			vim.keymap.set("n", "<leader>sg", builtin.live_grep, { desc = "[S]earch by [G]rep" })
+			vim.keymap.set("n", "<leader>st", function()
+				local ext = vim.fn.input("Extension (e.g. yml): ")
+				if ext == "" then
+					return
+				end
+				builtin.live_grep({ glob_pattern = "*." .. ext })
+			end, { desc = "[S]earch by Grep in File [T]ype" })
 			vim.keymap.set("n", "<leader>sd", builtin.diagnostics, { desc = "[S]earch [D]iagnostics" })
 			vim.keymap.set("n", "<leader>sr", builtin.resume, { desc = "[S]earch [R]esume" })
 			vim.keymap.set("n", "<leader>s.", builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
