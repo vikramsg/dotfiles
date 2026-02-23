@@ -41,5 +41,35 @@ Instead of permanently altering your default `opencode.json` to be unsafe, you c
 
 Now you can run `opencode` for normal safe operations, and `opencode-yolo` when you want the AI to execute fully autonomously.
 
-## Future Updates
-*Note: The OpenCode team is actively working on PRs (like #11831) to introduce native `--yolo` flags, `OPENCODE_YOLO=true` environment variables, and UI toggles for a formal YOLO mode in future releases.*
+## Custom Instructions & Rules (`rules.md`)
+
+This repository includes a `rules.md` file designed to provide base system instructions to the OpenCode AI that apply across all sessions. 
+
+### What it does
+By default, this file contains a hard rule telling the AI to **never delete `.sqlite` or `.db` files**.
+
+### How it is configured
+This file is injected into the AI's context using the `instructions` array inside `opencode.json` (and `yolo.json`):
+
+```json
+{
+  "instructions": [
+    "~/.config/opencode/rules.md"
+  ]
+}
+```
+
+### Safety & Permissions Fallback
+In addition to prompting the AI via `rules.md`, `opencode.json` enforces this at the execution level using OpenCode's permissions system:
+
+```json
+{
+  "permission": {
+    "bash": {
+      "*rm *.sqlite*": "deny",
+      "*rm *.db*": "deny"
+    }
+  }
+}
+```
+*Note: Because we only specify `deny` rules for specific file patterns, OpenCode automatically falls back to its default behavior (`ask`) for all other `bash` commands. This safely adds a constraint without overriding your entire default permission configuration.*
