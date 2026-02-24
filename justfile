@@ -22,15 +22,23 @@ tmux:
         echo "TPM is already installed."; \
     fi
 
-# Set up Tmux symlink
+# Set up Opencode symlink
 opencode:
     @echo "Setting up Opencode symlink..."
     mkdir -p ~/.config
     mkdir -p ~/.config/opencode
     ln -sfn {{justfile_directory()}}/opencode/opencode.json ~/.config/opencode/opencode.json
-    @echo "Tmux symlink created at ~/.config/tmux -> {{justfile_directory()}}/tmux"
+    @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
+
+
+# Set up Ghostty symlink
+ghostty:
+    @echo "Setting up Ghostty symlink..."
+    mkdir -p ~/.config/ghostty
+    ln -sfn {{justfile_directory()}}/ghostty/config ~/.config/ghostty/config
+    @echo "Ghostty symlink created at ~/.config/ghostty/config -> {{justfile_directory()}}/ghostty/config"
 
 
 # Set up all symlinks
-all: nvim tmux
+all: nvim tmux opencode ghostty
     @echo "All dotfiles symlinked successfully!"
