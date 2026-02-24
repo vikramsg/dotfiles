@@ -1,12 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": [
-    "~/.config/opencode/rules.md"
-  ],
+  "instructions": ["~/.config/opencode/rules.md"],
   "permission": {
     "bash": {
       "*rm*.sqlite*": "deny",
       "*rm*.db*": "deny"
+    },
+    "external_directory": {
+      "/tmp/**": "allow"
     }
   },
   "plugin": ["opencode-websearch-cited@1.2.0"],
