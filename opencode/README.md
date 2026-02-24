@@ -73,3 +73,20 @@ In addition to prompting the AI via `rules.md`, `opencode.json` enforces this at
 }
 ```
 *Note: Because we only specify `deny` rules for specific file patterns, OpenCode automatically falls back to its default behavior (`ask`) for all other `bash` commands. This safely adds a constraint without overriding your entire default permission configuration.*
+
+## Inspecting the Internal System Prompt
+
+If you want to read the exact system instructions and tool definitions OpenCode uses behind the scenes, you can extract them from the local log files.
+
+The system prompt is embedded inside the JSON payloads sent to the LLM API and starts with `"You are opencode, an interactive CLI agent..."`.
+
+### How to extract it
+To extract the raw system prompt from your most recent log file and save it as readable text, run this command:
+
+```bash
+LATEST_LOG=$(ls -t ~/.local/share/opencode/log | head -n 1)
+grep -o '{"parts":\[{"text":"You are opencode.*' ~/.local/share/opencode/log/$LATEST_LOG | head -n 1 | sed 's/^[^{]*//' | sed 's/}$//' | jq -r '.parts[0].text' > /tmp/opencode_prompt.txt
+cat /tmp/opencode_prompt.txt
+```
+*(Note: Because the log lines contain massive JSON arrays for the API request, we use `grep -o` and some text manipulation to isolate just the system prompt string).*
+
