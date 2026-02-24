@@ -66,3 +66,10 @@ link-previews = true
 # Helpful keybinds for URLs (optional)
 # keybind = cmd+u=copy_url_to_clipboard
 # keybind = cmd+shift+u=open_url
+
+# Clipboard Configuration
+# ==================
+# Allow OSC52 clipboard access for remote sessions
+copy-on-select = clipboard
+clipboard-read = allow
+clipboard-write = allow
