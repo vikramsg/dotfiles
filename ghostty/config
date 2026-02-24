@@ -59,6 +59,13 @@ window-save-state = always
 # ==================
 # By default Ghostty automatically makes URLs clickable when holding Cmd (macOS)
 # or Ctrl (Linux) and clicking them.
+# 
+# IMPORTANT (Tmux Users): Because tmux captures mouse events (`set -g mouse on`),
+# you MUST hold `Shift` + `Cmd` (macOS) to click links. The Shift key bypasses
+# tmux and allows Ghostty to handle the click.
+#
+# Note: URLs that wrap across lines in vertical tmux splits may not be clickable 
+# because the tmux pane border visually breaks the URL string.
 
 link-url = true
 link-previews = true
