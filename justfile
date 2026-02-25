@@ -21,6 +21,12 @@ tmux:
     else \
         echo "TPM is already installed."; \
     fi
+    @if ! command -v gitmux &> /dev/null; then \
+        echo "Installing gitmux via Homebrew..."; \
+        brew install gitmux; \
+    else \
+        echo "gitmux is already installed."; \
+    fi
 
 # Set up Opencode symlink
 opencode:
