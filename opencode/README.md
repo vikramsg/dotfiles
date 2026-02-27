@@ -41,6 +41,45 @@ Instead of permanently altering your default `opencode.json` to be unsafe, you c
 
 Now you can run `opencode` for normal safe operations, and `opencode-yolo` when you want the AI to execute fully autonomously.
 
+## Dual Mode Models (Plan vs. Build)
+
+OpenCode utilizes a dual-mode workflow:
+1.  **Plan Mode (Read-Only):** The AI analyzes code and proposes a strategy.
+2.  **Build Mode (Execution):** The AI writes code and executes commands based on the approved plan.
+
+*(You can toggle between these modes instantly in the terminal by pressing the **Tab** key.)*
+
+You can optimize cost and performance by configuring different models for each mode within your `opencode.json` configuration file under the `"agent"` key.
+
+### Configuration Example
+To use a fast, inexpensive model for planning, and a more capable model for building, add the following to your configuration:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-3-haiku",
+      "temperature": 0.1,
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "build": {
+      "model": "anthropic/claude-3-5-sonnet",
+      "temperature": 0.3,
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    }
+  }
+}
+```
+*Note: Disabling the `write`, `edit`, and `bash` tools in Plan Mode ensures the AI cannot accidentally modify your system while planning.*
+
 ## Custom Instructions & Rules (`rules.md`)
 
 This repository includes a `rules.md` file designed to provide base system instructions to the OpenCode AI that apply across all sessions. 
