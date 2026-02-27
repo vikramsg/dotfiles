@@ -956,10 +956,12 @@ require("lazy").setup({
 						-- Small delay to let Diffview finish its internal window teardown
 						vim.defer_fn(function()
 							for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-								-- If the buffer is loaded, wasn't there before diffview, and has no unsaved changes
+								-- If the buffer is loaded, wasn't there before diffview, has no unsaved changes,
+								-- and is not currently visible in any active window (e.g. opened via gf)
 								if vim.api.nvim_buf_is_loaded(bufnr) 
 								   and not diffview_initial_buffers[bufnr] 
-								   and vim.bo[bufnr].modified == false then
+								   and vim.bo[bufnr].modified == false
+								   and #vim.fn.win_findbuf(bufnr) == 0 then
 									vim.api.nvim_buf_delete(bufnr, { force = false })
 								end
 							end
