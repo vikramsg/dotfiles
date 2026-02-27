@@ -16,8 +16,8 @@
 -- Git (Diffview & LazyGit):
 --   <leader>gs : Open Diffview (against index/HEAD)
 --   <leader>gm : Open Diffview (against main or master branch)
---   <leader>gS : Close Diffview
---   <leader>gM : Close Diffview
+--   <leader>gS : Close Diffview & cleanup buffers
+--   <leader>gM : Close Diffview & cleanup buffers
 --   <leader>gh : File History (Diffview)
 --   <leader>gH : Close File History
 --   <leader>lg : LazyGit (Floating terminal)
@@ -938,6 +938,37 @@ require("lazy").setup({
 		"sindrets/diffview.nvim",
 		dependencies = { "nvim-tree/nvim-web-devicons" },
 		config = function()
+			-- Track buffers opened before Diffview to cleanup afterwards
+			local diffview_initial_buffers = {}
+
+			require("diffview").setup({
+				hooks = {
+					view_opened = function()
+						-- Snapshot all currently loaded buffers
+						diffview_initial_buffers = {}
+						for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+							if vim.api.nvim_buf_is_loaded(bufnr) then
+								diffview_initial_buffers[bufnr] = true
+							end
+						end
+					end,
+					view_closed = function()
+						-- Small delay to let Diffview finish its internal window teardown
+						vim.defer_fn(function()
+							for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+								-- If the buffer is loaded, wasn't there before diffview, and has no unsaved changes
+								if vim.api.nvim_buf_is_loaded(bufnr) 
+								   and not diffview_initial_buffers[bufnr] 
+								   and vim.bo[bufnr].modified == false then
+									vim.api.nvim_buf_delete(bufnr, { force = false })
+								end
+							end
+							diffview_initial_buffers = {} -- reset
+						end, 50)
+					end,
+				},
+			})
+
 			-- Open Diffview (against index/HEAD)
 			vim.keymap.set("n", "<leader>gs", "<cmd>DiffviewOpen<CR>", { desc = "Git status (Diffview)" })
 
@@ -972,69 +1003,6 @@ require("lazy").setup({
 
 			-- Close current file history
 			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewFileHistoryClose<CR>", { desc = "Close Git history" })
-		end,
-	},
-
-	-- OpenCode AI Integration
-	{
-		"nickjvandyke/opencode.nvim",
-		version = "*", -- Latest stable release
-		dependencies = {
-			{
-				"folke/snacks.nvim",
-				optional = true,
-				opts = {
-					input = {},
-					picker = {
-						actions = {
-							opencode_send = function(...)
-								return require("opencode").snacks_picker_send(...)
-							end,
-						},
-						win = {
-							input = {
-								keys = {
-									["<a-a>"] = { "opencode_send", mode = { "n", "i" } },
-								},
-							},
-						},
-					},
-					terminal = {},
-				},
-			},
-		},
-		config = function()
-			---@type opencode.Opts
-			vim.g.opencode_opts = {
-				provider = {
-					enabled = "tmux",
-					tmux = {},
-				},
-			}
-
-			vim.o.autoread = true -- Required for opts.events.reload
-
-			-- Leader focused keymaps
-			vim.keymap.set({ "n", "x" }, "<leader>oa", function()
-				require("opencode").ask("@this: ", { submit = true })
-			end, { desc = "Ask OpenCode…" })
-
-			vim.keymap.set({ "n", "x" }, "<leader>ox", function()
-				require("opencode").select()
-			end, { desc = "Execute OpenCode action menu" })
-
-			vim.keymap.set({ "n", "t" }, "<leader>ot", function()
-				require("opencode").toggle()
-			end, { desc = "Toggle OpenCode window" })
-
-			-- Vim operators
-			vim.keymap.set({ "n", "x" }, "<leader>oo", function()
-				return require("opencode").operator("@this ")
-			end, { desc = "Add range to OpenCode", expr = true })
-
-			vim.keymap.set("n", "<leader>ol", function()
-				return require("opencode").operator("@this ") .. "_"
-			end, { desc = "Add line to OpenCode", expr = true })
 		end,
 	},
 })
