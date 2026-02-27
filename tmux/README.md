@@ -36,3 +36,32 @@ After installing, you **must restart the tmux server** completely for it to pick
 2.  Press `prefix` + `I` (capital i) to install plugins.
 3.  Press `prefix` + `U` to update plugins.
 4.  Press `prefix` + `alt` + `u` to remove/uninstall plugins not on the plugin list.
+
+## Testing Configuration Changes
+
+Before applying changes to your main `tmux.conf`, you can test them safely in an isolated environment without affecting your running sessions. This is highly recommended to prevent breaking your daily workflow.
+
+1. **Create a temporary configuration file**:
+   Copy your proposed changes or your current `tmux.conf` to a temporary location.
+   ```bash
+   cp ~/.tmux.conf /tmp/tmux-test.conf
+   # Make your experimental edits to /tmp/tmux-test.conf
+   ```
+
+2. **Start a sandboxed Tmux server**:
+   Use a different socket name (`-L`) and point to your temporary config file (`-f`). This creates a completely separate Tmux instance.
+   ```bash
+   tmux -L test_socket -f /tmp/tmux-test.conf
+   ```
+
+3. **Verify the changes**:
+   Test your new keybindings, visual changes, or status bar updates in this isolated session.
+
+4. **Exit the sandbox**:
+   Once you are done testing, simply exit the Tmux session. The `test_socket` server will close automatically.
+   ```bash
+   exit
+   ```
+
+5. **Apply the changes**:
+   If the tests are successful, you can confidently apply the changes to your actual `~/Projects/Personal/dotfiles/tmux/tmux.conf`.
