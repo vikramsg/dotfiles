@@ -39,3 +39,37 @@ By default, the padding uses the `background` color. If you have a solid-colored
 ```text
 window-padding-color = extend
 ```
+
+## Automating Multiple Tabs & SSH Sessions
+
+Ghostty on macOS currently relies on native windowing and does not support opening multiple tabs via direct command-line arguments (like `ghostty --new-tab`). 
+
+However, you can automate opening multiple tabs, SSHing into a VM, and attaching to specific tmux sessions using a single AppleScript command (via `osascript`). This simulates Ghostty's native `Cmd+T` shortcut.
+
+### The Command
+
+Run the following in your terminal to open 3 tabs, each connecting to a separate tmux session (`session1`, `session2`, `session3`) on a remote machine:
+
+```bash
+osascript -e 'tell application "Ghostty" to activate' \
+          -e 'tell application "System Events"' \
+          -e 'keystroke "t" using command down' \
+          -e 'delay 0.2' \
+          -e 'keystroke "ssh -t your_user@your_vm \"tmux new-session -A -s session1\"" & return' \
+          -e 'keystroke "t" using command down' \
+          -e 'delay 0.2' \
+          -e 'keystroke "ssh -t your_user@your_vm \"tmux new-session -A -s session2\"" & return' \
+          -e 'keystroke "t" using command down' \
+          -e 'delay 0.2' \
+          -e 'keystroke "ssh -t your_user@your_vm \"tmux new-session -A -s session3\"" & return' \
+          -e 'end tell'
+```
+
+*Note: Replace `your_user@your_vm` with your actual SSH alias or IP address.*
+
+### How it Works
+1. **`activate`**: Brings the Ghostty window to the foreground.
+2. **`keystroke "t" using command down`**: Simulates `Cmd+T` to open a new tab.
+3. **`delay 0.2`**: Allows the Ghostty UI a moment to render the tab before typing.
+4. **`ssh -t ...`**: Forces pseudo-terminal allocation, which is strictly required for running `tmux` over SSH.
+5. **`tmux new-session -A -s <name>`**: Attaches to the named session if it exists, or creates it if it doesn't.
