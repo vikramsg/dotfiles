@@ -1,6 +1,3 @@
-# Setup PATH
-export PATH="$HOME/.local/bin:$PATH"
-
 #########################################
 # Install zinit
 # Home is $HOME/.local/share/zinit/
@@ -63,4 +60,8 @@ zinit cdreplay -q
 # Aliases
 
 [[ -f ~/.zshenv ]] && source ~/.zshenv
+
+#########################################
+# Setup PATH to use locally installed binaries
+export PATH="$HOME/.local/bin:$PATH"
 
