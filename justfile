@@ -45,6 +45,13 @@ ghostty:
     @echo "Ghostty symlink created at ~/.config/ghostty/config -> {{justfile_directory()}}/ghostty/config"
 
 
+# Set up custom bin symlinks
+bin:
+    @echo "Setting up custom bin symlinks..."
+    mkdir -p ~/.local/bin
+    ln -sfn {{justfile_directory()}}/bin/lc ~/.local/bin/lc
+    @echo "lc symlink created at ~/.local/bin/lc -> {{justfile_directory()}}/bin/lc"
+
 # Set up all symlinks
-all: nvim tmux opencode ghostty
+all: nvim tmux opencode ghostty bin
     @echo "All dotfiles symlinked successfully!"

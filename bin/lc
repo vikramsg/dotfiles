@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# Exit if no argument provided
+if [ -z "$1" ]; then
+    echo "Usage: lc <file_or_directory>"
+    exit 1
+fi
+
+TARGET="$1"
+
+if [ -d "$TARGET" ]; then
+    # It's a directory: use eza if installed, otherwise ls
+    if command -v eza &> /dev/null; then
+        eza -lh --group-directories-first --icons=auto "$TARGET"
+    else
+        ls -la "$TARGET"
+    fi
+elif [ -f "$TARGET" ]; then
+    # It's a file: use bat if installed, otherwise cat
+    if command -v bat &> /dev/null; then
+        bat --style=numbers --color=always "$TARGET"
+    else
+        cat "$TARGET"
+    fi
+else
+    echo "Error: '$TARGET' is not a valid file or directory."
+    exit 1
+fi
