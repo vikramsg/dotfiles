@@ -86,6 +86,12 @@ Go look at some of the settings [here](https://github.com/nvim-lua/kickstart.nvi
 - `:checkhealth` is useful
 - `:checkhealth vim.lsp` shows what is happening with LSP 
 
+## LazyGit
+
+1. LazyGit can open the GH PR page for a branch. Do the following
+    - Push the branch
+    - While focused on the branch view in LazyGit, press 'o' and it will open the PR page.
+
 ## ToDo
 
 1. Make `Cmd + .` work to suggest imports.
