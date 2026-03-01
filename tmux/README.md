@@ -65,3 +65,21 @@ Before applying changes to your main `tmux.conf`, you can test them safely in an
 
 5. **Apply the changes**:
    If the tests are successful, you can confidently apply the changes to your actual `~/Projects/Personal/dotfiles/tmux/tmux.conf`.
+
+## FAQs
+
+### HALP: My theme doesn't load
+
+If this is happening with new setup, make sure that no existing setuo is hashed. 
+Try doing the following 
+
+```sh
+rm -rf ~/.tmux/plugins
+tmux kill-server
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+
+# Inside tmux session
+# Make sure you have done the correct symlinking using `just tmux`
+tmux source ~/.config/tmux/tmux.conf
+# C-b + I 
+```
