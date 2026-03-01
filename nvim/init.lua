@@ -52,12 +52,9 @@
 --   ca : Code Action
 --   K  : Hover documentation
 --
--- OpenCode AI:
---   <leader>oa : Ask OpenCode about current selection/file
---   <leader>ox : Execute OpenCode action menu
---   <leader>ot : Toggle OpenCode window
---   <leader>oo : OpenCode operator (e.g., <leader>ooip for paragraph)
---   <leader>ol : Add current line to OpenCode
+-- Markdown Renderer:
+--   mp : Open viewer window on focused markdown file
+--   Cmd + q : Close viewer
 ------------------------------------------------------------------------------
 
 -- hacky way to ignore the vim global warnings issue
@@ -958,10 +955,12 @@ require("lazy").setup({
 							for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
 								-- If the buffer is loaded, wasn't there before diffview, has no unsaved changes,
 								-- and is not currently visible in any active window (e.g. opened via gf)
-								if vim.api.nvim_buf_is_loaded(bufnr) 
-								   and not diffview_initial_buffers[bufnr] 
-								   and vim.bo[bufnr].modified == false
-								   and #vim.fn.win_findbuf(bufnr) == 0 then
+								if
+									vim.api.nvim_buf_is_loaded(bufnr)
+									and not diffview_initial_buffers[bufnr]
+									and vim.bo[bufnr].modified == false
+									and #vim.fn.win_findbuf(bufnr) == 0
+								then
 									vim.api.nvim_buf_delete(bufnr, { force = false })
 								end
 							end
@@ -1008,6 +1007,21 @@ require("lazy").setup({
 		end,
 	},
 })
+
+---------------------------------------------------------------------
+----- Custom Markdown Preview using mdr (External Window)
+---------------------------------------------------------------------
+vim.api.nvim_create_user_command("MdPreview", function()
+	local file = vim.fn.expand("%:p")
+	if file == "" or not file:match("%.md$") then
+		vim.notify("Not a markdown file or buffer has no file", vim.log.levels.WARN)
+		return
+	end
+	-- Launch mdr as an external detached process (defaults to egui/native window)
+	vim.fn.jobstart({ "mdr", file }, { detach = true })
+end, {})
+
+vim.keymap.set("n", "<leader>mp", "<cmd>MdPreview<CR>", { desc = "[M]arkdown [P]review (External)" })
 
 ---------------------------------------------------------------------
 ----- Setup ty here since its setup for vim 0.11 rather than 0.10
