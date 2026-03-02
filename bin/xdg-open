@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+# Proxy xdg-open to a local Mac browser via an SSH-forwarded Unix socket.
+# Strictly handles Linux-only forwarding, falling back to 'open' on macOS.
+
+URL="$1"
+SOCKET="$HOME/.opener.sock"
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # On Mac, just use the native open command
+    open "$URL"
+    exit 0
+fi
+
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    if [ -S "$SOCKET" ]; then
+        # Forward the URL to the opener daemon on the local machine
+        echo "$URL" | nc -U "$SOCKET"
+    else
+        echo "Error: .opener.sock not found at $SOCKET"
+        echo "To fix this:"
+        echo "1. Ensure 'opener' is running on your Mac (brew services start opener)"
+        echo "2. Add 'RemoteForward $SOCKET /Users/<your-mac-user>/.opener.sock' to your ~/.ssh/config"
+        echo "3. Restart your SSH session"
+        echo ""
+        echo "Fallback: Printing URL instead:"
+        echo "$URL"
+        exit 1
+    fi
+else
+    # Fallback for other OS types
+    echo "Unsupported OS for xdg-open proxy: $OSTYPE"
+    echo "URL: $URL"
+    exit 1
+fi
