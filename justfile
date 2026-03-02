@@ -57,7 +57,21 @@ bin:
     @echo "Setting up custom bin symlinks..."
     mkdir -p ~/.local/bin
     ln -sfn {{justfile_directory()}}/bin/lc ~/.local/bin/lc
-    @echo "lc symlink created at ~/.local/bin/lc -> {{justfile_directory()}}/bin/lc"
+    @if [ "$(uname)" = "Linux" ]; then \
+        ln -sfn {{justfile_directory()}}/bin/xdg-open ~/.local/bin/xdg-open; \
+        echo "xdg-open symlink created at ~/.local/bin/xdg-open"; \
+    fi
+
+# Set up lazygit symlink (Linux only)
+lazygit:
+    @if [ "$(uname)" = "Linux" ]; then \
+        echo "Setting up lazygit symlink..."; \
+        mkdir -p ~/.config/lazygit; \
+        ln -sfn {{justfile_directory()}}/lazygit/config.yml ~/.config/lazygit/config.yml; \
+        echo "lazygit symlink created at ~/.config/lazygit/config.yml"; \
+    else \
+        echo "Skipping lazygit symlink on non-Linux OS"; \
+    fi
 
 # Set up zsh symlink
 zsh:
@@ -66,5 +80,5 @@ zsh:
     @echo ".zshrc symlink created at ~/.zshrc -> {{justfile_directory()}}/zsh/.zshrc"
 
 # Set up all symlinks
-all: nvim tmux opencode ghostty bin zsh
+all: nvim tmux opencode ghostty bin zsh lazygit
     @echo "All dotfiles symlinked successfully!"

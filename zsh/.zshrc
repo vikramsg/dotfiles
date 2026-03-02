@@ -57,6 +57,19 @@ autoload -Uz compinit && compinit
 zinit cdreplay -q
 
 #########################################
+# History Configuration
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=10000               # How many lines to keep in the current session
+SAVEHIST=10000               # How many lines to save in the history file
+# History Options
+setopt APPEND_HISTORY        # Append to the history file, don't overwrite
+setopt SHARE_HISTORY         # Share history between different terminal sessions
+setopt HIST_IGNORE_DUPS      # Don't record the same command twice in a row
+setopt HIST_IGNORE_ALL_DUPS  # Remove older duplicate entries from history
+setopt HIST_IGNORE_SPACE     # Don't record commands starting with a space
+setopt HIST_REDUCE_BLANKS    # Remove extra blanks from commands
+
+#########################################
 # Aliases
 
 [[ -f ~/.zshenv ]] && source ~/.zshenv
@@ -64,4 +77,23 @@ zinit cdreplay -q
 #########################################
 # Setup PATH to use locally installed binaries
 export PATH="$HOME/.local/bin:$PATH"
+
+#########################################
+# Common aliases
+alias vi="nvim"
+
+# Replace: alias ls="ls -G"
+# With:
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    alias ls='ls --color=auto'
+    export BROWSER="xdg-open"
+    export GH_BROWSER="xdg-open"
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    alias ls='ls -G'
+fi
+
+#########################################
+# gcloud commands
+alias gcloud-auth="gcloud auth login"
+alias gs="gcloud storage"
 

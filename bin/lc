@@ -13,8 +13,12 @@ if [ -d "$TARGET" ]; then
     if command -v eza &> /dev/null; then
         eza -lh --group-directories-first --icons=auto "$TARGET"
     else
-        export CLICOLOR=1
-        ls -laG "$TARGET"
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            ls -la --color=auto "$TARGET"
+        else
+            export CLICOLOR=1
+            ls -laG "$TARGET"
+        fi
     fi
 elif [ -f "$TARGET" ]; then
     # It's a file: use bat if installed, otherwise cat
