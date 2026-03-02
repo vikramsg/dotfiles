@@ -85,3 +85,26 @@ AUTOSSH_GATETIME=0 autossh -M 0 -f -N vm-tunnel -L 8080:localhost:8080
 
 With this setup, if your laptop sleeps, the tunnel drops. When you wake it up, `autossh` aggressively retries until the remote server frees the port, re-establishes the tunnel in the background, and your local browser can access `localhost:8080` again without manual intervention.
 
+
+## TMUX ssh config
+
+```
+Host vm 
+    HostName IP 
+    IdentityFile /path/to/home/.ssh/google_compute_engine
+    UserKnownHostsFile=/path/to/home/.ssh/google_compute_known_hosts
+    HostKeyAlias=<something>
+    IdentitiesOnly=yes
+    CheckHostIP=no
+    User <User> 
+    RequestTTY yes    
+    # Note that we are starting in a tmux session that should exist on the remote
+    RemoteCommand tmux new -A -s dotfiles
+    # Use opener to forward browser open
+    RemoteForward /path/to/remote_home/.opener.sock /path/to/local_home/.opener.sock
+
+    # --- Common ports for fowarding---
+    LocalForward 5173 localhost:5173  # Vite (Vue, React, Svelte)
+    LocalForward 8080 localhost:8080  # Webpack Dev Server, Tomcat, general HTTP
+    LocalForward 8081 localhost:8081  # Composer Airflow 
+```
