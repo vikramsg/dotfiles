@@ -18,7 +18,7 @@ This script allows you to open URLs from this remote VM directly in your local M
    Add the following to your `~/.ssh/config` on your Mac:
    ```sshconfig
    Host <your-vm-hostname>
-     RemoteForward /home/vikram_orbio_earth/.opener.sock /Users/<your-mac-user>/.opener.sock
+     RemoteForward /path/to/home/.opener.sock /Users/<your-mac-user>/.opener.sock
    ```
    *Replace `<your-mac-user>` with your actual local username.*
 
