@@ -86,6 +86,8 @@ alias vi="nvim"
 # With:
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     alias ls='ls --color=auto'
+    export BROWSER="xdg-open"
+    export GH_BROWSER="xdg-open"
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     alias ls='ls -G'
 fi
