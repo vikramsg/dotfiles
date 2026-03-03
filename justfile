@@ -81,7 +81,7 @@ zsh:
 
 # Set up SSH remote forwarding socket fix (Linux only)
 setup-ssh-forwarding:
-    @if [ "$$(uname)" = "Linux" ]; then \
+    @if [ "$(uname)" = "Linux" ]; then \
         echo "Setting up SSH StreamLocalBindUnlink fix..."; \
         if ! grep -q "^StreamLocalBindUnlink yes" /etc/ssh/sshd_config; then \
             echo "StreamLocalBindUnlink yes" | sudo tee -a /etc/ssh/sshd_config > /dev/null; \
