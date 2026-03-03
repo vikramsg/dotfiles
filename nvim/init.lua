@@ -71,11 +71,23 @@ vim.o.writebackup = false
 vim.o.undofile = true
 vim.o.cmdheight = 0 -- Remove gap between statusline and tmux
 -- Sync clipboard between OS and Neovim.
---  Schedule the setting after `UiEnter` because it can increase startup-time.
---  Remove this option if you want your OS clipboard to remain independent.
---  See `:help 'clipboard'`
+-- Use OSC 52 for remote clipboard support (works over SSH/Tmux)
+-- This avoids issues with broken xclip/x11 forwarding
 vim.schedule(function()
 	vim.opt.clipboard = "unnamedplus"
+	if vim.fn.exists("$SSH_CONNECTION") == 1 or vim.fn.exists("$TMUX") == 1 then
+		vim.g.clipboard = {
+			name = "OSC 52",
+			copy = {
+				["+"] = require("vim.ui.clipboard.osc52").copy("+"),
+				["*"] = require("vim.ui.clipboard.osc52").copy("*"),
+			},
+			paste = {
+				["+"] = require("vim.ui.clipboard.osc52").paste("+"),
+				["*"] = require("vim.ui.clipboard.osc52").paste("*"),
+			},
+		}
+	end
 end)
 
 -- Save undo history

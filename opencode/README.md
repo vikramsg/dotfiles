@@ -112,3 +112,21 @@ In addition to prompting the AI via `rules.md`, `opencode.json` enforces this at
 }
 ```
 *Note: Because we only specify `deny` rules for specific file patterns, OpenCode automatically falls back to its default behavior (`ask`) for all other `bash` commands. This safely adds a constraint without overriding your entire default permission configuration.*
+
+
+## MCP
+
+Setup MCP by adding config like this to the config JSON file.
+MIRO for example, required OAUTH, but it did not automatically open the browser when I added to the config.
+I had to do `opencode mcp auth miro-mcp`. 
+This opened a page on a specific port which I needed to add to the port forwarding for ssh as well.
+
+```json
+  "mcp": {
+    "miro-mcp": {
+      "type": "remote",
+      "url": "https://mcp.miro.com/",
+      "enabled": true
+    }
+  }
+```

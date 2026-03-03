@@ -21,5 +21,12 @@
         }
       }
     }
+  },
+  "mcp": {
+    "miro-mcp": {
+      "type": "remote",
+      "url": "https://mcp.miro.com/",
+      "enabled": true
+    }
   }
 }
