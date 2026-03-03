@@ -130,3 +130,16 @@ This opened a page on a specific port which I needed to add to the port forwardi
     }
   }
 ```
+
+### Miro
+
+Note that when using the Miro MCP, we authenticated to a Team.
+The MCP only has access to the team board.
+Miro makes it very hard to correctly deal with this, but here's the steps.
+
+1. Make sure you did create the team and that you know which team the MCP has access to.
+    - This can be done by `click on profile -> select team in dropdown -> click on apps -> check MCP server is there`. 
+    - Now go back to board view, create board.
+    - This board by default will be put on your personal account. 
+    - Go to 3 dots at top left, `click -> Board -> move to -> Team`.
+    - Then this will be available to your agent!
