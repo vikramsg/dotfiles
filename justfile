@@ -79,6 +79,22 @@ zsh:
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
     @echo ".zshrc symlink created at ~/.zshrc -> {{justfile_directory()}}/zsh/.zshrc"
 
+# Set up SSH remote forwarding socket fix (Linux only)
+setup-ssh-forwarding:
+    @if [ "$$(uname)" = "Linux" ]; then \
+        echo "Setting up SSH StreamLocalBindUnlink fix..."; \
+        if ! grep -q "^StreamLocalBindUnlink yes" /etc/ssh/sshd_config; then \
+            echo "StreamLocalBindUnlink yes" | sudo tee -a /etc/ssh/sshd_config > /dev/null; \
+            echo "Restarting sshd..."; \
+            sudo systemctl restart sshd || sudo systemctl restart ssh; \
+            echo "SSH socket fix applied successfully."; \
+        else \
+            echo "StreamLocalBindUnlink is already enabled in /etc/ssh/sshd_config."; \
+        fi \
+    else \
+        echo "Skipping SSH socket fix on non-Linux OS"; \
+    fi
+
 # Set up all symlinks
 all: nvim tmux opencode ghostty bin zsh lazygit
     @echo "All dotfiles symlinked successfully!"
