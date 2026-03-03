@@ -112,3 +112,10 @@ In addition to prompting the AI via `rules.md`, `opencode.json` enforces this at
 }
 ```
 *Note: Because we only specify `deny` rules for specific file patterns, OpenCode automatically falls back to its default behavior (`ask`) for all other `bash` commands. This safely adds a constraint without overriding your entire default permission configuration.*
+
+
+## MCP
+
+```
+
+```
