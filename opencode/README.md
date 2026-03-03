@@ -116,6 +116,17 @@ In addition to prompting the AI via `rules.md`, `opencode.json` enforces this at
 
 ## MCP
 
-```
+Setup MCP by adding config like this to the config JSON file.
+MIRO for example, required OAUTH, but it did not automatically open the browser when I added to the config.
+I had to do `opencode mcp auth miro-mcp`. 
+This opened a page on a specific port which I needed to add to the port forwarding for ssh as well.
 
+```json
+  "mcp": {
+    "miro-mcp": {
+      "type": "remote",
+      "url": "https://mcp.miro.com/",
+      "enabled": true
+    }
+  }
 ```

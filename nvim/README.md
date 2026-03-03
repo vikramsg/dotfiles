@@ -67,6 +67,16 @@ Next, and this is annoying, make sure to start `zed` from a folder
 where `ruff` is part of the `venv`. 
 Otherwise, it mysteriously refuses to start `ruff` even though it maybe globally available. 
 
+2. Clipboard / Copy-Paste
+
+If copy-paste stops working on a remote VM (e.g., after SSH changes that break X11 forwarding), Neovim might try to use `xclip` and fail.
+The config is set to use **OSC 52** by default when `$SSH_CONNECTION` or `$TMUX` is detected. This allows the terminal to handle the clipboard directly.
+
+If you experience issues:
+- Ensure your terminal emulator supports OSC 52.
+- If inside `tmux`, ensure `set -g set-clipboard on` is in `tmux.conf`.
+- Restart Neovim.
+
 ## Config init 
 
 We are trying to do a simple single file `init.lua` setup. 
