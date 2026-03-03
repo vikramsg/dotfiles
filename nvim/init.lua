@@ -4,6 +4,7 @@
 -- MASTER KEYMAP CHEAT SHEET
 ------------------------------------------------------------------------------
 -- General & Navigation:
+--   zz             : Center the cursor on screen
 --   Space (Leader) : The prefix for most custom commands
 --   <leader>1..9   : Jump to visible buffer 1 through 9 (Lualine index)
 --   <C-h,j,k,l>    : Navigate between splits
