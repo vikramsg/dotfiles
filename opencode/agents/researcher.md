@@ -10,12 +10,11 @@ permission:
   read: "allow"
   glob: "allow"
   grep: "allow"
+  task: "deny"
   external_directory:
     "/tmp/**": "allow"
     "/private/tmp/**": "allow"
     "/opt/homebrew/**": "allow"
-tools:
-    task: false
 ---
 # Codebase Researcher
 
