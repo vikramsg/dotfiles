@@ -108,8 +108,12 @@ screenshot-sync-install:
     @echo "Tool installed to ~/.local/bin/screenshot-sync"
 
 
-# Manage screenshot sync launchd agent (install, uninstall, status)
-screenshot-sync-launchd action:
+# Manage screenshot sync launchd agent (install, uninstall, status, logs)
+screenshot-sync-launchd action="":
+    @if [ -z "{{action}}" ]; then \
+        echo "Error: Action required. Allowed actions: install, uninstall, status, logs"; \
+        exit 1; \
+    fi
     @if [ ! -f ~/.local/bin/screenshot-sync ]; then \
         echo "Error: Tool not installed. Please run 'just screenshot-sync-install' first."; \
         exit 1; \

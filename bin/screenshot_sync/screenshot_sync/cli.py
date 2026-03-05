@@ -131,6 +131,21 @@ def status_launchd():
     else:
         print(f"Agent '{PLIST_LABEL}' is NOT loaded.")
 
+def logs_launchd():
+    """Tails the launchd logs."""
+    out_log = Path.home() / f"Library/Logs/{PLIST_LABEL}.out.log"
+    err_log = Path.home() / f"Library/Logs/{PLIST_LABEL}.err.log"
+    
+    print(f"Tailing logs for {PLIST_LABEL}...")
+    print(f"Out: {out_log}")
+    print(f"Err: {err_log}")
+    print("-" * 40)
+    
+    try:
+        subprocess.run(["tail", "-f", str(out_log), str(err_log)])
+    except KeyboardInterrupt:
+        print("\nStopped tailing logs.")
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"Sync screenshots to a remote VM (Config: {CONFIG_FILE})"
@@ -142,21 +157,25 @@ def main():
 
     # Launchd commands
     launchd_parser = subparsers.add_parser("launchd", help="Manage launchd agent")
-    launchd_parser.add_argument("action", choices=["install", "uninstall", "status"], help="Action to perform")
+    launchd_parser.add_argument("action", choices=["install", "uninstall", "status", "logs"], help="Action to perform")
 
     args = parser.parse_args()
 
-    if args.command == "sync":
-        run_sync()
-    elif args.command == "launchd":
-        if args.action == "install":
-            install_launchd()
-        elif args.action == "uninstall":
-            uninstall_launchd()
-        elif args.action == "status":
-            status_launchd()
-    else:
-        parser.print_help()
+    match args.command:
+        case "sync":
+            run_sync()
+        case "launchd":
+            match args.action:
+                case "install":
+                    install_launchd()
+                case "uninstall":
+                    uninstall_launchd()
+                case "status":
+                    status_launchd()
+                case "logs":
+                    logs_launchd()
+        case _:
+            parser.print_help()
 
 if __name__ == "__main__":
     main()
