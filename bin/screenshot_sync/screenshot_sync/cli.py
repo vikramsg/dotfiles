@@ -74,7 +74,7 @@ def install_launchd():
     tool_path = Path.home() / ".local/bin/screenshot-sync"
     
     if not tool_path.exists():
-        print(f"Error: Tool not found at {tool_path}. Please install it first with 'uv tool install --script {Path(__file__).resolve()}'", file=sys.stderr)
+        print(f"Error: Tool not found at {tool_path}. Please install it first using uv.", file=sys.stderr)
         sys.exit(1)
 
     plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -214,6 +214,27 @@ def config_help():
     print("Environment Variables (Optional):")
     print("  SCREENSHOT_DIR: Path to watch for screenshots (Default: ~/Desktop)")
 
+def self_update():
+    """Updates the tool via uv tool upgrade."""
+    print("Updating screenshot-sync via uv...")
+    try:
+        subprocess.run(["uv", "tool", "upgrade", "screenshot-sync"], check=True)
+        print("\nUpdate completed successfully!")
+        
+        # Check if launchd agent is active and reload it
+        result = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
+        if PLIST_LABEL in result.stdout:
+            print(f"Launchd agent '{PLIST_LABEL}' is currently active.")
+            print("Reloading agent to apply the update...")
+            subprocess.run(["launchctl", "unload", str(PLIST_PATH)], capture_output=True)
+            subprocess.run(["launchctl", "load", str(PLIST_PATH)], check=True)
+            print("Agent reloaded successfully.")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to update screenshot-sync (exit code {e.returncode}).", file=sys.stderr)
+        print("Ensure 'uv' is installed and accessible in your PATH.", file=sys.stderr)
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"Sync screenshots to a remote VM (Config: {CONFIG_FILE})"
@@ -229,6 +250,9 @@ def main():
     # Launchd commands
     launchd_parser = subparsers.add_parser("launchd", help="Manage launchd agent")
     launchd_parser.add_argument("action", choices=["install", "uninstall", "status", "logs", "debug", "help"], help="Action to perform")
+
+    # Self-update command
+    subparsers.add_parser("self-update", help="Update this tool to the latest version via uv")
 
     args = parser.parse_args()
 
@@ -251,6 +275,8 @@ def main():
                     debug_launchd()
                 case "help":
                     help_launchd()
+        case "self-update":
+            self_update()
         case _:
             parser.print_help()
 
