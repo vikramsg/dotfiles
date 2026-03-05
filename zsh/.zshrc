@@ -77,6 +77,9 @@ setopt HIST_REDUCE_BLANKS    # Remove extra blanks from commands
 #########################################
 # Setup PATH to use locally installed binaries
 export PATH="$HOME/.local/bin:$PATH"
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+fi
 
 #########################################
 # Common aliases
