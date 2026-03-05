@@ -49,6 +49,7 @@ This is because on MacOs `/tmp` is actually a symlink from `/private/tmp`.
 So, if we specify only `/tmp` then the agent will still ask for permissions on Mac.  
 
 Specifying `dir: allow` actually gives `All` permissions on that dir to the agent.
+But it is restricted by any denies etc settings in your workspace.
 
 ```yml
   external_directory:
