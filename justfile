@@ -98,3 +98,24 @@ setup-ssh-forwarding:
 # Set up all symlinks
 all: nvim tmux opencode ghostty bin zsh lazygit
     @echo "All dotfiles symlinked successfully!"
+
+# Install and manage screenshot sync tool
+screenshot-sync-install:
+    @echo "Installing screenshot-sync tool via uv..."
+    uv tool install . --with python-dotenv --force
+    @echo "Tool installed to ~/.local/bin/screenshot-sync"
+
+# Manage screenshot sync launchd agent (install, uninstall, status)
+screenshot-sync-launchd action:
+    @if [ ! -f ~/.local/bin/screenshot-sync ]; then \
+        echo "Error: Tool not installed. Please run 'just screenshot-sync-install' first."; \
+        exit 1; \
+    fi
+    ~/.local/bin/screenshot-sync launchd {{action}}
+
+# Run Python tests
+python-tests:
+    @echo "Running Python tests using uv with dev group..."
+    uv run --group dev pytest
+
+

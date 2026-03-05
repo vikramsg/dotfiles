@@ -3,3 +3,6 @@
 *.pdf
 
 tmp
+
+# Python
+__pycache__
