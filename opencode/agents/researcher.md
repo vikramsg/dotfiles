@@ -13,7 +13,7 @@ permission:
   external_directory:
     "/tmp/**": "allow"
     "/private/tmp/**": "allow"
-    "/opt/homebrew/**": "read"
+    "/opt/homebrew/**": "allow"
 ---
 # Codebase Researcher
 
