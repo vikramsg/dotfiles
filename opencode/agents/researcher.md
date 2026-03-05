@@ -1,6 +1,6 @@
 ---
 description: Codebase researcher subagent that clones repositories to /tmp, researches topics, and returns citations.
-mode: agent
+mode: primary 
 hidden: true
 permission:
   edit: "deny"
@@ -13,6 +13,7 @@ permission:
   external_directory:
     "/tmp/**": "allow"
     "/private/tmp/**": "allow"
+    "/opt/homebrew/**": "read"
 ---
 # Codebase Researcher
 
