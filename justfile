@@ -102,8 +102,11 @@ all: nvim tmux opencode ghostty bin zsh lazygit
 # Install and manage screenshot sync tool
 screenshot-sync-install:
     @echo "Installing screenshot-sync tool via uv workspace..."
-    uv tool install {{justfile_directory()}}/bin/screenshot_sync --force
+    # --force: Reinstalls even if already present.
+    # --no-cache: Bypasses cache to ensure local code changes are applied.
+    uv tool install {{justfile_directory()}}/bin/screenshot_sync --force --no-cache
     @echo "Tool installed to ~/.local/bin/screenshot-sync"
+
 
 # Manage screenshot sync launchd agent (install, uninstall, status)
 screenshot-sync-launchd action:

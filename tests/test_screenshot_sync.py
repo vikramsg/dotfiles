@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
-from bin.screenshot_sync.screenshot_sync import SyncConfig, PLIST_LABEL, PLIST_PATH
+from bin.screenshot_sync.screenshot_sync.cli import SyncConfig, PLIST_LABEL, PLIST_PATH
 
 @pytest.fixture
 def mock_config_file(tmp_path):
@@ -19,25 +19,25 @@ def mock_config_file(tmp_path):
     return config_file
 
 def test_config_loading(mock_config_file, monkeypatch):
-    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.CONFIG_FILE",
- mock_config_file)
+    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.cli.CONFIG_FILE",
+                        mock_config_file)
     config = SyncConfig.load()
     assert config.vm_host == "test-vm"
     assert config.remote_dir == "/remote/path/"
     assert config.screenshot_dir == Path.home() / "Desktop"
 
 def test_config_env_override(mock_config_file, monkeypatch):
-    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.CONFIG_FILE",
- mock_config_file)
+    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.cli.CONFIG_FILE",
+                        mock_config_file)
     monkeypatch.setenv("SCREENSHOT_DIR", "/custom/screenshots")
     config = SyncConfig.load()
     assert config.screenshot_dir == Path("/custom/screenshots")
 
 @patch("subprocess.run")
 def test_sync_command_construction(mock_run, mock_config_file, monkeypatch):
-    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.CONFIG_FILE",
- mock_config_file)
-    from bin.screenshot_sync.screenshot_sync import run_sync
+    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.cli.CONFIG_FILE",
+                        mock_config_file)
+    from bin.screenshot_sync.screenshot_sync.cli import run_sync
     
     run_sync()
     
@@ -57,7 +57,7 @@ def test_uv_tool_install_and_path_verification():
     expected_tool_path = Path.home() / ".local/bin/screenshot-sync"
 
     # Force reinstall of the specific workspace member
-    subprocess.run(["uv", "tool", "install", str(tool_member_path), "--force"], check=True)
+    subprocess.run(["uv", "tool", "install", str(tool_member_path), "--force", "--no-cache"], check=True)
 
     
     # Assert path existence
@@ -70,16 +70,17 @@ def test_uv_tool_install_and_path_verification():
 
 @patch("subprocess.run")
 def test_plist_generation(mock_run, mock_config_file, monkeypatch, tmp_path):
-    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.CONFIG_FILE",
- mock_config_file)
+    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.cli.CONFIG_FILE",
+                        mock_config_file)
     
     # Mock PLIST_PATH to a temp location
     temp_plist = tmp_path / "test.plist"
-    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.PLIST_PATH", temp_plist)
+    monkeypatch.setattr("bin.screenshot_sync.screenshot_sync.cli.PLIST_PATH", temp_plist)
+
     
     # Mock tool path existence
     with patch("pathlib.Path.exists", return_value=True):
-        from bin.screenshot_sync.screenshot_sync import install_launchd
+        from bin.screenshot_sync.screenshot_sync.cli import install_launchd
         install_launchd()
     
     assert temp_plist.exists()

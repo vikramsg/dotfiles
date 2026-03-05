@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-check-battery = "router_battery_check:main"
+check-battery = "router_battery_check.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

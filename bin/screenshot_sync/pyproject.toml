@@ -7,7 +7,7 @@ dependencies = [
 ]
 
 [project.scripts]
-screenshot-sync = "screenshot_sync:main"
+screenshot-sync = "screenshot_sync.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
