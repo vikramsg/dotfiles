@@ -41,6 +41,21 @@ Instead of permanently altering your default `opencode.json` to be unsafe, you c
 
 Now you can run `opencode` for normal safe operations, and `opencode-yolo` when you want the AI to execute fully autonomously.
 
+
+### Permissions
+
+Notice that we have to do `/private/tmp`.
+This is because on MacOs `/tmp` is actually a symlink from `/private/tmp`.
+So, if we specify only `/tmp` then the agent will still ask for permissions on Mac.  
+
+Specifying `dir: allow` actually gives `All` permissions on that dir to the agent.
+
+```yml
+  external_directory:
+    "/tmp/**": "allow"
+    "/private/tmp/**": "allow"
+```
+
 ## Dual Mode Models (Plan vs. Build)
 
 OpenCode utilizes a dual-mode workflow:
@@ -143,3 +158,9 @@ Miro makes it very hard to correctly deal with this, but here's the steps.
     - This board by default will be put on your personal account. 
     - Go to 3 dots at top left, `click -> Board -> move to -> Team`.
     - Then this will be available to your agent!
+
+## Ref
+
+- [OpenCode Github](https://github.com/anomalyco/opencode)
+- [OpenCode Docs](https://opencode.ai/docs)
+- [OpenCode Config Schema](https://opencode.ai/config.json)
