@@ -56,6 +56,7 @@ just screenshot-sync-launchd install
 | `just screenshot-sync-install` | Installs/reinstalls the `screenshot-sync` tool via `uv`. |
 | `just screenshot-sync-launchd install` | Generates the plist and starts the `launchd` monitoring. |
 | `just screenshot-sync-launchd status` | Checks if the sync agent is active. |
+| `just screenshot-sync-launchd logs` | Tails the sync agent's logs. |
 | `just screenshot-sync-launchd uninstall` | Stops and removes the `launchd` agent. |
 | `screenshot-sync sync` | Manually triggers a synchronization. |
 
@@ -71,5 +72,5 @@ Tests are located in `tests/test_screenshot_sync.py` and cover configuration par
 
 Run tests:
 ```bash
-PYTHONPATH=. uv run --with pytest pytest tests/test_screenshot_sync.py
+just python-tests
 ```

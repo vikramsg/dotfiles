@@ -128,8 +128,56 @@ def status_launchd():
         # Try to get more info
         info = subprocess.run(["launchctl", "list", PLIST_LABEL], capture_output=True, text=True)
         print(info.stdout)
+        
+        # Show last 5 lines of logs
+        out_log = Path.home() / f"Library/Logs/{PLIST_LABEL}.out.log"
+        err_log = Path.home() / f"Library/Logs/{PLIST_LABEL}.err.log"
+        
+        if out_log.exists():
+            print("\n--- Recent Output Logs ---")
+            subprocess.run(["tail", "-n", "5", str(out_log)])
+            
+        if err_log.exists():
+            print("\n--- Recent Error Logs ---")
+            subprocess.run(["tail", "-n", "5", str(err_log)])
     else:
         print(f"Agent '{PLIST_LABEL}' is NOT loaded.")
+
+def help_launchd():
+    """Displays help for the launchd management commands."""
+    print("This command manages the screenshot-sync launchd agent.")
+    print("It runs via the 'screenshot-sync' tool installed via uv.")
+    print()
+    print("Allowed actions: install, uninstall, status, logs, debug, help")
+    print()
+    print("Investigation helpers:")
+    print("  uv tool list               List installed tools")
+    print("  uv tool list --show-paths  Show tool installation paths")
+    print("  uv tool dir                Show uv tools directory")
+
+def debug_launchd():
+    """Runs uv tool commands to debug the installation."""
+    print("=== UV Tool Debug Information ===")
+    
+    print("Tool directory:", flush=True)
+    subprocess.run(["uv", "tool", "dir"])
+    
+    print("\nInstalled tool details:", flush=True)
+    subprocess.run(["uv", "tool", "list", "--show-paths"])
+    
+    print("\n=== System Paths ===")
+    print(f"Home: {Path.home()}")
+    print(f"PATH: {os.environ.get('PATH')}")
+    
+    print("\n=== Plist Details ===")
+    print(f"Label: {PLIST_LABEL}")
+    print(f"Path:  {PLIST_PATH}")
+    if PLIST_PATH.exists():
+        print("Status: FILE EXISTS")
+        print("\n--- Plist Content ---")
+        print(PLIST_PATH.read_text())
+    else:
+        print("Status: FILE MISSING")
 
 def logs_launchd():
     """Tails the launchd logs."""
@@ -146,6 +194,26 @@ def logs_launchd():
     except KeyboardInterrupt:
         print("\nStopped tailing logs.")
 
+def config_help():
+    """Displays help for the configuration file."""
+    print(f"Screenshot Sync Configuration Help")
+    print(f"====================================")
+    print(f"Config Directory: {CONFIG_DIR}")
+    print(f"Config File:      {CONFIG_FILE}")
+    print()
+    print("Expected JSON format:")
+    print(json.dumps({
+        "vm_host": "my-linux-vm",
+        "remote_dir": "~/Pictures/Screenshots/"
+    }, indent=2))
+    print()
+    print("Fields:")
+    print("  vm_host:    The SSH host alias from your ~/.ssh/config")
+    print("  remote_dir: The destination directory on the remote Linux VM")
+    print()
+    print("Environment Variables (Optional):")
+    print("  SCREENSHOT_DIR: Path to watch for screenshots (Default: ~/Desktop)")
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"Sync screenshots to a remote VM (Config: {CONFIG_FILE})"
@@ -155,15 +223,20 @@ def main():
     # Sync command
     subparsers.add_parser("sync", help="Execute the sync manually")
 
+    # Config help command
+    subparsers.add_parser("config-help", help="Show configuration details and example")
+
     # Launchd commands
     launchd_parser = subparsers.add_parser("launchd", help="Manage launchd agent")
-    launchd_parser.add_argument("action", choices=["install", "uninstall", "status", "logs"], help="Action to perform")
+    launchd_parser.add_argument("action", choices=["install", "uninstall", "status", "logs", "debug", "help"], help="Action to perform")
 
     args = parser.parse_args()
 
     match args.command:
         case "sync":
             run_sync()
+        case "config-help":
+            config_help()
         case "launchd":
             match args.action:
                 case "install":
@@ -174,6 +247,10 @@ def main():
                     status_launchd()
                 case "logs":
                     logs_launchd()
+                case "debug":
+                    debug_launchd()
+                case "help":
+                    help_launchd()
         case _:
             parser.print_help()
 
