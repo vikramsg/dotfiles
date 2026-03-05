@@ -6,3 +6,6 @@ tmp
 
 # Python
 __pycache__
+
+# Worktree
+.worktrees
