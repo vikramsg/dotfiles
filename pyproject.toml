@@ -1,0 +1,20 @@
+[project]
+name = "dotfiles-tools"
+version = "0.1.0"
+description = "Monorepo for dotfiles Python tools"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["bin/screenshot_sync", "router-battery-check"]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

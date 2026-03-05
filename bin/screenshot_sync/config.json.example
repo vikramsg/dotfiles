@@ -1,0 +1,4 @@
+{
+  "vm_host": "my-linux-vm",
+  "remote_dir": "~/Pictures/Screenshots/"
+}

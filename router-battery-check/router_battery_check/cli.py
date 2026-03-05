@@ -1,23 +1,10 @@
-#!/usr/bin/env -S uv run --python 3.14t
-# /// script
-# requires-python = ">=3.14"
-# dependencies = [
-#   "requests",
-#   "python-dotenv",
-#   "pyobjc-framework-CoreWLAN",
-# ]
-# ///
-
-"""
-This script checks the battery status of a router via its API and sends a native macOS
-notification if the battery level falls below a specified threshold and the device is
-not currently charging.
-
-Usage:
-    ./check_battery.py (directly via uv)
-"""
+# This script is part of a standard Python package layout.
+# The nested structure (router_battery_check/router_battery_check/cli.py) is
+# required by the `uv_build` backend to correctly identify the package name
+# and isolate the installable code from project metadata like `pyproject.toml`.
 
 import logging
+
 import os
 import re
 import subprocess
@@ -131,6 +118,9 @@ def check_battery():
     process_results(results)
 
 
-if __name__ == "__main__":
-    # Defaulting to concurrent version for normal use
+def main():
+    """Entry point for the check-battery tool."""
     check_battery()
+
+if __name__ == "__main__":
+    main()
