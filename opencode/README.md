@@ -41,6 +41,20 @@ Instead of permanently altering your default `opencode.json` to be unsafe, you c
 
 Now you can run `opencode` for normal safe operations, and `opencode-yolo` when you want the AI to execute fully autonomously.
 
+
+### Permissions
+
+Notice that we have to do `/private/tmp`.
+This is because on MacOs `/tmp` is actually a symlink from `/private/tmp`.
+So, if we specify only `/tmp` then the agent will still ask for permissions on Mac.  
+
+```yml
+  external_directory:
+    "/tmp/**": "allow"
+    "/private/tmp/**": "allow"
+
+```
+
 ## Dual Mode Models (Plan vs. Build)
 
 OpenCode utilizes a dual-mode workflow:
