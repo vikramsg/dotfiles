@@ -9,7 +9,7 @@
 --   <leader>1..9   : Jump to visible buffer 1 through 9 (Lualine index)
 --   <leader><Tab>  : Toggle alternate buffer
 --   <C-h,j,k,l>    : Navigate between splits
---   <leader>tt     : Toggle Terminal
+--   <C-t>          : Toggle Terminal
 --   <leader>d      : Delete without yanking
 --   <leader>a      : Toggle Autocomplete (nvim-cmp)
 --   <leader>f      : Format current buffer (Conform)
@@ -857,7 +857,7 @@ require("lazy").setup({
 		version = "*",
 		config = function()
 			require("toggleterm").setup({
-				open_mapping = [[<leader>tt]],
+				open_mapping = [[<C-t>]],
 				direction = "vertical", -- You can also use 'float' or 'vertical'
 				size = 65,
 				hide_numbers = true,

@@ -48,11 +48,12 @@ Notice that we have to do `/private/tmp`.
 This is because on MacOs `/tmp` is actually a symlink from `/private/tmp`.
 So, if we specify only `/tmp` then the agent will still ask for permissions on Mac.  
 
+Specifying `dir: allow` actually gives `All` permissions on that dir to the agent.
+
 ```yml
   external_directory:
     "/tmp/**": "allow"
     "/private/tmp/**": "allow"
-
 ```
 
 ## Dual Mode Models (Plan vs. Build)
