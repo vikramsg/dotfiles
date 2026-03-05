@@ -82,6 +82,12 @@ zsh:
     @echo "Setting up zsh symlink..."
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
     @echo ".zshrc symlink created at ~/.zshrc -> {{justfile_directory()}}/zsh/.zshrc"
+    @if [ "$(uname)" = "Linux" ]; then \
+        if command -v loginctl >/dev/null 2>&1; then \
+            echo "Linux detected: Enabling systemd lingering to preserve background processes (like tmux) across SSH disconnects..."; \
+            loginctl enable-linger $$USER; \
+        fi \
+    fi
 
 # Set up SSH remote forwarding socket fix (Linux only)
 setup-ssh-forwarding:
