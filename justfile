@@ -82,6 +82,12 @@ zsh:
     @echo "Setting up zsh symlink..."
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
     @echo ".zshrc symlink created at ~/.zshrc -> {{justfile_directory()}}/zsh/.zshrc"
+    @if [ "$(uname)" = "Linux" ]; then \
+        if command -v loginctl >/dev/null 2>&1; then \
+            echo "Linux detected: Enabling systemd lingering to preserve background processes (like tmux) across SSH disconnects..."; \
+            loginctl enable-linger $$USER; \
+        fi \
+    fi
 
 # Set up SSH remote forwarding socket fix (Linux only)
 setup-ssh-forwarding:
@@ -102,23 +108,6 @@ setup-ssh-forwarding:
 # Set up all symlinks
 all: nvim tmux opencode ghostty bin zsh lazygit
     @echo "All dotfiles symlinked successfully!"
-
-# Install and manage screenshot sync tool
-screenshot-sync-install:
-    @echo "Installing screenshot-sync tool via uv workspace..."
-    # --force: Reinstalls even if already present.
-    # --no-cache: Bypasses cache to ensure local code changes are applied.
-    uv tool install {{justfile_directory()}}/bin/screenshot_sync --force --no-cache
-    @echo "Tool installed to ~/.local/bin/screenshot-sync"
-
-
-# Manage screenshot sync launchd agent (install, uninstall, status, logs, debug, help)
-screenshot-sync-launchd action="help":
-    @if [ ! -f ~/.local/bin/screenshot-sync ]; then \
-        echo "Error: Tool not installed. Please run 'just screenshot-sync-install' first."; \
-        exit 1; \
-    fi
-    ~/.local/bin/screenshot-sync launchd {{action}}
 
 # Run Python tests
 python-tests:

@@ -83,3 +83,18 @@ git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 tmux source ~/.config/tmux/tmux.conf
 # C-b + I 
 ```
+
+### HALP: My tmux session dies when I disconnect from SSH
+
+If you are SSHing into a Linux server and using a command like `RemoteCommand tmux new -A -s my_session` in your local `~/.ssh/config`, your `tmux` server will likely be killed the moment you disconnect or your laptop goes to sleep.
+
+**Why does this happen?**
+Modern Linux distributions use `systemd`. By default, `systemd-logind` is configured to cleanly kill all user processes when a login session ends (`KillUserProcesses=yes`). Because you used `RemoteCommand`, the `tmux` server is tied directly to the temporary SSH session. When the connection drops, `systemd` aggressively terminates it.
+
+**The Fix:**
+You must tell `systemd` to allow your user's background processes to "linger" indefinitely after logout. Run this command **once on your remote Linux machine**:
+
+```bash
+loginctl enable-linger $USER
+```
+*(Running `just zsh` on the remote machine will also automatically run this for you).*

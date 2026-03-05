@@ -108,3 +108,16 @@ Host vm
     LocalForward 8080 localhost:8080  # Webpack Dev Server, Tomcat, general HTTP
     LocalForward 8081 localhost:8081  # Composer Airflow 
 ```
+
+### Important Note on `RemoteCommand` and `systemd`
+
+When using `RemoteCommand tmux ...` on modern Linux distributions (like Ubuntu, Debian, Fedora), you **must** enable systemd user lingering on the remote server. 
+
+By default, modern `systemd-logind` is configured to cleanly kill all user processes when a login session ends (`KillUserProcesses=yes`). Because `RemoteCommand` scopes the execution directly to the temporary SSH session, if your SSH connection drops (e.g., your laptop goes to sleep), `systemd` will detect the session closure and murder the `tmux` server. 
+
+To fix this and allow your `tmux` background processes to survive SSH disconnects, run the following command **once on your remote Linux server**:
+
+```bash
+loginctl enable-linger $USER
+```
+This tells systemd to spawn a persistent User Manager at boot and leave it running indefinitely, protecting your tmux server from being killed when the SSH connection drops.

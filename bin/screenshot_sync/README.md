@@ -38,26 +38,26 @@ Create your configuration file at `~/.config/screenshot-sync/config.json`:
 ```
 
 ### 3. Install the Tool
-From the root of this repository:
+Using `uv`:
 ```bash
-just screenshot-sync-install
+uv tool install "git+https://github.com/vikramsg/dotfiles.git#subdirectory=bin/screenshot_sync" --force
 ```
 
 ### 4. Enable the Sync Agent
 Load the `launchd` service to start monitoring your desktop:
 ```bash
-just screenshot-sync-launchd install
+screenshot-sync launchd install
 ```
 
 ## Management Commands
 
 | Command | Description |
 | --- | --- |
-| `just screenshot-sync-install` | Installs/reinstalls the `screenshot-sync` tool via `uv`. |
-| `just screenshot-sync-launchd install` | Generates the plist and starts the `launchd` monitoring. |
-| `just screenshot-sync-launchd status` | Checks if the sync agent is active. |
-| `just screenshot-sync-launchd logs` | Tails the sync agent's logs. |
-| `just screenshot-sync-launchd uninstall` | Stops and removes the `launchd` agent. |
+| `screenshot-sync self-update` | Updates the tool from GitHub and restarts the agent. |
+| `screenshot-sync launchd install` | Generates the plist and starts the `launchd` monitoring. |
+| `screenshot-sync launchd status` | Checks if the sync agent is active. |
+| `screenshot-sync launchd logs` | Tails the sync agent's logs. |
+| `screenshot-sync launchd uninstall` | Stops and removes the `launchd` agent. |
 | `screenshot-sync sync` | Manually triggers a synchronization. |
 
 ## Configuration Options
