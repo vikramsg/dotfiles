@@ -7,7 +7,9 @@
 --   zz             : Center the cursor on screen
 --   Space (Leader) : The prefix for most custom commands
 --   <leader>1..9   : Jump to visible buffer 1 through 9 (Lualine index)
+--   <leader><Tab>  : Toggle alternate buffer
 --   <C-h,j,k,l>    : Navigate between splits
+--   <leader>tt     : Toggle Terminal
 --   <leader>d      : Delete without yanking
 --   <leader>a      : Toggle Autocomplete (nvim-cmp)
 --   <leader>f      : Format current buffer (Conform)
@@ -147,6 +149,9 @@ vim.keymap.set("n", "<leader>cp", function()
 	vim.fn.setreg("+", path)
 	vim.notify('Copied "' .. path .. '" to clipboard')
 end, { desc = "Copy absolute path of current file to clipboard" })
+
+-- Toggle alternate buffer (last opened buffer)
+vim.keymap.set("n", "<leader><Tab>", "<C-^>", { desc = "Switch to alternate buffer" })
 
 --  Try it with `yap` in normal mode
 --  See `:help vim.highlight.on_yank()`
@@ -843,6 +848,26 @@ require("lazy").setup({
 		keys = {
 			{ "<leader>lg", "<cmd>LazyGit<cr>", desc = "LazyGit" },
 		},
+	},
+
+	-- Toggle terminal window
+	{
+		"akinsho/toggleterm.nvim",
+		version = "*",
+		config = function()
+			require("toggleterm").setup({
+				open_mapping = [[<leader>tt]],
+				direction = "vertical", -- You can also use 'float' or 'vertical'
+				size = 65,
+				hide_numbers = true,
+				shade_terminals = true,
+				start_in_insert = true,
+				insert_mappings = true,
+				persist_size = true,
+				close_on_exit = true,
+				shell = vim.o.shell,
+			})
+		end,
 	},
 
 	-- Statusline with git branch
