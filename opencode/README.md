@@ -143,3 +143,9 @@ Miro makes it very hard to correctly deal with this, but here's the steps.
     - This board by default will be put on your personal account. 
     - Go to 3 dots at top left, `click -> Board -> move to -> Team`.
     - Then this will be available to your agent!
+
+## Ref
+
+- [OpenCode Github](https://github.com/anomalyco/opencode)
+- [OpenCode Docs](https://opencode.ai/docs)
+- [OpenCode Config Schema](https://opencode.ai/config.json)

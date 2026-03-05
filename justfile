@@ -41,7 +41,9 @@ opencode:
     mkdir -p ~/.config
     mkdir -p ~/.config/opencode
     ln -sfn {{justfile_directory()}}/opencode/opencode.json ~/.config/opencode/opencode.json
+    ln -sfn {{justfile_directory()}}/opencode/agent ~/.config/opencode/agent
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
+    @echo "Opencode agent directory symlinked to ~/.config/opencode/agent"
 
 
 # Set up Ghostty symlink
