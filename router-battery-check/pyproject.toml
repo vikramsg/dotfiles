@@ -1,0 +1,19 @@
+[project]
+name = "router-battery-check"
+version = "0.1.0"
+description = "Check the battery status of a router and notify"
+dependencies = [
+    "requests",
+    "python-dotenv",
+    "pyobjc-framework-CoreWLAN; sys_platform == 'darwin'",
+]
+
+[project.scripts]
+check-battery = "router_battery_check:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "."

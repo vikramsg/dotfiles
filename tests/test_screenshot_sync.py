@@ -51,12 +51,13 @@ def test_sync_command_construction(mock_run, mock_config_file, monkeypatch):
     assert "--exclude=*" in cmd
 
 def test_uv_tool_install_and_path_verification():
-    # This test actually performs the installation from the root directory
+    # This test actually performs the installation of the workspace member
     root_path = Path(__file__).parent.parent
+    tool_member_path = root_path / "bin/screenshot_sync"
     expected_tool_path = Path.home() / ".local/bin/screenshot-sync"
 
-    # Force reinstall with required dependency
-    subprocess.run(["uv", "tool", "install", str(root_path), "--with", "python-dotenv", "--force"], check=True)
+    # Force reinstall of the specific workspace member
+    subprocess.run(["uv", "tool", "install", str(tool_member_path), "--force"], check=True)
 
     
     # Assert path existence

@@ -1,0 +1,17 @@
+[project]
+name = "screenshot-sync"
+version = "0.1.0"
+description = "Sync screenshots to a remote VM"
+dependencies = [
+    "python-dotenv",
+]
+
+[project.scripts]
+screenshot-sync = "screenshot_sync:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "."

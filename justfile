@@ -101,8 +101,8 @@ all: nvim tmux opencode ghostty bin zsh lazygit
 
 # Install and manage screenshot sync tool
 screenshot-sync-install:
-    @echo "Installing screenshot-sync tool via uv..."
-    uv tool install . --with python-dotenv --force
+    @echo "Installing screenshot-sync tool via uv workspace..."
+    uv tool install {{justfile_directory()}}/bin/screenshot_sync --force
     @echo "Tool installed to ~/.local/bin/screenshot-sync"
 
 # Manage screenshot sync launchd agent (install, uninstall, status)
@@ -115,7 +115,7 @@ screenshot-sync-launchd action:
 
 # Run Python tests
 python-tests:
-    @echo "Running Python tests using uv with dev group..."
+    @echo "Running Python tests using uv dev group..."
     uv run --group dev pytest
 
 

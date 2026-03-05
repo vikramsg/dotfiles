@@ -1,35 +1,20 @@
 [project]
 name = "dotfiles-tools"
 version = "0.1.0"
-description = "Tools and scripts for my dotfiles"
+description = "Monorepo for dotfiles Python tools"
 requires-python = ">=3.14"
 dependencies = []
 
-[project.scripts]
-screenshot-sync = "bin.screenshot_sync.screenshot_sync:main"
+[tool.uv.workspace]
+members = ["bin/screenshot_sync", "router-battery-check"]
+
+[tool.uv]
+package = false
 
 [dependency-groups]
 dev = [
     "pytest",
 ]
-screenshot-sync = [
-    "python-dotenv",
-]
-router-battery-check = [
-    "requests",
-    "python-dotenv",
-    "pyobjc-framework-CoreWLAN; sys_platform == 'darwin'",
-]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["bin", "router-battery-check"]
-
-[tool.uv]
-package = true
 
 [tool.pytest.ini_options]
 pythonpath = "."

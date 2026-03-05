@@ -2,6 +2,13 @@ version = 1
 revision = 3
 requires-python = ">=3.14"
 
+[manifest]
+members = [
+    "dotfiles-tools",
+    "router-battery-check",
+    "screenshot-sync",
+]
+
 [[package]]
 name = "certifi"
 version = "2026.2.25"
@@ -48,31 +55,17 @@ wheels = [
 [[package]]
 name = "dotfiles-tools"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
-]
-router-battery-check = [
-    { name = "pyobjc-framework-corewlan", marker = "sys_platform == 'darwin'" },
-    { name = "python-dotenv" },
-    { name = "requests" },
-]
-screenshot-sync = [
-    { name = "python-dotenv" },
 ]
 
 [package.metadata]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest" }]
-router-battery-check = [
-    { name = "pyobjc-framework-corewlan", marker = "sys_platform == 'darwin'" },
-    { name = "python-dotenv" },
-    { name = "requests" },
-]
-screenshot-sync = [{ name = "python-dotenv" }]
 
 [[package]]
 name = "idna"
@@ -195,6 +188,34 @@ sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
 ]
+
+[[package]]
+name = "router-battery-check"
+version = "0.1.0"
+source = { editable = "router-battery-check" }
+dependencies = [
+    { name = "pyobjc-framework-corewlan", marker = "sys_platform == 'darwin'" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pyobjc-framework-corewlan", marker = "sys_platform == 'darwin'" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+]
+
+[[package]]
+name = "screenshot-sync"
+version = "0.1.0"
+source = { editable = "bin/screenshot_sync" }
+dependencies = [
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "python-dotenv" }]
 
 [[package]]
 name = "urllib3"
