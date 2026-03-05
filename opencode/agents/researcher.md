@@ -1,6 +1,7 @@
 ---
 description: Codebase researcher subagent that clones repositories to /tmp, researches topics, and returns citations.
-mode: subagent
+mode: agent
+hidden: true
 permission:
   edit: "deny"
   write: "deny"
