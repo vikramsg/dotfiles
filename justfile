@@ -85,7 +85,8 @@ zsh:
     @if [ "$(uname)" = "Linux" ]; then \
         if command -v loginctl >/dev/null 2>&1; then \
             echo "Linux detected: Enabling systemd lingering to preserve background processes (like tmux) across SSH disconnects..."; \
-            loginctl enable-linger $$USER; \
+            loginctl enable-linger $USER; \
+            echo "Check current status by doing - loginctl show-user \$USER --property=Linger"; \
         fi \
     fi
 
