@@ -70,15 +70,10 @@ setopt HIST_IGNORE_SPACE     # Don't record commands starting with a space
 setopt HIST_REDUCE_BLANKS    # Remove extra blanks from commands
 
 #########################################
-# Aliases
-
-[[ -f ~/.zshenv ]] && source ~/.zshenv
-
-#########################################
 # Setup PATH to use locally installed binaries
 export PATH="$HOME/.local/bin:$PATH"
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    export PATH="$HOME/.local/bin:$PATH"
+    export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 fi
 
 #########################################
@@ -102,4 +97,18 @@ alias gs="gcloud storage"
 # Init zoxide
 eval "$(zoxide init zsh)"
 
+#########################################
+# Tmux: Prefer system tmux to avoid Homebrew TTY issues on linux
 
+tmux() {
+    # Ensure we use a stable path and a compatible terminal type
+    if [[ -x /usr/bin/tmux ]]; then
+        TERM=xterm-256color /usr/bin/tmux "$@"
+    elif [[ -x /bin/tmux ]]; then
+        TERM=xterm-256color /bin/tmux "$@"
+    else
+        TERM=xterm-256color command tmux "$@"
+    fi
+}
+
+[[ -f ~/.zshenv ]] && source ~/.zshenv
