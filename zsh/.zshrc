@@ -98,17 +98,5 @@ alias gs="gcloud storage"
 eval "$(zoxide init zsh)"
 
 #########################################
-# Tmux: Prefer system tmux to avoid Homebrew TTY issues on linux
-
-tmux() {
-    # Ensure we use a stable path and a compatible terminal type
-    if [[ -x /usr/bin/tmux ]]; then
-        TERM=xterm-256color /usr/bin/tmux "$@"
-    elif [[ -x /bin/tmux ]]; then
-        TERM=xterm-256color /bin/tmux "$@"
-    else
-        TERM=xterm-256color command tmux "$@"
-    fi
-}
 
 [[ -f ~/.zshenv ]] && source ~/.zshenv
