@@ -70,15 +70,10 @@ setopt HIST_IGNORE_SPACE     # Don't record commands starting with a space
 setopt HIST_REDUCE_BLANKS    # Remove extra blanks from commands
 
 #########################################
-# Aliases
-
-[[ -f ~/.zshenv ]] && source ~/.zshenv
-
-#########################################
 # Setup PATH to use locally installed binaries
 export PATH="$HOME/.local/bin:$PATH"
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    export PATH="$HOME/.local/bin:$PATH"
+    export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 fi
 
 #########################################
@@ -98,8 +93,15 @@ fi
 alias gcloud-auth="gcloud auth login"
 alias gs="gcloud storage"
 
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    alias chafa="chafa --passthrough=tmux -f kitty" 
+fi
+
+
 #########################################
 # Init zoxide
 eval "$(zoxide init zsh)"
 
+#########################################
 
+[[ -f ~/.zshenv ]] && source ~/.zshenv
