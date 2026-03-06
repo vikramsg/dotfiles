@@ -85,18 +85,21 @@ fi
 # Common aliases
 alias vi="nvim"
 
-# Replace: alias ls="ls -G"
-# With:
+# Replace standard ls with eza (icons + grid view)
+alias ls='eza --icons --grid'
+
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    alias ls='ls --color=auto'
     export BROWSER="xdg-open"
     export GH_BROWSER="xdg-open"
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    alias ls='ls -G'
 fi
 
 #########################################
 # gcloud commands
 alias gcloud-auth="gcloud auth login"
 alias gs="gcloud storage"
+
+#########################################
+# Init zoxide
+eval "$(zoxide init zsh)"
+
 
