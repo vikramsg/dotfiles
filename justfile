@@ -115,4 +115,17 @@ python-tests:
     @echo "Running Python tests using uv dev group..."
     uv run --group dev pytest
 
+# Install CLI tools
+install-tools:
+    @echo "Installing eza, zoxide, and chafa..."
+    @if ! command -v brew > /dev/null; then \
+        echo "Homebrew is not installed. Please install Homebrew first."; \
+        exit 1; \
+    fi
+    brew install eza zoxide chafa
+    @echo "The following tools have been successfully installed:"
+    @echo "  - eza"
+    @echo "  - zoxide"
+    @echo "  - chafa"
+
 
