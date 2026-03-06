@@ -93,6 +93,11 @@ fi
 alias gcloud-auth="gcloud auth login"
 alias gs="gcloud storage"
 
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    alias chafa="chafa --passthrough=tmux -f kitty" 
+fi
+
+
 #########################################
 # Init zoxide
 eval "$(zoxide init zsh)"
