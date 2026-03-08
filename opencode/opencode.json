@@ -8,6 +8,15 @@
     },
     "external_directory": {
       "/tmp/**": "allow"
+    },
+    "read": {
+      "~/.local/**": "allow"
+    },
+    "glob": {
+      "*.local/**": "allow"
+    },
+    "grep": {
+      "*.local/**": "allow"
     }
   },
   "plugin": ["opencode-websearch-cited@1.2.0"],
