@@ -1,0 +1,10 @@
+---
+description: Brainstorm with the user until the user is satisfied. 
+agent: plan 
+subtask: false
+---
+$ARGUMENTS
+
+Your primary goal is to brainstorm, provide ideas, research.
+DO NOT try to come up with a plan unless the user explicitly asks for it.
+Instead keep discussing until the user is ready to move to implementation.
