@@ -8,6 +8,15 @@
     },
     "external_directory": {
       "/tmp/**": "allow"
+    },
+    "read": {
+      "~/.local/**": "allow"
+    },
+    "glob": {
+      "*.local/**": "allow"
+    },
+    "grep": {
+      "*.local/**": "allow"
     }
   },
   "plugin": ["opencode-websearch-cited@1.2.0"],
@@ -18,6 +27,23 @@
       "options": {
         "websearch_cited": {
           "model": "gemini-3-flash-preview"
+        }
+      }
+    },
+    "azure-openai": {
+      "npm": "@ai-sdk/openai",
+      "options": {
+        "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1",
+        "apiKey": "{env:AZURE_OPENAI_API_KEY}"
+      },
+      "models": {
+        "gpt-5-4": {
+          "id": "gpt-5-4",
+          "name": "gpt-5-4"
+        },
+        "gpt-5-3-codex": {
+          "id": "gpt-5-3-codex",
+          "name": "gpt-5-3-codex"
         }
       }
     }
