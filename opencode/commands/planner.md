@@ -1,5 +1,5 @@
 ---
-description: Research a topic, codebase, or repository
+description: Provide a complete actionable implementation plan ready for a coding agent to use. 
 agent: plan 
 subtask: false
 ---

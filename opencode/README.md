@@ -160,6 +160,24 @@ Miro makes it very hard to correctly deal with this, but here's the steps.
     - Go to 3 dots at top left, `click -> Board -> move to -> Team`.
     - Then this will be available to your agent!
 
+## Auth
+
+
+Helpful commands
+
+```bash
+# To setup auth for provider, mcp etc.
+# Auth usually saved in ~/.local/share/opencode/auth.json
+opencode auth login
+```
+
+For custom providers, once the provider is setup in `opencode.json`,
+open the TUI and then do `/connect`.
+The provider should be available under `Other`.
+Enter your key there.
+
+
+
 ## Ref
 
 - [OpenCode Github](https://github.com/anomalyco/opencode)
