@@ -72,6 +72,9 @@ setopt HIST_REDUCE_BLANKS    # Remove extra blanks from commands
 #########################################
 # Setup PATH to use locally installed binaries
 export PATH="$HOME/.local/bin:$PATH"
+if [[ -d /opt/homebrew/opt/rustup/bin ]]; then
+    export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
+fi
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 fi
