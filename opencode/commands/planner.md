@@ -31,5 +31,7 @@ and then proceeding with implementation.
 
 ## Checklist of tasks to be done
 
+(NOTE: The checlist should not just be `1. write failing test, 2. implement fix..... It should be 1. write failing test, 2. Run tests to validate that its actually failing, otherwise write the correct test. 3. implement fix..`)
+
 ```
 
