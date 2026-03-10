@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf '%s\n' "Usage: oc-fast [on|off|status|toggle]"
+}
+
+cmd="${1:-status}"
+
+case "$cmd" in
+  on|off|status|toggle)
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
+
+if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  root="$git_root"
+else
+  root="$PWD"
+fi
+
+state_dir="$root/.opencode"
+state_file="$state_dir/fast-mode.json"
+
+read_enabled() {
+  if [[ ! -f "$state_file" ]]; then
+    printf '%s' "false"
+    return
+  fi
+
+  if grep -q '"enabled"[[:space:]]*:[[:space:]]*true' "$state_file"; then
+    printf '%s' "true"
+  else
+    printf '%s' "false"
+  fi
+}
+
+write_enabled() {
+  local enabled="$1"
+  mkdir -p "$state_dir"
+  cat >"$state_file" <<EOF
+{
+  "enabled": $enabled
+}
+EOF
+}
+
+enabled="$(read_enabled)"
+
+case "$cmd" in
+  on)
+    enabled="true"
+    write_enabled "$enabled"
+    ;;
+  off)
+    enabled="false"
+    write_enabled "$enabled"
+    ;;
+  toggle)
+    if [[ "$enabled" == "true" ]]; then
+      enabled="false"
+    else
+      enabled="true"
+    fi
+    write_enabled "$enabled"
+    ;;
+  status)
+    ;;
+esac
+
+if [[ "$enabled" == "true" ]]; then
+  tier="priority"
+  state="ON"
+else
+  tier="auto"
+  state="OFF"
+fi
+
+printf '%s\n' "Fast mode is $state (service tier: $tier)."
+printf '%s\n' "State file: $state_file"

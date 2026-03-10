@@ -171,6 +171,34 @@ Helpful commands
 opencode auth login
 ```
 
+## Deterministic Fast Mode
+
+Use the local controller script instead of markdown slash commands:
+
+```bash
+~/Projects/Personal/dotfiles/opencode/bin/oc-fast status
+~/Projects/Personal/dotfiles/opencode/bin/oc-fast on
+~/Projects/Personal/dotfiles/opencode/bin/oc-fast off
+~/Projects/Personal/dotfiles/opencode/bin/oc-fast toggle
+```
+
+What this does:
+
+- Persists state in `.opencode/fast-mode.json` in the repo root.
+- OpenCode plugin `opencode/plugins/fast-mode.ts` reads that file in `chat.params` and sets OpenAI `serviceTier` to `priority` when enabled, `auto` when disabled.
+- Writes request-side verification entries to `.opencode/fast-mode.audit.log`.
+
+Inside TUI, use shell mode for deterministic control:
+
+1. Press `!` at the start of the input to enter shell mode.
+2. Run `~/Projects/Personal/dotfiles/opencode/bin/oc-fast status` (or `on` / `off`).
+
+Optional alias:
+
+```bash
+alias oc-fast="$HOME/Projects/Personal/dotfiles/opencode/bin/oc-fast"
+```
+
 For custom providers, once the provider is setup in `opencode.json`,
 open the TUI and then do `/connect`.
 The provider should be available under `Other`.
