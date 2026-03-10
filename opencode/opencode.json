@@ -22,7 +22,10 @@
       "/opt/homebrew/lib/**": "allow"
     }
   },
-  "plugin": ["opencode-websearch-cited@1.2.0"],
+  "plugin": [
+    "opencode-websearch-cited@1.2.0",
+    "file:///home/vikram_orbio_earth/personal/dotfiles/opencode/plugins/fast-mode/index.ts"
+  ],
   "lsp": false,
   "formatter": false,
   "provider": {

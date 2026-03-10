@@ -34,10 +34,10 @@ The implementation must:
 
 Use an external state controller + plugin request mutation:
 
-1. Add `opencode/bin/oc-fast` script.
-2. Script writes/reads `.opencode/fast-mode.json` in repo root (or detected git root).
-3. Plugin `.opencode/plugins/fast-mode.ts` reads state and sets `output.options.serviceTier` in `chat.params`.
-4. Plugin appends audit entries to `.opencode/fast-mode.audit.log` for deterministic verification.
+1. Add `opencode/plugins/fast-mode/oc-fast` script.
+2. Script writes/reads global state at `~/.local/share/opencode/plugins/fast-mode.json` (or `$XDG_DATA_HOME/opencode/plugins/fast-mode.json`).
+3. Plugin `opencode/plugins/fast-mode/index.ts` reads state and sets `output.options.serviceTier` in `chat.params`.
+4. Plugin writes audit entries only when `OPENCODE_FAST_MODE_AUDIT` is enabled.
 5. Use from TUI via shell mode: `!oc-fast on|off|status`.
 
 Why deterministic:
@@ -75,13 +75,13 @@ Tradeoff:
 
 Acceptance criteria:
 - `oc-fast on|off|status|toggle` behaves deterministically with exit code 0.
-- `.opencode/fast-mode.json` persists across sessions.
+- `~/.local/share/opencode/plugins/fast-mode.json` persists across sessions.
 
 ### Task group B: plugin request mutation
 
 - Remove tool-based toggling from plugin.
 - In `chat.params`, read state and apply OpenAI-only `serviceTier`.
-- Append deterministic audit log entry per request.
+- Append audit entries only when `OPENCODE_FAST_MODE_AUDIT` is enabled.
 
 Acceptance criteria:
 - Enabled mode sets tier to `priority` on requests.
@@ -115,9 +115,9 @@ Acceptance criteria:
 | `oc-fast off` | writes disabled state deterministically |
 | `oc-fast status` | prints persisted state deterministically |
 | `oc-fast toggle` | flips persisted state deterministically |
-| restart OpenCode | prior state restored from `.opencode/fast-mode.json` |
-| prompt with OpenAI provider | audit shows `serviceTier=priority` when enabled |
-| prompt with OpenAI provider disabled | audit shows `serviceTier=auto` when disabled |
+| restart OpenCode | prior state restored from global state file |
+| prompt with OpenAI provider | audit shows `serviceTier=priority` when enabled (with env var enabled) |
+| prompt with OpenAI provider disabled | audit shows `serviceTier=auto` when disabled (with env var enabled) |
 | non-OpenAI provider prompt | no forced OpenAI `serviceTier` mutation |
 | TUI shell mode | `!oc-fast status` works from within prompt UI |
 
@@ -145,7 +145,7 @@ Acceptance criteria:
 
 ## 10) Done definition
 
-- `/fast on|off|status` works end-to-end.
+- `oc-fast on|off|status|toggle` works end-to-end.
 - Request tier mutation is observable and correct.
 - Behavior is safe on unsupported providers.
 - Documentation includes usage, caveats, and rollback steps.

@@ -173,30 +173,40 @@ opencode auth login
 
 ## Deterministic Fast Mode
 
-Use the local controller script instead of markdown slash commands:
+Use the plugin-local controller script instead of markdown slash commands:
 
 ```bash
-~/Projects/Personal/dotfiles/opencode/bin/oc-fast status
-~/Projects/Personal/dotfiles/opencode/bin/oc-fast on
-~/Projects/Personal/dotfiles/opencode/bin/oc-fast off
-~/Projects/Personal/dotfiles/opencode/bin/oc-fast toggle
+~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast status
+~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast on
+~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast off
+~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast toggle
 ```
 
 What this does:
 
-- Persists state in `.opencode/fast-mode.json` in the repo root.
-- OpenCode plugin `opencode/plugins/fast-mode.ts` reads that file in `chat.params` and sets OpenAI `serviceTier` to `priority` when enabled, `auto` when disabled.
-- Writes request-side verification entries to `.opencode/fast-mode.audit.log`.
+- Persists global state in `~/.local/share/opencode/plugins/fast-mode.json` (or `$XDG_DATA_HOME/opencode/plugins/fast-mode.json`).
+- OpenCode plugin `opencode/plugins/fast-mode/index.ts` reads that file in `chat.params` and sets OpenAI `serviceTier` to `priority` when enabled, `auto` when disabled.
+- Audit logging is opt-in only via `OPENCODE_FAST_MODE_AUDIT=1`.
 
 Inside TUI, use shell mode for deterministic control:
 
 1. Press `!` at the start of the input to enter shell mode.
-2. Run `~/Projects/Personal/dotfiles/opencode/bin/oc-fast status` (or `on` / `off`).
+2. Run `~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast status` (or `on` / `off`).
+
+To enable plugin audit entries:
+
+```bash
+export OPENCODE_FAST_MODE_AUDIT=1
+```
+
+Plugin docs:
+
+- `opencode/plugins/fast-mode/README.md`
 
 Optional alias:
 
 ```bash
-alias oc-fast="$HOME/Projects/Personal/dotfiles/opencode/bin/oc-fast"
+alias oc-fast="$HOME/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast"
 ```
 
 For custom providers, once the provider is setup in `opencode.json`,

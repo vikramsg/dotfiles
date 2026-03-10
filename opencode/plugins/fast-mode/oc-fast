@@ -2,13 +2,13 @@
 set -euo pipefail
 
 usage() {
-  printf '%s\n' "Usage: oc-fast [on|off|status|toggle]"
+  printf '%s\n' "Usage: oc-fast [on|off|status|toggle|path]"
 }
 
 cmd="${1:-status}"
 
 case "$cmd" in
-  on|off|status|toggle)
+  on|off|status|toggle|path)
     ;;
   *)
     usage
@@ -16,14 +16,10 @@ case "$cmd" in
     ;;
 esac
 
-if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
-  root="$git_root"
-else
-  root="$PWD"
-fi
-
-state_dir="$root/.opencode"
+data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+state_dir="$data_home/opencode/plugins"
 state_file="$state_dir/fast-mode.json"
+audit_file="$state_dir/fast-mode.audit.log"
 
 read_enabled() {
   if [[ ! -f "$state_file" ]]; then
@@ -47,6 +43,12 @@ write_enabled() {
 }
 EOF
 }
+
+if [[ "$cmd" == "path" ]]; then
+  printf '%s\n' "State file: $state_file"
+  printf '%s\n' "Audit file: $audit_file"
+  exit 0
+fi
 
 enabled="$(read_enabled)"
 
