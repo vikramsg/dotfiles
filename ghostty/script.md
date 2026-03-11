@@ -23,7 +23,9 @@ References:
 
 ## Why Tab Renaming Works Indirectly
 
-Ghostty exposes the tab `name`, but the AppleScript dictionary defines it as a read-only property. In practice, Ghostty updates that title from the terminal process. That means the reliable way to rename a tab is to emit a terminal title escape sequence from the command that launches inside the tab.
+Ghostty exposes the tab `name`, but the AppleScript dictionary defines it as a read-only property. 
+In practice, Ghostty updates that title from the terminal process. 
+That means the reliable way to rename a tab is to emit a terminal title escape sequence from the command that launches inside the tab.
 
 The standard sequence used here is:
 
