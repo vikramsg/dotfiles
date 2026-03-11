@@ -131,8 +131,3 @@ Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier =
 - [I2] https://github.com/anomalyco/opencode/issues/10262
 - [I3] https://github.com/anomalyco/opencode/issues/5305
 
-## 10) Citation completeness checklist
-
-- Every implementation claim in sections 3-8 has at least one [R#] citation.
-- Product/billing behavior claims use [W#] docs.
-- User-observed behavior alignment uses [I#] issue evidence.
