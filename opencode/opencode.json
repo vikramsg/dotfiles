@@ -22,6 +22,18 @@
       "/opt/homebrew/lib/**": "allow"
     }
   },
+  "agent": {
+    "build": {
+      "options": {
+        "serviceTier": "priority"
+      }
+    },
+    "plan": {
+      "options": {
+        "serviceTier": "priority"
+      }
+    }
+  },
   "plugin": ["opencode-websearch-cited@1.2.0"],
   "lsp": false,
   "formatter": false,

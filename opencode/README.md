@@ -177,6 +177,37 @@ The provider should be available under `Other`.
 Enter your key there.
 
 
+## OpenAI Priority Tier
+
+For a static Codex-like fast-tier setup, this repo now uses plain agent config instead of plugin state.
+
+```json
+{
+  "agent": {
+    "build": {
+      "options": {
+        "serviceTier": "priority"
+      }
+    },
+    "plan": {
+      "options": {
+        "serviceTier": "priority"
+      }
+    }
+  }
+}
+```
+
+What this does:
+
+- Applies OpenAI `serviceTier: "priority"` to both the `build` and `plan` agents.
+- Only affects providers that use the OpenAI Responses option surface.
+
+Important caveat:
+
+- OpenCode validates `serviceTier` support per model. If the selected model does not support `priority`, the provider layer removes `service_tier` from the request rather than crashing.
+
+
 
 ## Ref
 
