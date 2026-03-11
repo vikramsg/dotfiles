@@ -171,6 +171,12 @@ Helpful commands
 opencode auth login
 ```
 
+For custom providers, once the provider is setup in `opencode.json`,
+open the TUI and then do `/connect`.
+The provider should be available under `Other`.
+Enter your key there.
+
+
 ## OpenAI Priority Tier
 
 For a static Codex-like fast-tier setup, this repo now uses plain agent config instead of plugin state.
@@ -195,17 +201,11 @@ For a static Codex-like fast-tier setup, this repo now uses plain agent config i
 What this does:
 
 - Applies OpenAI `serviceTier: "priority"` to both the `build` and `plan` agents.
-- Keeps the setup deterministic because the value lives directly in config rather than in a prompt or markdown command.
 - Only affects providers that use the OpenAI Responses option surface.
 
 Important caveat:
 
 - OpenCode validates `serviceTier` support per model. If the selected model does not support `priority`, the provider layer removes `service_tier` from the request rather than crashing.
-
-For custom providers, once the provider is setup in `opencode.json`,
-open the TUI and then do `/connect`.
-The provider should be available under `Other`.
-Enter your key there.
 
 
 

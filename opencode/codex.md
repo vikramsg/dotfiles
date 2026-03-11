@@ -109,18 +109,18 @@ Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier =
 
 ### Repository citations
 
-- [R1] `/tmp/research-codex-cli/codex-rs/tui/src/chatwidget.rs`: `dispatch_command` (around line 3876), `dispatch_command_with_args` (around line 4205), `set_service_tier_selection` (around line 7420).
-- [R2] `/tmp/research-codex-cli/codex-rs/core/src/client.rs`: `build_responses_request` mapping `ServiceTier::Fast` -> `"priority"` (around lines 490-551).
-- [R3] `/tmp/research-codex-cli/codex-rs/codex-api/src/endpoint/responses.rs`: stream request serialization and POST path `responses` (around lines 58-126).
-- [R4] `/tmp/research-codex-cli/codex-rs/codex-api/src/endpoint/responses_websocket.rs`: websocket `stream_request` for `ResponsesWsRequest` (around lines 216-270).
-- [R5] `/tmp/research-codex-cli/codex-rs/codex-api/src/common.rs`: `ResponsesApiRequest.service_tier`, `ResponseCreateWsRequest.service_tier`, `ResponsesWsRequest::ResponseCreate` (around lines 144-218).
-- [R6] `/tmp/research-codex-cli/codex-rs/tui/src/slash_command.rs`: `/fast` command metadata and inline-args support (command description / `supports_inline_args`).
-- [R7] `/tmp/research-codex-cli/codex-rs/protocol/src/protocol.rs`: `service_tier` override fields in `Op` payloads (around lines 241-307).
-- [R8] `/tmp/research-codex-cli/codex-rs/tui/src/app.rs` and `/tmp/research-codex-cli/codex-rs/tui/src/app_event.rs`: `PersistServiceTierSelection` handling and persistence write.
-- [R9] `/tmp/research-opencode/packages/plugin/src/index.ts`: plugin hook surface including `"chat.params"`.
-- [R10] `/tmp/research-opencode/packages/opencode/src/provider/sdk/copilot/responses/openai-responses-language-model.ts`: `serviceTier` option and serialization to `service_tier`.
-- [R11] `/tmp/research-codex-cli/codex-rs/core/src/config/mod.rs`: service tier config merge/selection path.
-- [R12] `/tmp/research-opencode/packages/opencode/src/session/llm.ts`: `mergeDeep(input.agent.options)` merges agent options into final request options before provider send.
+- [R1] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/tui/src/chatwidget.rs#L3876 and https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/tui/src/chatwidget.rs#L4205 and https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/tui/src/chatwidget.rs#L7420 — `/fast` toggle logic, `on|off|status` handling, and service-tier setter.
+- [R2] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/core/src/client.rs#L490-L551 — `build_responses_request` maps `ServiceTier::Fast` to wire payload `"priority"`.
+- [R3] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/codex-api/src/endpoint/responses.rs#L58-L126 — Responses HTTP/SSE request serialization and `responses` POST path.
+- [R4] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/codex-api/src/endpoint/responses_websocket.rs#L216-L270 — websocket `stream_request` for `ResponsesWsRequest`.
+- [R5] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/codex-api/src/common.rs#L144-L218 — `ResponsesApiRequest.service_tier`, `ResponseCreateWsRequest.service_tier`, and `ResponsesWsRequest::ResponseCreate`.
+- [R6] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/tui/src/slash_command.rs#L65-L149 — `/fast` command description, inline-arg support, and availability metadata.
+- [R7] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/protocol/src/protocol.rs#L241-L307 — per-turn and persistent `service_tier` override fields.
+- [R8] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/tui/src/app.rs#L2848-L2879 — `PersistServiceTierSelection` handling and user-facing persistence messages.
+- [R9] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/plugin/src/index.ts#L166-L177 — plugin hook surface including `"chat.params"`.
+- [R10] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/provider/sdk/copilot/responses/openai-responses-language-model.ts#L284-L373 — `serviceTier` serialization to `service_tier` and unsupported-tier stripping logic.
+- [R11] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/core/src/config/mod.rs#L2185-L2194 — service-tier config merge and feature gating.
+- [R12] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/session/llm.ts#L95-L131 — `mergeDeep(input.agent.options)` merges agent options into final request options before provider send.
 
 ### Web/docs citations
 
