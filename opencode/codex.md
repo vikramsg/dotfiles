@@ -10,7 +10,7 @@ This document captures how Codex CLI `/fast` works at the API payload level, and
 - `/fast` does **not** use a dedicated endpoint; Codex keeps using the standard Responses API path (`responses`) and the Responses WebSocket `response.create` flow. [R3][R4][R5]
 - The effective API control is a request payload field: `service_tier`. [R5]
 - Internal Codex `ServiceTier::Fast` is mapped to wire value `"priority"` in request construction. [R2]
-- OpenCode already exposes equivalent payload control (`serviceTier` provider option serialized to `service_tier`), so a functional equivalent can be implemented either with plugin hooks or with static per-agent config. [R9][R10][R12]
+- OpenCode already exposes equivalent payload control, and for `@ai-sdk/openai` / `@ai-sdk/azure` models it can be driven either by plugin hooks or by static per-agent config. OpenCode merges agent options into runtime options, namespaces them under the `openai` provider key, and the upstream AI SDK Responses client serializes `serviceTier` to `service_tier`. [R10][R12][R13]
 
 ## 3) Codex command-side behavior
 
@@ -82,15 +82,15 @@ OpenCode exposes equivalent control knobs:
 
 - Static agent config can set `agent.<name>.options.serviceTier`, and OpenCode merges `agent.options` into runtime LLM options before request send. [R12]
 - Plugin hook `"chat.params"` can mutate request options before model call. [R9]
-- OpenAI Responses provider maps `providerOptions.openai.serviceTier` to request `service_tier`. [R10]
-- Supported OpenCode values there are `auto | flex | priority`. [R10]
+- For `@ai-sdk/openai` and `@ai-sdk/azure`, OpenCode routes provider options under the `openai` namespace and selects `sdk.responses(modelID)` for normal Responses API calls. [R10][R11]
+- The upstream AI SDK OpenAI Responses client serializes `serviceTier` to request `service_tier` and strips unsupported tiers when necessary. [R13]
 
-Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier = "priority"` when enabled, and `auto`/unset when disabled. For a deterministic always-on setup, setting `agent.build.options.serviceTier = "priority"` and `agent.plan.options.serviceTier = "priority"` is the simplest config-only approach. [R2][R10][R12]
+Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier = "priority"` when enabled, and `auto`/unset when disabled. For a deterministic always-on setup, setting `agent.build.options.serviceTier = "priority"` and `agent.plan.options.serviceTier = "priority"` is the simplest config-only approach. [R2][R10][R12][R13]
 
 ## 7) Non-equivalences and constraints
 
 - Codex docs describe ChatGPT-credit fast mode behavior and billing semantics that are product-level, not only payload-level. [W1][W2]
-- OpenCode command execution path for custom commands is agent-mediated today, so a user-defined `/fast` command is not inherently an instant native command unless core command registration is extended. [R12][I2][I3]
+- OpenCode command execution path for custom commands is agent-mediated today, so a user-defined `/fast` command is not inherently an instant native command unless core command registration is extended. [R14][I2][I3]
 
 ## 8) Evidence table
 
@@ -102,8 +102,9 @@ Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier =
 | No dedicated fast endpoint | responses endpoint path + WS response.create flow [R3][R4] |
 | Payload control field is `service_tier` | request structs in codex-api [R5] |
 | Internal Fast maps to wire `priority` | `build_responses_request` mapping code [R2] |
-| OpenCode supports equivalent field | OpenCode provider maps `serviceTier` -> `service_tier` [R10] |
 | OpenCode can set it statically in config | `agent.options` are merged into runtime options before send [R12] |
+| OpenCode routes OpenAI/Azure options to Responses client | provider key mapping + `sdk.responses(modelID)` selection [R10][R11] |
+| OpenAI Responses client emits `service_tier` | upstream AI SDK serializes `serviceTier` and strips unsupported tiers [R13] |
 
 ## 9) Citations
 
@@ -118,9 +119,11 @@ Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier =
 - [R7] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/protocol/src/protocol.rs#L241-L307 — per-turn and persistent `service_tier` override fields.
 - [R8] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/tui/src/app.rs#L2848-L2879 — `PersistServiceTierSelection` handling and user-facing persistence messages.
 - [R9] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/plugin/src/index.ts#L166-L177 — plugin hook surface including `"chat.params"`.
-- [R10] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/provider/sdk/copilot/responses/openai-responses-language-model.ts#L284-L373 — `serviceTier` serialization to `service_tier` and unsupported-tier stripping logic.
-- [R11] https://github.com/openai/codex/blob/2bc3e52a91bb88a0e067a95f8f8559f8711d30e6/codex-rs/core/src/config/mod.rs#L2185-L2194 — service-tier config merge and feature gating.
+- [R10] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/provider/transform.ts#L23-L31 and https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/provider/transform.ts#L840-L872 — `@ai-sdk/openai` / `@ai-sdk/azure` options are namespaced under `openai` for providerOptions.
+- [R11] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/provider/provider.ts#L88-L110 and https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/provider/provider.ts#L154-L205 — OpenCode uses bundled `@ai-sdk/openai` / `@ai-sdk/azure` providers and selects `sdk.responses(modelID)` for OpenAI/Azure Responses API calls.
 - [R12] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/session/llm.ts#L95-L131 — `mergeDeep(input.agent.options)` merges agent options into final request options before provider send.
+- [R13] https://github.com/vercel/ai/blob/37b1b9d0247d498f019de0200134511647add4d9/packages/openai/src/responses/openai-responses-language-model.ts#L324-L429 — upstream `@ai-sdk/openai` Responses client serializes `serviceTier` to `service_tier` and removes unsupported tiers.
+- [R14] https://github.com/sst/opencode/blob/c71d1bde5e8dcc8be49c15697ad2e5d0f2607e5e/packages/opencode/src/session/prompt.ts#L1794-L1873 — custom command execution resolves the markdown command and then calls `prompt(...)`, making it agent-mediated.
 
 ### Web/docs citations
 
