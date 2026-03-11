@@ -171,43 +171,36 @@ Helpful commands
 opencode auth login
 ```
 
-## Deterministic Fast Mode
+## OpenAI Priority Tier
 
-Use the plugin-local controller script instead of markdown slash commands:
+For a static Codex-like fast-tier setup, this repo now uses plain agent config instead of plugin state.
 
-```bash
-~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast status
-~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast on
-~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast off
-~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast toggle
+```json
+{
+  "agent": {
+    "build": {
+      "options": {
+        "serviceTier": "priority"
+      }
+    },
+    "plan": {
+      "options": {
+        "serviceTier": "priority"
+      }
+    }
+  }
+}
 ```
 
 What this does:
 
-- Persists global state in `~/.local/share/opencode/plugins/fast-mode.json` (or `$XDG_DATA_HOME/opencode/plugins/fast-mode.json`).
-- OpenCode plugin `opencode/plugins/fast-mode/index.ts` reads that file in `chat.params` and sets OpenAI `serviceTier` to `priority` when enabled, `auto` when disabled.
-- Audit logging is opt-in only via `OPENCODE_FAST_MODE_AUDIT=1`.
+- Applies OpenAI `serviceTier: "priority"` to both the `build` and `plan` agents.
+- Keeps the setup deterministic because the value lives directly in config rather than in a prompt or markdown command.
+- Only affects providers that use the OpenAI Responses option surface.
 
-Inside TUI, use shell mode for deterministic control:
+Important caveat:
 
-1. Press `!` at the start of the input to enter shell mode.
-2. Run `~/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast status` (or `on` / `off`).
-
-To enable plugin audit entries:
-
-```bash
-export OPENCODE_FAST_MODE_AUDIT=1
-```
-
-Plugin docs:
-
-- `opencode/plugins/fast-mode/README.md`
-
-Optional alias:
-
-```bash
-alias oc-fast="$HOME/Projects/Personal/dotfiles/opencode/plugins/fast-mode/oc-fast"
-```
+- OpenCode validates `serviceTier` support per model. If the selected model does not support `priority`, the provider layer removes `service_tier` from the request rather than crashing.
 
 For custom providers, once the provider is setup in `opencode.json`,
 open the TUI and then do `/connect`.

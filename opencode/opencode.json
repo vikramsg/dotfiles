@@ -27,6 +27,11 @@
       "options": {
         "serviceTier": "priority"
       }
+    },
+    "plan": {
+      "options": {
+        "serviceTier": "priority"
+      }
     }
   },
   "plugin": ["opencode-websearch-cited@1.2.0"],

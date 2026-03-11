@@ -10,7 +10,7 @@ This document captures how Codex CLI `/fast` works at the API payload level, and
 - `/fast` does **not** use a dedicated endpoint; Codex keeps using the standard Responses API path (`responses`) and the Responses WebSocket `response.create` flow. [R3][R4][R5]
 - The effective API control is a request payload field: `service_tier`. [R5]
 - Internal Codex `ServiceTier::Fast` is mapped to wire value `"priority"` in request construction. [R2]
-- OpenCode already exposes equivalent payload control (`serviceTier` provider option serialized to `service_tier`), so a functional equivalent can be implemented with plugin hooks. [R9][R10]
+- OpenCode already exposes equivalent payload control (`serviceTier` provider option serialized to `service_tier`), so a functional equivalent can be implemented either with plugin hooks or with static per-agent config. [R9][R10][R12]
 
 ## 3) Codex command-side behavior
 
@@ -80,11 +80,12 @@ Reports that "fast mode isn't active by default unless `service_tier=fast` is co
 
 OpenCode exposes equivalent control knobs:
 
+- Static agent config can set `agent.<name>.options.serviceTier`, and OpenCode merges `agent.options` into runtime LLM options before request send. [R12]
 - Plugin hook `"chat.params"` can mutate request options before model call. [R9]
 - OpenAI Responses provider maps `providerOptions.openai.serviceTier` to request `service_tier`. [R10]
 - Supported OpenCode values there are `auto | flex | priority`. [R10]
 
-Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier = "priority"` when enabled, and `auto`/unset when disabled. [R2][R10]
+Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier = "priority"` when enabled, and `auto`/unset when disabled. For a deterministic always-on setup, setting `agent.build.options.serviceTier = "priority"` and `agent.plan.options.serviceTier = "priority"` is the simplest config-only approach. [R2][R10][R12]
 
 ## 7) Non-equivalences and constraints
 
@@ -102,6 +103,7 @@ Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier =
 | Payload control field is `service_tier` | request structs in codex-api [R5] |
 | Internal Fast maps to wire `priority` | `build_responses_request` mapping code [R2] |
 | OpenCode supports equivalent field | OpenCode provider maps `serviceTier` -> `service_tier` [R10] |
+| OpenCode can set it statically in config | `agent.options` are merged into runtime options before send [R12] |
 
 ## 9) Citations
 
@@ -118,7 +120,7 @@ Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier =
 - [R9] `/tmp/research-opencode/packages/plugin/src/index.ts`: plugin hook surface including `"chat.params"`.
 - [R10] `/tmp/research-opencode/packages/opencode/src/provider/sdk/copilot/responses/openai-responses-language-model.ts`: `serviceTier` option and serialization to `service_tier`.
 - [R11] `/tmp/research-codex-cli/codex-rs/core/src/config/mod.rs`: service tier config merge/selection path.
-- [R12] `/tmp/research-opencode/packages/opencode/src/session/prompt.ts`: command path is agent-mediated.
+- [R12] `/tmp/research-opencode/packages/opencode/src/session/llm.ts`: `mergeDeep(input.agent.options)` merges agent options into final request options before provider send.
 
 ### Web/docs citations
 
@@ -130,4 +132,3 @@ Therefore, Codex `/fast` equivalent in OpenCode is payload-level `service_tier =
 - [I1] https://github.com/openai/codex/issues/13960
 - [I2] https://github.com/anomalyco/opencode/issues/10262
 - [I3] https://github.com/anomalyco/opencode/issues/5305
-
