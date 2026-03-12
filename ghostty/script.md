@@ -21,6 +21,25 @@ References:
 - Ghostty AppleScript docs: <https://ghostty.org/docs/features/applescript>
 - Ghostty scripting definition: <https://github.com/ghostty-org/ghostty/blob/main/macos/Ghostty.sdef>
 
+## How AppleScript Reaches Ghostty
+
+AppleScript is the macOS automation language and event system. Ghostty is not being controlled through a private hack or through tmux; Ghostty publishes a native AppleScript dictionary, and macOS uses that dictionary to route Apple events into Ghostty.
+
+The end-to-end flow is:
+
+1. a script runs through `osascript`, Script Editor, or another macOS automation tool
+2. macOS looks up Ghostty's AppleScript dictionary to understand the supported objects, properties, and commands
+3. the script sends Apple events such as `new window`, `new tab`, `select tab`, or `input text` to Ghostty
+4. Ghostty's AppleScript implementation handles those events and maps them to real Ghostty windows, tabs, and terminals
+
+That means the control surface is external in the sense that another process is talking to Ghostty, but the API surface itself is native Ghostty functionality exposed on macOS.
+
+References:
+
+- Ghostty AppleScript docs: <https://ghostty.org/docs/features/applescript>
+- Ghostty scripting definition: <https://github.com/ghostty-org/ghostty/blob/main/macos/Ghostty.sdef>
+- Ghostty AppleScript implementation: <https://github.com/ghostty-org/ghostty/blob/main/macos/Sources/Features/AppleScript/AppDelegate+AppleScript.swift>
+
 ## Why Tab Renaming Works Indirectly
 
 Ghostty exposes the tab `name`, but the AppleScript dictionary defines it as a read-only property. 
