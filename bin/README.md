@@ -31,7 +31,7 @@ uv run pytest
 Event-driven screenshot sync from macOS to a remote host via `launchd` + `rsync`.
 
 - Install: `uv tool install ./bin/screenshot_sync --force`
-- Test: `uv run --package screenshot-sync pytest -c bin/screenshot_sync/pyproject.toml`
+- Test: from `bin/screenshot_sync`, run `uv run pytest`
 - Docs: `bin/screenshot_sync/README.md`
 
 ## ghostty-workspace
@@ -39,7 +39,7 @@ Event-driven screenshot sync from macOS to a remote host via `launchd` + `rsync`
 Open a Ghostty window with tabs/commands/directories from a TOML workspace config.
 
 - Install: `uv tool install ./bin/ghostty_workspace --force`
-- Test: `uv run --package ghostty-workspace pytest -c bin/ghostty_workspace/pyproject.toml`
+- Test: from `bin/ghostty_workspace`, run `uv run pytest`
 - Docs: `bin/ghostty_workspace/README.md`
 
 ## xdg-open (Remote Browser Proxy)

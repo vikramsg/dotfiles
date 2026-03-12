@@ -79,5 +79,7 @@ Tests are located in `bin/screenshot_sync/tests` and cover configuration parsing
 
 Run tests:
 ```bash
-uv run --package screenshot-sync pytest -c bin/screenshot_sync/pyproject.toml
+uv run pytest
 ```
+
+Run from the package directory: `bin/screenshot_sync`.

@@ -62,5 +62,7 @@ ghostty-workspace --config ~/.config/ghostty/workspaces/dev.toml
 ## Testing
 
 ```bash
-uv run --package ghostty-workspace pytest -c bin/ghostty_workspace/pyproject.toml
+uv run pytest
 ```
+
+Run from the package directory: `bin/ghostty_workspace`.
