@@ -1,0 +1,14 @@
+tell application "Ghostty"
+    activate
+{% for tab in tabs %}
+    set cfg{{ loop.index }} to new surface configuration
+    set command of cfg{{ loop.index }} to "{{ tab.applescript_command }}"
+{% if loop.first %}
+    set win to new window with configuration cfg{{ loop.index }}
+{% else %}
+    new tab in win with configuration cfg{{ loop.index }}
+{% endif %}
+{% endfor %}
+    activate window win
+    select tab (tab {{ focus_tab }} of win)
+end tell

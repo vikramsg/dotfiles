@@ -1,13 +1,14 @@
 [project]
-name = "screenshot-sync"
+name = "ghostty-workspace"
 version = "0.1.0"
-description = "Sync screenshots to a remote VM"
+description = "Open configured Ghostty workspaces from TOML"
 dependencies = [
-    "python-dotenv",
+    "click",
+    "jinja2",
 ]
 
 [project.scripts]
-screenshot-sync = "screenshot_sync.cli:main"
+ghostty-workspace = "ghostty_workspace.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

@@ -38,7 +38,14 @@ Create your configuration file at `~/.config/screenshot-sync/config.json`:
 ```
 
 ### 3. Install the Tool
-Using `uv`:
+Using `uv` from this repo:
+
+```bash
+uv tool install ./bin/screenshot_sync --force
+```
+
+Or directly from GitHub:
+
 ```bash
 uv tool install "git+https://github.com/vikramsg/dotfiles.git#subdirectory=bin/screenshot_sync" --force
 ```
@@ -68,9 +75,9 @@ screenshot-sync launchd install
 
 ## Development & Testing
 
-Tests are located in `tests/test_screenshot_sync.py` and cover configuration parsing, command construction, and installation verification.
+Tests are located in `bin/screenshot_sync/tests` and cover configuration parsing, command construction, and installation verification.
 
 Run tests:
 ```bash
-just python-tests
+uv run --package screenshot-sync pytest -c bin/screenshot_sync/pyproject.toml
 ```

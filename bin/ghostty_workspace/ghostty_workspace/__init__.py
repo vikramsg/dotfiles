@@ -1,0 +1,1 @@
+"""ghostty_workspace package."""
