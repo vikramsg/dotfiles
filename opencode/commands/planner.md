@@ -15,6 +15,10 @@ $ARGUMENTS
 Start with a test first approach with writing failing tests, making sure they fail
 and then proceeding with implementation.
 
+## Architecture Diagram
+
+(NOTE: Add helpful ASCII diagrams. Example diagrams: Call stack with main function calls, sequence diagrams etc.)
+
 ## Current Status
 
 ## Short summary of changes
@@ -31,7 +35,8 @@ and then proceeding with implementation.
 
 ## Checklist of tasks to be done
 
-(NOTE: The checlist should not just be `1. write failing test, 2. implement fix..... It should be 1. write failing test, 2. Run tests to validate that its actually failing, otherwise write the correct test. 3. implement fix..`)
+(NOTE #1: The checlist should not just be `1. write failing test, 2. implement fix..... It should be 1. write failing test, 2. Run tests to validate that its actually failing, otherwise write the correct test. 3. implement fix..`)
+(NOTE #2: If there is a browser skill available, make sure to use that for smoke checks of the PR changes as part of the checklist)
 
 ```
 
