@@ -126,9 +126,10 @@ end tell
 
 Then target `win` instead of `front window` in the multi-tab script.
 
-## Verification Checklist
+## Running 
 
 - Running `osascript -e 'tell application "Ghostty" to get version'` returns a Ghostty version.
+- Running `osascript /path/to/script` runs the script and does what you expect. 
 - Running the example opens one tab per session.
 
 ## Sources
