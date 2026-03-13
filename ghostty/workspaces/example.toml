@@ -1,0 +1,12 @@
+path = "~"
+focus_tab = 2
+
+[[tabs]]
+name = "tab1"
+path = "./ghostty"
+command = "pwd"
+
+[[tabs]]
+name = "tab2"
+path = "./tmux"
+command = "ls"

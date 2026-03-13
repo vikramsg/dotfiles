@@ -1,123 +1,174 @@
-# SSH & Remote Development Workflows
+# SSH  
 
-This guide covers advanced configurations for `~/.ssh/config` to improve remote development, handle Tmux session auto-attachment, and build resilient connections using `autossh`.
+## SSH Config Inheritance
+
+SSH config is matched top-to-bottom. For each key, the first value that matches is used.
+
+Use this pattern:
+
+- Put specific aliases first (`vm.dotfiles`, `vm.kunda`).
+- Put shared base rules after (`vm`, `vm.*`).
+
+Example:
+
+```ssh-config
+Host vm.dotfiles
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t dotfiles
+
+Host vm.kunda
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t kunda
+
+Host vm vm.*
+    RequestTTY yes
+    ServerAliveInterval 15
+    ServerAliveCountMax 3
+```
 
 ---
 
-## 1. SSH Config Inheritance (DRY Aliases)
+## Core SSH Options
 
-You can use SSH config's top-down matching to create multiple, distinct connection aliases that all share the same underlying server details (IP, User, Keys).
+- `HostName`: target server DNS/IP.
+- `User`: remote user.
+- `IdentityFile`: private key path used for auth.
+- `IdentitiesOnly yes`: forces SSH to use only configured identities.
+- `RequestTTY yes`: asks for interactive TTY.
+- `RemoteCommand`: command run after login (for example tmux attach).
+- `LocalForward`: local port -> remote destination tunnel.
+- `RemoteForward`: remote port/socket -> local destination tunnel.
+- `ExitOnForwardFailure yes`: fail early if any configured forward cannot bind.
 
-The rule is simple: **The first time SSH sees a configuration key, it sets it and ignores future declarations.** Therefore, place your specific aliases at the top and your shared wildcard config at the bottom.
 
-### Example `~/.ssh/config`
-```ssh-config
-# 1. Specific Session Aliases (These match FIRST)
-# Use this to instantly connect and drop into your 'dotfiles' tmux session
-Host vm-dotfiles
-    RequestTTY yes
-    RemoteCommand tmux new -A -s dotfiles
+## Resilient Connections
 
-# Use this to instantly connect and drop into your 'backend' tmux session
-Host vm-backend
-    RequestTTY yes
-    RemoteCommand tmux new -A -s backend
+For laptop sleep/wake and network changes:
 
-# 2. Base Configuration (This matches SECOND, filling in the blanks)
-# All aliases starting with 'vm-' will inherit these settings
-Host vm-*
-    HostName <YOUR_SERVER_IP_OR_HOSTNAME>
-    User <YOUR_REMOTE_USERNAME>
-    
-    # MUST be an absolute path if you plan to use background processes
-    IdentityFile /Users/yourusername/.ssh/your_private_key
-    IdentitiesOnly yes
-    
-    # (Add any other server-specific rules here)
-```
+- `ServerAliveInterval 15` + `ServerAliveCountMax 3` makes dead sessions exit instead of hanging.
+- `ExitOnForwardFailure yes` prevents half-broken reconnects.
+- `autossh` supervises SSH and restarts when SSH exits.
 
-With this setup, running `ssh vm-dotfiles` reads the `vm-dotfiles` block, applies the `RemoteCommand`, and then falls through to the `vm-*` block to get the IP address and SSH keys.
+Useful autossh flags/env:
+
+- `AUTOSSH_POLL=30`: fast child-health checks.
+- `AUTOSSH_GATETIME=0`: keep retrying even if initial reconnect attempt fails.
+- `-M 0`: disable autossh monitor-port mode and rely on SSH keepalive behavior.
 
 ---
 
-## 2. Resilient Port Forwarding with `autossh`
+## Port Forwarding Patterns
 
-If you are roaming (changing Wi-Fi networks, putting your laptop to sleep) and need to maintain background port forwarding tunnels (e.g., `localhost:8080`), standard SSH will freeze and die. 
+When multiple SSH sessions run concurrently, avoid port collisions:
 
-While `autossh` can automatically restart dead connections, it has two fatal flaws if not configured perfectly:
-1. **The "Address Already in Use" Hang:** When reconnecting, the remote server might still hold the port from the previous, dead connection. `autossh` connects but the tunnel fails, and it hangs forever instead of retrying.
-2. **Background Detachment Issues:** Running `autossh` in the background (`-f`) changes its working directory, causing relative paths to SSH keys to fail silently.
+- Use exactly one forwarding-owner session for shared local ports.
+- Run other sessions without forwards (or with `-o ClearAllForwardings=yes`).
 
-### The Bulletproof `autossh` Configuration
+If more than one session binds the same local ports, SSH fails with `Address already in use`.
 
-To fix these flaws, you must aggressively tune your `~/.ssh/config` and the command itself.
+---
 
-**1. Update `~/.ssh/config`**
-Add these parameters to your host block to ensure SSH detects dead drops instantly and crashes cleanly if a port is stuck:
+## Remote SSHD Setup
 
-```ssh-config
-Host vm-tunnel
-    HostName <YOUR_SERVER_IP_OR_HOSTNAME>
-    User <YOUR_REMOTE_USERNAME>
-    # MUST BE ABSOLUTE PATH for backgrounding
-    IdentityFile /Users/yourusername/.ssh/your_private_key
-    
-    # Detect dead connections immediately (Client side)
-    ServerAliveInterval 5
-    ServerAliveCountMax 2
-    
-    # CRITICAL: Fix the "Address already in use" hang
-    # Forces SSH to crash if the port is stuck, triggering autossh to retry
-    ExitOnForwardFailure yes
-```
+Client-side settings are not enough. Remote sshd should aggressively clean up dead clients.
 
-**2. The `autossh` Command**
-Run this command to establish a resilient, backgrounded tunnel:
+Run this on the remote Linux VM from that machine's dotfiles checkout:
 
 ```bash
-AUTOSSH_GATETIME=0 autossh -M 0 -f -N vm-tunnel -L 8080:localhost:8080
+just setup-ssh-forwarding
 ```
 
-*   **`AUTOSSH_GATETIME=0`**: Tells `autossh` not to give up if the very first connection attempt fails (useful if running in a startup script before Wi-Fi connects).
-*   **`-M 0`**: Disables autossh's internal (and outdated) ping method. We rely entirely on the superior `ServerAliveInterval` defined in the SSH config.
-*   **`-f`**: Runs the process in the background.
-*   **`-N`**: Do not execute a remote command (we just want the tunnel).
+This writes `/etc/ssh/sshd_config.d/99-vm-resilience.conf` and sets:
 
-With this setup, if your laptop sleeps, the tunnel drops. When you wake it up, `autossh` aggressively retries until the remote server frees the port, re-establishes the tunnel in the background, and your local browser can access `localhost:8080` again without manual intervention.
+- `StreamLocalBindUnlink yes`
+- `ClientAliveInterval 15`
+- `ClientAliveCountMax 3`
 
+Then it validates sshd config and restarts sshd safely.
 
-## TMUX ssh config
+---
 
-```
-Host vm 
-    HostName IP 
-    IdentityFile /path/to/home/.ssh/google_compute_engine
-    UserKnownHostsFile=/path/to/home/.ssh/google_compute_known_hosts
-    HostKeyAlias=<something>
-    IdentitiesOnly=yes
-    CheckHostIP=no
-    User <User> 
-    RequestTTY yes    
-    # Note that we are starting in a tmux session that should exist on the remote
-    RemoteCommand tmux new -A -s dotfiles
-    # Use opener to forward browser open
-    RemoteForward /path/to/remote_home/.opener.sock /path/to/local_home/.opener.sock
+## Systemd and Long-Lived Sessions
 
-    # --- Common ports for fowarding---
-    LocalForward 5173 localhost:5173  # Vite (Vue, React, Svelte)
-    LocalForward 8080 localhost:8080  # Webpack Dev Server, Tomcat, general HTTP
-    LocalForward 8081 localhost:8081  # Composer Airflow 
-```
-
-### Important Note on `RemoteCommand` and `systemd`
-
-When using `RemoteCommand tmux ...` on modern Linux distributions (like Ubuntu, Debian, Fedora), you **must** enable systemd user lingering on the remote server. 
-
-By default, modern `systemd-logind` is configured to cleanly kill all user processes when a login session ends (`KillUserProcesses=yes`). Because `RemoteCommand` scopes the execution directly to the temporary SSH session, if your SSH connection drops (e.g., your laptop goes to sleep), `systemd` will detect the session closure and murder the `tmux` server. 
-
-To fix this and allow your `tmux` background processes to survive SSH disconnects, run the following command **once on your remote Linux server**:
+For tmux/session persistence on many Linux servers:
 
 ```bash
 loginctl enable-linger $USER
 ```
-This tells systemd to spawn a persistent User Manager at boot and leave it running indefinitely, protecting your tmux server from being killed when the SSH connection drops.
+
+Without lingering, user processes can be cleaned up when SSH disconnects.
+
+---
+
+## VM + Ghostty Example
+
+This repo's workspace file is `ghostty/workspaces/vm.toml`.
+
+- Forwarding owner tab (`vm.dotfiles`):
+
+```toml
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 vm.dotfiles"
+```
+
+- Non-owner tabs (clear inherited forwards):
+
+```toml
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 -o ClearAllForwardings=yes vm.kunda"
+```
+
+Shared alias behavior is defined in `ssh/config.vm.shared`.
+
+---
+
+## Troubleshooting
+
+### `Address already in use`
+
+If you see:
+
+`bind [127.0.0.1]:8080: Address already in use`
+
+then multiple SSH/autossh sessions are trying to bind the same local port.
+
+Fix:
+
+1. Keep forwards on one alias only (forwarding owner).
+2. Use `-o ClearAllForwardings=yes` for non-owner sessions.
+3. Close stale local SSH sessions that already own those ports.
+
+### Interpreting `lsof` for forwarded ports
+
+Run:
+
+```bash
+lsof -nP -iTCP:5173,8080,8081,19876,54321,54323 -sTCP:LISTEN
+```
+
+Interpretation:
+
+- Good: one `ssh` PID owns all forwarded ports.
+- Each port appears twice (`127.0.0.1` and `[::1]`) because SSH listens on IPv4 + IPv6 loopback.
+- `LISTEN` means local tunnel endpoints are active.
+
+### Reconnected but tmux looks wrong
+
+Use `tmux a -d -t <session>` so stale clients are detached on reconnect.
+
+---
+
+## Quick Command Reference
+
+```bash
+# Forwarding-owner interactive session
+env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 vm.dotfiles
+
+# Non-owner interactive session
+env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 -o ClearAllForwardings=yes vm.kunda
+
+# Inspect local forwarded port ownership
+lsof -nP -iTCP:5173,8080,8081,19876,54321,54323 -sTCP:LISTEN
+
+# Apply remote sshd resilience settings (run on remote VM)
+just setup-ssh-forwarding
+
+# Keep tmux/session processes alive across disconnects (run on remote VM)
+loginctl enable-linger $USER
+```

@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["bin/screenshot_sync", "router-battery-check"]
+members = ["bin/screenshot_sync", "router-battery-check", "bin/ghostty_workspace"]
 
 [tool.uv]
 package = false
@@ -17,4 +17,4 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["bin/screenshot_sync/tests", "bin/ghostty_workspace/tests"]

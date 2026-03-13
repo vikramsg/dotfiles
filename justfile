@@ -53,7 +53,9 @@ ghostty:
     @echo "Setting up Ghostty symlink..."
     mkdir -p ~/.config/ghostty
     ln -sfn {{justfile_directory()}}/ghostty/config ~/.config/ghostty/config
+    ln -sfn {{justfile_directory()}}/ghostty/workspaces ~/.config/ghostty/workspaces
     @echo "Ghostty symlink created at ~/.config/ghostty/config -> {{justfile_directory()}}/ghostty/config"
+    @echo "Ghostty workspaces symlink created at ~/.config/ghostty/workspaces -> {{justfile_directory()}}/ghostty/workspaces"
 
 
 # Set up custom bin symlinks
@@ -90,20 +92,46 @@ zsh:
         fi \
     fi
 
-# Set up SSH remote forwarding socket fix (Linux only)
+# Set up SSH shared config symlink
+ssh:
+    @echo "Setting up SSH shared VM config symlink..."
+    mkdir -p ~/.ssh
+    ln -sfn {{justfile_directory()}}/ssh/config.vm.shared ~/.ssh/config.vm.shared
+    @echo "SSH shared config symlink created at ~/.ssh/config.vm.shared -> {{justfile_directory()}}/ssh/config.vm.shared"
+
+# Configure remote sshd for resilient autossh reconnects (Linux only)
+# Run this on the REMOTE VM from its dotfiles checkout.
 setup-ssh-forwarding:
     @if [ "$(uname)" = "Linux" ]; then \
-        echo "Setting up SSH StreamLocalBindUnlink fix..."; \
-        if ! grep -q "^StreamLocalBindUnlink yes" /etc/ssh/sshd_config; then \
-            echo "StreamLocalBindUnlink yes" | sudo tee -a /etc/ssh/sshd_config > /dev/null; \
-            echo "Restarting sshd..."; \
+        CONFIG_DIR="/etc/ssh/sshd_config.d"; \
+        CONFIG_FILE="$$CONFIG_DIR/99-vm-resilience.conf"; \
+        echo "Writing SSH resilience config to $$CONFIG_FILE..."; \
+        sudo mkdir -p "$$CONFIG_DIR"; \
+        printf '%s\n' \
+            '# Managed by: just setup-ssh-forwarding' \
+            '# Purpose: make sleep/wake autossh reconnects fast and predictable.' \
+            '' \
+            '# Remove stale Unix domain socket forwards cleanly.' \
+            'StreamLocalBindUnlink yes' \
+            '' \
+            '# Server-side keepalive: detect dead laptop clients quickly.' \
+            '# 15s * 3 misses = 45s until ghost connections are dropped.' \
+            'ClientAliveInterval 15' \
+            'ClientAliveCountMax 3' \
+            | sudo tee "$$CONFIG_FILE" > /dev/null; \
+        echo "Validating sshd config..."; \
+        if sudo sshd -t 2>/dev/null || sudo /usr/sbin/sshd -t 2>/dev/null; then \
+            echo "Config valid. Restarting sshd..."; \
             sudo systemctl restart sshd || sudo systemctl restart ssh; \
-            echo "SSH socket fix applied successfully."; \
+            echo "Applied. Active values:"; \
+            sudo sshd -T 2>/dev/null | grep -E 'streamlocalbindunlink|clientaliveinterval|clientalivecountmax' \
+                || sudo /usr/sbin/sshd -T 2>/dev/null | grep -E 'streamlocalbindunlink|clientaliveinterval|clientalivecountmax'; \
         else \
-            echo "StreamLocalBindUnlink is already enabled in /etc/ssh/sshd_config."; \
+            echo "ERROR: sshd config validation failed. Not restarting sshd."; \
+            exit 1; \
         fi \
     else \
-        echo "Skipping SSH socket fix on non-Linux OS"; \
+        echo "Skipping SSH forwarding setup on non-Linux OS"; \
     fi
 
 # Set up all symlinks
@@ -117,15 +145,17 @@ python-tests:
 
 # Install CLI tools
 install-tools:
-    @echo "Installing eza, zoxide, and chafa..."
+    @echo "Ensuring eza, zoxide, chafa, and autossh are installed..."
     @if ! command -v brew > /dev/null; then \
         echo "Homebrew is not installed. Please install Homebrew first."; \
         exit 1; \
     fi
-    brew install eza zoxide chafa
-    @echo "The following tools have been successfully installed:"
-    @echo "  - eza"
-    @echo "  - zoxide"
-    @echo "  - chafa"
-
-
+    @for tool in eza zoxide chafa autossh; do \
+        if brew list --formula "${tool}" > /dev/null 2>&1; then \
+            echo "  - ${tool} is already installed"; \
+        else \
+            echo "  - Installing ${tool}..."; \
+            brew install "${tool}"; \
+        fi; \
+    done
+    @echo "Tool check complete."

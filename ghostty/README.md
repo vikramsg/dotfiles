@@ -42,34 +42,24 @@ window-padding-color = extend
 
 ## Automating Multiple Tabs & SSH Sessions
 
-Ghostty on macOS currently relies on native windowing and does not support opening multiple tabs via direct command-line arguments (like `ghostty --new-tab`). 
+Ghostty 1.3 adds native AppleScript support on macOS, so multi-tab automation no longer needs simulated keystrokes.
 
-However, you can automate opening multiple tabs, SSHing into a VM, and attaching to specific tmux sessions using a single AppleScript command (via `osascript`). This simulates Ghostty's native `Cmd+T` shortcut.
+See `ghostty/script.md` for:
 
-### The Command
+- how the Ghostty AppleScript object model works
+- how to create tabs with `new surface configuration`
+- how to open one tab per remote tmux session
+- how to set each tab title to the tmux session name before `ssh`
+- source references for the behavior and commands used
 
-Run the following in your terminal to open 3 tabs, each connecting to a separate tmux session (`session1`, `session2`, `session3`) on a remote machine:
+For the `ghostty-workspace` CLI, an example TOML workspace config is at:
 
-```bash
-osascript -e 'tell application "Ghostty" to activate' \
-          -e 'tell application "System Events"' \
-          -e 'keystroke "t" using command down' \
-          -e 'delay 0.2' \
-          -e 'keystroke "ssh -t your_user@your_vm \"tmux new-session -A -s session1\"" & return' \
-          -e 'keystroke "t" using command down' \
-          -e 'delay 0.2' \
-          -e 'keystroke "ssh -t your_user@your_vm \"tmux new-session -A -s session2\"" & return' \
-          -e 'keystroke "t" using command down' \
-          -e 'delay 0.2' \
-          -e 'keystroke "ssh -t your_user@your_vm \"tmux new-session -A -s session3\"" & return' \
-          -e 'end tell'
+- `ghostty/workspaces/example.toml`
+
+For deterministic tab order with `ghostty-workspace`, set this in `ghostty/config`:
+
+```ini
+window-new-tab-position = end
 ```
 
-*Note: Replace `your_user@your_vm` with your actual SSH alias or IP address.*
-
-### How it Works
-1. **`activate`**: Brings the Ghostty window to the foreground.
-2. **`keystroke "t" using command down`**: Simulates `Cmd+T` to open a new tab.
-3. **`delay 0.2`**: Allows the Ghostty UI a moment to render the tab before typing.
-4. **`ssh -t ...`**: Forces pseudo-terminal allocation, which is strictly required for running `tmux` over SSH.
-5. **`tmux new-session -A -s <name>`**: Attaches to the named session if it exists, or creates it if it doesn't.
+This keeps scripted tab creation in append order. The workspace CLI then focuses the requested tab index using Ghostty's `goto_tab` action.

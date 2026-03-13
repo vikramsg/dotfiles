@@ -2,6 +2,48 @@
 
 This directory contains custom scripts for the dotfiles environment.
 
+## Python Tools (uv)
+
+Install tools from this repo with `uv`:
+
+```bash
+uv tool install ./bin/screenshot_sync --force
+uv tool install ./bin/ghostty_workspace --force
+```
+
+Upgrade an installed local tool after changes:
+
+```bash
+uv tool install ./bin/screenshot_sync --force --no-cache
+uv tool install ./bin/ghostty_workspace --force --no-cache
+```
+
+Each tool keeps its own package-local tests under `bin/<tool>/tests`.
+
+Run all Python tests from repo root:
+
+```bash
+uv run pytest
+```
+
+## screenshot-sync
+
+Event-driven screenshot sync from macOS to a remote host via `launchd` + `rsync`.
+
+- Install: `uv tool install ./bin/screenshot_sync --force`
+- Test: from `bin/screenshot_sync`, run `uv run pytest`
+- Docs: `bin/screenshot_sync/README.md`
+
+## ghostty-workspace
+
+Open a Ghostty window with tabs/commands/directories from a TOML workspace config.
+
+Requires `window-new-tab-position = end` in `ghostty/config` for deterministic tab append order during scripted startup.
+
+- Install: `uv tool install ./bin/ghostty_workspace --force`
+- Test: from `bin/ghostty_workspace`, run `uv run pytest`
+- Docs: `bin/ghostty_workspace/README.md`
+
 ## xdg-open (Remote Browser Proxy)
 
 This script allows you to open URLs from this remote VM directly in your local Mac's web browser. It is designed to be used with the `opener` tool and SSH remote forwarding.

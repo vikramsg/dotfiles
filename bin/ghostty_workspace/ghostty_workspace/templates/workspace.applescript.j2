@@ -1,0 +1,19 @@
+tell application "Ghostty"
+    activate
+{% for tab in tabs %}
+    set cfg{{ loop.index }} to new surface configuration
+    set command of cfg{{ loop.index }} to "{{ tab.applescript_command }}"
+{% if loop.first %}
+    set win to new window with configuration cfg{{ loop.index }}
+{% else %}
+    new tab in win with configuration cfg{{ loop.index }}
+{% endif %}
+    -- Required for deterministic startup ordering:
+    -- `new tab` returns before AppKit/Ghostty tab-group bookkeeping is fully settled.
+    -- A short delay prevents the next insertion/focus command from racing tab-group state updates.
+    delay 0.1
+{% endfor %}
+    activate window win
+    -- Select tab by Ghostty action instead of `select tab (...)` to avoid focus desync.
+    perform action "goto_tab:{{ focus_tab }}" on terminal 1 of selected tab of win
+end tell
