@@ -21,5 +21,9 @@ name = "mx"
 command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.mx"
 
 [[tabs]]
+name = "mx-worktree"
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.mx-worktree"
+
+[[tabs]]
 name = "btop"
 command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.btop"
