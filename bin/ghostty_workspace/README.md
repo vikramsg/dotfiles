@@ -24,6 +24,10 @@ By workspace name, the tool looks in:
 
 You can also pass an explicit file path with `--config`.
 
+Repo example config:
+
+- `ghostty/workspaces/example.toml`
+
 ## Example Config
 
 ```toml
@@ -57,6 +61,9 @@ ghostty-workspace dev
 
 # Uses an explicit config file
 ghostty-workspace --config ~/.config/ghostty/workspaces/dev.toml
+
+# Uses the repo example config directly
+ghostty-workspace --config ~/Projects/Personal/dotfiles/ghostty/workspaces/example.toml
 ```
 
 ## Testing

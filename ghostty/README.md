@@ -51,3 +51,7 @@ See `ghostty/script.md` for:
 - how to open one tab per remote tmux session
 - how to set each tab title to the tmux session name before `ssh`
 - source references for the behavior and commands used
+
+For the `ghostty-workspace` CLI, an example TOML workspace config is at:
+
+- `ghostty/workspaces/example.toml`
