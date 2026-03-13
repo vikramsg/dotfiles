@@ -1,3 +1,10 @@
+# NOTE: Guardrail for just recipes in this repo:
+# - Use $VAR for shell variable references.
+# - Use $(...) for command substitution.
+# - Do NOT use $$VAR for variable references.
+# - $$ expands to shell PID and can corrupt paths (for example 721854CONFIG_FILE).
+# - Use {{...}} only for just-level interpolation.
+
 # List available commands
 default:
     @just --list
@@ -99,40 +106,6 @@ ssh:
     ln -sfn {{justfile_directory()}}/ssh/config.vm.shared ~/.ssh/config.vm.shared
     @echo "SSH shared config symlink created at ~/.ssh/config.vm.shared -> {{justfile_directory()}}/ssh/config.vm.shared"
 
-# Configure remote sshd for resilient autossh reconnects (Linux only)
-# Run this on the REMOTE VM from its dotfiles checkout.
-setup-ssh-forwarding:
-    @if [ "$(uname)" = "Linux" ]; then \
-        CONFIG_DIR="/etc/ssh/sshd_config.d"; \
-        CONFIG_FILE="$$CONFIG_DIR/99-vm-resilience.conf"; \
-        echo "Writing SSH resilience config to $$CONFIG_FILE..."; \
-        sudo mkdir -p "$$CONFIG_DIR"; \
-        printf '%s\n' \
-            '# Managed by: just setup-ssh-forwarding' \
-            '# Purpose: make sleep/wake autossh reconnects fast and predictable.' \
-            '' \
-            '# Remove stale Unix domain socket forwards cleanly.' \
-            'StreamLocalBindUnlink yes' \
-            '' \
-            '# Server-side keepalive: detect dead laptop clients quickly.' \
-            '# 15s * 3 misses = 45s until ghost connections are dropped.' \
-            'ClientAliveInterval 15' \
-            'ClientAliveCountMax 3' \
-            | sudo tee "$$CONFIG_FILE" > /dev/null; \
-        echo "Validating sshd config..."; \
-        if sudo sshd -t 2>/dev/null || sudo /usr/sbin/sshd -t 2>/dev/null; then \
-            echo "Config valid. Restarting sshd..."; \
-            sudo systemctl restart sshd || sudo systemctl restart ssh; \
-            echo "Applied. Active values:"; \
-            sudo sshd -T 2>/dev/null | grep -E 'streamlocalbindunlink|clientaliveinterval|clientalivecountmax' \
-                || sudo /usr/sbin/sshd -T 2>/dev/null | grep -E 'streamlocalbindunlink|clientaliveinterval|clientalivecountmax'; \
-        else \
-            echo "ERROR: sshd config validation failed. Not restarting sshd."; \
-            exit 1; \
-        fi \
-    else \
-        echo "Skipping SSH forwarding setup on non-Linux OS"; \
-    fi
 
 # Set up all symlinks
 all: nvim tmux opencode ghostty bin zsh lazygit
@@ -159,3 +132,55 @@ install-tools:
         fi; \
     done
     @echo "Tool check complete."
+
+
+# Configure remote sshd for resilient autossh reconnects (Linux only)
+# Run this on the REMOTE VM from its dotfiles checkout.
+setup-ssh-forwarding:
+    @if [ "$(uname)" = "Linux" ]; then \
+        CONFIG_DIR="/etc/ssh/sshd_config.d"; \
+        CONFIG_FILE="$CONFIG_DIR/05-vm-resilience.conf"; \
+        echo "Writing SSH resilience config to $CONFIG_FILE..."; \
+        sudo mkdir -p "$CONFIG_DIR"; \
+        printf '%s\n' \
+            '# Managed by: just setup-ssh-forwarding' \
+            '# Purpose: make sleep/wake autossh reconnects fast and predictable.' \
+            '' \
+            '# Remove stale Unix domain socket forwards cleanly.' \
+            'StreamLocalBindUnlink yes' \
+            '' \
+            '# Server-side keepalive: detect dead laptop clients quickly.' \
+            '# 15s * 3 misses = 45s until ghost connections are dropped.' \
+            'ClientAliveInterval 15' \
+            'ClientAliveCountMax 3' \
+            | sudo tee "$CONFIG_FILE" > /dev/null; \
+        echo "Validating sshd config..."; \
+        if sudo sshd -t 2>/dev/null || sudo /usr/sbin/sshd -t 2>/dev/null; then \
+            echo "Config valid. Restarting sshd..."; \
+            if sudo systemctl restart ssh 2>/dev/null; then \
+                true; \
+            elif sudo systemctl restart sshd 2>/dev/null; then \
+                true; \
+            else \
+                echo "ERROR: Could not restart ssh.service or sshd.service."; \
+                exit 1; \
+            fi; \
+            echo "Applied. Active values:"; \
+            EFFECTIVE_VALUES="$(sudo sshd -T 2>/dev/null || sudo /usr/sbin/sshd -T 2>/dev/null)"; \
+            printf '%s\n' "$EFFECTIVE_VALUES" | grep -E '^(streamlocalbindunlink|clientaliveinterval|clientalivecountmax) '; \
+            EFFECTIVE_INTERVAL="$(printf '%s\n' "$EFFECTIVE_VALUES" | grep -E '^clientaliveinterval ' | cut -d' ' -f2)"; \
+            EFFECTIVE_COUNTMAX="$(printf '%s\n' "$EFFECTIVE_VALUES" | grep -E '^clientalivecountmax ' | cut -d' ' -f2)"; \
+            EFFECTIVE_UNLINK="$(printf '%s\n' "$EFFECTIVE_VALUES" | grep -E '^streamlocalbindunlink ' | cut -d' ' -f2)"; \
+            if [ "$EFFECTIVE_INTERVAL" != "15" ] || [ "$EFFECTIVE_COUNTMAX" != "3" ] || [ "$EFFECTIVE_UNLINK" != "yes" ]; then \
+                echo "WARNING: Effective sshd values differ from desired settings."; \
+                echo "Desired: clientaliveinterval=15 clientalivecountmax=3 streamlocalbindunlink=yes"; \
+                echo "Effective: clientaliveinterval=$EFFECTIVE_INTERVAL clientalivecountmax=$EFFECTIVE_COUNTMAX streamlocalbindunlink=$EFFECTIVE_UNLINK"; \
+                echo "Hint: sshd uses first-matching values from included drop-ins. Use an earlier filename if needed."; \
+            fi; \
+        else \
+            echo "ERROR: sshd config validation failed. Not restarting sshd."; \
+            exit 1; \
+        fi \
+    else \
+        echo "Skipping SSH forwarding setup on non-Linux OS"; \
+    fi
