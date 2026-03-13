@@ -11,7 +11,11 @@ Host vm vm.*
     # If any port forward cannot bind on reconnect, fail hard and let autossh restart.
     ExitOnForwardFailure yes
 
-    # Local development forwards that should always come back after reconnect.
+Host vm.dotfiles
+    # Forwarding OWNER profile: only one active SSH session should bind these local ports.
+    # If multiple tabs try to own the same LocalForward ports, ssh will fail with:
+    # "bind [127.0.0.1]:PORT: Address already in use".
+    # Keep all shared forwards on exactly one host alias to avoid collisions.
     LocalForward 5173 localhost:5173
     LocalForward 8080 localhost:8080
     LocalForward 8081 localhost:8081
@@ -19,7 +23,6 @@ Host vm vm.*
     LocalForward 54321 localhost:54321
     LocalForward 54323 localhost:54323
 
-Host vm.dotfiles
     # -d detaches ghost clients left behind by stale SSH sessions.
     RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t dotfiles
 
