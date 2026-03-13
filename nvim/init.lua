@@ -7,6 +7,8 @@
 --   zz             : Center the cursor on screen
 --   Space (Leader) : The prefix for most custom commands
 --   <leader>1..9   : Jump to visible buffer 1 through 9 (Lualine index)
+--   <leader><Left> : Previous buffer
+--   <leader><Right>: Next buffer
 --   <leader><Tab>  : Toggle alternate buffer
 --   <C-h,j,k,l>    : Navigate between splits
 --   <C-t>          : Toggle Terminal
@@ -38,6 +40,7 @@
 --   <leader>sw : Search current Word
 --   <leader>sd : Search Diagnostics
 --   <leader>sh : Search Help tags
+--   <C-d>      : Delete open buffers inside Telescope <Leader><Leader>
 --
 -- File Explorers:
 --   <leader>e  : Toggle Neo-tree
@@ -153,6 +156,10 @@ end, { desc = "Copy absolute path of current file to clipboard" })
 -- Toggle alternate buffer (last opened buffer)
 vim.keymap.set("n", "<leader><Tab>", "<C-^>", { desc = "Switch to alternate buffer" })
 
+-- Cycle through buffers
+vim.keymap.set("n", "<leader><Left>", "<cmd>bprevious<CR>", { desc = "Go to previous buffer" })
+vim.keymap.set("n", "<leader><Right>", "<cmd>bnext<CR>", { desc = "Go to next buffer" })
+
 --  Try it with `yap` in normal mode
 --  See `:help vim.highlight.on_yank()`
 vim.api.nvim_create_autocmd("TextYankPost", {
@@ -232,15 +239,18 @@ require("lazy").setup({
 			-- it can fuzzy find! It's more than just a "file finder", it can search
 			-- many different aspects of Neovim, your workspace, LSP, and more!
 			--
+			local actions = require("telescope.actions")
+
 			require("telescope").setup({
 				-- You can put your default mappings / updates / etc. in here
 				--  All the info you're looking for is in `:help telescope.setup()`
 				--
-				-- defaults = {
-				--   mappings = {
-				--     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
-				--   },
-				-- },
+				defaults = {
+					mappings = {
+						i = { ["<C-d>"] = actions.delete_buffer },
+						n = { ["<C-d>"] = actions.delete_buffer },
+					},
+				},
 				-- pickers = {}
 				extensions = {
 					["ui-select"] = {
@@ -276,7 +286,11 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>sd", builtin.diagnostics, { desc = "[S]earch [D]iagnostics" })
 			vim.keymap.set("n", "<leader>sr", builtin.resume, { desc = "[S]earch [R]esume" })
 			vim.keymap.set("n", "<leader>s.", builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
-			vim.keymap.set("n", "<leader><leader>", builtin.buffers, { desc = "[ ] Find existing buffers" })
+			vim.keymap.set("n", "<leader><leader>", function()
+				builtin.buffers({
+					prompt_title = "Open Buffers (Cycle: Leader+Left/Right | Delete: Ctrl+d)",
+				})
+			end, { desc = "[ ] Find existing buffers" })
 
 			-- Slightly advanced example of overriding default behavior and theme
 			vim.keymap.set("n", "<leader>/", function()
