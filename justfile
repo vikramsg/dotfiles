@@ -159,15 +159,15 @@ setup-ssh-forwarding:
                 exit 1; \
             fi; \
             echo "Applied. Active values:"; \
-            EFFECTIVE_VALUES="$$(sudo sshd -T 2>/dev/null || sudo /usr/sbin/sshd -T 2>/dev/null)"; \
-            printf '%s\n' "$$EFFECTIVE_VALUES" | grep -E '^(streamlocalbindunlink|clientaliveinterval|clientalivecountmax) '; \
-            EFFECTIVE_INTERVAL="$$(printf '%s\n' "$$EFFECTIVE_VALUES" | grep -E '^clientaliveinterval ' | cut -d' ' -f2)"; \
-            EFFECTIVE_COUNTMAX="$$(printf '%s\n' "$$EFFECTIVE_VALUES" | grep -E '^clientalivecountmax ' | cut -d' ' -f2)"; \
-            EFFECTIVE_UNLINK="$$(printf '%s\n' "$$EFFECTIVE_VALUES" | grep -E '^streamlocalbindunlink ' | cut -d' ' -f2)"; \
-            if [ "$$EFFECTIVE_INTERVAL" != "15" ] || [ "$$EFFECTIVE_COUNTMAX" != "3" ] || [ "$$EFFECTIVE_UNLINK" != "yes" ]; then \
+            EFFECTIVE_VALUES="$(sudo sshd -T 2>/dev/null || sudo /usr/sbin/sshd -T 2>/dev/null)"; \
+            printf '%s\n' "$EFFECTIVE_VALUES" | grep -E '^(streamlocalbindunlink|clientaliveinterval|clientalivecountmax) '; \
+            EFFECTIVE_INTERVAL="$$(printf '%s\n' "$EFFECTIVE_VALUES" | grep -E '^clientaliveinterval ' | cut -d' ' -f2)"; \
+            EFFECTIVE_COUNTMAX="$$(printf '%s\n' "$EFFECTIVE_VALUES" | grep -E '^clientalivecountmax ' | cut -d' ' -f2)"; \
+            EFFECTIVE_UNLINK="$$(printf '%s\n' "$EFFECTIVE_VALUES" | grep -E '^streamlocalbindunlink ' | cut -d' ' -f2)"; \
+            if [ "$$EFFECTIVE_INTERVAL" != "15" ] || [ "$EFFECTIVE_COUNTMAX" != "3" ] || [ "$EFFECTIVE_UNLINK" != "yes" ]; then \
                 echo "WARNING: Effective sshd values differ from desired settings."; \
                 echo "Desired: clientaliveinterval=15 clientalivecountmax=3 streamlocalbindunlink=yes"; \
-                echo "Effective: clientaliveinterval=$$EFFECTIVE_INTERVAL clientalivecountmax=$$EFFECTIVE_COUNTMAX streamlocalbindunlink=$$EFFECTIVE_UNLINK"; \
+                echo "Effective: clientaliveinterval=$EFFECTIVE_INTERVAL clientalivecountmax=$EFFECTIVE_COUNTMAX streamlocalbindunlink=$EFFECTIVE_UNLINK"; \
                 echo "Hint: sshd uses first-matching values from included drop-ins. Use an earlier filename if needed."; \
             fi; \
         else \
