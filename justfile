@@ -104,9 +104,9 @@ ssh:
 setup-ssh-forwarding:
     @if [ "$(uname)" = "Linux" ]; then \
         CONFIG_DIR="/etc/ssh/sshd_config.d"; \
-        CONFIG_FILE="$$CONFIG_DIR/99-vm-resilience.conf"; \
-        echo "Writing SSH resilience config to $$CONFIG_FILE..."; \
-        sudo mkdir -p "$$CONFIG_DIR"; \
+        CONFIG_FILE="$CONFIG_DIR/99-vm-resilience.conf"; \
+        echo "Writing SSH resilience config to $CONFIG_FILE..."; \
+        sudo mkdir -p "$CONFIG_DIR"; \
         printf '%s\n' \
             '# Managed by: just setup-ssh-forwarding' \
             '# Purpose: make sleep/wake autossh reconnects fast and predictable.' \
@@ -118,11 +118,11 @@ setup-ssh-forwarding:
             '# 15s * 3 misses = 45s until ghost connections are dropped.' \
             'ClientAliveInterval 15' \
             'ClientAliveCountMax 3' \
-            | sudo tee "$$CONFIG_FILE" > /dev/null; \
+            | sudo tee "$CONFIG_FILE" > /dev/null; \
         echo "Validating sshd config..."; \
         if sudo sshd -t 2>/dev/null || sudo /usr/sbin/sshd -t 2>/dev/null; then \
             echo "Config valid. Restarting sshd..."; \
-            sudo systemctl restart sshd || sudo systemctl restart ssh; \
+            sudo systemctl restart ssh; \
             echo "Applied. Active values:"; \
             sudo sshd -T 2>/dev/null | grep -E 'streamlocalbindunlink|clientaliveinterval|clientalivecountmax' \
                 || sudo /usr/sbin/sshd -T 2>/dev/null | grep -E 'streamlocalbindunlink|clientaliveinterval|clientalivecountmax'; \
