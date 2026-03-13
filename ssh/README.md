@@ -76,13 +76,31 @@ Run this on the remote Linux VM from that machine's dotfiles checkout:
 just setup-ssh-forwarding
 ```
 
-This writes `/etc/ssh/sshd_config.d/99-vm-resilience.conf` and sets:
+This writes `/etc/ssh/sshd_config.d/05-vm-resilience.conf` and sets:
 
 - `StreamLocalBindUnlink yes`
 - `ClientAliveInterval 15`
 - `ClientAliveCountMax 3`
 
-Then it validates sshd config and restarts sshd safely.
+Then it validates sshd config, restarts sshd safely, and prints the effective values.
+
+### Drop-in Order (Important)
+
+`sshd` loads `/etc/ssh/sshd_config`, which includes `/etc/ssh/sshd_config.d/*.conf`.
+For many keys, including `ClientAliveInterval`, the first obtained value wins.
+
+On cloud images, `/etc/ssh/sshd_config.d/50-cloudimg-settings.conf` commonly sets:
+
+- `ClientAliveInterval 120`
+
+If your file is named `99-...`, it can lose to `50-...` for first-match keys.
+That is why this setup uses `05-vm-resilience.conf`.
+
+Verify effective server values:
+
+```bash
+sudo sshd -T | rg 'clientaliveinterval|clientalivecountmax|streamlocalbindunlink'
+```
 
 ---
 
@@ -133,6 +151,19 @@ Fix:
 1. Keep forwards on one alias only (forwarding owner).
 2. Use `-o ClearAllForwardings=yes` for non-owner sessions.
 3. Close stale local SSH sessions that already own those ports.
+
+### Applied successfully but `clientaliveinterval` is still 120
+
+Cause:
+
+- An earlier drop-in (often `50-cloudimg-settings.conf`) set `ClientAliveInterval 120`.
+- `sshd` kept that first value and ignored your later override for that key.
+
+Fix:
+
+1. Use an earlier drop-in filename for your override (for example `05-vm-resilience.conf`).
+2. Re-run `just setup-ssh-forwarding`.
+3. Verify with `sudo sshd -T | rg 'clientaliveinterval|clientalivecountmax|streamlocalbindunlink'`.
 
 ### Interpreting `lsof` for forwarded ports
 
