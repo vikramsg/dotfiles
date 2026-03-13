@@ -118,6 +118,11 @@ def load_workspace_config(*, workspace_name: str | None = None, config_path: Pat
 
 
 def render_applescript(config: WorkspaceConfig) -> str:
+    # Focusing with AppleScript `select tab (tab N of win)` is unreliable for Ghostty workspaces:
+    # Ghostty's ScriptTab.handleSelectTab currently brings the window forward but does not reliably
+    # switch the active tab for scripted multi-tab startup. We therefore emit a Ghostty action:
+    # `perform action "goto_tab:N"` on a terminal in the target window, which uses Ghostty's
+    # tab-navigation path and consistently lands on the requested 1-based index from `focus_tab`.
     env = Environment(
         loader=FileSystemLoader(TEMPLATES_DIR),
         autoescape=False,

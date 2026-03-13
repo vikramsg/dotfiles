@@ -54,6 +54,12 @@ scrollback-limit = 1000000
 
 window-save-state = always
 
+# Used by ghostty-workspace startup scripts that call AppleScript `new tab in win ...`.
+# Ghostty's `window-new-tab-position = current` inserts each new tab after the *currently focused* tab.
+# During scripted startup, focus can shift while tabs initialize, so later tabs may insert in the middle.
+# Setting `end` forces each new tab to append to the tab list, preserving TOML order (tabs[0], tabs[1], ...).
+window-new-tab-position = end
+
 
 # Link Configuration
 # ==================

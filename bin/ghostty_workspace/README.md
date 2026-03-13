@@ -66,6 +66,24 @@ ghostty-workspace --config ~/.config/ghostty/workspaces/dev.toml
 ghostty-workspace --config ~/Projects/Personal/dotfiles/ghostty/workspaces/example.toml
 ```
 
+## Deterministic Tab Order And Focus
+
+For deterministic workspace startup, set this in your Ghostty config:
+
+```ini
+window-new-tab-position = end
+```
+
+Why this is required:
+
+- `current` inserts each new tab after the currently focused tab.
+- During scripted startup, focus can shift while tabs initialize.
+- `end` always appends tabs, so TOML order is preserved.
+
+The CLI focuses tabs using Ghostty action `goto_tab:N` (via AppleScript `perform action`) instead of `select tab (...)` for reliable focus.
+
+If order or focus still looks wrong, rerun with `ghostty/workspaces/example.toml` to verify behavior against the known-good sample in this repo.
+
 ## Testing
 
 ```bash

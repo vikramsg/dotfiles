@@ -145,13 +145,17 @@ python-tests:
 
 # Install CLI tools
 install-tools:
-    @echo "Installing eza, zoxide, and chafa..."
+    @echo "Ensuring eza, zoxide, chafa, and autossh are installed..."
     @if ! command -v brew > /dev/null; then \
         echo "Homebrew is not installed. Please install Homebrew first."; \
         exit 1; \
     fi
-    brew install eza zoxide chafa
-    @echo "The following tools have been successfully installed:"
-    @echo "  - eza"
-    @echo "  - zoxide"
-    @echo "  - chafa"
+    @for tool in eza zoxide chafa autossh; do \
+        if brew list --formula "${tool}" > /dev/null 2>&1; then \
+            echo "  - ${tool} is already installed"; \
+        else \
+            echo "  - Installing ${tool}..."; \
+            brew install "${tool}"; \
+        fi; \
+    done
+    @echo "Tool check complete."

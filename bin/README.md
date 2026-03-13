@@ -38,6 +38,8 @@ Event-driven screenshot sync from macOS to a remote host via `launchd` + `rsync`
 
 Open a Ghostty window with tabs/commands/directories from a TOML workspace config.
 
+Requires `window-new-tab-position = end` in `ghostty/config` for deterministic tab append order during scripted startup.
+
 - Install: `uv tool install ./bin/ghostty_workspace --force`
 - Test: from `bin/ghostty_workspace`, run `uv run pytest`
 - Docs: `bin/ghostty_workspace/README.md`

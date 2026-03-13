@@ -59,9 +59,32 @@ def test_render_applescript_uses_focus_and_tabs():
     assert "set cfg1 to new surface configuration" in script
     assert "set cfg2 to new surface configuration" in script
     assert "new tab in win with configuration cfg2" in script
-    assert "select tab (tab 2 of win)" in script
+    assert 'perform action "goto_tab:2" on terminal 1 of selected tab of win' in script
+    assert "delay 0.1" in script
+    assert "select tab (tab" not in script
     assert "tab1" in script
     assert "tab2" in script
+
+
+def test_render_applescript_preserves_toml_tab_order():
+    cfg = WorkspaceConfig(
+        focus_tab=1,
+        tabs=[
+            WorkspaceTab(name="dotfiles", command="ssh vm.dotfiles", path=Path("~")),
+            WorkspaceTab(name="knda", command="ssh vm.kunda", path=Path("~")),
+            WorkspaceTab(name="mx", command="ssh vm.mx", path=Path("~")),
+            WorkspaceTab(name="btop", command="ssh vm.btop", path=Path("~")),
+        ],
+    )
+
+    script = render_applescript(cfg)
+
+    dotfiles_idx = script.index("dotfiles")
+    knda_idx = script.index("knda")
+    mx_idx = script.index("mx")
+    btop_idx = script.index("btop")
+
+    assert dotfiles_idx < knda_idx < mx_idx < btop_idx
 
 
 def test_cli_runs_osascript_with_rendered_script(tmp_path):
