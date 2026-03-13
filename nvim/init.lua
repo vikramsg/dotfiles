@@ -40,6 +40,7 @@
 --   <leader>sw : Search current Word
 --   <leader>sd : Search Diagnostics
 --   <leader>sh : Search Help tags
+--   <C-d>      : Delete open buffers inside Telescope <Leader><Leader>
 --
 -- File Explorers:
 --   <leader>e  : Toggle Neo-tree
@@ -238,15 +239,18 @@ require("lazy").setup({
 			-- it can fuzzy find! It's more than just a "file finder", it can search
 			-- many different aspects of Neovim, your workspace, LSP, and more!
 			--
+			local actions = require("telescope.actions")
+
 			require("telescope").setup({
 				-- You can put your default mappings / updates / etc. in here
 				--  All the info you're looking for is in `:help telescope.setup()`
 				--
-				-- defaults = {
-				--   mappings = {
-				--     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
-				--   },
-				-- },
+				defaults = {
+					mappings = {
+						i = { ["<C-d>"] = actions.delete_buffer },
+						n = { ["<C-d>"] = actions.delete_buffer },
+					},
+				},
 				-- pickers = {}
 				extensions = {
 					["ui-select"] = {
