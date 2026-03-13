@@ -53,11 +53,19 @@
       "models": {
         "gpt-5-4": {
           "id": "gpt-5-4",
-          "name": "gpt-5-4"
+          "name": "gpt-5-4",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
         },
         "gpt-5-3-codex": {
           "id": "gpt-5-3-codex",
-          "name": "gpt-5-3-codex"
+          "name": "gpt-5-3-codex",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
         }
       }
     }
