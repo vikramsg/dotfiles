@@ -31,20 +31,10 @@ def _applescript_escape(value: str) -> str:
 
 
 def _build_tab_shell_command(tab: WorkspaceTab) -> str:
-    steps: list[str] = [
-        'features=",${GHOSTTY_SHELL_FEATURES:-},"',
-        'features=${features//,title,/,}',
-        'features=${features//,no-title,/,}',
-        'features=${features#,}',
-        'features=${features%,}',
-        'export GHOSTTY_SHELL_FEATURES="$features"',
-        "export DISABLE_AUTO_TITLE=true",
-    ]
+    steps: list[str] = []
 
     if tab.path is not None:
         steps.append(f"cd {shlex.quote(str(tab.path))}")
-
-    steps.append(f"printf '\\033]0;%s\\007' {shlex.quote(tab.name)}")
 
     if tab.command:
         steps.append(tab.command)
@@ -133,6 +123,7 @@ def render_applescript(config: WorkspaceConfig) -> str:
     tab_payload = [
         {
             "applescript_command": _build_tab_shell_command(tab),
+            "applescript_title": _applescript_escape(tab.name),
         }
         for tab in config.tabs
     ]

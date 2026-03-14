@@ -34,6 +34,11 @@ Host vm.mx
     # -d detaches ghost clients left behind by stale SSH sessions.
     RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx
 
+Host vm.mx-worktree
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx-worktree
+
+
 Host vm.btop
     # -d detaches ghost clients left behind by stale SSH sessions.
     RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t btop

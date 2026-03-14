@@ -59,11 +59,13 @@ def test_render_applescript_uses_focus_and_tabs():
     assert "set cfg1 to new surface configuration" in script
     assert "set cfg2 to new surface configuration" in script
     assert "new tab in win with configuration cfg2" in script
+    assert 'perform action "set_tab_title:tab1"' in script
+    assert 'perform action "set_tab_title:tab2"' in script
     assert 'perform action "goto_tab:2" on terminal 1 of selected tab of win' in script
     assert "delay 0.1" in script
     assert "select tab (tab" not in script
-    assert "tab1" in script
-    assert "tab2" in script
+    assert "DISABLE_AUTO_TITLE=true" not in script
+    assert "\\033]0;" not in script
 
 
 def test_render_applescript_preserves_toml_tab_order():
@@ -111,18 +113,32 @@ def test_cli_runs_osascript_with_rendered_script(tmp_path):
     assert cmd[1] == "-e"
 
 
-def test_build_tab_shell_command_keeps_shell_open_and_sets_title():
+def test_build_tab_shell_command_keeps_shell_open_without_legacy_title_hacks():
     cmd = _build_tab_shell_command(
         WorkspaceTab(name="tabA", command="ls -la", path=Path("/tmp"))
     )
 
-    assert "DISABLE_AUTO_TITLE=true" in cmd
-    assert "tabA" in cmd
+    assert "DISABLE_AUTO_TITLE=true" not in cmd
+    assert "GHOSTTY_SHELL_FEATURES" not in cmd
+    assert "\\033]0;" not in cmd
     assert "cd /tmp" in cmd
     assert "ls -la" in cmd
     assert "exec" in cmd
     assert "$SHELL" in cmd
     assert "-l" in cmd
+
+
+def test_render_applescript_escapes_set_tab_title_payload():
+    cfg = WorkspaceConfig(
+        focus_tab=1,
+        tabs=[
+            WorkspaceTab(name='qa "alpha" \\ tab', command=None, path=Path("/tmp")),
+        ],
+    )
+
+    script = render_applescript(cfg)
+
+    assert 'perform action "set_tab_title:qa \\"alpha\\" \\\\ tab"' in script
 
 
 def test_focus_tab_out_of_bounds_fails(tmp_path):

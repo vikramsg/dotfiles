@@ -5,9 +5,11 @@ tell application "Ghostty"
     set command of cfg{{ loop.index }} to "{{ tab.applescript_command }}"
 {% if loop.first %}
     set win to new window with configuration cfg{{ loop.index }}
+    set createdTab to selected tab of win
 {% else %}
-    new tab in win with configuration cfg{{ loop.index }}
+    set createdTab to new tab in win with configuration cfg{{ loop.index }}
 {% endif %}
+    perform action "set_tab_title:{{ tab.applescript_title }}" on focused terminal of createdTab
     -- Required for deterministic startup ordering:
     -- `new tab` returns before AppKit/Ghostty tab-group bookkeeping is fully settled.
     -- A short delay prevents the next insertion/focus command from racing tab-group state updates.

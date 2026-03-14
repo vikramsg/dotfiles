@@ -49,7 +49,7 @@ See `ghostty/script.md` for:
 - how the Ghostty AppleScript object model works
 - how to create tabs with `new surface configuration`
 - how to open one tab per remote tmux session
-- how to set each tab title to the tmux session name before `ssh`
+- how to set each tab title using native `perform action "set_tab_title:..."`
 - source references for the behavior and commands used
 
 For the `ghostty-workspace` CLI, an example TOML workspace config is at:
