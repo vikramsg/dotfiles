@@ -99,6 +99,7 @@ screenshot clipboard on-event
 
 ## Short summary of changes
 
+- Use `Click` for CLI argument parsing in both `screenshot` and `lch`.
 - Add a new canonical `screenshot` tool as a `uv`-managed package under `bin/screenshot/`.
 - Move screenshot-domain concerns into `screenshot`:
   - `sync` subcommands for rsync behavior
