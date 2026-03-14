@@ -49,7 +49,7 @@ Fields:
 - `path` (optional): global default working directory for all tabs
 - `focus_tab` (optional, default `1`): 1-based tab index to focus
 - `[[tabs]]` (required): tab definitions
-  - `name` (optional): tab title, defaults to `tabN`
+  - `name` (optional): tab title, defaults to `tabN` (applied via Ghostty action `set_tab_title`)
   - `command` (optional): shell command to run before dropping into login shell
   - `path` (optional): per-tab path override (absolute, relative to global `path`, or relative to config directory)
 
