@@ -1,0 +1,20 @@
+[project]
+name = "screenshot"
+version = "0.1.0"
+description = "Screenshot domain tool for config, clipboard, and sync workflows"
+dependencies = [
+    "click",
+]
+
+[project.scripts]
+screenshot = "screenshot.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "."
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
