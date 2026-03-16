@@ -15,11 +15,11 @@ def test_load_config_reads_screenshot_and_sync_settings(tmp_path, monkeypatch):
     config_file = write_config(
         tmp_path / ".config/screenshot/config.json",
         {
-            "screenshot_dir": "~/Screenshots",
+            "screenshot_dir": "~/Desktop/Screenshots",
             "clipboard_history_limit": 7,
             "sync": {
                 "vm_host": "test-vm",
-                "remote_dir": "~/Pictures/Screenshots/",
+                "remote_dir": "~/Desktop/Screenshots/",
             },
         },
     )
@@ -28,10 +28,10 @@ def test_load_config_reads_screenshot_and_sync_settings(tmp_path, monkeypatch):
 
     config = load_config(config_file=config_file)
 
-    assert config.screenshot_dir == Path.home() / "Screenshots"
+    assert config.screenshot_dir == Path.home() / "Desktop/Screenshots"
     assert config.clipboard_history_limit == 7
     assert config.sync.vm_host == "test-vm"
-    assert config.sync.remote_dir == "~/Pictures/Screenshots/"
+    assert config.sync.remote_dir == "~/Desktop/Screenshots/"
     assert config.filename_patterns == DEFAULT_FILENAME_PATTERNS
 
 
@@ -51,7 +51,7 @@ def test_load_config_uses_defaults_when_values_are_omitted(tmp_path, monkeypatch
 
     config = load_config(config_file=config_file)
 
-    assert config.screenshot_dir == Path.home() / "Screenshots"
+    assert config.screenshot_dir == Path.home() / "Desktop/Screenshots"
     assert config.clipboard_history_limit == DEFAULT_CLIPBOARD_HISTORY_LIMIT == 5
     assert config.filename_patterns == DEFAULT_FILENAME_PATTERNS
 
@@ -95,7 +95,7 @@ def test_load_config_uses_default_file_location_when_not_explicit(tmp_path, monk
 
     config = load_config()
 
-    assert config.screenshot_dir == home / "Screenshots"
+    assert config.screenshot_dir == home / "Desktop/Screenshots"
     assert config.sync.vm_host == "demo-vm"
 
 
@@ -129,3 +129,5 @@ def test_config_command_shows_effective_paths_and_format(tmp_path, monkeypatch):
     assert f"SCREENSHOT_DIR  {home / 'Shots'}" in result.output
     assert '"clipboard_history_limit": 5' in result.output
     assert '"vm_host": "my-vm"' in result.output
+    assert '"screenshot_dir": "~/Desktop/Screenshots"' in result.output
+    assert '"remote_dir": "~/Desktop/Screenshots/"' in result.output

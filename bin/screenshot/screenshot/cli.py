@@ -5,6 +5,7 @@ import click
 
 from screenshot.clipboard import copy_history_entry, copy_path_to_clipboard, handle_event, list_history
 from screenshot.config import get_config_file, load_config
+from screenshot.macos import apply_macos_screenshot_location
 from screenshot.paths import format_user_path
 from screenshot.state import get_state_file
 from screenshot.sync import format_rsync_command, run_sync
@@ -20,17 +21,18 @@ def render_screenshot_config() -> str:
     state_file = get_state_file()
     config = load_config()
     example = {
-        "screenshot_dir": "~/Screenshots",
+        "screenshot_dir": "~/Desktop/Screenshots",
         "clipboard_history_limit": 5,
         "sync": {
             "vm_host": "my-vm",
-            "remote_dir": "~/Pictures/Screenshots/",
+            "remote_dir": "~/Desktop/Screenshots/",
         },
     }
     lines = [
         f"CONFIG_FILE  {config_file}",
         f"STATE_FILE  {state_file}",
         f"SCREENSHOT_DIR  {config.screenshot_dir}",
+        "MACOS_APPLY  screenshot macos apply",
         "",
         "FORMAT",
         json.dumps(example, indent=2),
@@ -107,6 +109,20 @@ def sync_command_command() -> None:
 def sync_run_command() -> None:
     """Run the screenshot sync command."""
     run_sync()
+
+
+@main.group("macos")
+def macos_group() -> None:
+    """Apply screenshot config to macOS system settings."""
+
+
+@macos_group.command("apply")
+def macos_apply_command() -> None:
+    """Set the macOS screenshot location from screenshot config."""
+    try:
+        click.echo(str(apply_macos_screenshot_location()))
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 if __name__ == "__main__":

@@ -35,16 +35,31 @@ def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path
     paths = get_job_paths(job, home=tmp_path)
     plist = build_launch_agent_plist(
         job,
-        watch_path=Path("/Users/vikramsingh/Screenshots"),
+        watch_path=Path("/Users/vikramsingh/Desktop/Screenshots"),
         executable_path=Path("/Users/vikramsingh/.local/bin/lch"),
         paths=paths,
     )
 
     assert plist["Label"] == job.label
-    assert plist["WatchPaths"] == ["/Users/vikramsingh/Screenshots"]
+    assert plist["WatchPaths"] == ["/Users/vikramsingh/Desktop/Screenshots"]
     assert plist["ProgramArguments"] == ["/Users/vikramsingh/.local/bin/lch", "run", "lch-screenshot-clipboard"]
     assert plist["StandardOutPath"] == str(paths.stdout_log_path)
     assert plist["StandardErrorPath"] == str(paths.stderr_log_path)
+
+
+def test_launch_agent_paths_follow_label_conventions_for_sync_job(tmp_path, monkeypatch):
+    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
+    from lch.jobs import get_job_definition
+    from lch.launchd import get_job_paths
+
+    job = get_job_definition("lch-screenshot-sync")
+    paths = get_job_paths(job, home=tmp_path)
+
+    assert paths.plist_path == tmp_path / "Library/LaunchAgents/com.vikramsg.dotfiles.lch-screenshot-sync.plist"
+    assert paths.stdout_log_path == tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-sync.out.log"
+    assert paths.stderr_log_path == tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-sync.err.log"
 
 
 def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path, monkeypatch):

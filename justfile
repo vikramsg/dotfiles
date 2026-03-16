@@ -65,12 +65,15 @@ ghostty:
     @echo "Ghostty workspaces symlink created at ~/.config/ghostty/workspaces -> {{justfile_directory()}}/ghostty/workspaces"
 
 
-# Set up screenshot config symlink and install tool
+# Set up screenshot config symlink, install tool, and apply macOS location
 screenshot:
     @echo "Setting up screenshot config symlink and tool..."
     mkdir -p ~/.config/screenshot
     ln -sfn {{justfile_directory()}}/screenshot/config.json ~/.config/screenshot/config.json
     uv tool install ./bin/screenshot --force --no-cache
+    @if [ "$(uname)" = "Darwin" ]; then \
+        "$HOME/.local/bin/screenshot" macos apply; \
+    fi
     @echo "screenshot config symlink created at ~/.config/screenshot/config.json -> {{justfile_directory()}}/screenshot/config.json"
 
 

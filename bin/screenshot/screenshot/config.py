@@ -9,6 +9,7 @@ DEFAULT_FILENAME_PATTERNS = (
     "Screenshot *.png",
     "Screen Shot *.png",
 )
+DEFAULT_SCREENSHOT_DIR = "~/Desktop/Screenshots"
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ def _expand_path(raw_path: str | Path) -> Path:
 
 
 def get_default_screenshot_dir() -> Path:
-    return _expand_path("~/Screenshots")
+    return _expand_path(DEFAULT_SCREENSHOT_DIR)
 
 
 def get_default_config_file() -> Path:

@@ -1,6 +1,6 @@
 # screenshot architecture
 
-`screenshot` is the single owner of screenshot-domain configuration, filtering, clipboard history state, and sync command construction.
+`screenshot` is the single owner of screenshot-domain configuration, macOS screenshot location application, filtering, clipboard history state, and sync command construction.
 
 Its repo-managed config source of truth is `screenshot/config.json`, symlinked to `~/.config/screenshot/config.json`.
 
@@ -15,6 +15,15 @@ Its repo-managed config source of truth is `screenshot/config.json`, symlinked t
 | - clipboard_history_limit |
 | - sync.vm_host            |
 | - sync.remote_dir         |
++-------------+-------------+
+              |
+              v
++---------------------------+
+| macOS system location     |
+| screenshot macos apply    |
+| - mkdir screenshot_dir    |
+| - defaults write location |
+| - killall SystemUIServer  |
 +-------------+-------------+
               |
               v
@@ -49,6 +58,16 @@ directory change
   -> pbcopy formatted path
   -> prepend to history
   -> trim to clipboard_history_limit
+```
+
+## macOS apply flow
+
+```text
+screenshot macos apply
+  -> load screenshot config
+  -> mkdir -p screenshot_dir
+  -> defaults write com.apple.screencapture location <screenshot_dir>
+  -> killall SystemUIServer
 ```
 
 ## Sync flow

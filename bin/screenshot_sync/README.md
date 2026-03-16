@@ -1,5 +1,7 @@
 # Screenshot Sync
 
+Legacy tool: the active dotfiles-managed screenshot workflow now uses `screenshot` for config and `lch` for launchd jobs. This package remains in the repo for history/reference, but `com.user.screenshotsync` is no longer the preferred automation path.
+
 A native, event-driven screenshot synchronization tool for macOS that copies new screenshots to a remote Linux VM.
 
 ## Features
