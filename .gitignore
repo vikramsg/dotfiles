@@ -3,6 +3,7 @@
 *.pdf
 
 tmp
+ToDo.md
 
 # Python
 __pycache__

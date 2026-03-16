@@ -6,6 +6,8 @@ This repo contains all settings for
 2. NeoVim
 3. Ghostty 
 4. OpenCode
+    - [OpenCode Github](https://github.com/anomalyco/opencode)
+
 
 The settings are symlinked to their required config locations.
 Prefer interacting with the settings file directly in this repo

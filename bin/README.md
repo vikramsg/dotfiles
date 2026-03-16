@@ -9,6 +9,8 @@ Install tools from this repo with `uv`:
 ```bash
 uv tool install ./bin/screenshot_sync --force
 uv tool install ./bin/ghostty_workspace --force
+uv tool install ./bin/screenshot --force
+uv tool install ./bin/lch --force
 ```
 
 Upgrade an installed local tool after changes:
@@ -16,6 +18,8 @@ Upgrade an installed local tool after changes:
 ```bash
 uv tool install ./bin/screenshot_sync --force --no-cache
 uv tool install ./bin/ghostty_workspace --force --no-cache
+uv tool install ./bin/screenshot --force --no-cache
+uv tool install ./bin/lch --force --no-cache
 ```
 
 Each tool keeps its own package-local tests under `bin/<tool>/tests`.
@@ -33,6 +37,22 @@ Event-driven screenshot sync from macOS to a remote host via `launchd` + `rsync`
 - Install: `uv tool install ./bin/screenshot_sync --force`
 - Test: from `bin/screenshot_sync`, run `uv run pytest`
 - Docs: `bin/screenshot_sync/README.md`
+
+## screenshot
+
+Canonical screenshot-domain tool for screenshot config, clipboard history, and sync workflows.
+
+- Install: `uv tool install ./bin/screenshot --force`
+- Test: from `bin/screenshot`, run `uv run pytest`
+- Docs: `bin/screenshot/README.md`, `screenshot/README.md`
+
+## lch
+
+Thin `launchd` orchestrator that installs, manages, and dispatches LaunchAgents into domain CLIs.
+
+- Install: `uv tool install ./bin/lch --force`
+- Test: from `bin/lch`, run `uv run pytest`
+- Docs: `bin/lch/README.md`, `lch/README.md`
 
 ## ghostty-workspace
 

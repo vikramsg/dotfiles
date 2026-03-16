@@ -1,0 +1,36 @@
+ss() {
+    if [[ $# -eq 0 ]]; then
+        print "usage: ss <index|ls|cp <dest>>" >&2
+        return 1
+    fi
+
+    case "$1" in
+        ls)
+            screenshot clipboard list
+            ;;
+        cp)
+            shift
+            if [[ $# -eq 0 ]]; then
+                print "usage: ss cp <dest>" >&2
+                return 1
+            fi
+            local display_source_shell
+            local display_source
+            local source_path
+            display_source="$(screenshot clipboard copy --index 1)" || return
+            display_source_shell="${display_source// /\\ }"
+            print "copying $display_source_shell -> $*"
+            source_path="$display_source"
+            source_path="${(Q)source_path}"
+            source_path="${source_path/#\~/$HOME}"
+            cp "$source_path" "$@"
+            ;;
+        <->)
+            screenshot clipboard copy --index "$1"
+            ;;
+        *)
+            print "usage: ss <index|ls|cp <dest>>" >&2
+            return 1
+            ;;
+    esac
+}
