@@ -24,6 +24,20 @@ def test_job_definition_has_expected_label_dispatch_and_watch_path_command(tmp_p
     assert job.watch_path_command == ["screenshot", "watch-path"]
 
 
+def test_sync_job_definition_has_expected_label_dispatch_and_watch_path_command(tmp_path, monkeypatch):
+    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
+    from lch.jobs import get_job_definition
+
+    job = get_job_definition("lch-screenshot-sync")
+
+    assert job.job_id == "lch-screenshot-sync"
+    assert job.label == "com.vikramsg.dotfiles.lch-screenshot-sync"
+    assert job.dispatch_command == ["screenshot", "sync", "run"]
+    assert job.watch_path_command == ["screenshot", "watch-path"]
+
+
 def test_help_lists_install_and_run_commands():
     from lch.cli import main
 
@@ -51,6 +65,12 @@ def test_list_shows_known_jobs_with_install_and_load_status(monkeypatch):
                 installed=True,
                 loaded=True,
                 label="com.vikramsg.dotfiles.lch-screenshot-clipboard",
+            ),
+            SimpleNamespace(
+                job_id="lch-screenshot-sync",
+                installed=True,
+                loaded=True,
+                label="com.vikramsg.dotfiles.lch-screenshot-sync",
             )
         ],
     )
@@ -61,8 +81,10 @@ def test_list_shows_known_jobs_with_install_and_load_status(monkeypatch):
     assert result.exit_code == 0
     assert "JOB" in result.output
     assert "lch-screenshot-clipboard" in result.output
+    assert "lch-screenshot-sync" in result.output
     assert "yes" in result.output
     assert "com.vikramsg.dotfiles.lch-screenshot-clipboard" in result.output
+    assert "com.vikramsg.dotfiles.lch-screenshot-sync" in result.output
 
 
 def test_config_reports_effective_paths_and_namespace_format(monkeypatch):

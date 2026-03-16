@@ -9,6 +9,8 @@ This directory contains the repo-managed configuration for the `screenshot` tool
 
 The live config should be a symlink back to this repo file.
 
+On macOS, this config is also the source of truth for the system screenshot save location. Running `just screenshot` applies `screenshot_dir` to `com.apple.screencapture` via `screenshot macos apply`.
+
 ## Setup
 
 Run:
@@ -22,6 +24,7 @@ That command:
 - creates `~/.config/screenshot`
 - symlinks `screenshot/config.json` to `~/.config/screenshot/config.json`
 - installs the `screenshot` CLI with `uv tool install ./bin/screenshot --force --no-cache`
+- on macOS, creates the configured screenshot directory if needed and applies it to the system screenshot location
 
 For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_screenshot` to `~/.zsh_screenshot`. That helper adds:
 
@@ -33,13 +36,13 @@ For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_screenshot` to `~/.zsh_
 
 ```json
 {
-  "screenshot_dir": "~/Screenshots",
+  "screenshot_dir": "~/Desktop/Screenshots",
   "clipboard_history_limit": 5,
   "sync": {
-    "vm_host": "my-vm",
-    "remote_dir": "~/Pictures/Screenshots/"
+    "vm_host": "dev-vm-vikram.europe-west3-b.orbio-development",
+    "remote_dir": "~/Desktop/Screenshots/"
   }
 }
 ```
 
-Use `screenshot config` to see the single effective config path currently in use.
+Use `screenshot config` to see the effective config, and `screenshot macos apply` to re-apply `screenshot_dir` to macOS after manual config edits.

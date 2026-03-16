@@ -12,19 +12,23 @@ filename filters                    plist generation
 clipboard history limit             install/uninstall/status/logs
 clipboard history state             dispatch into screenshot command
 sync config                         watch-path lookup invocation
+macOS screenshot location apply
 ```
 
 ## Install-time interaction
 
 ```text
 lch install lch-screenshot-clipboard
+or
+lch install lch-screenshot-sync
   -> get job definition
   -> run `screenshot watch-path`
   -> receive absolute screenshot directory
   -> write LaunchAgent plist:
        Label = com.vikramsg.dotfiles.lch-screenshot-clipboard
+         or  = com.vikramsg.dotfiles.lch-screenshot-sync
        WatchPaths = [<screenshot_dir>]
-       ProgramArguments = [~/.local/bin/lch, run, lch-screenshot-clipboard]
+       ProgramArguments = [~/.local/bin/lch, run, <job_id>]
   -> load plist with launchctl
 ```
 
@@ -33,12 +37,15 @@ lch install lch-screenshot-clipboard
 ```text
 native macOS screenshot UI
   -> file written to screenshot_dir
-  -> launchd WatchPaths triggers lch job
+  -> launchd WatchPaths triggers lch jobs
   -> `lch run lch-screenshot-clipboard`
   -> `screenshot clipboard on-event`
   -> screenshot finds newest matching screenshot
   -> screenshot copies absolute path to clipboard
   -> screenshot updates last-5 history state
+  -> `lch run lch-screenshot-sync`
+  -> `screenshot sync run`
+  -> screenshot rsyncs matching files to the configured remote_dir
 ```
 
 ## State and command contract
@@ -46,13 +53,15 @@ native macOS screenshot UI
 ```text
 lch contract with screenshot
   watch-path command: screenshot watch-path
-  dispatch command:   screenshot clipboard on-event
+  dispatch commands:
+    screenshot clipboard on-event
+    screenshot sync run
 
 screenshot state file
   ~/.local/state/screenshot/clipboard-history.json
   {
     "history": [
-      "/Users/.../Screenshots/Screen Shot ...png"
+      "/Users/.../Desktop/Screenshots/Screen Shot ...png"
     ]
   }
 ```

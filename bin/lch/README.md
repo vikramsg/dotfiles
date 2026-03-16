@@ -30,10 +30,15 @@ lch list
 lch launchd list
 lch launchd page --page 1 --page-size 25
 lch install lch-screenshot-clipboard
+lch install lch-screenshot-sync
 lch status lch-screenshot-clipboard
+lch status lch-screenshot-sync
 lch logs lch-screenshot-clipboard
+lch logs lch-screenshot-sync
 lch run lch-screenshot-clipboard
+lch run lch-screenshot-sync
 lch uninstall lch-screenshot-clipboard
+lch uninstall lch-screenshot-sync
 ```
 
 ## Docs

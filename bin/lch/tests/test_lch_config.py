@@ -40,6 +40,22 @@ def test_get_job_definition_uses_namespace_from_config(tmp_path, monkeypatch):
     assert job.label == "com.example.dotfiles.lch-screenshot-clipboard"
 
 
+def test_sync_job_definition_uses_namespace_from_config(tmp_path, monkeypatch):
+    config_file = write_config(
+        tmp_path / ".config/lch/config.json",
+        {
+            "namespace": "com.example.dotfiles",
+        },
+    )
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
+    from lch.jobs import get_job_definition
+
+    job = get_job_definition("lch-screenshot-sync")
+
+    assert job.label == "com.example.dotfiles.lch-screenshot-sync"
+
+
 def test_load_config_uses_default_path_when_override_is_absent(tmp_path, monkeypatch):
     home = tmp_path / "home"
     config_file = write_config(

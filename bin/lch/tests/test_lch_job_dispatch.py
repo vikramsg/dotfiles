@@ -56,3 +56,20 @@ def test_run_job_prefers_installed_tool_path_for_launchd_style_environments(tmp_
     launchd_module.run_job("lch-screenshot-clipboard")
 
     assert called == [[str(screenshot_executable), "clipboard", "on-event"]]
+
+
+def test_run_sync_job_invokes_expected_screenshot_command(monkeypatch):
+    import lch.launchd as launchd_module
+
+    called: list[list[str]] = []
+
+    def fake_run(command: list[str], *, check: bool) -> None:
+        assert check is True
+        called.append(command)
+
+    monkeypatch.setattr(launchd_module.subprocess, "run", fake_run)
+
+    launchd_module.run_job("lch-screenshot-sync")
+
+    assert called[0][-2:] == ["sync", "run"]
+    assert called[0][0].endswith("screenshot")

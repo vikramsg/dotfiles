@@ -32,7 +32,7 @@ uv run pytest
 
 ## screenshot-sync
 
-Event-driven screenshot sync from macOS to a remote host via `launchd` + `rsync`.
+Legacy screenshot sync tool retained for history/reference. Active screenshot automation now lives in `screenshot` + `lch`.
 
 - Install: `uv tool install ./bin/screenshot_sync --force`
 - Test: from `bin/screenshot_sync`, run `uv run pytest`
@@ -40,7 +40,7 @@ Event-driven screenshot sync from macOS to a remote host via `launchd` + `rsync`
 
 ## screenshot
 
-Canonical screenshot-domain tool for screenshot config, clipboard history, and sync workflows.
+Canonical screenshot-domain tool for screenshot config, macOS screenshot location, clipboard history, and sync workflows.
 
 - Install: `uv tool install ./bin/screenshot --force`
 - Test: from `bin/screenshot`, run `uv run pytest`
@@ -48,7 +48,7 @@ Canonical screenshot-domain tool for screenshot config, clipboard history, and s
 
 ## lch
 
-Thin `launchd` orchestrator that installs, manages, and dispatches LaunchAgents into domain CLIs.
+Thin `launchd` orchestrator that installs, manages, and dispatches LaunchAgents into domain CLIs such as `lch-screenshot-clipboard` and `lch-screenshot-sync`.
 
 - Install: `uv tool install ./bin/lch --force`
 - Test: from `bin/lch`, run `uv run pytest`

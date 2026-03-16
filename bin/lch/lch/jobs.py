@@ -17,6 +17,12 @@ JOBS = {
         label="",
         dispatch_command=["screenshot", "clipboard", "on-event"],
         watch_path_command=["screenshot", "watch-path"],
+    ),
+    "lch-screenshot-sync": JobDefinition(
+        job_id="lch-screenshot-sync",
+        label="",
+        dispatch_command=["screenshot", "sync", "run"],
+        watch_path_command=["screenshot", "watch-path"],
     )
 }
 

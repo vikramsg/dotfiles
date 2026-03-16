@@ -50,8 +50,10 @@ lch install lch-screenshot-clipboard
 ```text
 launchd WatchPaths event
   -> ProgramArguments: ~/.local/bin/lch run lch-screenshot-clipboard
+     or ~/.local/bin/lch run lch-screenshot-sync
   -> lch resolves dispatch command
   -> run: screenshot clipboard on-event
+     or: screenshot sync run
 ```
 
 ## Discovery and pagination flow
