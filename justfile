@@ -74,6 +74,8 @@ screenshot:
     uv tool install ./bin/screenshot --force --no-cache
     @if [ "$(uname)" = "Darwin" ]; then \
         "$HOME/.local/bin/screenshot" macos apply; \
+    elif [ "$(uname)" = "Linux" ]; then \
+        "$HOME/.local/bin/screenshot" systemd apply; \
     fi
     @echo "screenshot config symlink created at ~/.config/screenshot/config.json -> {{justfile_directory()}}/screenshot/config.json"
 
