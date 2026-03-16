@@ -142,7 +142,7 @@ python-tests:
 
 # Install CLI tools
 install-tools:
-    @echo "Ensuring eza, zoxide, chafa, and autossh are installed..."
+    @echo "Ensuring eza, zoxide, mcat, and autossh are installed..."
     @if ! command -v brew > /dev/null; then \
         echo "Homebrew is not installed. Please install Homebrew first."; \
         exit 1; \
