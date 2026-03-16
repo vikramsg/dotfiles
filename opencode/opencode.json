@@ -7,7 +7,8 @@
       "*rm*.db*": "deny"
     },
     "external_directory": {
-      "/tmp/**": "allow"
+      "/tmp/**": "allow",
+      "/private/tmp/**": "allow"
     },
     "read": {
       "~/.local/**": "allow",
