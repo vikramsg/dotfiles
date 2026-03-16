@@ -56,7 +56,7 @@
           "id": "gpt-5-4",
           "name": "gpt-5-4",
           "modalities": {
-            "input": ["text", "image"],
+            "input": ["text", "image", "pdf"],
             "output": ["text"]
           }
         },
