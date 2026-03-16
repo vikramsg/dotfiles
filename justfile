@@ -48,6 +48,7 @@ opencode:
     mkdir -p ~/.config
     mkdir -p ~/.config/opencode
     ln -sfn {{justfile_directory()}}/opencode/opencode.json ~/.config/opencode/opencode.json
+    ln -sfn {{justfile_directory()}}/opencode/tui.json ~/.config/opencode/tui.json
     ln -sfn {{justfile_directory()}}/opencode/agents ~/.config/opencode/agents
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
