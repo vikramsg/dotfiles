@@ -147,7 +147,7 @@ install-tools:
         echo "Homebrew is not installed. Please install Homebrew first."; \
         exit 1; \
     fi
-    @for tool in eza zoxide chafa autossh; do \
+    @for tool in eza zoxide mcat autossh; do \
         if brew list --formula "${tool}" > /dev/null 2>&1; then \
             echo "  - ${tool} is already installed"; \
         else \
