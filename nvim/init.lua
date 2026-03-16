@@ -344,6 +344,8 @@ require("lazy").setup({
 		---@type neotree.Config?
 		opts = {
 			filesystem = {
+				-- enables refreshing file view when new files are added withouth needing to toggle view
+				use_libuv_file_watcher = true,
 				filtered_items = {
 					visible = true,
 					show_hidden_count = true,
