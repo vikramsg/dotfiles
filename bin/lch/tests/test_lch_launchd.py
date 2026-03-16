@@ -68,6 +68,7 @@ def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path,
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     import lch.cli as cli_module
+    monkeypatch.setattr(cli_module.sys, "platform", "darwin")
 
     calls: list[list[str]] = []
 
@@ -90,10 +91,10 @@ def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path,
             tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-clipboard.err.log",
         )
 
-    monkeypatch.setattr(cli_module, "install_job", fake_install_job)
-    monkeypatch.setattr(cli_module, "uninstall_job", fake_uninstall_job)
-    monkeypatch.setattr(cli_module, "status_job", fake_status_job)
-    monkeypatch.setattr(cli_module, "logs_job", fake_logs_job)
+    monkeypatch.setattr(cli_module, "install_job_launchd", fake_install_job)
+    monkeypatch.setattr(cli_module, "uninstall_job_launchd", fake_uninstall_job)
+    monkeypatch.setattr(cli_module, "status_job_launchd", fake_status_job)
+    monkeypatch.setattr(cli_module, "logs_job_launchd", fake_logs_job)
 
     runner = CliRunner()
 

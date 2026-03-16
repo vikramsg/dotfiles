@@ -1,6 +1,6 @@
 # screenshot architecture
 
-`screenshot` is the single owner of screenshot-domain configuration, OS-specific watcher/application hooks, filtering, clipboard history state, and sync command construction.
+`screenshot` is the single owner of screenshot-domain configuration, macOS screenshot location application, filtering, clipboard history state, and sync command construction.
 
 Its repo-managed config source of truth is `screenshot/config.json`, symlinked to `~/.config/screenshot/config.json`.
 
@@ -45,7 +45,7 @@ Its repo-managed config source of truth is `screenshot/config.json`, symlinked t
 +---------------------------+
 ```
 
-On Linux, a user systemd watcher (`screenshot-clipboard.path`) dispatches `screenshot clipboard on-event` through `screenshot-clipboard.service` whenever `screenshot_dir` changes.
+On Linux, watcher orchestration is owned by `lch` (not `screenshot`). `lch` dispatches `screenshot clipboard on-event` when the configured watch path changes.
 
 ## Clipboard event flow
 

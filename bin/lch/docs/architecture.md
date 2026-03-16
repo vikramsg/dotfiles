@@ -1,6 +1,6 @@
 # lch architecture
 
-`lch` is a thin `launchd` orchestrator. It does not own screenshot rules or state; it only translates job definitions into LaunchAgents and dispatch commands.
+`lch` is a thin native watcher orchestrator (`launchd` on macOS, `systemd --user` on Linux). It does not own screenshot rules or state; it only translates job definitions into OS watcher units and dispatch commands.
 
 Its namespace configuration is repo-managed at `lch/config.json` and symlinked to `~/.config/lch/config.json`.
 
@@ -39,22 +39,22 @@ Its namespace configuration is repo-managed at `lch/config.json` and symlinked t
 lch install lch-screenshot-clipboard
   -> resolve job metadata
   -> ask screenshot for watch path
-  -> compute plist/log paths from label
-  -> write ~/Library/LaunchAgents/<label>.plist
-  -> launchctl unload existing plist if present
-  -> launchctl load new plist
+  -> on macOS: write ~/Library/LaunchAgents/<label>.plist and load with launchctl
+  -> on Linux: write ~/.config/systemd/user/<label>.{path,service} and enable path unit
 ```
 
 ## Runtime flow
 
 ```text
-launchd WatchPaths event
+native watcher event
   -> ProgramArguments: ~/.local/bin/lch run lch-screenshot-clipboard
      or ~/.local/bin/lch run lch-screenshot-sync
   -> lch resolves dispatch command
   -> run: screenshot clipboard on-event
      or: screenshot sync run
 ```
+
+On Linux sink machines, the installed watcher job is `lch-screenshot-clipboard` only.
 
 ## Discovery and pagination flow
 

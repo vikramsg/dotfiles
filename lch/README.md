@@ -22,6 +22,7 @@ That command:
 - creates `~/.config/lch`
 - symlinks `lch/config.json` to `~/.config/lch/config.json`
 - installs the `lch` CLI with `uv tool install ./bin/lch --force --no-cache`
+- on Linux sink machines, installs `lch-screenshot-clipboard` so new files in the screenshot directory dispatch `screenshot clipboard on-event`
 
 ## Format
 
@@ -31,6 +32,6 @@ That command:
 }
 ```
 
-`namespace` is used to derive LaunchAgent labels such as `com.vikramsg.dotfiles.lch-screenshot-clipboard`.
+`namespace` is used to derive watcher labels such as `com.vikramsg.dotfiles.lch-screenshot-clipboard`.
 
 Use `lch config` to see the single effective config path currently in use.

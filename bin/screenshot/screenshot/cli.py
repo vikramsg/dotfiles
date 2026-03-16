@@ -9,7 +9,6 @@ from screenshot.macos import apply_macos_screenshot_location
 from screenshot.paths import format_user_path
 from screenshot.state import get_state_file
 from screenshot.sync import format_rsync_command, run_sync
-from screenshot.systemd import apply_linux_screenshot_watcher
 
 
 @click.group()
@@ -34,7 +33,6 @@ def render_screenshot_config() -> str:
         f"STATE_FILE  {state_file}",
         f"SCREENSHOT_DIR  {config.screenshot_dir}",
         "MACOS_APPLY  screenshot macos apply",
-        "SYSTEMD_APPLY  screenshot systemd apply",
         "",
         "FORMAT",
         json.dumps(example, indent=2),
@@ -125,21 +123,5 @@ def macos_apply_command() -> None:
         click.echo(str(apply_macos_screenshot_location()))
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
-
-
-@main.group("systemd")
-def systemd_group() -> None:
-    """Apply screenshot config to Linux user systemd units."""
-
-
-@systemd_group.command("apply")
-def systemd_apply_command() -> None:
-    """Write and enable Linux user systemd watcher units."""
-    try:
-        click.echo(str(apply_linux_screenshot_watcher()))
-    except RuntimeError as exc:
-        raise click.ClickException(str(exc)) from exc
-
-
 if __name__ == "__main__":
     main()

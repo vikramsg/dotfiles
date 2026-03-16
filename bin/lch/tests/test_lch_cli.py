@@ -58,7 +58,7 @@ def test_list_shows_known_jobs_with_install_and_load_status(monkeypatch):
 
     monkeypatch.setattr(
         cli_module,
-        "list_known_jobs",
+        "list_known_jobs_systemd",
         lambda: [
             SimpleNamespace(
                 job_id="lch-screenshot-clipboard",

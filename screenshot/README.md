@@ -11,8 +11,6 @@ The live config should be a symlink back to this repo file.
 
 On macOS, this config is also the source of truth for the system screenshot save location. Running `just screenshot` applies `screenshot_dir` to `com.apple.screencapture` via `screenshot macos apply`.
 
-On Linux, running `just screenshot` writes and enables a user systemd watcher (`screenshot-clipboard.path` + `screenshot-clipboard.service`) so new files in `screenshot_dir` automatically trigger `screenshot clipboard on-event`.
-
 ## Setup
 
 Run:
@@ -27,7 +25,8 @@ That command:
 - symlinks `screenshot/config.json` to `~/.config/screenshot/config.json`
 - installs the `screenshot` CLI with `uv tool install ./bin/screenshot --force --no-cache`
 - on macOS, creates the configured screenshot directory if needed and applies it to the system screenshot location
-- on Linux, creates the configured screenshot directory if needed and enables user systemd units that watch it for new files
+
+On Linux, directory watching/orchestration is owned by `lch`. Run `just lch` to install the sink watcher job (`lch-screenshot-clipboard`) that dispatches `screenshot clipboard on-event`.
 
 For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_screenshot` to `~/.zsh_screenshot`. That helper adds:
 
@@ -51,6 +50,5 @@ For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_screenshot` to `~/.zsh_
 Use `screenshot config` to see the effective config.
 
 - macOS: `screenshot macos apply`
-- Linux: `screenshot systemd apply`
 
 Clipboard writes are best-effort: `screenshot` will try `pbcopy`, `wl-copy`, or `xclip`. If none are available, it still updates screenshot history so `ss ls`, `ss <index>`, and `ss cp <dest>` continue to work.

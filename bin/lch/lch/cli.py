@@ -11,15 +11,20 @@ from lch.launchd import (
     get_lch_executable_path,
     get_logs_directory,
     get_standard_launchd_roots,
-    install_job,
-    list_known_jobs,
-    logs_job,
+    install_job as install_job_launchd,
+    list_known_jobs as list_known_jobs_launchd,
+    logs_job as logs_job_launchd,
     paginate_launchd_jobs,
     render_full_launchd_job_list as render_full_launchd_job_list_from_launchd,
     run_job,
-    status_job,
-    uninstall_job,
+    status_job as status_job_launchd,
+    uninstall_job as uninstall_job_launchd,
 )
+from lch.systemd import install_job as install_job_systemd
+from lch.systemd import list_known_jobs as list_known_jobs_systemd
+from lch.systemd import logs_job as logs_job_systemd
+from lch.systemd import status_job as status_job_systemd
+from lch.systemd import uninstall_job as uninstall_job_systemd
 
 
 @click.group()
@@ -31,7 +36,8 @@ def main() -> None:
 def list_command() -> None:
     """List known lch jobs and their local status."""
     click.echo("JOB  INSTALLED  LOADED  LABEL")
-    for job in list_known_jobs():
+    jobs = list_known_jobs_systemd() if sys.platform.startswith("linux") else list_known_jobs_launchd()
+    for job in jobs:
         installed = "yes" if job.installed else "no"
         loaded = "yes" if job.loaded else "no"
         click.echo(f"{job.job_id}  {installed}  {loaded}  {job.label}")
@@ -113,28 +119,40 @@ def launchd_page_command(page: int, page_size: int) -> None:
 @click.argument("job_id")
 def install_command(job_id: str) -> None:
     """Install a launchd job."""
-    click.echo(str(install_job(job_id)))
+    if sys.platform.startswith("linux"):
+        click.echo(str(install_job_systemd(job_id)))
+        return
+    click.echo(str(install_job_launchd(job_id)))
 
 
 @main.command("uninstall")
 @click.argument("job_id")
 def uninstall_command(job_id: str) -> None:
     """Uninstall a launchd job."""
-    click.echo(str(uninstall_job(job_id)))
+    if sys.platform.startswith("linux"):
+        click.echo(str(uninstall_job_systemd(job_id)))
+        return
+    click.echo(str(uninstall_job_launchd(job_id)))
 
 
 @main.command("status")
 @click.argument("job_id")
 def status_command(job_id: str) -> None:
     """Show launchd status for a job."""
-    click.echo(status_job(job_id))
+    if sys.platform.startswith("linux"):
+        click.echo(status_job_systemd(job_id))
+        return
+    click.echo(status_job_launchd(job_id))
 
 
 @main.command("logs")
 @click.argument("job_id")
 def logs_command(job_id: str) -> None:
     """Show launchd log file paths for a job."""
-    stdout_log_path, stderr_log_path = logs_job(job_id)
+    if sys.platform.startswith("linux"):
+        stdout_log_path, stderr_log_path = logs_job_systemd(job_id)
+    else:
+        stdout_log_path, stderr_log_path = logs_job_launchd(job_id)
     click.echo(str(stdout_log_path))
     click.echo(str(stderr_log_path))
 
