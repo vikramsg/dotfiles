@@ -48,12 +48,21 @@ def test_handle_event_prepends_newest_and_trims_to_limit(tmp_path):
 
 def test_clipboard_list_shows_newest_first_history(tmp_path, monkeypatch):
     state_file = tmp_path / "history.json"
+    monkeypatch.setenv("HOME", str(tmp_path))
     history = [
-        "/tmp/shot-3.png",
-        "/tmp/shot-2.png",
-        "/tmp/shot-1.png",
+        "~/Screenshots/shot-3.png",
+        "~/Screenshots/shot-2.png",
+        "~/Screenshots/shot-1.png",
     ]
-    state_file.write_text('{"history": ["/tmp/shot-3.png", "/tmp/shot-2.png", "/tmp/shot-1.png"]}')
+    state_file.write_text(
+        '{"history": ["'
+        + str((tmp_path / 'Screenshots/shot-3.png').resolve())
+        + '", "'
+        + str((tmp_path / 'Screenshots/shot-2.png').resolve())
+        + '", "'
+        + str((tmp_path / 'Screenshots/shot-1.png').resolve())
+        + '"]}'
+    )
     monkeypatch.setenv("SCREENSHOT_STATE_FILE", str(state_file))
 
     from screenshot.cli import main
@@ -67,7 +76,16 @@ def test_clipboard_list_shows_newest_first_history(tmp_path, monkeypatch):
 
 def test_clipboard_copy_by_index_recopies_prior_item(tmp_path, monkeypatch):
     state_file = tmp_path / "history.json"
-    state_file.write_text('{"history": ["/tmp/shot-3.png", "/tmp/shot-2.png", "/tmp/shot-1.png"]}')
+    monkeypatch.setenv("HOME", str(tmp_path))
+    state_file.write_text(
+        '{"history": ["'
+        + str((tmp_path / 'Screenshots/shot 3.png').resolve())
+        + '", "'
+        + str((tmp_path / 'Screenshots/shot 2.png').resolve())
+        + '", "'
+        + str((tmp_path / 'Screenshots/shot 1.png').resolve())
+        + '"]}'
+    )
     monkeypatch.setenv("SCREENSHOT_STATE_FILE", str(state_file))
 
     copied: list[str] = []
@@ -80,7 +98,8 @@ def test_clipboard_copy_by_index_recopies_prior_item(tmp_path, monkeypatch):
     result = runner.invoke(cli_module.main, ["clipboard", "copy", "--index", "2"])
 
     assert result.exit_code == 0
-    assert copied == ["/tmp/shot-2.png"]
+    assert copied == [r"~/Screenshots/shot\ 2.png"]
+    assert result.output.splitlines() == [r"~/Screenshots/shot\ 2.png"]
 
 
 def test_clipboard_copy_rejects_out_of_range_index(tmp_path, monkeypatch):

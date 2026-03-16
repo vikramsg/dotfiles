@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from click.testing import CliRunner
+
 
 def write_config(path: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,3 +97,35 @@ def test_load_config_uses_default_file_location_when_not_explicit(tmp_path, monk
 
     assert config.screenshot_dir == home / "Screenshots"
     assert config.sync.vm_host == "demo-vm"
+
+
+def test_config_command_shows_effective_paths_and_format(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    config_file = write_config(
+        home / "custom/screenshot.json",
+        {
+            "screenshot_dir": "~/Shots",
+            "clipboard_history_limit": 9,
+            "sync": {
+                "vm_host": "cfg-vm",
+                "remote_dir": "/srv/shots",
+            },
+        },
+    )
+    state_file = home / "state/screenshot-history.json"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("SCREENSHOT_CONFIG_FILE", str(config_file))
+    monkeypatch.setenv("SCREENSHOT_STATE_FILE", str(state_file))
+    monkeypatch.delenv("SCREENSHOT_DIR", raising=False)
+
+    from screenshot.cli import main
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["config"])
+
+    assert result.exit_code == 0
+    assert f"CONFIG_FILE  {config_file}" in result.output
+    assert f"STATE_FILE  {state_file}" in result.output
+    assert f"SCREENSHOT_DIR  {home / 'Shots'}" in result.output
+    assert '"clipboard_history_limit": 5' in result.output
+    assert '"vm_host": "my-vm"' in result.output

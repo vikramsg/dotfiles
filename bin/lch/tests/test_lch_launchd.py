@@ -3,7 +3,16 @@ from pathlib import Path
 from click.testing import CliRunner
 
 
-def test_launch_agent_paths_follow_label_conventions(tmp_path):
+def write_config(path: Path, payload: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(__import__("json").dumps(payload))
+    return path
+
+
+def test_launch_agent_paths_follow_label_conventions(tmp_path, monkeypatch):
+    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
     from lch.jobs import get_job_definition
     from lch.launchd import get_job_paths
 
@@ -15,7 +24,10 @@ def test_launch_agent_paths_follow_label_conventions(tmp_path):
     assert paths.stderr_log_path == tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-clipboard.err.log"
 
 
-def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path):
+def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path, monkeypatch):
+    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
     from lch.jobs import get_job_definition
     from lch.launchd import build_launch_agent_plist, get_job_paths
 
@@ -37,6 +49,8 @@ def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path
 
 def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     import lch.cli as cli_module
 

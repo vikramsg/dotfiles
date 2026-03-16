@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 from screenshot.config import ScreenshotConfig
+from screenshot.paths import format_user_path
 from screenshot.state import load_history_state, write_history_state
 
 
@@ -44,7 +45,7 @@ def handle_event(
     if state.history and state.history[0] == newest_path:
         return newest.resolve()
 
-    copy_to_clipboard(newest_path)
+    copy_to_clipboard(format_user_path(newest_path))
     history = [newest_path, *[entry for entry in state.history if entry != newest_path]]
     write_history_state(history[: config.clipboard_history_limit], state_file)
     return newest.resolve()
@@ -66,5 +67,6 @@ def copy_history_entry(
         raise IndexError("History index out of range")
 
     entry = history[entry_index]
-    copy_to_clipboard(entry)
-    return entry
+    formatted_entry = format_user_path(entry)
+    copy_to_clipboard(formatted_entry)
+    return formatted_entry

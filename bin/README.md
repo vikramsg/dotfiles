@@ -44,7 +44,7 @@ Canonical screenshot-domain tool for screenshot config, clipboard history, and s
 
 - Install: `uv tool install ./bin/screenshot --force`
 - Test: from `bin/screenshot`, run `uv run pytest`
-- Docs: `bin/screenshot/README.md`
+- Docs: `bin/screenshot/README.md`, `screenshot/README.md`
 
 ## lch
 
@@ -52,7 +52,7 @@ Thin `launchd` orchestrator that installs, manages, and dispatches LaunchAgents 
 
 - Install: `uv tool install ./bin/lch --force`
 - Test: from `bin/lch`, run `uv run pytest`
-- Docs: `bin/lch/README.md`
+- Docs: `bin/lch/README.md`, `lch/README.md`
 
 ## ghostty-workspace
 

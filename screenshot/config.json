@@ -1,0 +1,8 @@
+{
+  "screenshot_dir": "~/Screenshots",
+  "clipboard_history_limit": 5,
+  "sync": {
+    "vm_host": "my-vm",
+    "remote_dir": "~/Pictures/Screenshots/"
+  }
+}

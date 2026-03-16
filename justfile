@@ -65,6 +65,24 @@ ghostty:
     @echo "Ghostty workspaces symlink created at ~/.config/ghostty/workspaces -> {{justfile_directory()}}/ghostty/workspaces"
 
 
+# Set up screenshot config symlink and install tool
+screenshot:
+    @echo "Setting up screenshot config symlink and tool..."
+    mkdir -p ~/.config/screenshot
+    ln -sfn {{justfile_directory()}}/screenshot/config.json ~/.config/screenshot/config.json
+    uv tool install ./bin/screenshot --force --no-cache
+    @echo "screenshot config symlink created at ~/.config/screenshot/config.json -> {{justfile_directory()}}/screenshot/config.json"
+
+
+# Set up lch config symlink and install tool
+lch:
+    @echo "Setting up lch config symlink and tool..."
+    mkdir -p ~/.config/lch
+    ln -sfn {{justfile_directory()}}/lch/config.json ~/.config/lch/config.json
+    uv tool install ./bin/lch --force --no-cache
+    @echo "lch config symlink created at ~/.config/lch/config.json -> {{justfile_directory()}}/lch/config.json"
+
+
 # Set up custom bin symlinks
 bin:
     @echo "Setting up custom bin symlinks..."
@@ -90,7 +108,9 @@ lazygit:
 zsh:
     @echo "Setting up zsh symlink..."
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
+    ln -sfn {{justfile_directory()}}/zsh/.zsh_screenshot ~/.zsh_screenshot
     @echo ".zshrc symlink created at ~/.zshrc -> {{justfile_directory()}}/zsh/.zshrc"
+    @echo ".zsh_screenshot symlink created at ~/.zsh_screenshot -> {{justfile_directory()}}/zsh/.zsh_screenshot"
     @if [ "$(uname)" = "Linux" ]; then \
         if command -v loginctl >/dev/null 2>&1; then \
             echo "Linux detected: Enabling systemd lingering to preserve background processes (like tmux) across SSH disconnects..."; \
@@ -108,7 +128,7 @@ ssh:
 
 
 # Set up all symlinks
-all: nvim tmux opencode ghostty bin zsh lazygit
+all: nvim tmux opencode ghostty screenshot lch bin zsh lazygit
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

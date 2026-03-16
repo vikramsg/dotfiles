@@ -25,6 +25,7 @@ def write_file(path: Path, *, mtime: int) -> Path:
 
 
 def test_on_event_copies_newest_matching_screenshot(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
     screenshot_dir = tmp_path / "Screenshots"
     older = write_file(screenshot_dir / "Screenshot 2026-03-14 at 9.00.00 AM.png", mtime=10)
     newer = write_file(screenshot_dir / "Screen Shot 2026-03-14 at 9.01.00 AM.png", mtime=20)
@@ -45,7 +46,7 @@ def test_on_event_copies_newest_matching_screenshot(tmp_path, monkeypatch):
 
     assert older.exists()
     assert result == newer.resolve()
-    assert copied["value"] == str(newer.resolve())
+    assert copied["value"] == r"~/Screenshots/Screen\ Shot\ 2026-03-14\ at\ 9.01.00\ AM.png"
 
 
 def test_on_event_ignores_non_screenshot_filenames(tmp_path):

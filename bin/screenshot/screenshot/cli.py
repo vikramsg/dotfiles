@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 import click
 
 from screenshot.clipboard import copy_history_entry, copy_path_to_clipboard, handle_event, list_history
-from screenshot.config import get_default_config_file, load_config
+from screenshot.config import get_config_file, load_config
+from screenshot.paths import format_user_path
 from screenshot.state import get_state_file
 from screenshot.sync import format_rsync_command, run_sync
 
@@ -11,6 +13,35 @@ from screenshot.sync import format_rsync_command, run_sync
 @click.group()
 def main() -> None:
     """Screenshot domain tool."""
+
+
+def render_screenshot_config() -> str:
+    config_file = get_config_file()
+    state_file = get_state_file()
+    config = load_config()
+    example = {
+        "screenshot_dir": "~/Screenshots",
+        "clipboard_history_limit": 5,
+        "sync": {
+            "vm_host": "my-vm",
+            "remote_dir": "~/Pictures/Screenshots/",
+        },
+    }
+    lines = [
+        f"CONFIG_FILE  {config_file}",
+        f"STATE_FILE  {state_file}",
+        f"SCREENSHOT_DIR  {config.screenshot_dir}",
+        "",
+        "FORMAT",
+        json.dumps(example, indent=2),
+    ]
+    return "\n".join(lines)
+
+
+@main.command("config")
+def config_command() -> None:
+    """Show the effective screenshot config paths and format."""
+    click.echo(render_screenshot_config())
 
 
 @main.command("watch-path")
@@ -29,14 +60,14 @@ def clipboard_on_event_command() -> None:
     """Handle a screenshot folder event."""
     result = handle_event(load_config(), state_file=get_state_file())
     if result is not None:
-        click.echo(str(result))
+        click.echo(format_user_path(result))
 
 
 @clipboard_group.command("list")
 def clipboard_list_command() -> None:
     """List copied screenshot history."""
     for entry in list_history(state_file=get_state_file()):
-        click.echo(entry)
+        click.echo(format_user_path(entry))
 
 
 @clipboard_group.command("copy")
@@ -63,7 +94,7 @@ def sync_group() -> None:
 @sync_group.command("config-path")
 def sync_config_path_command() -> None:
     """Print the screenshot config path."""
-    click.echo(str(get_default_config_file()))
+    click.echo(str(get_config_file()))
 
 
 @sync_group.command("command")

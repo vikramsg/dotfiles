@@ -2,6 +2,8 @@
 
 `screenshot` is the single owner of screenshot-domain configuration, filtering, clipboard history state, and sync command construction.
 
+Its repo-managed config source of truth is `screenshot/config.json`, symlinked to `~/.config/screenshot/config.json`.
+
 ## Internal ownership
 
 ```text
@@ -43,7 +45,8 @@ directory change
   -> filter by "Screenshot *.png" and "Screen Shot *.png"
   -> pick newest matching file by mtime
   -> if already history head: stop
-  -> pbcopy absolute path
+  -> render shell-safe `~`-relative path for user-facing output
+  -> pbcopy formatted path
   -> prepend to history
   -> trim to clipboard_history_limit
 ```
