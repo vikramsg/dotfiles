@@ -32,7 +32,7 @@ Its repo-managed config source of truth is `screenshot/config.json`, symlinked t
 | - scan screenshot_dir     |
 | - match filename filters  |
 | - choose newest file      |
-| - pbcopy absolute path    |
+| - best-effort clipboard   |
 | - update state history    |
 +-------------+-------------+
               |
@@ -45,6 +45,8 @@ Its repo-managed config source of truth is `screenshot/config.json`, symlinked t
 +---------------------------+
 ```
 
+On Linux, watcher orchestration is owned by `lch` (not `screenshot`). `lch` dispatches `screenshot clipboard on-event` when the configured watch path changes.
+
 ## Clipboard event flow
 
 ```text
@@ -55,7 +57,8 @@ directory change
   -> pick newest matching file by mtime
   -> if already history head: stop
   -> render shell-safe `~`-relative path for user-facing output
-  -> pbcopy formatted path
+  -> try pbcopy, wl-copy, xclip (best effort)
+  -> continue even if clipboard backend is unavailable
   -> prepend to history
   -> trim to clipboard_history_limit
 ```

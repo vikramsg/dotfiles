@@ -93,15 +93,13 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     export GH_BROWSER="xdg-open"
 fi
 
+alias python="echo 'Do not use python\nUse uv for all Python related usage.'"
+alias python3="echo 'Do not use python3\nUse uv for all Python related usage.'"
+
 #########################################
 # gcloud commands
 alias gcloud-auth="gcloud auth login"
 alias gs="gcloud storage"
-
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    alias chafa="chafa --passthrough=tmux -f kitty" 
-fi
-
 
 #########################################
 # Init zoxide

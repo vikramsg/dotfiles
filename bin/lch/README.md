@@ -1,13 +1,14 @@
 # lch
 
-Thin `launchd` orchestrator for dotfiles jobs.
+Thin watcher orchestrator for dotfiles jobs (`launchd` on macOS, `systemd --user` on Linux).
 
 It owns:
 
 - job ids and labels
-- LaunchAgent plist generation
+- LaunchAgent plist generation (macOS)
+- systemd user unit generation (Linux)
 - install/uninstall/status/logs flows
-- dispatch from `launchd` into domain CLIs
+- dispatch from native watcher into domain CLIs
 
 ## Install
 
@@ -49,5 +50,7 @@ lch uninstall lch-screenshot-sync
 `lch config` reports the single effective config file path currently in use, the configured namespace, and the derived launchd paths.
 
 The repo-managed config source of truth lives at `lch/config.json`. Use `just lch` to symlink it into `~/.config/lch/config.json` and install the tool.
+
+On Linux sink machines, `just lch` installs the `lch-screenshot-clipboard` watcher job only.
 
 `lch launchd list` uses an interactive pager when stdout is a TTY and renders the full discovered launchd dataset. Use `lch launchd page` for deterministic, non-interactive pagination in tests and scripts.

@@ -123,7 +123,5 @@ def macos_apply_command() -> None:
         click.echo(str(apply_macos_screenshot_location()))
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
-
-
 if __name__ == "__main__":
     main()

@@ -84,6 +84,9 @@ lch:
     mkdir -p ~/.config/lch
     ln -sfn {{justfile_directory()}}/lch/config.json ~/.config/lch/config.json
     uv tool install ./bin/lch --force --no-cache
+    @if [ "$(uname)" = "Linux" ]; then \
+        "$HOME/.local/bin/lch" install lch-screenshot-clipboard; \
+    fi
     @echo "lch config symlink created at ~/.config/lch/config.json -> {{justfile_directory()}}/lch/config.json"
 
 

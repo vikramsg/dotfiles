@@ -9,7 +9,6 @@ members = [
     "lch",
     "router-battery-check",
     "screenshot",
-    "screenshot-sync",
 ]
 
 [[package]]
@@ -299,17 +298,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "click" }]
-
-[[package]]
-name = "screenshot-sync"
-version = "0.1.0"
-source = { editable = "bin/screenshot_sync" }
-dependencies = [
-    { name = "python-dotenv" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "python-dotenv" }]
 
 [[package]]
 name = "urllib3"

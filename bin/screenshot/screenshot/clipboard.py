@@ -27,7 +27,24 @@ def find_newest_screenshot(config: ScreenshotConfig) -> Path | None:
 
 
 def copy_path_to_clipboard(text: str) -> None:
-    subprocess.run(["pbcopy"], input=text, text=True, check=True)
+    commands = [
+        ["pbcopy"],
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+    ]
+    for command in commands:
+        try:
+            subprocess.run(
+                command,
+                input=text,
+                text=True,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+        except (FileNotFoundError, OSError, subprocess.CalledProcessError):
+            continue
 
 
 def handle_event(

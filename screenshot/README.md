@@ -26,6 +26,8 @@ That command:
 - installs the `screenshot` CLI with `uv tool install ./bin/screenshot --force --no-cache`
 - on macOS, creates the configured screenshot directory if needed and applies it to the system screenshot location
 
+On Linux, directory watching/orchestration is owned by `lch`. Run `just lch` to install the sink watcher job (`lch-screenshot-clipboard`) that dispatches `screenshot clipboard on-event`.
+
 For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_screenshot` to `~/.zsh_screenshot`. That helper adds:
 
 - `ss ls`
@@ -45,4 +47,8 @@ For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_screenshot` to `~/.zsh_
 }
 ```
 
-Use `screenshot config` to see the effective config, and `screenshot macos apply` to re-apply `screenshot_dir` to macOS after manual config edits.
+Use `screenshot config` to see the effective config.
+
+- macOS: `screenshot macos apply`
+
+Clipboard writes are best-effort: `screenshot` will try `pbcopy`, `wl-copy`, or `xclip`. If none are available, it still updates screenshot history so `ss ls`, `ss <index>`, and `ss cp <dest>` continue to work.

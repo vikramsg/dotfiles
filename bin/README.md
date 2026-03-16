@@ -7,7 +7,6 @@ This directory contains custom scripts for the dotfiles environment.
 Install tools from this repo with `uv`:
 
 ```bash
-uv tool install ./bin/screenshot_sync --force
 uv tool install ./bin/ghostty_workspace --force
 uv tool install ./bin/screenshot --force
 uv tool install ./bin/lch --force
@@ -16,7 +15,6 @@ uv tool install ./bin/lch --force
 Upgrade an installed local tool after changes:
 
 ```bash
-uv tool install ./bin/screenshot_sync --force --no-cache
 uv tool install ./bin/ghostty_workspace --force --no-cache
 uv tool install ./bin/screenshot --force --no-cache
 uv tool install ./bin/lch --force --no-cache
@@ -29,14 +27,6 @@ Run all Python tests from repo root:
 ```bash
 uv run pytest
 ```
-
-## screenshot-sync
-
-Legacy screenshot sync tool retained for history/reference. Active screenshot automation now lives in `screenshot` + `lch`.
-
-- Install: `uv tool install ./bin/screenshot_sync --force`
-- Test: from `bin/screenshot_sync`, run `uv run pytest`
-- Docs: `bin/screenshot_sync/README.md`
 
 ## screenshot
 

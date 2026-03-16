@@ -1,6 +1,6 @@
 # lch and screenshot integration
 
-This document describes the boundary between the generic `launchd` orchestrator (`lch`) and the screenshot-domain CLI (`screenshot`).
+This document describes the boundary between the generic watcher orchestrator (`lch`) and the screenshot-domain CLI (`screenshot`).
 
 ## Ownership boundary
 
@@ -9,6 +9,7 @@ screenshot owns                     lch owns
 -------------------------------     ---------------------------------
 screenshot_dir                      launchd labels
 filename filters                    plist generation
+                                    systemd user unit generation
 clipboard history limit             install/uninstall/status/logs
 clipboard history state             dispatch into screenshot command
 sync config                         watch-path lookup invocation
@@ -24,28 +25,24 @@ lch install lch-screenshot-sync
   -> get job definition
   -> run `screenshot watch-path`
   -> receive absolute screenshot directory
-  -> write LaunchAgent plist:
-       Label = com.vikramsg.dotfiles.lch-screenshot-clipboard
-         or  = com.vikramsg.dotfiles.lch-screenshot-sync
-       WatchPaths = [<screenshot_dir>]
-       ProgramArguments = [~/.local/bin/lch, run, <job_id>]
-  -> load plist with launchctl
+  -> on macOS: write LaunchAgent plist
+  -> on Linux: write systemd user .path/.service units
+        Label = com.vikramsg.dotfiles.lch-screenshot-clipboard
+          or  = com.vikramsg.dotfiles.lch-screenshot-sync
+   -> activate with launchctl (macOS) or systemctl --user (Linux)
 ```
 
 ## Runtime interaction
 
 ```text
-native macOS screenshot UI
-  -> file written to screenshot_dir
-  -> launchd WatchPaths triggers lch jobs
+file written to screenshot_dir
+  -> launchd/systemd path trigger wakes lch job
   -> `lch run lch-screenshot-clipboard`
   -> `screenshot clipboard on-event`
   -> screenshot finds newest matching screenshot
   -> screenshot copies absolute path to clipboard
   -> screenshot updates last-5 history state
-  -> `lch run lch-screenshot-sync`
-  -> `screenshot sync run`
-  -> screenshot rsyncs matching files to the configured remote_dir
+  -> optional source-machine flow: `lch run lch-screenshot-sync` -> `screenshot sync run`
 ```
 
 ## State and command contract
@@ -65,3 +62,5 @@ screenshot state file
     ]
   }
 ```
+
+Linux sink machines install only `lch-screenshot-clipboard`.
