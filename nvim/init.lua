@@ -58,6 +58,9 @@
 --   ca : Code Action
 --   K  : Hover documentation
 --
+-- File navigation
+--   gf : Go to File, if a filepath is available as text, for eg. in markdown
+--
 -- Markdown Renderer:
 --   mp : Open viewer window on focused markdown file
 --   Cmd + q : Close viewer
