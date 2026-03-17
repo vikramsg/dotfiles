@@ -145,12 +145,13 @@ python-tests:
 
 # Install CLI tools
 install-tools:
-    @echo "Ensuring eza, zoxide, mcat, and autossh are installed..."
+    @echo "Ensuring eza, zoxide, mcat, mdr and autossh are installed..."
     @if ! command -v brew > /dev/null; then \
         echo "Homebrew is not installed. Please install Homebrew first."; \
         exit 1; \
     fi
-    @for tool in eza zoxide mcat autossh; do \
+    # Note for mdr, linux libraries are required - sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libgl1-mesa-dev
+    @for tool in eza zoxide mcat autossh CleverCloud/misc/mdr; do \
         if brew list --formula "${tool}" > /dev/null 2>&1; then \
             echo "  - ${tool} is already installed"; \
         else \

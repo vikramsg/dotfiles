@@ -216,7 +216,7 @@ require("lazy").setup({
 	{ -- Fuzzy Finder (files, lsp, etc)
 		"nvim-telescope/telescope.nvim",
 		event = "VimEnter",
-		branch = "0.1.x",
+		version = "*",
 		dependencies = {
 			"nvim-lua/plenary.nvim",
 			{ -- If encountering errors, see telescope-fzf-native README for installation instructions
@@ -249,6 +249,7 @@ require("lazy").setup({
 				--  All the info you're looking for is in `:help telescope.setup()`
 				--
 				defaults = {
+					path_display = { "filename_first" },
 					mappings = {
 						i = { ["<C-d>"] = actions.delete_buffer },
 						n = { ["<C-d>"] = actions.delete_buffer },
