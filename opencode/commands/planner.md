@@ -20,7 +20,7 @@ and then proceeding with implementation.
 (
     NOTE: 
         1. Add helpful ASCII diagrams. Example diagrams: Call stack with main function calls, sequence diagrams etc.
-        2. When showing call stacks, prefer showing the entire stack in the user flow together. Put full filenames in the call stack
+        2. When showing call stacks, prefer showing the entire stack in the user flow together. Put full filenames in the call stack. Include how edge cases are handled.
         3. Use ASCII to represent UI
 )
 
