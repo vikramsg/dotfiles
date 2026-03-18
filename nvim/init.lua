@@ -146,6 +146,10 @@ vim.keymap.set({ "n", "v", "i" }, "<Select>", "$", { desc = "Go to end of line" 
 -- Paste over selection without overwriting register
 vim.keymap.set("x", "p", "P", { desc = "Paste without overwriting register" })
 
+-- Prevent Ghostty/KKP <D-c> from falling back to plain `c` outside tmux
+vim.keymap.set("n", "<D-c>", [[:<C-u>normal! "+yy<CR>]], { desc = "Copy line to system clipboard" })
+vim.keymap.set("x", "<D-c>", [[:<C-u>normal! "+y<CR>]], { desc = "Copy selection to system clipboard" })
+
 -- Delete without yanking (to the black hole register)
 vim.keymap.set({ "n", "v" }, "<leader>d", [["_x]], { desc = "Delete character/selection without yanking" })
 
