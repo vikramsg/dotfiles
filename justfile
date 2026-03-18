@@ -15,12 +15,11 @@ nvim:
     mkdir -p ~/.config
     ln -sfn {{justfile_directory()}}/nvim ~/.config/nvim
     @echo "Neovim symlink created at ~/.config/nvim -> {{justfile_directory()}}/nvim"
-    @if ! command -v mdr &> /dev/null; then \
+    @if ! command -v markdown-viewer &> /dev/null; then \
         echo "Installing mdr via Homebrew for markdown previews..."; \
-        brew tap CleverCloud/misc; \
-        brew install mdr; \
+        uv tool install ./bin/markdown_viewer
     else \
-        echo "mdr is already installed."; \
+        echo "Markdown viewer is already installed."; \
     fi
 
 # Set up Tmux symlink
