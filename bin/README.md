@@ -54,6 +54,14 @@ Requires `window-new-tab-position = end` in `ghostty/config` for deterministic t
 - Test: from `bin/ghostty_workspace`, run `uv run pytest`
 - Docs: `bin/ghostty_workspace/README.md`
 
+## marxual
+
+Render Markdown files or stdin in a Bubble Tea TUI, with Mermaid fences converted to ASCII via `mermaid-ascii` before Glamour rendering.
+
+- Install: `just marxual`
+- Test: from `bin/marxual`, run `go test ./...`
+- Docs: `bin/marxual/README.md`
+
 ## xdg-open (Remote Browser Proxy)
 
 This script allows you to open URLs from this remote VM directly in your local Mac's web browser. It is designed to be used with the `opener` tool and SSH remote forwarding.

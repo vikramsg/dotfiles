@@ -1,0 +1,10 @@
+# Unsupported Mermaid Example
+
+> Warning: failed to render Mermaid diagram: failed to parse graph diagram: unsupported graph type 'journey'. Supported types: graph TD, graph TB, graph LR, flowchart TD, flowchart TB, flowchart LR
+
+```mermaid
+journey
+  title Unsupported diagram
+  section Day 1
+    Start: 5: Me
+```
