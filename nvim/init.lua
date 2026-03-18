@@ -1075,6 +1075,25 @@ require("lazy").setup({
 ---------------------------------------------------------------------
 local markdown_preview_term = nil
 
+local function cleanup_markdown_preview_term(term)
+	if term == nil then
+		markdown_preview_term = nil
+		return
+	end
+
+	if term.window and vim.api.nvim_win_is_valid(term.window) and #vim.api.nvim_list_tabpages() > 1 then
+		pcall(vim.api.nvim_win_close, term.window, true)
+	end
+
+	if term.bufnr and vim.api.nvim_buf_is_valid(term.bufnr) then
+		pcall(vim.api.nvim_buf_delete, term.bufnr, { force = true })
+	end
+
+	if markdown_preview_term == term then
+		markdown_preview_term = nil
+	end
+end
+
 vim.api.nvim_create_user_command("MdPreview", function()
 	local file = vim.fn.expand("%:p")
 	if vim.bo.filetype ~= "markdown" then
@@ -1097,16 +1116,28 @@ vim.api.nvim_create_user_command("MdPreview", function()
 	end
 
 	if markdown_preview_term ~= nil then
-		markdown_preview_term:shutdown()
+		cleanup_markdown_preview_term(markdown_preview_term)
 	end
 
-	markdown_preview_term = toggleterm_terminal.Terminal:new({
+	local term
+	term = toggleterm_terminal.Terminal:new({
 		cmd = "marxual " .. vim.fn.shellescape(file),
 		direction = "tab",
 		hidden = true,
-		close_on_exit = true,
+		close_on_exit = false,
 		display_name = "Markdown Preview",
+		on_close = function()
+			if markdown_preview_term == term then
+				markdown_preview_term = nil
+			end
+		end,
+		on_exit = function()
+			vim.schedule(function()
+				cleanup_markdown_preview_term(term)
+			end)
+		end,
 	})
+	markdown_preview_term = term
 	markdown_preview_term:toggle()
 end, {})
 
