@@ -22,6 +22,34 @@ func firstNonEmptyLine(input string) string {
 	return ""
 }
 
+func nonEmptyLines(input string) []string {
+	lines := make([]string, 0)
+	for _, line := range strings.Split(input, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		lines = append(lines, line)
+	}
+
+	return lines
+}
+
+func leadingWhitespaceWidth(input string) int {
+	width := 0
+	for _, r := range input {
+		if r != ' ' && r != '\t' {
+			break
+		}
+		if r == '\t' {
+			width += 4
+			continue
+		}
+		width++
+	}
+
+	return width
+}
+
 func TestResolveStyleDefaultsToTokyoNight(t *testing.T) {
 	t.Parallel()
 
@@ -183,6 +211,23 @@ func TestRenderMarkdownAddsGlyphBasedCodeFenceLabels(t *testing.T) {
 	if !strings.Contains(visible, "echo hi") {
 		t.Fatalf("rendered output missing code content: %q", visible)
 	}
+
+	lines := nonEmptyLines(visible)
+	if len(lines) < 2 {
+		t.Fatalf("rendered output should contain label and code lines: %q", visible)
+	}
+
+	if strings.TrimSpace(lines[0]) != " bash" {
+		t.Fatalf("first visible line = %q, want bash label", lines[0])
+	}
+
+	if strings.TrimSpace(lines[1]) != "echo hi" {
+		t.Fatalf("second visible line = %q, want code content without spacer line", lines[1])
+	}
+
+	if leadingWhitespaceWidth(lines[0]) != leadingWhitespaceWidth(lines[1]) {
+		t.Fatalf("label indent = %d, code indent = %d; want matching indentation", leadingWhitespaceWidth(lines[0]), leadingWhitespaceWidth(lines[1]))
+	}
 }
 
 func TestRenderMarkdownUsesCodeFenceLabelsAfterMermaidPreprocessing(t *testing.T) {
@@ -203,5 +248,33 @@ func TestRenderMarkdownUsesCodeFenceLabelsAfterMermaidPreprocessing(t *testing.T
 
 	if !strings.Contains(visible, "graph TD") {
 		t.Fatalf("rendered output missing mermaid ascii content: %q", visible)
+	}
+}
+
+func TestRenderMarkdownDefaultsUnlabeledCodeFencesToTextLabel(t *testing.T) {
+	t.Parallel()
+
+	input := "```\nplain text\n```\n"
+	rendered, err := RenderMarkdown(input, styles.TokyoNightStyle, 40)
+	if err != nil {
+		t.Fatalf("RenderMarkdown returned error: %v", err)
+	}
+
+	visible := stripANSI(rendered)
+	lines := nonEmptyLines(visible)
+	if len(lines) < 2 {
+		t.Fatalf("rendered output should contain label and code lines: %q", visible)
+	}
+
+	if strings.TrimSpace(lines[0]) != "󰈙 text" {
+		t.Fatalf("first visible line = %q, want default text label", lines[0])
+	}
+
+	if strings.TrimSpace(lines[1]) != "plain text" {
+		t.Fatalf("second visible line = %q, want code content without spacer line", lines[1])
+	}
+
+	if leadingWhitespaceWidth(lines[0]) != leadingWhitespaceWidth(lines[1]) {
+		t.Fatalf("label indent = %d, code indent = %d; want matching indentation", leadingWhitespaceWidth(lines[0]), leadingWhitespaceWidth(lines[1]))
 	}
 }

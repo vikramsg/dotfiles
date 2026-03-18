@@ -162,10 +162,6 @@ python-tests:
     @echo "Running Python tests using uv dev group..."
     uv run --group dev pytest
 
-# Install CLI tools
-install-tools:
-    @just brew
-
 
 # Configure remote sshd for resilient autossh reconnects (Linux only)
 # Run this on the REMOTE VM from its dotfiles checkout.

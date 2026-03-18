@@ -52,11 +52,14 @@ type codeFenceSegment struct {
 	language string
 }
 
+type codeFenceTheme struct {
+	icon  string
+	color string
+}
+
 type renderTheme struct {
 	headingFG string
 	headingBG string
-	labelFG   string
-	labelBG   string
 	plain     bool
 }
 
@@ -69,40 +72,40 @@ var headingIcons = map[int]string{
 	6: "󰎵",
 }
 
-var codeFenceIcons = map[string]string{
-	"bash":       "",
-	"console":    "",
-	"fish":       "",
-	"go":         "",
-	"golang":     "",
-	"javascript": "",
-	"js":         "",
-	"json":       "",
-	"lua":        "",
-	"markdown":   "󰍔",
-	"md":         "󰍔",
-	"python":     "",
-	"py":         "",
-	"shell":      "",
-	"sh":         "",
-	"text":       "󰈙",
-	"toml":       "",
-	"ts":         "",
-	"typescript": "",
-	"yaml":       "",
-	"yml":        "",
-	"zsh":        "",
+var codeFenceThemes = map[string]codeFenceTheme{
+	"bash":       {icon: "", color: "#22c55e"},
+	"console":    {icon: "", color: "#22c55e"},
+	"fish":       {icon: "", color: "#22c55e"},
+	"go":         {icon: "", color: "#67e8f9"},
+	"golang":     {icon: "", color: "#67e8f9"},
+	"javascript": {icon: "", color: "#fde047"},
+	"js":         {icon: "", color: "#fde047"},
+	"json":       {icon: "", color: "#eab308"},
+	"lua":        {icon: "", color: "#60a5fa"},
+	"markdown":   {icon: "󰍔", color: "#e5e7eb"},
+	"md":         {icon: "󰍔", color: "#e5e7eb"},
+	"python":     {icon: "", color: "#f59e0b"},
+	"py":         {icon: "", color: "#f59e0b"},
+	"shell":      {icon: "", color: "#22c55e"},
+	"sh":         {icon: "", color: "#22c55e"},
+	"text":       {icon: "󰈙", color: "#9ca3af"},
+	"toml":       {icon: "", color: "#c084fc"},
+	"ts":         {icon: "", color: "#60a5fa"},
+	"typescript": {icon: "", color: "#60a5fa"},
+	"yaml":       {icon: "", color: "#f97316"},
+	"yml":        {icon: "", color: "#f97316"},
+	"zsh":        {icon: "", color: "#22c55e"},
 }
 
 var styleThemes = map[string]renderTheme{
 	styles.AsciiStyle:      {plain: true},
-	styles.AutoStyle:       {headingFG: "#1f2937", headingBG: "#cbd5e1", labelFG: "#1f2937", labelBG: "#dbe4f0"},
-	styles.DarkStyle:       {headingFG: "#f8fafc", headingBG: "#334155", labelFG: "#e2e8f0", labelBG: "#1e293b"},
-	styles.DraculaStyle:    {headingFG: "#f8f8f2", headingBG: "#44475a", labelFG: "#f1fa8c", labelBG: "#282a36"},
-	styles.TokyoNightStyle: {headingFG: "#c0caf5", headingBG: "#3b4261", labelFG: "#c0caf5", labelBG: "#24283b"},
-	styles.LightStyle:      {headingFG: "#1f2937", headingBG: "#dbe4f0", labelFG: "#334155", labelBG: "#e5edf7"},
+	styles.AutoStyle:       {headingFG: "#1f2937", headingBG: "#cbd5e1"},
+	styles.DarkStyle:       {headingFG: "#f8fafc", headingBG: "#334155"},
+	styles.DraculaStyle:    {headingFG: "#f8f8f2", headingBG: "#44475a"},
+	styles.TokyoNightStyle: {headingFG: "#c0caf5", headingBG: "#3b4261"},
+	styles.LightStyle:      {headingFG: "#1f2937", headingBG: "#dbe4f0"},
 	styles.NoTTYStyle:      {plain: true},
-	styles.PinkStyle:       {headingFG: "#fff1f2", headingBG: "#be185d", labelFG: "#831843", labelBG: "#fbcfe8"},
+	styles.PinkStyle:       {headingFG: "#fff1f2", headingBG: "#be185d"},
 }
 
 func (r TermRenderer) Render(input string, width int) (string, error) {
@@ -320,12 +323,15 @@ func renderCodeFence(renderer *glamour.TermRenderer, theme renderTheme, fence co
 	if err != nil {
 		return "", err
 	}
+	body = trimRenderedBlankLines(body)
+	indent := renderedContentIndent(body)
 
-	if fence.language == "" {
-		return body, nil
+	language := fence.language
+	if language == "" {
+		language = "text"
 	}
 
-	label := renderStyledBar(theme.labelStyle(), codeFenceLabel(fence.language), width)
+	label := renderCodeFenceLabel(theme, language, indent)
 	if body == "" {
 		return label, nil
 	}
@@ -345,12 +351,74 @@ func renderStyledBar(style lipgloss.Style, content string, width int) string {
 
 func codeFenceLabel(language string) string {
 	language = strings.ToLower(strings.TrimSpace(language))
-	icon, ok := codeFenceIcons[language]
+	theme, ok := codeFenceThemes[language]
 	if !ok {
-		icon = "󰆍"
+		theme = codeFenceTheme{icon: "󰆍", color: "#9ca3af"}
 	}
 
-	return strings.TrimSpace(strings.Join([]string{icon, language}, " "))
+	return strings.TrimSpace(strings.Join([]string{theme.icon, language}, " "))
+}
+
+func renderCodeFenceLabel(theme renderTheme, language string, indent string) string {
+	label := codeFenceLabel(language)
+	if theme.plain {
+		return indent + label
+	}
+
+	style := lipgloss.NewStyle().Faint(true)
+	if fenceTheme, ok := codeFenceThemes[strings.ToLower(strings.TrimSpace(language))]; ok && fenceTheme.color != "" {
+		style = style.Foreground(lipgloss.Color(fenceTheme.color))
+	}
+
+	return indent + style.Render(label)
+}
+
+func trimRenderedBlankLines(content string) string {
+	if content == "" {
+		return ""
+	}
+
+	lines := strings.Split(content, "\n")
+	start := 0
+	for start < len(lines) && isVisuallyBlank(lines[start]) {
+		start++
+	}
+
+	end := len(lines)
+	for end > start && isVisuallyBlank(lines[end-1]) {
+		end--
+	}
+
+	return strings.Join(lines[start:end], "\n")
+}
+
+func isVisuallyBlank(line string) bool {
+	return strings.TrimSpace(ansi.Strip(line)) == ""
+}
+
+func renderedContentIndent(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		if isVisuallyBlank(line) {
+			continue
+		}
+
+		visible := ansi.Strip(line)
+		width := 0
+		for _, r := range visible {
+			if r != ' ' && r != '\t' {
+				break
+			}
+			if r == '\t' {
+				width += 4
+				continue
+			}
+			width++
+		}
+
+		return strings.Repeat(" ", width)
+	}
+
+	return ""
 }
 
 func themeForStyle(style string) renderTheme {
@@ -373,22 +441,6 @@ func (t renderTheme) headingStyle() lipgloss.Style {
 	}
 	if t.headingBG != "" {
 		style = style.Background(lipgloss.Color(t.headingBG))
-	}
-
-	return style
-}
-
-func (t renderTheme) labelStyle() lipgloss.Style {
-	style := lipgloss.NewStyle().Bold(true)
-	if t.plain {
-		return style
-	}
-
-	if t.labelFG != "" {
-		style = style.Foreground(lipgloss.Color(t.labelFG))
-	}
-	if t.labelBG != "" {
-		style = style.Background(lipgloss.Color(t.labelBG))
 	}
 
 	return style
