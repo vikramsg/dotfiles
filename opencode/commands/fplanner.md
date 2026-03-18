@@ -157,6 +157,7 @@ What should be true:
 15. If browser-based smoke testing is available and the change is user-facing, run a smoke check for the changed flow.
 16. If export, download, or visibility behavior is relevant, verify that flow explicitly during smoke testing.
 17. Re-check the acceptance scenarios against the implemented behavior.
-18. Prepare a PR description that clearly states scope, constraints, and regression protections.
+18. Re-check all layer rules have been correctly followed and no cross-feature, cross-view etc imports exist. Make sure correct React composition patterns are used. 
+19. Prepare a PR description that clearly states scope, constraints, and regression protections.
 ```
 
