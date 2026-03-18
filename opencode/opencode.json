@@ -12,15 +12,18 @@
     },
     "read": {
       "~/.local/**": "allow",
-      "/opt/homebrew/lib/**": "allow"
+      "/opt/homebrew/lib/**": "allow",
+      "~/go/**": "allow"
     },
     "glob": {
       "*.local/**": "allow",
-      "/opt/homebrew/lib/**": "allow"
+      "/opt/homebrew/lib/**": "allow",
+      "~/go/**": "allow"
     },
     "grep": {
       "*.local/**": "allow",
-      "/opt/homebrew/lib/**": "allow"
+      "/opt/homebrew/lib/**": "allow",
+      "~/go/**": "allow"
     }
   },
   "agent": {

@@ -9,6 +9,22 @@
 default:
     @just --list
 
+# Bootstrap Homebrew and install tools from Brewfile
+brew:
+    @echo "Ensuring Homebrew is installed..."
+    @if ! command -v brew > /dev/null; then \
+        echo "Homebrew not found. Installing..."; \
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; \
+    fi
+    @if [ -x /opt/homebrew/bin/brew ]; then \
+        eval "$(/opt/homebrew/bin/brew shellenv)"; \
+    elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then \
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"; \
+    elif [ -x /usr/local/bin/brew ]; then \
+        eval "$(/usr/local/bin/brew shellenv)"; \
+    fi; \
+    brew bundle check --file "{{justfile_directory()}}/Brewfile" || brew bundle --file "{{justfile_directory()}}/Brewfile"
+
 # Set up Neovim symlink
 nvim:
     @echo "Setting up Neovim symlink..."
@@ -33,12 +49,6 @@ tmux:
         git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm; \
     else \
         echo "TPM is already installed."; \
-    fi
-    @if ! command -v gitmux &> /dev/null; then \
-        echo "Installing gitmux via Homebrew..."; \
-        brew install gitmux; \
-    else \
-        echo "gitmux is already installed."; \
     fi
 
 # Set up Opencode symlink
@@ -102,15 +112,11 @@ bin:
 # Build and install marxual
 marxual:
     @echo "Installing marxual..."
-    @if ! command -v brew > /dev/null; then \
-        echo "Homebrew is not installed. Please install Homebrew first."; \
+    @if ! command -v go > /dev/null; then \
+        echo "Go is not installed. Run 'just brew' first."; \
         exit 1; \
     fi
-    @if ! command -v go > /dev/null; then \
-        echo "Go is not installed. Installing via Homebrew..."; \
-        brew install go; \
-    fi
-    @PATH="$(brew --prefix)/bin:$PATH" && mkdir -p ~/.local/bin && cd {{justfile_directory()}}/bin/marxual && GOBIN="$HOME/.local/bin" go install .
+    @mkdir -p ~/.local/bin && cd {{justfile_directory()}}/bin/marxual && GOBIN="$HOME/.local/bin" go install .
     @echo "marxual installed at ~/.local/bin/marxual"
 
 # Set up lazygit symlink (Linux only)
@@ -158,21 +164,7 @@ python-tests:
 
 # Install CLI tools
 install-tools:
-    @echo "Ensuring eza, zoxide, mcat, mdr and autossh are installed..."
-    @if ! command -v brew > /dev/null; then \
-        echo "Homebrew is not installed. Please install Homebrew first."; \
-        exit 1; \
-    fi
-    # Note for mdr, linux libraries are required - sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libgl1-mesa-dev
-    @for tool in eza zoxide mcat autossh CleverCloud/misc/mdr; do \
-        if brew list --formula "${tool}" > /dev/null 2>&1; then \
-            echo "  - ${tool} is already installed"; \
-        else \
-            echo "  - Installing ${tool}..."; \
-            brew install "${tool}"; \
-        fi; \
-    done
-    @echo "Tool check complete."
+    @just brew
 
 
 # Configure remote sshd for resilient autossh reconnects (Linux only)
