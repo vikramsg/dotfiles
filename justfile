@@ -15,11 +15,11 @@ nvim:
     mkdir -p ~/.config
     ln -sfn {{justfile_directory()}}/nvim ~/.config/nvim
     @echo "Neovim symlink created at ~/.config/nvim -> {{justfile_directory()}}/nvim"
-    @if ! command -v markdown-viewer &> /dev/null; then \
-        echo "Installing mdr via Homebrew for markdown previews..."; \
-        uv tool install ./bin/markdown_viewer
+    @if ! command -v marxual &> /dev/null; then \
+        echo "Installing marxual for markdown previews..."; \
+        just marxual; \
     else \
-        echo "Markdown viewer is already installed."; \
+        echo "marxual is already installed."; \
     fi
 
 # Set up Tmux symlink
@@ -98,6 +98,20 @@ bin:
         ln -sfn {{justfile_directory()}}/bin/xdg-open ~/.local/bin/xdg-open; \
         echo "xdg-open symlink created at ~/.local/bin/xdg-open"; \
     fi
+
+# Build and install marxual
+marxual:
+    @echo "Installing marxual..."
+    @if ! command -v brew > /dev/null; then \
+        echo "Homebrew is not installed. Please install Homebrew first."; \
+        exit 1; \
+    fi
+    @if ! command -v go > /dev/null; then \
+        echo "Go is not installed. Installing via Homebrew..."; \
+        brew install go; \
+    fi
+    @PATH="$(brew --prefix)/bin:$PATH" && mkdir -p ~/.local/bin && cd {{justfile_directory()}}/bin/marxual && GOBIN="$HOME/.local/bin" go install .
+    @echo "marxual installed at ~/.local/bin/marxual"
 
 # Set up lazygit symlink (Linux only)
 lazygit:

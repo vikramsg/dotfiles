@@ -62,7 +62,7 @@
 --   gf : Go to File, if a filepath is available as text, for eg. in markdown
 --
 -- Markdown Renderer:
---   mp : Open viewer window on focused markdown file
+--   <leader>mp : Open viewer window on focused markdown file
 --   Cmd + q : Close viewer
 ------------------------------------------------------------------------------
 
@@ -1071,17 +1071,43 @@ require("lazy").setup({
 	},
 })
 
+----- Custom Markdown Preview using marxual
 ---------------------------------------------------------------------
------ Custom Markdown Preview using mdr (External Window)
----------------------------------------------------------------------
+local markdown_preview_term = nil
+
 vim.api.nvim_create_user_command("MdPreview", function()
 	local file = vim.fn.expand("%:p")
-	if file == "" or not file:match("%.md$") then
-		vim.notify("Not a markdown file or buffer has no file", vim.log.levels.WARN)
+	if vim.bo.filetype ~= "markdown" then
+		vim.notify("Markdown preview only works for markdown buffers", vim.log.levels.WARN)
 		return
 	end
-	-- Launch mdr as an external detached process (defaults to egui/native window)
-	vim.fn.jobstart({ "mdr", file }, { detach = true })
+	if file == "" then
+		vim.notify("Save the Markdown buffer before previewing", vim.log.levels.WARN)
+		return
+	end
+	if vim.fn.executable("marxual") ~= 1 then
+		vim.notify("marxual not found. Run 'just nvim' to install it.", vim.log.levels.ERROR)
+		return
+	end
+
+	local ok, toggleterm_terminal = pcall(require, "toggleterm.terminal")
+	if not ok then
+		vim.notify("toggleterm.nvim is not available; cannot open markdown preview.", vim.log.levels.ERROR)
+		return
+	end
+
+	if markdown_preview_term ~= nil then
+		markdown_preview_term:shutdown()
+	end
+
+	markdown_preview_term = toggleterm_terminal.Terminal:new({
+		cmd = "marxual " .. vim.fn.shellescape(file),
+		direction = "tab",
+		hidden = true,
+		close_on_exit = true,
+		display_name = "Markdown Preview",
+	})
+	markdown_preview_term:toggle()
 end, {})
 
 vim.keymap.set("n", "<leader>mp", "<cmd>MdPreview<CR>", { desc = "[M]arkdown [P]review (External)" })

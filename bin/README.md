@@ -54,13 +54,13 @@ Requires `window-new-tab-position = end` in `ghostty/config` for deterministic t
 - Test: from `bin/ghostty_workspace`, run `uv run pytest`
 - Docs: `bin/ghostty_workspace/README.md`
 
-## markdown-viewer
+## marxual
 
-Render Markdown files or stdin in a Textual app using Textual's `MarkdownViewer` widget.
+Render Markdown files or stdin in a Bubble Tea TUI, with Mermaid fences converted to ASCII via `mermaid-ascii` before Glamour rendering.
 
-- Install: `uv tool install ./bin/markdown_viewer --force`
-- Test: from `bin/markdown_viewer`, run `uv run pytest`
-- Docs: `bin/markdown_viewer/README.md`
+- Install: `just marxual`
+- Test: from `bin/marxual`, run `go test ./...`
+- Docs: `bin/marxual/README.md`
 
 ## xdg-open (Remote Browser Proxy)
 
