@@ -1,2 +1,3 @@
 os:
   openLink: 'xdg-open {{link}}'
+  editPreset: 'nvim-remote'
