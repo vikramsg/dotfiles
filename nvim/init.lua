@@ -222,8 +222,21 @@ require("lazy").setup({
 		"folke/snacks.nvim",
 		priority = 1000,
 		lazy = false,
-		opts = {
-			picker = { enabled = true },
+			opts = {
+				picker = {
+					enabled = true,
+					sources = {
+						explorer = {
+							win = {
+								list = {
+									keys = {
+										["e"] = "toggle_maximize",
+									},
+								},
+							},
+						},
+					},
+				},
 			explorer = {
 				enabled = true,
 				replace_netrw = true,
@@ -238,12 +251,14 @@ require("lazy").setup({
 						end
 					end,
 				},
-				config = function(opts)
-					opts.win = opts.win or {}
-					opts.win.keys = opts.win.keys or {}
-					opts.win.keys.Y = "yank_filename"
-					opts.win.keys.e = "toggle_maximize"
-				end,
+				win = {
+					list = {
+						keys = {
+							["Y"] = "yank_filename",
+							["e"] = "toggle_maximize",
+						}
+					}
+				},
 			},
 			terminal = { enabled = true },
 			lazygit = { enabled = true },

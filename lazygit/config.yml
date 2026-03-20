@@ -21,6 +21,21 @@ git:
         delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
 
 customCommands:
+  - key: '<c-y>'
+    context: 'global'
+    description: 'Select file to diff against main'
+    prompts:
+      - type: 'menuFromCommand'
+        title: 'Files changed against main'
+        key: 'File'
+        command: 'git diff --name-only main'
+        filter: '(?P<file>.+)'
+        valueFormat: '{{ .file }}'
+        labelFormat: '{{ .file }}'
+    # Uses the same delta styling as the existing full-screen diff, but compares against main.
+    command: >-
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" diff main -- {{.Form.File | quote}}
+    output: terminal
   - key: '<c-g>'
     context: 'files'
     description: 'Full-screen diff of selected file'
