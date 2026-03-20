@@ -222,21 +222,21 @@ require("lazy").setup({
 		"folke/snacks.nvim",
 		priority = 1000,
 		lazy = false,
-			opts = {
-				picker = {
-					enabled = true,
-					sources = {
-						explorer = {
-							win = {
-								list = {
-									keys = {
-										["e"] = "toggle_maximize",
-									},
+		opts = {
+			picker = {
+				enabled = true,
+				sources = {
+					explorer = {
+						win = {
+							list = {
+								keys = {
+									["e"] = "toggle_maximize",
 								},
 							},
 						},
 					},
 				},
+			},
 			explorer = {
 				enabled = true,
 				replace_netrw = true,
@@ -256,8 +256,8 @@ require("lazy").setup({
 						keys = {
 							["Y"] = "yank_filename",
 							["e"] = "toggle_maximize",
-						}
-					}
+						},
+					},
 				},
 			},
 			terminal = { enabled = true },
@@ -265,32 +265,154 @@ require("lazy").setup({
 			notifier = { enabled = true },
 		},
 		keys = {
-			{ "<leader>sh", function() Snacks.picker.help() end, desc = "Search Help" },
-			{ "<leader>sk", function() Snacks.picker.keymaps() end, desc = "Search Keymaps" },
-			{ "<leader>sf", function() Snacks.picker.files() end, desc = "Search Files" },
-			{ "<leader>ss", function() Snacks.picker.pickers() end, desc = "Search Pickers" },
-			{ "<leader>sw", function() Snacks.picker.grep_word() end, desc = "Search Word" },
-			{ "<leader>sg", function() Snacks.picker.grep() end, desc = "Search Grep" },
-			{ "<leader>st", function()
-				local ext = vim.fn.input("Extension (e.g. yml): ")
-				if ext ~= "" then Snacks.picker.grep({ glob = "*." .. ext, hidden = true }) end
-			end, desc = "Search Grep by Ext" },
-			{ "<leader>sd", function() Snacks.picker.diagnostics() end, desc = "Search Diagnostics" },
-			{ "<leader>sr", function() Snacks.picker.resume() end, desc = "Search Resume" },
-			{ "<leader>s.", function() Snacks.picker.recent() end, desc = "Search Recent" },
-			{ "<leader><leader>", function() Snacks.picker.buffers({ win = { input = { keys = { ["<c-d>"] = { "bufdelete", mode = { "n", "i" } } } } } }) end, desc = "Search Buffers" },
-			{ "<leader>/", function() Snacks.picker.lines() end, desc = "Fuzzily search in current buffer" },
-			{ "<leader>s/", function() Snacks.picker.grep_buffers() end, desc = "Search Open Files" },
-			{ "<leader>sn", function() Snacks.picker.files({ cwd = vim.fn.stdpath("config") }) end, desc = "Search Neovim config" },
-			{ "<leader>sF", function() Snacks.picker.files({ hidden = true, ignored = true }) end, desc = "Search All Files" },
-			{ "<leader>sG", function() Snacks.picker.grep({ hidden = true, ignored = true }) end, desc = "Search All Grep" },
-			{ "<leader>e", function() Snacks.explorer() end, desc = "Toggle Explorer" },
-			{ "<leader>E", function() Snacks.explorer({ reveal_file = vim.fn.expand("%:p") }) end, desc = "Reveal Explorer" },
-			{ "<leader>lg", function() Snacks.lazygit() end, desc = "LazyGit" },
-			{ "<C-t>", function() Snacks.terminal.toggle(nil, { win = { position = "right", width = 65 } }) end, mode = { "n", "t" }, desc = "Toggle Terminal" },
+			{
+				"<leader>sh",
+				function()
+					Snacks.picker.help()
+				end,
+				desc = "Search Help",
+			},
+			{
+				"<leader>sk",
+				function()
+					Snacks.picker.keymaps()
+				end,
+				desc = "Search Keymaps",
+			},
+			{
+				"<leader>sf",
+				function()
+					Snacks.picker.files()
+				end,
+				desc = "Search Files",
+			},
+			{
+				"<leader>ss",
+				function()
+					Snacks.picker.pickers()
+				end,
+				desc = "Search Pickers",
+			},
+			{
+				"<leader>sw",
+				function()
+					Snacks.picker.grep_word()
+				end,
+				desc = "Search Word",
+			},
+			{
+				"<leader>sg",
+				function()
+					Snacks.picker.grep()
+				end,
+				desc = "Search Grep",
+			},
+			{
+				"<leader>st",
+				function()
+					local ext = vim.fn.input("Extension (e.g. yml): ")
+					if ext ~= "" then
+						Snacks.picker.grep({ glob = "*." .. ext, hidden = true })
+					end
+				end,
+				desc = "Search Grep by Ext",
+			},
+			{
+				"<leader>sd",
+				function()
+					Snacks.picker.diagnostics()
+				end,
+				desc = "Search Diagnostics",
+			},
+			{
+				"<leader>sr",
+				function()
+					Snacks.picker.resume()
+				end,
+				desc = "Search Resume",
+			},
+			{
+				"<leader>s.",
+				function()
+					Snacks.picker.recent()
+				end,
+				desc = "Search Recent",
+			},
+			{
+				"<leader><leader>",
+				function()
+					Snacks.picker.buffers({
+						win = { input = { keys = { ["<c-d>"] = { "bufdelete", mode = { "n", "i" } } } } },
+					})
+				end,
+				desc = "Search Buffers",
+			},
+			{
+				"<leader>/",
+				function()
+					Snacks.picker.lines()
+				end,
+				desc = "Fuzzily search in current buffer",
+			},
+			{
+				"<leader>s/",
+				function()
+					Snacks.picker.grep_buffers()
+				end,
+				desc = "Search Open Files",
+			},
+			{
+				"<leader>sn",
+				function()
+					Snacks.picker.files({ cwd = vim.fn.stdpath("config") })
+				end,
+				desc = "Search Neovim config",
+			},
+			{
+				"<leader>sF",
+				function()
+					Snacks.picker.files({ hidden = true, ignored = true })
+				end,
+				desc = "Search All Files",
+			},
+			{
+				"<leader>sG",
+				function()
+					Snacks.picker.grep({ hidden = true, ignored = true })
+				end,
+				desc = "Search All Grep",
+			},
+			{
+				"<leader>e",
+				function()
+					Snacks.explorer()
+				end,
+				desc = "Toggle Explorer",
+			},
+			{
+				"<leader>E",
+				function()
+					Snacks.explorer({ reveal_file = vim.fn.expand("%:p") })
+				end,
+				desc = "Reveal Explorer",
+			},
+			{
+				"<leader>lg",
+				function()
+					Snacks.lazygit()
+				end,
+				desc = "LazyGit",
+			},
+			{
+				"<C-t>",
+				function()
+					Snacks.terminal.toggle(nil, { win = { position = "right", width = 65 } })
+				end,
+				mode = { "n", "t" },
+				desc = "Toggle Terminal",
+			},
 		},
 	},
-
 
 	-- Colorscheme - Look at kickstart.nvim/init.lua for more config help.
 	{ -- You can easily change to a different colorscheme.
@@ -393,31 +515,39 @@ require("lazy").setup({
 					-- Jump to the definition of the word under your cursor.
 					--  This is where a variable was first declared, or where a function is defined, etc.
 					--  To jump back, press <C-t>.
-					map("gd", function() Snacks.picker.lsp_definitions() end, "[G]oto [D]efinition")
+					map("gd", function()
+						Snacks.picker.lsp_definitions()
+					end, "[G]oto [D]efinition")
 
 					-- Find references for the word under your cursor.
-					map("gr", function() Snacks.picker.lsp_references() end, "[G]oto [R]eferences")
+					map("gr", function()
+						Snacks.picker.lsp_references()
+					end, "[G]oto [R]eferences")
 
 					-- Jump to the implementation of the word under your cursor.
 					--  Useful when your language has ways of declaring types without an actual implementation.
-					map("gI", function() Snacks.picker.lsp_implementations() end, "[G]oto [I]mplementation")
+					map("gI", function()
+						Snacks.picker.lsp_implementations()
+					end, "[G]oto [I]mplementation")
 
 					-- Jump to the type of the word under your cursor.
 					--  Useful when you're not sure what type a variable is and you want to see
 					--  the definition of its *type*, not where it was *defined*.
-					map("<leader>D", function() Snacks.picker.lsp_type_definitions() end, "Type [D]efinition")
+					map("<leader>D", function()
+						Snacks.picker.lsp_type_definitions()
+					end, "Type [D]efinition")
 
 					-- Fuzzy find all the symbols in your current document.
 					--  Symbols are things like variables, functions, types, etc.
-					map("<leader>ds", function() Snacks.picker.lsp_symbols() end, "[D]ocument [S]ymbols")
+					map("<leader>ds", function()
+						Snacks.picker.lsp_symbols()
+					end, "[D]ocument [S]ymbols")
 
 					-- Fuzzy find all the symbols in your current workspace.
 					--  Similar to document symbols, except searches over your entire project.
-					map(
-						"<leader>ws",
-						function() Snacks.picker.lsp_workspace_symbols() end,
-						"[W]orkspace [S]ymbols"
-					)
+					map("<leader>ws", function()
+						Snacks.picker.lsp_workspace_symbols()
+					end, "[W]orkspace [S]ymbols")
 
 					-- Rename the variable under your cursor.
 					--  Most Language Servers support renaming across files, etc.
@@ -771,8 +901,6 @@ require("lazy").setup({
 		"christoomey/vim-tmux-navigator",
 	},
 
-
-
 	-- Statusline with git branch
 	{
 		"nvim-lualine/lualine.nvim",
@@ -805,12 +933,20 @@ require("lazy").setup({
 				extensions = {
 					{
 						sections = {
-							lualine_a = { function() return "Neo-tree" end },
-							lualine_b = { function() return "[e] fit width" end },
+							lualine_a = {
+								function()
+									return "Neo-tree"
+								end,
+							},
+							lualine_b = {
+								function()
+									return "[e] fit width"
+								end,
+							},
 						},
 						filetypes = { "snacks_explorer" },
-					}
-				}
+					},
+				},
 			})
 		end,
 	},
@@ -995,8 +1131,12 @@ vim.api.nvim_create_user_command("MdPreview", function()
 		},
 		on_buf = function(term)
 			-- Custom close mapping for the preview
-			vim.keymap.set("n", "q", function() term:close() end, { buffer = term.buf, nowait = true })
-			vim.keymap.set("n", "<D-q>", function() term:close() end, { buffer = term.buf, nowait = true })
+			vim.keymap.set("n", "q", function()
+				term:close()
+			end, { buffer = term.buf, nowait = true })
+			vim.keymap.set("n", "<D-q>", function()
+				term:close()
+			end, { buffer = term.buf, nowait = true })
 		end,
 	})
 end, {})
