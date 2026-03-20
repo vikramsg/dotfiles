@@ -45,11 +45,12 @@ On macOS, `screenshot macos apply` creates the configured screenshot directory i
 
 The repo-managed config source of truth lives at `screenshot/config.json`. Use `just screenshot` to symlink it into `~/.config/screenshot/config.json`, install the tool, and on macOS apply the configured screenshot location to the OS.
 
-`just zsh` also symlinks the zsh helper script `~/.zsh_screenshot`, which adds:
+`just zsh` also symlinks the zsh helper script `~/.zsh_script`, which adds:
 
 - `ss ls` -> `screenshot clipboard list`
 - `ss <index>` -> `screenshot clipboard copy --index <index>`
 - `ss cp <dest>` -> copy the current history item 1 file into `<dest>`
+- `vm-tab` -> pick an existing remote tmux session with `fzf`, rename the current Ghostty tab, and attach via `autossh`
 
 ## Docs
 

@@ -134,9 +134,9 @@ lazygit:
 zsh:
     @echo "Setting up zsh symlink..."
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
-    ln -sfn {{justfile_directory()}}/zsh/.zsh_screenshot ~/.zsh_screenshot
+    ln -sfn {{justfile_directory()}}/zsh/.zsh_script ~/.zsh_script
     @echo ".zshrc symlink created at ~/.zshrc -> {{justfile_directory()}}/zsh/.zshrc"
-    @echo ".zsh_screenshot symlink created at ~/.zsh_screenshot -> {{justfile_directory()}}/zsh/.zsh_screenshot"
+    @echo ".zsh_script symlink created at ~/.zsh_script -> {{justfile_directory()}}/zsh/.zsh_script"
     @if [ "$(uname)" = "Linux" ]; then \
         if command -v loginctl >/dev/null 2>&1; then \
             echo "Linux detected: Enabling systemd lingering to preserve background processes (like tmux) across SSH disconnects..."; \

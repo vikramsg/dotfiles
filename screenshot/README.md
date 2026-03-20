@@ -28,11 +28,12 @@ That command:
 
 On Linux, directory watching/orchestration is owned by `lch`. Run `just lch` to install the sink watcher job (`lch-screenshot-clipboard`) that dispatches `screenshot clipboard on-event`.
 
-For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_screenshot` to `~/.zsh_screenshot`. That helper adds:
+For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_script` to `~/.zsh_script`. That helper adds:
 
 - `ss ls`
 - `ss <index>`
 - `ss cp <dest>`
+- `vm-tab`
 
 ## Format
 
