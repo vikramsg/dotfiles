@@ -16,16 +16,22 @@ gui:
 git:
   diffContextSize: 5
   pagers:
-    - pager: delta --dark --paging=never --side-by-side --line-numbers --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
+    # Use delta with a custom syntax-theme to remove blocky high-contrast ANSI colors, applying subtle hex background colors instead.
+    - pager: >-
+        delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
 
 customCommands:
   - key: '<c-g>'
     context: 'files'
     description: 'Full-screen diff of selected file'
-    command: 'clear && git -c core.pager="delta --paging=always --dark --line-numbers" diff HEAD -- {{.SelectedFile.Name | quote}}'
+    # Passes identical delta style arguments inline so full-screen mode matches the inner UI style
+    command: >-
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" diff HEAD -- {{.SelectedFile.Name | quote}}
     output: terminal
   - key: '<c-g>'
     context: 'commits'
     description: 'Full-screen diff of selected commit'
-    command: 'clear && git -c core.pager="delta --paging=always --dark --line-numbers" show {{.SelectedLocalCommit.Sha}}'
+    # Passes identical delta style arguments inline so full-screen mode matches the inner UI style
+    command: >-
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" show {{.SelectedLocalCommit.Sha}}
     output: terminal

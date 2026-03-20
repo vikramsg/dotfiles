@@ -47,8 +47,9 @@
 --   <leader>yz : Open Yazi (at current file)
 --   <leader>cw : Open Yazi (at project root)
 --   <leader>cW : Open Yazi (at project root - including ignored)
---   In Neo-tree:
+--   In Snacks Explorer:
 --     Y        : Copy filename to clipboard
+--     e        : Toggle maximize explorer window
 --
 -- LSP (Code Intelligence):
 --   gd : Go to Definition
@@ -217,162 +218,64 @@ vim.opt.rtp:prepend(lazypath)
 
 -- Setup plugins using lazy
 require("lazy").setup({
-	{ -- Fuzzy Finder (files, lsp, etc)
-		"nvim-telescope/telescope.nvim",
-		event = "VimEnter",
-		version = "*",
-		dependencies = {
-			"nvim-lua/plenary.nvim",
-			{ -- If encountering errors, see telescope-fzf-native README for installation instructions
-				"nvim-telescope/telescope-fzf-native.nvim",
-
-				-- `build` is used to run some command when the plugin is installed/updated.
-				-- This is only run then, not every time Neovim starts up.
-				build = "make",
-
-				-- `cond` is a condition used to determine whether this plugin should be
-				-- installed and loaded.
-				cond = function()
-					return vim.fn.executable("make") == 1
+	{
+		"folke/snacks.nvim",
+		priority = 1000,
+		lazy = false,
+		opts = {
+			picker = { enabled = true },
+			explorer = {
+				enabled = true,
+				replace_netrw = true,
+				actions = {
+					yank_filename = function(picker)
+						local item = picker:current()
+						if item and item.file then
+							local path = item.file
+							local filename = vim.fn.fnamemodify(path, ":t")
+							vim.fn.setreg("+", filename)
+							print("Copied filename: " .. filename)
+						end
+					end,
+				},
+				config = function(opts)
+					opts.win = opts.win or {}
+					opts.win.keys = opts.win.keys or {}
+					opts.win.keys.Y = "yank_filename"
+					opts.win.keys.e = "toggle_maximize"
 				end,
 			},
-			{ "nvim-telescope/telescope-ui-select.nvim" },
-
-			-- Useful for getting pretty icons, but requires a Nerd Font.
-			{ "nvim-tree/nvim-web-devicons", enabled = vim.g.have_nerd_font },
+			terminal = { enabled = true },
+			lazygit = { enabled = true },
+			notifier = { enabled = true },
 		},
-		config = function()
-			-- Telescope is a fuzzy finder that comes with a lot of different things that
-			-- it can fuzzy find! It's more than just a "file finder", it can search
-			-- many different aspects of Neovim, your workspace, LSP, and more!
-			--
-			local actions = require("telescope.actions")
-
-			require("telescope").setup({
-				-- You can put your default mappings / updates / etc. in here
-				--  All the info you're looking for is in `:help telescope.setup()`
-				--
-				defaults = {
-					path_display = { "filename_first" },
-					mappings = {
-						i = { ["<C-d>"] = actions.delete_buffer },
-						n = { ["<C-d>"] = actions.delete_buffer },
-					},
-				},
-				-- pickers = {}
-				extensions = {
-					["ui-select"] = {
-						require("telescope.themes").get_dropdown(),
-					},
-				},
-			})
-
-			-- Enable Telescope extensions if they are installed
-			pcall(require("telescope").load_extension, "fzf")
-			pcall(require("telescope").load_extension, "ui-select")
-
-			-- See `:help telescope.builtin`
-			local builtin = require("telescope.builtin")
-			vim.keymap.set("n", "<leader>sh", builtin.help_tags, { desc = "[S]earch [H]elp" })
-			vim.keymap.set("n", "<leader>sk", builtin.keymaps, { desc = "[S]earch [K]eymaps" })
-			vim.keymap.set("n", "<leader>sf", builtin.find_files, { desc = "[S]earch [F]iles" })
-			vim.keymap.set("n", "<leader>ss", builtin.builtin, { desc = "[S]earch [S]elect Telescope" })
-			vim.keymap.set("n", "<leader>sw", builtin.grep_string, { desc = "[S]earch current [W]ord" })
-			vim.keymap.set("n", "<leader>sg", builtin.live_grep, { desc = "[S]earch by [G]rep" })
-			vim.keymap.set("n", "<leader>st", function()
-				local ext = vim.fn.input("Extension (e.g. yml): ")
-				if ext == "" then
-					return
-				end
-				builtin.live_grep({
-					glob_pattern = "*." .. ext,
-					additional_args = function()
-						return { "--hidden" }
-					end,
-				})
-			end, { desc = "[S]earch by Grep in File [T]ype" })
-			vim.keymap.set("n", "<leader>sd", builtin.diagnostics, { desc = "[S]earch [D]iagnostics" })
-			vim.keymap.set("n", "<leader>sr", builtin.resume, { desc = "[S]earch [R]esume" })
-			vim.keymap.set("n", "<leader>s.", builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
-			vim.keymap.set("n", "<leader><leader>", function()
-				builtin.buffers({
-					prompt_title = "Open Buffers (Cycle: Leader+Left/Right | Delete: Ctrl+d)",
-				})
-			end, { desc = "[ ] Find existing buffers" })
-
-			-- Slightly advanced example of overriding default behavior and theme
-			vim.keymap.set("n", "<leader>/", function()
-				-- You can pass additional configuration to Telescope to change the theme, layout, etc.
-				builtin.current_buffer_fuzzy_find(require("telescope.themes").get_dropdown({
-					winblend = 10,
-					previewer = false,
-				}))
-			end, { desc = "[/] Fuzzily search in current buffer" })
-
-			-- It's also possible to pass additional configuration options.
-			--  See `:help telescope.builtin.live_grep()` for information about particular keys
-			vim.keymap.set("n", "<leader>s/", function()
-				builtin.live_grep({
-					grep_open_files = true,
-					prompt_title = "Live Grep in Open Files",
-				})
-			end, { desc = "[S]earch [/] in Open Files" })
-
-			-- Shortcut for searching your Neovim configuration files
-			vim.keymap.set("n", "<leader>sn", function()
-				builtin.find_files({ cwd = vim.fn.stdpath("config") })
-			end, { desc = "[S]earch [N]eovim files" })
-
-			-- Search all files including git-ignored files
-			vim.keymap.set("n", "<leader>sF", function()
-				builtin.find_files({ no_ignore = true, hidden = true })
-			end, { desc = "[S]earch [F]iles (including git-ignored)" })
-
-			-- Grep all files including git-ignored files
-			vim.keymap.set("n", "<leader>sG", function()
-				builtin.live_grep({ additional_args = { "--no-ignore", "--hidden" } })
-			end, { desc = "[S]earch by [G]rep (including git-ignored)" })
-		end,
-	},
-
-	{
-		"nvim-neo-tree/neo-tree.nvim",
-		branch = "v3.x",
-		dependencies = {
-			"nvim-lua/plenary.nvim",
-			"nvim-tree/nvim-web-devicons", -- not strictly required, but recommended
-			"MunifTanjim/nui.nvim",
-		},
-		lazy = false, -- neo-tree will lazily load itself
 		keys = {
-			{ "<leader>e", "<cmd>Neotree toggle<cr>", desc = "Toggle file tree" },
-			{ "<leader>E", "<cmd>Neotree reveal<cr>", desc = "Reveal current file in tree" },
-		},
-		---@module "neo-tree"
-		---@type neotree.Config?
-		opts = {
-			filesystem = {
-				-- enables refreshing file view when new files are added withouth needing to toggle view
-				use_libuv_file_watcher = true,
-				filtered_items = {
-					visible = true,
-					show_hidden_count = true,
-					hide_dotfiles = false,
-					hide_gitignored = false,
-				},
-			},
-			window = {
-				mappings = {
-					["Y"] = function(state)
-						local node = state.tree:get_node()
-						local path = node:get_id()
-						vim.fn.setreg("+", vim.fn.fnamemodify(path, ":t"))
-						print("Copied filename: " .. vim.fn.fnamemodify(path, ":t"))
-					end,
-				},
-			},
+			{ "<leader>sh", function() Snacks.picker.help() end, desc = "Search Help" },
+			{ "<leader>sk", function() Snacks.picker.keymaps() end, desc = "Search Keymaps" },
+			{ "<leader>sf", function() Snacks.picker.files() end, desc = "Search Files" },
+			{ "<leader>ss", function() Snacks.picker.pickers() end, desc = "Search Pickers" },
+			{ "<leader>sw", function() Snacks.picker.grep_word() end, desc = "Search Word" },
+			{ "<leader>sg", function() Snacks.picker.grep() end, desc = "Search Grep" },
+			{ "<leader>st", function()
+				local ext = vim.fn.input("Extension (e.g. yml): ")
+				if ext ~= "" then Snacks.picker.grep({ glob = "*." .. ext, hidden = true }) end
+			end, desc = "Search Grep by Ext" },
+			{ "<leader>sd", function() Snacks.picker.diagnostics() end, desc = "Search Diagnostics" },
+			{ "<leader>sr", function() Snacks.picker.resume() end, desc = "Search Resume" },
+			{ "<leader>s.", function() Snacks.picker.recent() end, desc = "Search Recent" },
+			{ "<leader><leader>", function() Snacks.picker.buffers({ win = { input = { keys = { ["<c-d>"] = { "bufdelete", mode = { "n", "i" } } } } } }) end, desc = "Search Buffers" },
+			{ "<leader>/", function() Snacks.picker.lines() end, desc = "Fuzzily search in current buffer" },
+			{ "<leader>s/", function() Snacks.picker.grep_buffers() end, desc = "Search Open Files" },
+			{ "<leader>sn", function() Snacks.picker.files({ cwd = vim.fn.stdpath("config") }) end, desc = "Search Neovim config" },
+			{ "<leader>sF", function() Snacks.picker.files({ hidden = true, ignored = true }) end, desc = "Search All Files" },
+			{ "<leader>sG", function() Snacks.picker.grep({ hidden = true, ignored = true }) end, desc = "Search All Grep" },
+			{ "<leader>e", function() Snacks.explorer() end, desc = "Toggle Explorer" },
+			{ "<leader>E", function() Snacks.explorer({ reveal_file = vim.fn.expand("%:p") }) end, desc = "Reveal Explorer" },
+			{ "<leader>lg", function() Snacks.lazygit() end, desc = "LazyGit" },
+			{ "<C-t>", function() Snacks.terminal.toggle(nil, { win = { position = "right", width = 65 } }) end, mode = { "n", "t" }, desc = "Toggle Terminal" },
 		},
 	},
+
 
 	-- Colorscheme - Look at kickstart.nvim/init.lua for more config help.
 	{ -- You can easily change to a different colorscheme.
@@ -475,29 +378,29 @@ require("lazy").setup({
 					-- Jump to the definition of the word under your cursor.
 					--  This is where a variable was first declared, or where a function is defined, etc.
 					--  To jump back, press <C-t>.
-					map("gd", require("telescope.builtin").lsp_definitions, "[G]oto [D]efinition")
+					map("gd", function() Snacks.picker.lsp_definitions() end, "[G]oto [D]efinition")
 
 					-- Find references for the word under your cursor.
-					map("gr", require("telescope.builtin").lsp_references, "[G]oto [R]eferences")
+					map("gr", function() Snacks.picker.lsp_references() end, "[G]oto [R]eferences")
 
 					-- Jump to the implementation of the word under your cursor.
 					--  Useful when your language has ways of declaring types without an actual implementation.
-					map("gI", require("telescope.builtin").lsp_implementations, "[G]oto [I]mplementation")
+					map("gI", function() Snacks.picker.lsp_implementations() end, "[G]oto [I]mplementation")
 
 					-- Jump to the type of the word under your cursor.
 					--  Useful when you're not sure what type a variable is and you want to see
 					--  the definition of its *type*, not where it was *defined*.
-					map("<leader>D", require("telescope.builtin").lsp_type_definitions, "Type [D]efinition")
+					map("<leader>D", function() Snacks.picker.lsp_type_definitions() end, "Type [D]efinition")
 
 					-- Fuzzy find all the symbols in your current document.
 					--  Symbols are things like variables, functions, types, etc.
-					map("<leader>ds", require("telescope.builtin").lsp_document_symbols, "[D]ocument [S]ymbols")
+					map("<leader>ds", function() Snacks.picker.lsp_symbols() end, "[D]ocument [S]ymbols")
 
 					-- Fuzzy find all the symbols in your current workspace.
 					--  Similar to document symbols, except searches over your entire project.
 					map(
 						"<leader>ws",
-						require("telescope.builtin").lsp_dynamic_workspace_symbols,
+						function() Snacks.picker.lsp_workspace_symbols() end,
 						"[W]orkspace [S]ymbols"
 					)
 
@@ -853,47 +756,7 @@ require("lazy").setup({
 		"christoomey/vim-tmux-navigator",
 	},
 
-	-- Lazygit for git stuff
-	{
-		"kdheepak/lazygit.nvim",
-		lazy = true,
-		cmd = {
-			"LazyGit",
-			"LazyGitConfig",
-			"LazyGitCurrentFile",
-			"LazyGitFilter",
-			"LazyGitFilterCurrentFile",
-		},
-		-- optional for floating window border decoration
-		dependencies = {
-			"nvim-lua/plenary.nvim",
-		},
-		-- setting the keybinding for LazyGit with 'keys' is recommended in
-		-- order to load the plugin when the command is run for the first time
-		keys = {
-			{ "<leader>lg", "<cmd>LazyGit<cr>", desc = "LazyGit" },
-		},
-	},
 
-	-- Toggle terminal window
-	{
-		"akinsho/toggleterm.nvim",
-		version = "*",
-		config = function()
-			require("toggleterm").setup({
-				open_mapping = [[<C-t>]],
-				direction = "vertical", -- You can also use 'float' or 'vertical'
-				size = 65,
-				hide_numbers = true,
-				shade_terminals = true,
-				start_in_insert = true,
-				insert_mappings = true,
-				persist_size = true,
-				close_on_exit = true,
-				shell = vim.o.shell,
-			})
-		end,
-	},
 
 	-- Statusline with git branch
 	{
@@ -930,7 +793,7 @@ require("lazy").setup({
 							lualine_a = { function() return "Neo-tree" end },
 							lualine_b = { function() return "[e] fit width" end },
 						},
-						filetypes = { "neo-tree" },
+						filetypes = { "snacks_explorer" },
 					}
 				}
 			})
@@ -1084,26 +947,7 @@ require("lazy").setup({
 
 ----- Custom Markdown Preview using marxual
 ---------------------------------------------------------------------
-local markdown_preview_term = nil
-
-local function cleanup_markdown_preview_term(term)
-	if term == nil then
-		markdown_preview_term = nil
-		return
-	end
-
-	if term.window and vim.api.nvim_win_is_valid(term.window) and #vim.api.nvim_list_tabpages() > 1 then
-		pcall(vim.api.nvim_win_close, term.window, true)
-	end
-
-	if term.bufnr and vim.api.nvim_buf_is_valid(term.bufnr) then
-		pcall(vim.api.nvim_buf_delete, term.bufnr, { force = true })
-	end
-
-	if markdown_preview_term == term then
-		markdown_preview_term = nil
-	end
-end
+local markdown_preview_win = nil
 
 vim.api.nvim_create_user_command("MdPreview", function()
 	local file = vim.fn.expand("%:p")
@@ -1120,41 +964,29 @@ vim.api.nvim_create_user_command("MdPreview", function()
 		return
 	end
 
-	local ok, toggleterm_terminal = pcall(require, "toggleterm.terminal")
-	if not ok then
-		vim.notify("toggleterm.nvim is not available; cannot open markdown preview.", vim.log.levels.ERROR)
-		return
+	if markdown_preview_win and Snacks.win.valid(markdown_preview_win) then
+		markdown_preview_win:close()
 	end
 
-	if markdown_preview_term ~= nil then
-		cleanup_markdown_preview_term(markdown_preview_term)
-	end
-
-	local term
-	term = toggleterm_terminal.Terminal:new({
-		cmd = "marxual " .. vim.fn.shellescape(file),
-		direction = "tab",
-		hidden = true,
-		close_on_exit = false,
-		display_name = "Markdown Preview",
-		on_close = function()
-			if markdown_preview_term == term then
-				markdown_preview_term = nil
-			end
-		end,
-		on_exit = function()
-			vim.schedule(function()
-				cleanup_markdown_preview_term(term)
-			end)
+	markdown_preview_win = Snacks.terminal("marxual " .. vim.fn.shellescape(file), {
+		interactive = true,
+		win = {
+			position = "float",
+			border = "rounded",
+			title = " Markdown Preview ",
+			title_pos = "center",
+			width = 0.8,
+			height = 0.8,
+		},
+		on_buf = function(term)
+			-- Custom close mapping for the preview
+			vim.keymap.set("n", "q", function() term:close() end, { buffer = term.buf, nowait = true })
+			vim.keymap.set("n", "<D-q>", function() term:close() end, { buffer = term.buf, nowait = true })
 		end,
 	})
-	markdown_preview_term = term
-	markdown_preview_term:toggle()
 end, {})
 
 vim.keymap.set("n", "<leader>mp", "<cmd>MdPreview<CR>", { desc = "[M]arkdown [P]review (External)" })
-
----------------------------------------------------------------------
 ----- Setup ty here since its setup for vim 0.11 rather than 0.10
 ----- Docs here - https://docs.astral.sh/ty/reference/editor-settings/
 vim.lsp.config("ty", {
