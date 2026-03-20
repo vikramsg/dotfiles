@@ -1,0 +1,98 @@
+ss() {
+    if [[ $# -eq 0 ]]; then
+        print "usage: ss <index|ls|cp <dest>>" >&2
+        return 1
+    fi
+
+    case "$1" in
+        ls)
+            screenshot clipboard list
+            ;;
+        cp)
+            shift
+            if [[ $# -eq 0 ]]; then
+                print "usage: ss cp <dest>" >&2
+                return 1
+            fi
+            local display_source_shell
+            local display_source
+            local source_path
+            display_source="$(screenshot clipboard copy --index 1)" || return
+            display_source_shell="${display_source// /\\ }"
+            print "copying $display_source_shell -> $*"
+            source_path="$display_source"
+            source_path="${(Q)source_path}"
+            source_path="${source_path/#\~/$HOME}"
+            cp "$source_path" "$@"
+            ;;
+        <->)
+            screenshot clipboard copy --index "$1"
+            ;;
+        *)
+            print "usage: ss <index|ls|cp <dest>>" >&2
+            return 1
+            ;;
+    esac
+}
+
+vm-tab() {
+    emulate -L zsh
+    setopt pipefail
+
+    if [[ $# -ne 0 ]]; then
+        print "usage: vm-tab" >&2
+        return 1
+    fi
+
+    if (( !$+commands[fzf] )); then
+        print "fzf is required" >&2
+        return 1
+    fi
+
+    if (( !$+commands[osascript] )); then
+        print "osascript is required" >&2
+        return 1
+    fi
+
+    if [[ ! -x /opt/homebrew/bin/autossh ]]; then
+        print "/opt/homebrew/bin/autossh is required" >&2
+        return 1
+    fi
+
+    local session
+    session="$(ssh vm '/home/linuxbrew/.linuxbrew/bin/tmux list-sessions -F "#S"' | fzf)" || {
+        print "failed to select tmux session" >&2
+        return 1
+    }
+
+    if [[ -z "$session" ]]; then
+        print "selected tmux session is empty" >&2
+        return 1
+    fi
+
+    local remote_session
+    remote_session=${(q)session}
+
+    ssh vm "exec /home/linuxbrew/.linuxbrew/bin/tmux has-session -t $remote_session" || {
+        print "tmux session no longer exists: $session" >&2
+        return 1
+    }
+
+    osascript - "$session" <<'EOF' || {
+on run argv
+    set sessionName to item 1 of argv
+    tell application "Ghostty"
+        tell front window
+            perform action ("set_tab_title:" & sessionName) on focused terminal of selected tab
+        end tell
+    end tell
+end run
+EOF
+        print "failed to rename current Ghostty tab" >&2
+        return 1
+    }
+
+    env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 \
+        /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes \
+        vm "exec /home/linuxbrew/.linuxbrew/bin/tmux attach-session -d -t $remote_session"
+}

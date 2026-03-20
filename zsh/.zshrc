@@ -83,7 +83,7 @@ fi
 # Common aliases
 alias vi="nvim"
 
-[[ -f ~/.zsh_screenshot ]] && source ~/.zsh_screenshot
+[[ -f ~/.zsh_script ]] && source ~/.zsh_script
 
 # Replace standard ls with eza (icons + grid view)
 alias ls='eza --icons --grid'

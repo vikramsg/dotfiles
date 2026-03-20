@@ -75,12 +75,14 @@ This script allows you to open URLs from this remote VM directly in your local M
    ```
 
 2. **Configure SSH**:
-   Add the following to your `~/.ssh/config` on your Mac:
-   ```sshconfig
-   Host <your-vm-hostname>
-     RemoteForward /path/to/home/.opener.sock /Users/<your-mac-user>/.opener.sock
-   ```
-   *Replace `<your-mac-user>` with your actual local username.*
+    Add the following to your `~/.ssh/config` on your Mac:
+    ```sshconfig
+    Host <owner-alias>
+      RemoteForward /home/<remote-user>/.opener.sock /Users/<local-user>/.opener.sock
+    ```
+
+    Keep this forward on one dedicated owner alias only. Do not attach the same socket
+    `RemoteForward` to a broad host pattern used by short-lived helper SSH sessions.
 
 3. **SSH Server Tweak (Optional but recommended)**:
    If you experience issues with stale sockets, add this to the VM's `/etc/ssh/sshd_config` (requires sudo):
@@ -95,6 +97,33 @@ Once configured, any tool that uses `xdg-open` (like `gh browse`, `lazygit`, or 
 The script is OS-aware:
 - **On Linux**: It attempts to use the Unix socket bridge.
 - **On macOS**: It falls back to the native `open` command.
+
+### Troubleshooting
+
+If you see:
+
+```text
+nc: /home/<remote-user>/.opener.sock: connection refused
+```
+
+the socket file may still exist even though the forwarding session behind it is no longer alive.
+
+One common cause is a transient SSH session inheriting the same Unix-socket `RemoteForward`
+as your long-lived owner session. That helper session can replace the live socket path and,
+after it exits, leave behind a dead socket file that causes `connection refused`.
+
+To avoid this:
+
+- scope the opener `RemoteForward` to one owner alias only
+- use `-o ClearAllForwardings=yes` for non-owner sessions and helper SSH commands
+- reconnect the owner session if the socket has already been replaced
+
+Useful checks on the remote host:
+
+```bash
+ls -l ~/.opener.sock
+ss -xl | rg 'opener.sock'
+```
 
 ---
 

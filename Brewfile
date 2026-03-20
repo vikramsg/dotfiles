@@ -1,5 +1,7 @@
 brew "autossh"
 
+brew "fzf"
+
 # Modern ls replacement used by your shell/dotfiles experience.
 brew "eza"
 
