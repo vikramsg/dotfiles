@@ -1,6 +1,8 @@
 brew "autossh"
 
 brew "fzf"
+# Fast file finder used by snacks explorer search.
+brew "fd"
 
 # Modern ls replacement used by your shell/dotfiles experience.
 brew "eza"
