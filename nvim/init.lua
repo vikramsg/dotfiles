@@ -922,6 +922,17 @@ require("lazy").setup({
 						},
 					},
 				},
+				-- Display custom hints in Neo-tree's statusline
+				-- This explicitly shows the [e] hint without needing to open the help menu
+				extensions = {
+					{
+						sections = {
+							lualine_a = { function() return "Neo-tree" end },
+							lualine_b = { function() return "[e] fit width" end },
+						},
+						filetypes = { "neo-tree" },
+					}
+				}
 			})
 		end,
 	},
