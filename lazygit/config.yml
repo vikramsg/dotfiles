@@ -1,2 +1,21 @@
 os:
   openLink: 'xdg-open {{link}}'
+  editPreset: 'nvim-remote'
+gui:
+  wrapLinesInStagingView: true
+  splitDiff: 'auto'
+git:
+  diffContextSize: 5
+  pagers:
+    - pager: delta --dark --paging=never --line-numbers --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
+customCommands:
+  - key: '<c-g>'
+    context: 'files'
+    description: 'Full-screen diff of selected file'
+    command: 'clear && git -c core.pager="delta --paging=always --dark --line-numbers" diff HEAD -- {{.SelectedFile.Name | quote}}'
+    output: terminal
+  - key: '<c-g>'
+    context: 'commits'
+    description: 'Full-screen diff of selected commit'
+    command: 'clear && git -c core.pager="delta --paging=always --dark --line-numbers" show {{.SelectedLocalCommit.Sha}}'
+    output: terminal
