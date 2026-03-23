@@ -20,3 +20,4 @@ brew "go"
 brew "mcat"
 
 brew "zoxide"
+brew "television"

@@ -153,8 +153,15 @@ ssh:
     @echo "SSH shared config symlink created at ~/.ssh/config.vm.shared -> {{justfile_directory()}}/ssh/config.vm.shared"
 
 
+# Set up television symlink
+television:
+    @echo "Setting up television symlink..."
+    mkdir -p ~/.config/television
+    ln -sfn {{justfile_directory()}}/television/cable ~/.config/television/cable
+    @echo "Television symlink created at ~/.config/television/cable -> {{justfile_directory()}}/television/cable"
+
 # Set up all symlinks
-all: nvim tmux opencode ghostty screenshot lch bin zsh lazygit
+all: nvim tmux opencode ghostty screenshot lch bin zsh lazygit television
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

@@ -1,0 +1,23 @@
+[metadata]
+name = "opencode"
+description = "List running opencode instances and their working directories"
+requirements = ["lsof"]
+
+[source]
+# Finds opencode processes and extracts PID + directory.
+command = "lsof -c opencode -c .opencode -a -d cwd -F pn 2>/dev/null | awk '/^p/ {pid=substr($0,2)} /^n/ {cwd=substr($0,2); if (cwd !~ /Permission denied/) print pid \"\\t\" cwd}'"
+display = "[{split:\\t:0}]\t{split:\\t:1}"
+output = "{split:\\t:1}"
+no_sort = true
+
+[preview]
+command = "ls -la '{split:\\t:1}'"
+header = "Directory contents: {split:\\t:1}"
+
+[keybindings]
+ctrl-e = "actions:open_dir"
+
+[actions.open_dir]
+description = "Open directory in editor"
+command = "${EDITOR:-vim} '{split:\\t:1}'"
+mode = "execute"
