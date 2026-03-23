@@ -1,0 +1,18 @@
+[metadata]
+name = "screenshots"
+description = "Browse and copy recent screenshots"
+requirements = ["mcat"]
+
+[source]
+# Uses the config-managed screenshot directory and keeps newest-first ordering.
+command = "bash -c 'shopt -s nullglob; ls -1dt ~/Desktop/Screenshots/*.{png,jpg,jpeg} 2>/dev/null'"
+no_sort = true
+
+[preview]
+# Force a text-mode preview that television can render in its preview pane.
+command = "mcat --ascii < '{}' 2>/dev/null || file '{}'"
+
+[actions.open]
+description = "Open screenshot"
+command = "xdg-open '{}' 2>/dev/null || open '{}'"
+mode = "fork"
