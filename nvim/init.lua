@@ -1025,10 +1025,51 @@ require("lazy").setup({
 		config = function()
 			-- Track buffers opened before Diffview to cleanup afterwards
 			local diffview_initial_buffers = {}
+			local diffview_collapsed_width = 35
+
+			local function toggle_diffview_file_panel_width()
+				local ok, lib = pcall(require, "diffview.lib")
+				if not ok then
+					return
+				end
+
+				local view = lib.get_current_view()
+				if not (view and view.panel and view.panel.winid and vim.api.nvim_win_is_valid(view.panel.winid)) then
+					return
+				end
+
+				local expanded_width = math.max(60, math.floor(vim.o.columns * 0.45))
+				local current_width = vim.api.nvim_win_get_width(view.panel.winid)
+				local target_width = current_width <= diffview_collapsed_width and expanded_width or diffview_collapsed_width
+
+				vim.api.nvim_win_set_width(view.panel.winid, target_width)
+				view.panel:render()
+			end
+
+			local function set_diffview_file_panel_keymaps(view)
+				if not (view and view.panel and view.panel.bufid) then
+					return
+				end
+
+				vim.keymap.set("n", "e", toggle_diffview_file_panel_width, {
+					buffer = view.panel.bufid,
+					silent = true,
+					desc = "Toggle Diffview file panel width",
+				})
+			end
 
 			require("diffview").setup({
+				file_panel = {
+					listing_style = "list",
+					win_config = {
+						position = "left",
+						width = diffview_collapsed_width,
+					},
+				},
 				hooks = {
-					view_opened = function()
+					view_opened = function(view)
+						set_diffview_file_panel_keymaps(view)
+
 						-- Snapshot all currently loaded buffers
 						diffview_initial_buffers = {}
 						for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
