@@ -1040,10 +1040,13 @@ require("lazy").setup({
 
 				local expanded_width = math.max(60, math.floor(vim.o.columns * 0.45))
 				local current_width = vim.api.nvim_win_get_width(view.panel.winid)
-				local target_width = current_width <= diffview_collapsed_width and expanded_width or diffview_collapsed_width
+				local target_width = current_width <= diffview_collapsed_width and expanded_width
+					or diffview_collapsed_width
 
 				vim.api.nvim_win_set_width(view.panel.winid, target_width)
 				view.panel:render()
+				-- redraw is required otherwise the scrolling is messed up
+				view.panel:redraw()
 			end
 
 			local function set_diffview_file_panel_keymaps(view)
