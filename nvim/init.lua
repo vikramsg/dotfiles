@@ -49,7 +49,7 @@
 --   <leader>cW : Open Yazi (at project root - including ignored)
 --   In Snacks Explorer:
 --     Y        : Copy filename to clipboard
---     e        : Toggle maximize explorer window
+--     e        : Toggle explorer fit width
 --
 -- LSP (Code Intelligence):
 --   gd : Go to Definition
@@ -218,6 +218,31 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 -- Setup plugins using lazy
+local snacks_explorer_collapsed_width = 40
+
+local function snacks_explorer_expanded_width()
+	return math.max(60, math.floor(vim.o.columns * 0.35))
+end
+
+local function toggle_snacks_explorer_width(picker)
+	if not (picker and picker.layout and picker.layout.opts and picker.layout.opts.layout) then
+		return
+	end
+
+	local layout = picker.layout.opts.layout
+	local current_width = layout.width or snacks_explorer_collapsed_width
+	if picker.list and picker.list.win and picker.list.win.win and vim.api.nvim_win_is_valid(picker.list.win.win) then
+		current_width = vim.api.nvim_win_get_width(picker.list.win.win)
+	end
+
+	local target_width = current_width <= snacks_explorer_collapsed_width and snacks_explorer_expanded_width()
+		or snacks_explorer_collapsed_width
+	layout.width = target_width
+	layout.min_width = target_width
+	layout.max_width = target_width
+	picker.layout:update()
+end
+
 require("lazy").setup({
 	{
 		"folke/snacks.nvim",
@@ -226,41 +251,48 @@ require("lazy").setup({
 		opts = {
 			picker = {
 				enabled = true,
+				-- Snacks explorer keymaps run through picker actions, so custom actions
+				-- like `toggle_width` must be registered here as well, not only under
+				-- `opts.explorer.actions`, or the keymap resolves but does nothing.
+				actions = {
+					toggle_width = toggle_snacks_explorer_width,
+				},
 				sources = {
 					explorer = {
 						win = {
 							list = {
 								keys = {
-									["e"] = "toggle_maximize",
+									["e"] = "toggle_width",
 								},
 							},
 						},
 					},
 				},
 			},
-			explorer = {
-				enabled = true,
-				replace_netrw = true,
-				actions = {
-					yank_filename = function(picker)
-						local item = picker:current()
-						if item and item.file then
-							local path = item.file
-							local filename = vim.fn.fnamemodify(path, ":t")
-							vim.fn.setreg("+", filename)
-							print("Copied filename: " .. filename)
-						end
-					end,
-				},
-				win = {
-					list = {
-						keys = {
-							["Y"] = "yank_filename",
-							["e"] = "toggle_maximize",
+				explorer = {
+					enabled = true,
+					replace_netrw = true,
+					actions = {
+						toggle_width = toggle_snacks_explorer_width,
+						yank_filename = function(picker)
+							local item = picker:current()
+							if item and item.file then
+								local path = item.file
+								local filename = vim.fn.fnamemodify(path, ":t")
+								vim.fn.setreg("+", filename)
+								print("Copied filename: " .. filename)
+							end
+						end,
+					},
+					win = {
+						list = {
+							keys = {
+								["Y"] = "yank_filename",
+								["e"] = "toggle_width",
+							},
 						},
 					},
 				},
-			},
 			terminal = { enabled = true },
 			lazygit = { enabled = true },
 			notifier = { enabled = true },
