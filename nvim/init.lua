@@ -225,22 +225,22 @@ local function snacks_explorer_expanded_width()
 end
 
 local function toggle_snacks_explorer_width(picker)
-	if not (picker and picker.layout and picker.layout.opts and picker.layout.opts.layout) then
+	if not (picker and picker.resolved_layout and picker.resolved_layout.layout) then
 		return
 	end
 
-	local layout = picker.layout.opts.layout
-	local current_width = layout.width or snacks_explorer_collapsed_width
+	local current_width = picker.resolved_layout.layout.width or snacks_explorer_collapsed_width
 	if picker.list and picker.list.win and picker.list.win.win and vim.api.nvim_win_is_valid(picker.list.win.win) then
 		current_width = vim.api.nvim_win_get_width(picker.list.win.win)
 	end
 
 	local target_width = current_width <= snacks_explorer_collapsed_width and snacks_explorer_expanded_width()
 		or snacks_explorer_collapsed_width
-	layout.width = target_width
-	layout.min_width = target_width
-	layout.max_width = target_width
-	picker.layout:update()
+	local layout = vim.deepcopy(picker.resolved_layout)
+	layout.layout.width = target_width
+	layout.layout.min_width = target_width
+	layout.layout.max_width = target_width
+	picker:set_layout(layout)
 end
 
 require("lazy").setup({
@@ -248,21 +248,22 @@ require("lazy").setup({
 		"folke/snacks.nvim",
 		priority = 1000,
 		lazy = false,
+		config = function(_, opts)
+			-- Explorer picker keymaps resolve string actions through the global
+			-- `snacks.picker.actions` table, so custom picker actions need to be
+			-- registered there before the explorer is opened.
+			require("snacks.picker.actions").toggle_explorer_width = toggle_snacks_explorer_width
+			require("snacks").setup(opts)
+		end,
 		opts = {
 			picker = {
 				enabled = true,
-				-- Snacks explorer keymaps run through picker actions, so custom actions
-				-- like `toggle_width` must be registered here as well, not only under
-				-- `opts.explorer.actions`, or the keymap resolves but does nothing.
-				actions = {
-					toggle_width = toggle_snacks_explorer_width,
-				},
 				sources = {
 					explorer = {
 						win = {
 							list = {
 								keys = {
-									["e"] = "toggle_width",
+									["e"] = "toggle_explorer_width",
 								},
 							},
 						},
@@ -273,7 +274,6 @@ require("lazy").setup({
 					enabled = true,
 					replace_netrw = true,
 					actions = {
-						toggle_width = toggle_snacks_explorer_width,
 						yank_filename = function(picker)
 							local item = picker:current()
 							if item and item.file then
@@ -288,7 +288,7 @@ require("lazy").setup({
 						list = {
 							keys = {
 								["Y"] = "yank_filename",
-								["e"] = "toggle_width",
+								["e"] = "toggle_explorer_width",
 							},
 						},
 					},
