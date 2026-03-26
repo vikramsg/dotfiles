@@ -26,7 +26,9 @@
 --   <leader>gh : File History (Diffview)
 --   <leader>gH : Close File History
 --   <leader>lg : LazyGit (Floating terminal)
---   In Diffview (working tree):
+--   <leader>rF : Rename current file with LSP updates
+--   In Diffview (working tree / file history):
+--     <C-j> / <C-k> : Move between bottom panel and diff splits
 --     do : Diff Obtain (Pull hunk from other split to revert/stage)
 --     X  : Restore file (in file panel)
 --
@@ -50,6 +52,7 @@
 --   In Snacks Explorer:
 --     Y        : Copy filename to clipboard
 --     e        : Toggle explorer fit width
+--     .        : Toggle hidden files
 --
 -- LSP (Code Intelligence):
 --   gd : Go to Definition
@@ -135,6 +138,8 @@ end
 --
 ----  See `:help wincmd` for a list of all window commands
 vim.keymap.set("n", "<C-h>", "<C-w><C-h>", { desc = "Move focus to the left window" })
+vim.keymap.set("n", "<C-j>", "<C-w><C-j>", { desc = "Move focus to the lower window" })
+vim.keymap.set("n", "<C-k>", "<C-w><C-k>", { desc = "Move focus to the upper window" })
 -- Does not seem to work
 vim.keymap.set("n", "<C-b><Left>", "<C-w><C-h>", { desc = "Move focus to the left window" })
 vim.keymap.set("n", "<C-l>", "<C-w><C-l>", { desc = "Move focus to the right window" })
@@ -187,6 +192,26 @@ vim.api.nvim_create_autocmd("VimResized", {
 		local current_tab = vim.api.nvim_get_current_tabpage()
 		vim.cmd("tabdo wincmd =")
 		vim.api.nvim_set_current_tabpage(current_tab)
+	end,
+})
+
+vim.api.nvim_create_autocmd("FileType", {
+	desc = "Keep JS/TS comment continuation aligned without runaway indent",
+	group = vim.api.nvim_create_augroup("js_ts_comment_indent", { clear = true }),
+	pattern = { "javascript", "javascriptreact", "typescript", "typescriptreact" },
+	callback = function(event)
+		vim.bo[event.buf].indentexpr = ""
+		vim.opt_local.formatoptions:remove("t")
+		vim.opt_local.formatoptions:append("crqj")
+		vim.opt_local.comments = {
+			"s1:/*",
+			"mb:*",
+			"ex:*/",
+			"s1:/**",
+			"mb:*",
+			"ex:*/",
+			"://",
+		}
 	end,
 })
 
@@ -243,6 +268,14 @@ local function toggle_snacks_explorer_width(picker)
 	picker:set_layout(layout)
 end
 
+local function rename_current_file()
+	Snacks.rename.rename_file({
+		on_rename = function()
+			vim.cmd("silent! wa")
+		end,
+	})
+end
+
 require("lazy").setup({
 	{
 		"folke/snacks.nvim",
@@ -263,7 +296,9 @@ require("lazy").setup({
 						win = {
 							list = {
 								keys = {
+									["."] = "toggle_hidden",
 									["e"] = "toggle_explorer_width",
+									["gf"] = "explorer_focus",
 								},
 							},
 						},
@@ -287,12 +322,15 @@ require("lazy").setup({
 					win = {
 						list = {
 							keys = {
+								["."] = "toggle_hidden",
 								["Y"] = "yank_filename",
 								["e"] = "toggle_explorer_width",
+								["gf"] = "explorer_focus",
 							},
 						},
 					},
 				},
+				rename = { enabled = true },
 			terminal = { enabled = true },
 			lazygit = { enabled = true },
 			notifier = { enabled = true },
@@ -325,6 +363,11 @@ require("lazy").setup({
 					Snacks.picker.pickers()
 				end,
 				desc = "Search Pickers",
+			},
+			{
+				"<leader>rF",
+				rename_current_file,
+				desc = "Rename current file",
 			},
 			{
 				"<leader>sw",
@@ -510,7 +553,7 @@ require("lazy").setup({
 				--  the list of additional_vim_regex_highlighting and disabled languages for indent.
 				additional_vim_regex_highlighting = { "ruby" },
 			},
-			indent = { enable = true, disable = { "ruby" } },
+			indent = { enable = true, disable = { "ruby", "javascript", "javascriptreact", "typescript", "typescriptreact" } },
 		},
 	},
 
@@ -708,6 +751,11 @@ require("lazy").setup({
 			--  So, we create new capabilities with nvim cmp, and then broadcast that to the servers.
 			local capabilities = vim.lsp.protocol.make_client_capabilities()
 			capabilities = vim.tbl_deep_extend("force", capabilities, require("cmp_nvim_lsp").default_capabilities())
+			capabilities.workspace = capabilities.workspace or {}
+			capabilities.workspace.fileOperations = {
+				didRename = true,
+				willRename = true,
+			}
 
 			-- Enable the following language servers
 			--  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
