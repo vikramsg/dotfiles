@@ -49,7 +49,7 @@
 --   <leader>cW : Open Yazi (at project root - including ignored)
 --   In Snacks Explorer:
 --     Y        : Copy filename to clipboard
---     e        : Toggle maximize explorer window
+--     e        : Toggle explorer fit width
 --
 -- LSP (Code Intelligence):
 --   gd : Go to Definition
@@ -106,6 +106,7 @@ vim.opt.undofile = true
 -- Case-insensitive searching UNLESS \C or one or more capital letters in the search term
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
+vim.o.inccommand = "split"
 
 -- Optimize esc experience
 -- Fast, reliable <Esc>
@@ -217,11 +218,43 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 -- Setup plugins using lazy
+local snacks_explorer_collapsed_width = 40
+
+local function snacks_explorer_expanded_width()
+	return math.max(60, math.floor(vim.o.columns * 0.35))
+end
+
+local function toggle_snacks_explorer_width(picker)
+	if not (picker and picker.resolved_layout and picker.resolved_layout.layout) then
+		return
+	end
+
+	local current_width = picker.resolved_layout.layout.width or snacks_explorer_collapsed_width
+	if picker.list and picker.list.win and picker.list.win.win and vim.api.nvim_win_is_valid(picker.list.win.win) then
+		current_width = vim.api.nvim_win_get_width(picker.list.win.win)
+	end
+
+	local target_width = current_width <= snacks_explorer_collapsed_width and snacks_explorer_expanded_width()
+		or snacks_explorer_collapsed_width
+	local layout = vim.deepcopy(picker.resolved_layout)
+	layout.layout.width = target_width
+	layout.layout.min_width = target_width
+	layout.layout.max_width = target_width
+	picker:set_layout(layout)
+end
+
 require("lazy").setup({
 	{
 		"folke/snacks.nvim",
 		priority = 1000,
 		lazy = false,
+		config = function(_, opts)
+			-- Explorer picker keymaps resolve string actions through the global
+			-- `snacks.picker.actions` table, so custom picker actions need to be
+			-- registered there before the explorer is opened.
+			require("snacks.picker.actions").toggle_explorer_width = toggle_snacks_explorer_width
+			require("snacks").setup(opts)
+		end,
 		opts = {
 			picker = {
 				enabled = true,
@@ -230,36 +263,36 @@ require("lazy").setup({
 						win = {
 							list = {
 								keys = {
-									["e"] = "toggle_maximize",
+									["e"] = "toggle_explorer_width",
 								},
 							},
 						},
 					},
 				},
 			},
-			explorer = {
-				enabled = true,
-				replace_netrw = true,
-				actions = {
-					yank_filename = function(picker)
-						local item = picker:current()
-						if item and item.file then
-							local path = item.file
-							local filename = vim.fn.fnamemodify(path, ":t")
-							vim.fn.setreg("+", filename)
-							print("Copied filename: " .. filename)
-						end
-					end,
-				},
-				win = {
-					list = {
-						keys = {
-							["Y"] = "yank_filename",
-							["e"] = "toggle_maximize",
+				explorer = {
+					enabled = true,
+					replace_netrw = true,
+					actions = {
+						yank_filename = function(picker)
+							local item = picker:current()
+							if item and item.file then
+								local path = item.file
+								local filename = vim.fn.fnamemodify(path, ":t")
+								vim.fn.setreg("+", filename)
+								print("Copied filename: " .. filename)
+							end
+						end,
+					},
+					win = {
+						list = {
+							keys = {
+								["Y"] = "yank_filename",
+								["e"] = "toggle_explorer_width",
+							},
 						},
 					},
 				},
-			},
 			terminal = { enabled = true },
 			lazygit = { enabled = true },
 			notifier = { enabled = true },
@@ -413,6 +446,15 @@ require("lazy").setup({
 			},
 		},
 	},
+	{
+		"folke/noice.nvim",
+		dependencies = {
+			"MunifTanjim/nui.nvim",
+		},
+	},
+	{
+		"smjonas/inc-rename.nvim",
+	},
 
 	-- Colorscheme - Look at kickstart.nvim/init.lua for more config help.
 	{ -- You can easily change to a different colorscheme.
@@ -507,9 +549,10 @@ require("lazy").setup({
 					--
 					-- In this case, we create a function that lets us more easily define mappings specific
 					-- for LSP related items. It sets the mode, buffer and description for us each time.
-					local map = function(keys, func, desc, mode)
+					local map = function(keys, func, desc, mode, opts)
 						mode = mode or "n"
-						vim.keymap.set(mode, keys, func, { buffer = event.buf, desc = "LSP: " .. desc })
+						opts = vim.tbl_extend("force", { buffer = event.buf, desc = "LSP: " .. desc }, opts or {})
+						vim.keymap.set(mode, keys, func, opts)
 					end
 
 					-- Jump to the definition of the word under your cursor.
@@ -551,7 +594,9 @@ require("lazy").setup({
 
 					-- Rename the variable under your cursor.
 					--  Most Language Servers support renaming across files, etc.
-					map("<leader>rn", vim.lsp.buf.rename, "[R]e[n]ame")
+					map("<leader>rn", function()
+						return ":IncRename " .. vim.fn.expand("<cword>")
+					end, "[R]e[n]ame", "n", { expr = true })
 
 					-- Execute a code action, usually your cursor needs to be on top of an error
 					-- or a suggestion from your LSP for this to activate.
@@ -1138,6 +1183,23 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewFileHistoryClose<CR>", { desc = "Close Git history" })
 		end,
 	},
+})
+
+require("noice").setup({
+	presets = {
+		inc_rename = true,
+	},
+	cmdline = {
+		format = {
+			IncRename = { icon = "󰑕" },
+		},
+	},
+})
+
+require("inc_rename").setup({
+	post_hook = function()
+		vim.cmd("silent! wa")
+	end,
 })
 
 ----- Custom Markdown Preview using marxual
