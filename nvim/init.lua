@@ -106,6 +106,7 @@ vim.opt.undofile = true
 -- Case-insensitive searching UNLESS \C or one or more capital letters in the search term
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
+vim.o.inccommand = "split"
 
 -- Optimize esc experience
 -- Fast, reliable <Esc>
@@ -413,6 +414,15 @@ require("lazy").setup({
 			},
 		},
 	},
+	{
+		"folke/noice.nvim",
+		dependencies = {
+			"MunifTanjim/nui.nvim",
+		},
+	},
+	{
+		"smjonas/inc-rename.nvim",
+	},
 
 	-- Colorscheme - Look at kickstart.nvim/init.lua for more config help.
 	{ -- You can easily change to a different colorscheme.
@@ -507,9 +517,10 @@ require("lazy").setup({
 					--
 					-- In this case, we create a function that lets us more easily define mappings specific
 					-- for LSP related items. It sets the mode, buffer and description for us each time.
-					local map = function(keys, func, desc, mode)
+					local map = function(keys, func, desc, mode, opts)
 						mode = mode or "n"
-						vim.keymap.set(mode, keys, func, { buffer = event.buf, desc = "LSP: " .. desc })
+						opts = vim.tbl_extend("force", { buffer = event.buf, desc = "LSP: " .. desc }, opts or {})
+						vim.keymap.set(mode, keys, func, opts)
 					end
 
 					-- Jump to the definition of the word under your cursor.
@@ -551,7 +562,9 @@ require("lazy").setup({
 
 					-- Rename the variable under your cursor.
 					--  Most Language Servers support renaming across files, etc.
-					map("<leader>rn", vim.lsp.buf.rename, "[R]e[n]ame")
+					map("<leader>rn", function()
+						return ":IncRename " .. vim.fn.expand("<cword>")
+					end, "[R]e[n]ame", "n", { expr = true })
 
 					-- Execute a code action, usually your cursor needs to be on top of an error
 					-- or a suggestion from your LSP for this to activate.
@@ -1138,6 +1151,23 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewFileHistoryClose<CR>", { desc = "Close Git history" })
 		end,
 	},
+})
+
+require("noice").setup({
+	presets = {
+		inc_rename = true,
+	},
+	cmdline = {
+		format = {
+			IncRename = { icon = "󰑕" },
+		},
+	},
+})
+
+require("inc_rename").setup({
+	post_hook = function()
+		vim.cmd("silent! wa")
+	end,
 })
 
 ----- Custom Markdown Preview using marxual
