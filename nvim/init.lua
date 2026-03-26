@@ -305,32 +305,32 @@ require("lazy").setup({
 					},
 				},
 			},
-				explorer = {
-					enabled = true,
-					replace_netrw = true,
-					actions = {
-						yank_filename = function(picker)
-							local item = picker:current()
-							if item and item.file then
-								local path = item.file
-								local filename = vim.fn.fnamemodify(path, ":t")
-								vim.fn.setreg("+", filename)
-								print("Copied filename: " .. filename)
-							end
-						end,
-					},
-					win = {
-						list = {
-							keys = {
-								["."] = "toggle_hidden",
-								["Y"] = "yank_filename",
-								["e"] = "toggle_explorer_width",
-								["gf"] = "explorer_focus",
-							},
+			explorer = {
+				enabled = true,
+				replace_netrw = true,
+				actions = {
+					yank_filename = function(picker)
+						local item = picker:current()
+						if item and item.file then
+							local path = item.file
+							local filename = vim.fn.fnamemodify(path, ":t")
+							vim.fn.setreg("+", filename)
+							print("Copied filename: " .. filename)
+						end
+					end,
+				},
+				win = {
+					list = {
+						keys = {
+							["."] = "toggle_hidden",
+							["Y"] = "yank_filename",
+							["e"] = "toggle_explorer_width",
+							["gf"] = "explorer_focus",
 						},
 					},
 				},
-				rename = { enabled = true },
+			},
+			rename = { enabled = true },
 			terminal = { enabled = true },
 			lazygit = { enabled = true },
 			notifier = { enabled = true },
@@ -553,7 +553,10 @@ require("lazy").setup({
 				--  the list of additional_vim_regex_highlighting and disabled languages for indent.
 				additional_vim_regex_highlighting = { "ruby" },
 			},
-			indent = { enable = true, disable = { "ruby", "javascript", "javascriptreact", "typescript", "typescriptreact" } },
+			indent = {
+				enable = true,
+				disable = { "ruby", "javascript", "javascriptreact", "typescript", "typescriptreact" },
+			},
 		},
 	},
 
@@ -1228,7 +1231,7 @@ require("lazy").setup({
 			)
 
 			-- Close current file history
-			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewFileHistoryClose<CR>", { desc = "Close Git history" })
+			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewClose<CR>", { desc = "Close Git history view" })
 		end,
 	},
 })
