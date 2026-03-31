@@ -158,6 +158,7 @@ What should be true:
 16. If export, download, or visibility behavior is relevant, verify that flow explicitly during smoke testing.
 17. Re-check the acceptance scenarios against the implemented behavior.
 18. Re-check all layer rules have been correctly followed and no cross-feature, cross-view etc imports exist. Make sure correct React composition patterns are used. 
-19. Prepare a PR description that clearly states scope, constraints, and regression protections.
+19. No DB reset operations should be applied during implementation. Always use migrations as the only source of direcly mutating the DB. Use existing test scripts for inserting users. 
+20. Prepare a PR description that clearly states scope, constraints, and regression protections.
 ```
 
