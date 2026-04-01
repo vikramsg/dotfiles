@@ -11,6 +11,19 @@ Host vm vm.*
     # If any port forward cannot bind on reconnect, fail hard and let autossh restart.
     ExitOnForwardFailure yes
 
+Host vm.mx
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx
+
+Host vm.mx-worktree
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx-worktree
+
+Host vm.mx-wt2
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx-wt2
+
+
 Host vm.dotfiles
     # Forwarding OWNER profile: only one active SSH session should bind these local ports.
     # If multiple tabs try to own the same LocalForward ports, ssh will fail with:
@@ -29,15 +42,6 @@ Host vm.dotfiles
 Host vm.kunda
     # -d detaches ghost clients left behind by stale SSH sessions.
     RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t kunda
-
-Host vm.mx
-    # -d detaches ghost clients left behind by stale SSH sessions.
-    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx
-
-Host vm.mx-worktree
-    # -d detaches ghost clients left behind by stale SSH sessions.
-    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx-worktree
-
 
 Host vm.btop
     # -d detaches ghost clients left behind by stale SSH sessions.
