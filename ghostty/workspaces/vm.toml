@@ -15,16 +15,20 @@ name = "dotfiles"
 command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 vm.dotfiles"
 
 [[tabs]]
-name = "knda"
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.kunda"
-
-[[tabs]]
 name = "mx"
 command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.mx"
 
 [[tabs]]
 name = "mx-worktree"
 command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.mx-worktree"
+
+[[tabs]]
+name = "mx-wt2"
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.mx-wt2"
+
+[[tabs]]
+name = "knda"
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.kunda"
 
 [[tabs]]
 name = "btop"
