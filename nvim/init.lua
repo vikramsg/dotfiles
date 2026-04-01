@@ -479,6 +479,12 @@ require("lazy").setup({
 			},
 			{
 				"<C-t>",
+				-- Snacks terminal uses a double-escape handler in terminal mode.
+				-- With nested Neovim, a single <Esc> stays in the inner editor so
+				-- `:w` saves normally, but a quick second <Esc> drops the outer
+				-- terminal buffer into Normal mode. If you then run `:w`, the outer
+				-- Neovim tries to write the terminal buffer itself and raises E382
+				-- because terminal buftype buffers are not writable.
 				function()
 					Snacks.terminal.toggle(nil, { win = { position = "right", width = 65 } })
 				end,
