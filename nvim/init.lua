@@ -200,19 +200,9 @@ vim.api.nvim_create_autocmd("FileType", {
 	desc = "Keep JS/TS comment continuation aligned without runaway indent",
 	group = vim.api.nvim_create_augroup("js_ts_comment_indent", { clear = true }),
 	pattern = { "javascript", "javascriptreact", "typescript", "typescriptreact" },
-	callback = function(event)
-		vim.bo[event.buf].indentexpr = ""
+	callback = function()
 		vim.opt_local.formatoptions:remove("t")
-		vim.opt_local.formatoptions:append("crqj")
-		vim.opt_local.comments = {
-			"s1:/*",
-			"mb:*",
-			"ex:*/",
-			"s1:/**",
-			"mb:*",
-			"ex:*/",
-			"://",
-		}
+		vim.opt_local.formatoptions:append("j")
 	end,
 })
 
@@ -821,7 +811,7 @@ require("lazy").setup({
 			local ensure_installed = vim.tbl_keys(servers or {})
 			vim.list_extend(ensure_installed, {
 				"stylua", -- Used to format Lua code
-				"prettier", -- Used for formatting JSON
+				"prettierd", -- Faster formatter for JS/TS/JSON
 			})
 			require("mason-tool-installer").setup({ ensure_installed = ensure_installed })
 
@@ -870,14 +860,14 @@ require("lazy").setup({
 					lsp_format_opt = "fallback"
 				end
 				return {
-					timeout_ms = 500,
+					timeout_ms = 2000,
 					lsp_format = lsp_format_opt,
 				}
 			end,
 			formatters_by_ft = {
-				json = { "prettier" },
-				jsonc = { "prettier" },
-				json5 = { "prettier" },
+				json = { "prettierd" },
+				jsonc = { "prettierd" },
+				json5 = { "prettierd" },
 				lua = { "stylua" },
 				-- Conform can also run multiple formatters sequentially
 				python = { -- To fix auto-fixable lint errors.
@@ -889,10 +879,10 @@ require("lazy").setup({
 				},
 				--
 				-- You can use 'stop_after_first' to run the first available formatter from the list
-				javascript = { "prettier" },
-				typescript = { "prettier" },
-				javascriptreact = { "prettier" },
-				typescriptreact = { "prettier" },
+				javascript = { "prettierd" },
+				typescript = { "prettierd" },
+				javascriptreact = { "prettierd" },
+				typescriptreact = { "prettierd" },
 			},
 		},
 	},
