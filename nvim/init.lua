@@ -1161,7 +1161,46 @@ require("lazy").setup({
 				})
 			end
 
+			local function shorten_diffview_path(path, parent_dirs)
+				local keep_parts = (parent_dirs or 2) + 1
+				local parts = vim.split(path, "/", { plain = true })
+
+				if #parts <= keep_parts then
+					return path
+				end
+
+				for i = 1, #parts - keep_parts do
+					if parts[i] ~= "" then
+						parts[i] = parts[i]:sub(1, 1)
+					end
+				end
+
+				return table.concat(parts, "/")
+			end
+
+			local function shorten_diffview_winbar_path(winid)
+				local winbar = vim.wo[winid].winbar
+				if not winbar or winbar == "" then
+					return
+				end
+
+				local prefix, path = winbar:match("^(.* WORKING TREE %- )(.*)$")
+				if not prefix then
+					prefix, path = winbar:match("^([^:]*:)(.*)$")
+				end
+
+				if not (prefix and path and path ~= "") then
+					return
+				end
+
+				vim.wo[winid].winbar = prefix .. shorten_diffview_path(path, 2)
+			end
+
 			require("diffview").setup({
+				view = {
+					default = { winbar_info = true },
+					file_history = { winbar_info = true },
+				},
 				file_panel = {
 					listing_style = "tree",
 					win_config = {
@@ -1170,6 +1209,9 @@ require("lazy").setup({
 					},
 				},
 				hooks = {
+					diff_buf_win_enter = function(_, winid)
+						shorten_diffview_winbar_path(winid)
+					end,
 					view_opened = function(view)
 						set_diffview_file_panel_keymaps(view)
 
