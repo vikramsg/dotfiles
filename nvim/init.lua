@@ -1161,6 +1161,11 @@ require("lazy").setup({
 				})
 			end
 
+			---Shorten a slash-separated path by keeping the filename and N parent directories,
+			---while reducing earlier directories to a single character.
+			---@param path string
+			---@param parent_dirs? integer Number of parent directories to preserve in full.
+			---@return string
 			local function shorten_diffview_path(path, parent_dirs)
 				local keep_parts = (parent_dirs or 2) + 1
 				local parts = vim.split(path, "/", { plain = true })
@@ -1178,6 +1183,9 @@ require("lazy").setup({
 				return table.concat(parts, "/")
 			end
 
+			---Rewrite a Diffview window's winbar so the displayed file path is compact.
+			---Supports both working tree and object-path (hash:path) winbar formats.
+			---@param winid integer
 			local function shorten_diffview_winbar_path(winid)
 				local winbar = vim.wo[winid].winbar
 				if not winbar or winbar == "" then
@@ -1209,6 +1217,9 @@ require("lazy").setup({
 					},
 				},
 				hooks = {
+					---Apply custom path shortening each time a diff buffer is shown in a window.
+					---@param _ integer bufnr (unused)
+					---@param winid integer
 					diff_buf_win_enter = function(_, winid)
 						shorten_diffview_winbar_path(winid)
 					end,
