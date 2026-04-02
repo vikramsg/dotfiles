@@ -57,6 +57,16 @@ But it is restricted by any denies etc settings in your workspace.
     "/private/tmp/**": "allow"
 ```
 
+## State
+
+Opencode stores files under
+
+```
+~/.local/state/opencode
+~/.local/share/opencode
+~/.config/opencode
+```
+
 ## Dual Mode Models (Plan vs. Build)
 
 OpenCode utilizes a dual-mode workflow:

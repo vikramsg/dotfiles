@@ -33,6 +33,18 @@
 --     do : Diff Obtain (Pull hunk from other split to revert/stage)
 --     X  : Restore file (in file panel)
 --
+-- Local Code Review (quickfix-review.nvim):
+--   <leader>ra : Add comment (cycles through types)
+--   <leader>rd : Delete comment
+--   <leader>rx : Export review
+--   <leader>rc : Clear review
+--   <leader>ri : Add Issue
+--   <leader>rs : Add Suggestion
+--   <leader>rt : Add Note
+--   <leader>rp : Add Praise
+--   <leader>rq : Add Question
+--   <leader>rv : View the .review.md file (press 'q' to go back)
+--
 -- Search (Telescope):
 --   <leader>sf : Search Files
 --   <leader>sF : Search ALL Files (including git-ignored)
@@ -1289,6 +1301,76 @@ require("lazy").setup({
 
 			-- Close current file history
 			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewClose<CR>", { desc = "Close Git history view" })
+		end,
+	},
+
+	{
+		"MMesch/quickfix-review.nvim",
+		dependencies = { "sindrets/diffview.nvim" },
+		config = function()
+			local cwd = vim.fn.getcwd()
+			local branch = vim.fn.system("git rev-parse --abbrev-ref HEAD 2>/dev/null"):gsub("%s+", "")
+			if branch == "" then branch = "no-branch" end
+			
+			local review_dir = vim.fn.stdpath("data") .. cwd .. "/" .. branch
+			vim.fn.mkdir(review_dir, "p") -- Ensure the directory structure exists
+
+			require("quickfix-review").setup({
+				-- Reviews are stored locally on your machine 
+				storage_file = vim.fn.stdpath("data") .. "/quickfix-review.json",
+				
+				-- NOTE: This export path is evaluated statically at Neovim startup.
+				-- Possible issue: If you switch git branches while this Neovim instance 
+				-- is running, reviews will still be saved to the original branch's review.md file.
+				export_file = review_dir .. "/review.md",
+				
+				keymaps = {
+					-- Custom <leader>r mappings
+					add_comment_cycle = "<leader>ra",
+					cycle_next = "+",
+					cycle_previous = "-",
+					delete_comment = "<leader>rd",
+					export = "<leader>rx",
+					clear = "<leader>rc",
+					summary = "<leader>rS",
+					save = "<leader>rw",
+					load = "<leader>rl",
+					open_list = "<leader>ro",
+					next_comment = "]r",
+					prev_comment = "[r",
+					goto_real_file = "<leader>rg",
+
+					-- Explicit mappings for standard comment types
+					add_issue = "<leader>ri",
+					add_suggestion = "<leader>rs",
+					add_note = "<leader>rt", -- 't' instead of 'n' to avoid conflict with rename
+					add_praise = "<leader>rp",
+					add_question = "<leader>rq",
+					add_insight = "<leader>rk",
+				},
+			})
+
+			-- Custom shortcut to view the review markdown file and then easily go back
+			vim.keymap.set("n", "<leader>rv", function()
+				local qf_list = vim.fn.getqflist()
+				if #qf_list == 0 then
+					vim.notify("No review comments to view", vim.log.levels.WARN)
+					return
+				end
+
+				-- Force export to ensure the file is up to date
+				require("quickfix-review").export_review()
+				
+				-- Open the markdown file in a new tabpage to avoid breaking Diffview's layout
+				local export_file = require("quickfix-review").config.options.export_file
+				vim.cmd("tabedit " .. vim.fn.fnameescape(export_file))
+				
+				-- Set a buffer-local keymap on 'q' to close the tab and go back
+				vim.keymap.set("n", "q", "<cmd>tabclose<CR>", { 
+					buffer = true, 
+					desc = "Close review file and go back" 
+				})
+			end, { desc = "View exported Review Markdown" })
 		end,
 	},
 })
