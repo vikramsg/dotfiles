@@ -279,6 +279,9 @@ local function rename_current_file()
 	})
 end
 
+---Returns true when any segment in the given path is a dot-prefixed name.
+---@param path string
+---@return boolean
 local function path_has_hidden_segment(path)
 	local normalized = vim.fs.normalize(path)
 	for segment in normalized:gmatch("[^/]+") do
@@ -289,6 +292,9 @@ local function path_has_hidden_segment(path)
 	return false
 end
 
+---Ensures the explorer is rooted correctly, opens the file path in the tree, and reveals it.
+---@param picker snacks.Picker
+---@param file string
 local function reveal_file_in_explorer(picker, file)
 	local actions = require("snacks.explorer.actions")
 	local tree = require("snacks.explorer.tree")
@@ -299,6 +305,7 @@ local function reveal_file_in_explorer(picker, file)
 	actions.update(picker, { target = file, refresh = true })
 end
 
+---Reveals the current buffer's file in the explorer and unhides hidden paths when required.
 local function reveal_current_file_in_explorer()
 	local file = vim.fs.normalize(vim.fn.expand("%:p"))
 	if file == "" then
