@@ -64,8 +64,48 @@ Opencode stores files under
 ```
 ~/.local/state/opencode
 ~/.local/share/opencode
-~/.config/opencode
+~/.config/opencode
 ```
+
+## Favorite Models
+
+OpenCode does not currently support declaring favorite models in `opencode.json`.
+
+- Use `opencode.json` to set the default startup model.
+- Use `tui.json` to bind favorite cycling keys.
+- Use the TUI model picker to mark models as favorites.
+
+### Recommended setup
+
+Set a default model in `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "azure-openai/gpt-5-4"
+}
+```
+
+Bind left and right to cycle favorite models in `tui.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "keybinds": {
+    "model_cycle_favorite": "<leader>right",
+    "model_cycle_favorite_reverse": "<leader>left"
+  }
+}
+```
+
+### How to add favorites
+
+1. Open OpenCode.
+2. Run `/models`.
+3. Highlight the model you want in the rotation.
+4. Press `Ctrl+F` to toggle it as a favorite.
+
+Favorite models are stored by OpenCode in local TUI state, not in `opencode.json`.
 
 ## Dual Mode Models (Plan vs. Build)
 
