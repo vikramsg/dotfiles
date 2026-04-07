@@ -279,6 +279,61 @@ local function rename_current_file()
 	})
 end
 
+---Returns true when any segment in the given path is a dot-prefixed name.
+---@param path string
+---@return boolean
+local function path_has_hidden_segment(path)
+	local normalized = vim.fs.normalize(path)
+	for segment in normalized:gmatch("[^/]+") do
+		if segment ~= "." and segment ~= ".." and segment:sub(1, 1) == "." then
+			return true
+		end
+	end
+	return false
+end
+
+---Ensures the explorer is rooted correctly, opens the file path in the tree, and reveals it.
+---@param picker snacks.Picker
+---@param file string
+local function reveal_file_in_explorer(picker, file)
+	local actions = require("snacks.explorer.actions")
+	local tree = require("snacks.explorer.tree")
+	if not tree:in_cwd(picker:cwd(), file) then
+		picker:set_cwd(vim.fs.dirname(file))
+	end
+	tree:open(file)
+	actions.update(picker, { target = file, refresh = true })
+end
+
+---Reveals the current buffer's file in the explorer and unhides hidden paths when required.
+local function reveal_current_file_in_explorer()
+	local file = vim.fs.normalize(vim.fn.expand("%:p"))
+	if file == "" then
+		Snacks.explorer()
+		return
+	end
+
+	local reveal_hidden = path_has_hidden_segment(file)
+	local explorer = Snacks.picker.get({ source = "explorer" })[1]
+
+	if explorer then
+		if reveal_hidden and not explorer.opts.hidden then
+			explorer.opts.hidden = true
+			explorer.list:set_target()
+			explorer:find()
+		end
+		reveal_file_in_explorer(explorer, file)
+		return
+	end
+
+	Snacks.explorer({
+		hidden = reveal_hidden,
+		on_show = function(picker)
+			reveal_file_in_explorer(picker, file)
+		end,
+	})
+end
+
 require("lazy").setup({
 	{
 		"folke/snacks.nvim",
@@ -477,9 +532,7 @@ require("lazy").setup({
 			},
 			{
 				"<leader>E",
-				function()
-					Snacks.explorer({ reveal_file = vim.fn.expand("%:p") })
-				end,
+				reveal_current_file_in_explorer,
 				desc = "Reveal Explorer",
 			},
 			{
