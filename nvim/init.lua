@@ -30,7 +30,7 @@
 --   <leader>rF : Rename current file with LSP updates
 --   In Diffview (working tree / file history):
 --     <C-j> / <C-k> : Move between bottom panel and diff splits
---     do : Diff Obtain (Pull hunk from other split to revert/stage)
+--     do : Restore current hunk from the other split into this one (Diff Obtain / diffget)
 --     X  : Restore file (in file panel)
 --
 -- Local Code Review (quickfix-review.nvim):
