@@ -44,39 +44,6 @@ Requirements:
 - Include edge-case handling points if they matter
 ```
 
-```mermaid
-<MANDATORY Mermaid diagram>
-
-Requirements:
-- Always include this Mermaid diagram
-- Use it only to improve clarity, not as filler
-- When a node represents a function, method, hook, component, API handler, service, presenter, repository method, or other callable unit, include the full file path in brackets in the node label
-- Example node labels:
-  - ProjectsTable[src/features/queue-intelligence-project/components/ProjectsTable.tsx]
-  - getByDerIds[src/entities/queue/server/queueLatestRepository.ts]
-  - projectAnalyticsService[src/features/queue-intelligence-project/server/projectAnalyticsService.ts]
-- Prefer flowchart or sequence diagram depending on the change
-- Show end-to-end data flow across client/server/storage layers when relevant
-```
-
----
-
-## Impact Matrix
-
-<Add a reviewer-oriented table ordered by importance, highest-risk files first.>
-
-| File / Domain | Change Type | Impact / Purpose | Risk |
-| :--- | :--- | :--- | :--- |
-| `<path>` | `<feature/refactor/test/contract/ui/etc>` | `<why this file matters>` | `<High/Medium/Low>` |
-
-Guidance:
-- Include both production and test files
-- Order by reviewer importance, not alphabetically
-- Call out deleted files or ownership moves explicitly
-- Mention unchanged-but-regression-sensitive files when important
-
----
-
 ## Acceptance Scenarios (BDD)
 
 ### Scenario 1: <user-visible or system-critical behavior>
@@ -97,6 +64,37 @@ Guidance:
 - Prefer user-visible outcomes and architecture-critical invariants
 - Include regression scenarios when preserving existing behavior matters
 - Cover edge cases and null/empty/fallback behavior where relevant
+
+---
+
+## Impact Matrix
+
+<Add a reviewer-oriented table ordered by importance, highest-risk files first.>
+
+| File / Domain | Change Type | Impact / Purpose | Risk |
+| :--- | :--- | :--- | :--- |
+| `<path>` | `<feature/refactor/test/contract/ui/etc>` | `<why this file matters>` | `<High/Medium/Low>` |
+
+Guidance:
+- Include both production and test files
+- Order by reviewer importance, not alphabetically
+- Call out deleted files or ownership moves explicitly
+- Mention unchanged-but-regression-sensitive files when important
+
+---
+
+## Patterns to Follow
+
+<The type of patterns to follow for code, for example, layer rules, how to isolate/denote private fns, how to use types etc>
+1. 
+```python
+<this is the type of pattern I will follow if there is python code>
+```
+
+2.
+```javascript
+<this is the type of pattern I will follow if there was javascript code>
+```
 
 ---
 
