@@ -36,7 +36,10 @@ Put special emphasis on
 
 You must look for:
 - correctness and contract drift
-- best practices violations
+- best practices violations especially layer violations.
+    - outer layer should import inner layer not the other way round.
+    - No cross layer imports.
+    - IO like DB calls or blob storage access etc should only happen at the outermost layers.
 - needless fallback logic or defensive branches that should not exist
 - over-mocked tests or tests that avoid the real integration boundary being changed
 - missing regression coverage
