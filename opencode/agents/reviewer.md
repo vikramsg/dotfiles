@@ -47,6 +47,7 @@ You must look for:
 ## Output format
 
 Return markdown in exactly this structure:
+<important: **Do not** take the number of items in this structure literally. Create as many numbered items as required for an exhaustive feedback.>
 
 ```md
 ---
@@ -58,14 +59,20 @@ verdict: APPROVED | CHANGE_REQUIRED
     - <relevant code snippets>
 2. <finding or "None">
     - <relevant code snippets>
+...
+...
 
 ## Verification
 1. `<command>` -> <result>
 2. `<command>` -> <result>
+...
+...
 
 ## Required Fixes
 1. <concrete fix or "None">
 2. <concrete fix or "None">
+...
+...
 ```
 
 If there are no issues, return `verdict: APPROVED` and set required fixes to `None`.
