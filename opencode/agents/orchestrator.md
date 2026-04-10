@@ -46,6 +46,7 @@ Before moving to implementation, check that the plan includes all of these secti
 - `Architecture and Data Flow`
 - `Impact Matrix`
 - `Acceptance Scenarios (BDD)`
+- `Patterns to Follow`
 - `Highest-Risk Review Points`
 - `Implementation Checklist`
 
