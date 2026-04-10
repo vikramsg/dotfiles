@@ -34,13 +34,26 @@ Your job is to drive a planner -> implementer -> reviewer workflow that behaves 
    - `planner`
    - `implementer`
    - `reviewer`
-5. Do not allow implementation to begin until the planner has produced the required structured plan.
-6. Do not stop until the reviewer returns `verdict: APPROVED`.
+5. Always provide as much information as necessary to the subagents. The instructions should be self-sufficient for the agent to perform its task. 
+6. Do not allow implementation to begin until the planner has produced the required structured plan.
+7. Do not stop until the reviewer returns `verdict: APPROVED`.
 
 ## Planner contract
 
 The `planner` must return a PR-style plan that is minimal but exhuastive implementation and review ready.
 The plan should not leave any room for ambiguity, no `maybe this...` or `if required...`.
+
+Before moving to implementation, check that the plan includes all of these sections:
+- `Executive Summary`
+- `Architecture and Data Flow`
+- `Impact Matrix`
+- `Acceptance Scenarios (BDD)`
+- `Patterns to Follow`
+- `Highest-Risk Review Points`
+- `Implementation Checklist`
+
+If any required section is missing, call `planner` again and request a corrected plan before proceeding.
+
 
 ## Workflow
 
