@@ -271,6 +271,9 @@ local function toggle_snacks_explorer_width(picker)
 	picker:set_layout(layout)
 end
 
+---Persist the explorer hidden filter on both live and initial picker state.
+---Snacks rebuilds explorer items from `opts` during the current session and from
+---`init_opts` during follow-up refreshes/navigation, so both need to match.
 ---@param picker snacks.Picker
 ---@param hidden boolean
 local function set_snacks_explorer_hidden(picker, hidden)
@@ -280,6 +283,9 @@ local function set_snacks_explorer_hidden(picker, hidden)
 	end
 end
 
+---Persist the explorer ignored filter alongside the hidden toggle state.
+---This repo keeps `.agents/tasks` git-ignored, so showing hidden directories
+---without also unhiding ignored descendants leaves expanded hidden folders empty.
 ---@param picker snacks.Picker
 ---@param ignored boolean
 local function set_snacks_explorer_ignored(picker, ignored)
@@ -289,6 +295,9 @@ local function set_snacks_explorer_ignored(picker, ignored)
 	end
 end
 
+---Toggle the explorer between normal view and "show everything" mode.
+---The `.` mapping needs to flip both hidden and ignored filters so expanding a
+---hidden directory continues to show nested ignored children like `.agents/tasks`.
 ---@param picker snacks.Picker
 local function toggle_snacks_explorer_hidden(picker)
 	local show_all = not picker.opts.hidden
