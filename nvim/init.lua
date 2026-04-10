@@ -271,6 +271,32 @@ local function toggle_snacks_explorer_width(picker)
 	picker:set_layout(layout)
 end
 
+---@param picker snacks.Picker
+---@param hidden boolean
+local function set_snacks_explorer_hidden(picker, hidden)
+	picker.opts.hidden = hidden
+	if picker.init_opts then
+		picker.init_opts.hidden = hidden
+	end
+end
+
+---@param picker snacks.Picker
+---@param ignored boolean
+local function set_snacks_explorer_ignored(picker, ignored)
+	picker.opts.ignored = ignored
+	if picker.init_opts then
+		picker.init_opts.ignored = ignored
+	end
+end
+
+---@param picker snacks.Picker
+local function toggle_snacks_explorer_hidden(picker)
+	local show_all = not picker.opts.hidden
+	set_snacks_explorer_hidden(picker, show_all)
+	set_snacks_explorer_ignored(picker, show_all)
+	require("snacks.explorer.actions").update(picker, { refresh = true })
+end
+
 local function rename_current_file()
 	Snacks.rename.rename_file({
 		on_rename = function()
@@ -318,7 +344,7 @@ local function reveal_current_file_in_explorer()
 
 	if explorer then
 		if reveal_hidden and not explorer.opts.hidden then
-			explorer.opts.hidden = true
+			set_snacks_explorer_hidden(explorer, true)
 			explorer.list:set_target()
 			explorer:find()
 		end
@@ -344,6 +370,7 @@ require("lazy").setup({
 			-- `snacks.picker.actions` table, so custom picker actions need to be
 			-- registered there before the explorer is opened.
 			require("snacks.picker.actions").toggle_explorer_width = toggle_snacks_explorer_width
+			require("snacks.picker.actions").toggle_explorer_hidden = toggle_snacks_explorer_hidden
 			require("snacks").setup(opts)
 		end,
 		opts = {
@@ -354,7 +381,7 @@ require("lazy").setup({
 						win = {
 							list = {
 								keys = {
-									["."] = "toggle_hidden",
+									["."] = "toggle_explorer_hidden",
 									["e"] = "toggle_explorer_width",
 									["gf"] = "explorer_focus",
 								},
@@ -380,7 +407,7 @@ require("lazy").setup({
 				win = {
 					list = {
 						keys = {
-							["."] = "toggle_hidden",
+							["."] = "toggle_explorer_hidden",
 							["Y"] = "yank_filename",
 							["e"] = "toggle_explorer_width",
 							["gf"] = "explorer_focus",
@@ -1363,20 +1390,22 @@ require("lazy").setup({
 		config = function()
 			local cwd = vim.fn.getcwd()
 			local branch = vim.fn.system("git rev-parse --abbrev-ref HEAD 2>/dev/null"):gsub("%s+", "")
-			if branch == "" then branch = "no-branch" end
-			
+			if branch == "" then
+				branch = "no-branch"
+			end
+
 			local review_dir = vim.fn.stdpath("data") .. cwd .. "/" .. branch
 			vim.fn.mkdir(review_dir, "p") -- Ensure the directory structure exists
 
 			require("quickfix-review").setup({
-				-- Reviews are stored locally on your machine 
+				-- Reviews are stored locally on your machine
 				storage_file = vim.fn.stdpath("data") .. "/quickfix-review.json",
-				
+
 				-- NOTE: This export path is evaluated statically at Neovim startup.
-				-- Possible issue: If you switch git branches while this Neovim instance 
+				-- Possible issue: If you switch git branches while this Neovim instance
 				-- is running, reviews will still be saved to the original branch's review.md file.
 				export_file = review_dir .. "/review.md",
-				
+
 				keymaps = {
 					-- Custom <leader>r mappings
 					add_comment_cycle = "<leader>ra",
@@ -1413,15 +1442,15 @@ require("lazy").setup({
 
 				-- Force export to ensure the file is up to date
 				require("quickfix-review").export_review()
-				
+
 				-- Open the markdown file in a new tabpage to avoid breaking Diffview's layout
 				local export_file = require("quickfix-review").config.options.export_file
 				vim.cmd("tabedit " .. vim.fn.fnameescape(export_file))
-				
+
 				-- Set a buffer-local keymap on 'q' to close the tab and go back
-				vim.keymap.set("n", "q", "<cmd>tabclose<CR>", { 
-					buffer = true, 
-					desc = "Close review file and go back" 
+				vim.keymap.set("n", "q", "<cmd>tabclose<CR>", {
+					buffer = true,
+					desc = "Close review file and go back",
 				})
 			end, { desc = "View exported Review Markdown" })
 		end,
