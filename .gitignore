@@ -10,3 +10,6 @@ __pycache__
 
 # Worktree
 .worktrees
+
+# Agent artifacts
+.agents/tasks

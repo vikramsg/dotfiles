@@ -60,9 +60,11 @@ opencode:
     ln -sfn {{justfile_directory()}}/opencode/tui.json ~/.config/opencode/tui.json
     ln -sfn {{justfile_directory()}}/opencode/agents ~/.config/opencode/agents
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
+    ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
     @echo "Opencode agent directory symlinked to ~/.config/opencode/agents"
     @echo "Opencode commands directory symlinked to ~/.config/opencode/commands"
+    @echo "Opencode plugins directory symlinked to ~/.config/opencode/plugins"
 
 
 # Set up Ghostty symlink

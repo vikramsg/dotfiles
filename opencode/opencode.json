@@ -39,7 +39,7 @@
       }
     }
   },
-  "plugin": ["opencode-websearch-cited@1.2.0"],
+  "plugin": ["opencode-websearch-cited@1.2.0", "./plugins/orchestration-state.js"],
   "lsp": false,
   "formatter": false,
   "provider": {
