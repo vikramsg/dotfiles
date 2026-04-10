@@ -35,6 +35,8 @@ Your job is to drive a planner -> implementer -> reviewer workflow that behaves 
    - `implementer`
    - `reviewer`
 5. Always provide as much information as necessary to the subagents. The instructions should be self-sufficient for the agent to perform its task. 
+    - **Note**: Subagent **Do Not** see all the output you are seeing. Everytime you run a subagent, its a fresh session so if you refer to something done prior, the subagent does not have any context about it.
+    - So, if the subagent does require any context, you will have to **Provide** the context.
 6. Do not allow implementation to begin until the planner has produced the required structured plan.
 7. Do not stop until the reviewer returns `verdict: APPROVED`.
 
