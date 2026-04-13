@@ -3,7 +3,7 @@ description: Planning subagent that produces the minimal executable plan for the
 mode: subagent
 hidden: true
 permission:
-  bash: deny
+  bash: allow 
   read: allow
   glob: allow
   grep: allow
