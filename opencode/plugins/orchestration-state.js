@@ -129,7 +129,7 @@ function requireSessionID(sessionID) {
 }
 
 function resolveSessionID(input) {
-  return requireSessionID(input?.sessionID ?? input?.sessionId)
+  return requireSessionID(input?.sessionID)
 }
 
 function toSessionRunId(sessionID) {

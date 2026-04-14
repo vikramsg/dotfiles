@@ -134,6 +134,26 @@ test("command.execute.before normalizes quoted requests", async () => {
   assert.equal(state.requestPreview, "quoted request body")
 })
 
+test("command.execute.before rejects wrong-cased sessionId", async () => {
+  const worktree = makeWorkspace()
+  const hooks = await loadHooks(worktree)
+
+  await assert.rejects(
+    () =>
+      hooks["command.execute.before"](
+        {
+          command: "orchestrate",
+          sessionId: "wrong-case",
+          arguments: "request",
+        },
+        { parts: [] },
+      ),
+    /requires a non-empty sessionID/,
+  )
+
+  assert.equal(fs.existsSync(path.join(worktree, ".agents", "tasks")), false)
+})
+
 test("tool.execute.after persists planner, implementer, and reviewer task outputs", async () => {
   const worktree = makeWorkspace()
   const hooks = await loadHooks(worktree)
