@@ -1,3 +1,28 @@
+/**
+ * Resume means a later orchestrate call in the same OpenCode session reuses the
+ * exact persisted session folder under `.agents/tasks/<session-key>`.
+ * Attach means a task result writes artifacts and state updates only into the
+ * persisted folder mapped to the current OpenCode session ID.
+ *
+ * BDD scenarios:
+ * - Given no persisted folder for session S1, when orchestrate runs for S1,
+ *   then `.agents/tasks/<session-key(S1)>` is created with `request.md`,
+ *   `state.json`, and `index.json`, and the context says `Mode: create.`
+ * - Given a persisted folder for session S1, when orchestrate runs again for
+ *   S1, then the plugin resumes that same folder and preserves `request.md`.
+ * - Given a persisted folder for session S1, when orchestrate runs for S2 in
+ *   the same worktree, then `.agents/tasks/<session-key(S2)>` is created and
+ *   the S1 folder is not mutated.
+ * - Given persisted folders for S1 and S2, when planner, implementer, or
+ *   reviewer task output arrives for S2, then artifacts and state updates are
+ *   written only inside `.agents/tasks/<session-key(S2)>`.
+ * - Given a session ID with spaces or path-like characters, when the plugin
+ *   derives a folder name, then the mapping is deterministic, filesystem-safe,
+ *   and distinct from other session IDs.
+ * - Given a terminal persisted state for S1, when orchestrate runs again for
+ *   S1, then the plugin still resumes `.agents/tasks/<session-key(S1)>`
+ *   instead of creating another folder.
+ */
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
@@ -12,8 +37,6 @@ const ARTIFACT_FILES = {
   reviewer: "review.md",
 }
 
-const TERMINAL_PHASES = new Set(["complete", "completed", "failed", "cancelled"])
-const TERMINAL_STATUSES = new Set(["complete", "completed", "failed", "cancelled"])
 const REVIEWER_VERDICTS = new Set(["APPROVED", "CHANGE_REQUIRED"])
 
 function nowISO() {
@@ -97,6 +120,22 @@ function normalizeDirectory(value) {
   return typeof value === "string" && value.trim() ? value : null
 }
 
+function requireSessionID(sessionID) {
+  if (typeof sessionID !== "string" || !sessionID.trim()) {
+    throw new Error("OrchestrationStatePlugin requires a non-empty sessionID")
+  }
+
+  return sessionID
+}
+
+function resolveSessionID(input) {
+  return requireSessionID(input?.sessionID ?? input?.sessionId)
+}
+
+function toSessionRunId(sessionID) {
+  return `session-${Buffer.from(requireSessionID(sessionID), "utf8").toString("base64url")}`
+}
+
 function resolveWorktreeDirectory(context) {
   const resolved = normalizeDirectory(context?.directory) || normalizeDirectory(context?.worktree)
   if (!resolved) {
@@ -154,26 +193,6 @@ function collectRunStates(rootDir) {
     })
 }
 
-function isTerminalState(state) {
-  const phase = String(state?.phase || "").toLowerCase()
-  const status = String(state?.status || "").toLowerCase()
-  return TERMINAL_PHASES.has(phase) || TERMINAL_STATUSES.has(status)
-}
-
-function findLatestRun(rootDir, { worktree, includeTerminal = false }) {
-  const runs = collectRunStates(rootDir).filter((state) => {
-    if (state.worktree !== worktree) {
-      return false
-    }
-    if (!includeTerminal && isTerminalState(state)) {
-      return false
-    }
-    return true
-  })
-
-  return runs.at(-1) || null
-}
-
 function buildIndex(rootDir) {
   return {
     updatedAt: nowISO(),
@@ -193,10 +212,6 @@ function buildIndex(rootDir) {
 function rebuildIndex(rootDir) {
   ensureDirectory(rootDir)
   writeJsonFile(path.join(rootDir, INDEX_FILE), buildIndex(rootDir))
-}
-
-function makeRunId() {
-  return `${new Date().toISOString().replace(/[\-:.TZ]/g, "").slice(0, 14)}-${crypto.randomBytes(4).toString("hex")}`
 }
 
 function previewText(text, limit = 240) {
@@ -280,7 +295,8 @@ function buildRunContext(state, mode) {
   const summary = [
     "Persistent orchestration state is enabled for this run.",
     `Mode: ${mode}.`,
-    `Run ID: ${state.runId}`,
+    `Session ID: ${state.sessionID}`,
+    `Session folder: .agents/tasks/${state.runId}`,
     `Authoritative state: .agents/tasks/${state.runId}/state.json`,
     `Request: .agents/tasks/${state.runId}/request.md`,
     `Plan: .agents/tasks/${state.runId}/plan.md`,
@@ -365,7 +381,8 @@ function persistTaskResult(worktree, input, output) {
   }
 
   const rootDir = getTasksRoot(worktree)
-  const activeRun = findLatestRun(rootDir, { worktree })
+  const runId = toSessionRunId(resolveSessionID(input))
+  const activeRun = readRunState(rootDir, runId)
   if (!activeRun) {
     return null
   }
@@ -375,7 +392,7 @@ function persistTaskResult(worktree, input, output) {
   const outputText = normalizeText(output.output)
   const verdict = role === "reviewer" ? parseReviewerVerdict(outputText) : null
 
-  return commitRunMutation(rootDir, activeRun.runId, (state) => ({
+  return commitRunMutation(rootDir, runId, (state) => ({
     files: {
       [artifactFile]: outputText,
     },
@@ -412,14 +429,16 @@ export async function OrchestrationStatePlugin(context) {
       }
 
       const rootDir = getTasksRoot(worktree)
+      const sessionID = resolveSessionID(input)
+      const runId = toSessionRunId(sessionID)
       const requestText = normalizeRequestText(input.arguments)
-      const resumableRun = findLatestRun(rootDir, { worktree })
+      const resumableRun = readRunState(rootDir, runId)
 
       let state
       let mode
       if (resumableRun) {
         mode = "resume"
-        state = commitRunMutation(rootDir, resumableRun.runId, (currentState) => {
+        state = commitRunMutation(rootDir, runId, (currentState) => {
           const timestamp = nowISO()
           return {
             state: {
@@ -432,14 +451,13 @@ export async function OrchestrationStatePlugin(context) {
         })
       } else {
         mode = "create"
-        const runId = makeRunId()
         state = commitRunMutation(rootDir, runId, () => ({
           files: {
             [REQUEST_FILE]: requestText,
           },
           state: createInitialState({
             runId,
-            sessionID: input.sessionID,
+            sessionID,
             worktree,
             requestText,
           }),
@@ -458,3 +476,5 @@ export async function OrchestrationStatePlugin(context) {
     },
   }
 }
+
+export default OrchestrationStatePlugin
