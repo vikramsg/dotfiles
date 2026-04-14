@@ -39,7 +39,10 @@
       }
     }
   },
-  "plugin": ["opencode-websearch-cited@1.2.0", "./plugins/orchestration-state.js"],
+  "plugin": [
+    "opencode-websearch-cited@1.2.0",
+    "./plugins/orchestration-state.js"
+  ],
   "lsp": false,
   "formatter": false,
   "provider": {
@@ -56,17 +59,17 @@
         "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1"
       },
       "models": {
-        "gpt-5-4": {
-          "id": "gpt-5-4",
-          "name": "gpt-5-4",
+        "gpt-5.4": {
+          "id": "gpt-5.4",
+          "name": "gpt-5.4",
           "modalities": {
             "input": ["text", "image", "pdf"],
             "output": ["text"]
           }
         },
-        "gpt-5-3-codex": {
-          "id": "gpt-5-3-codex",
-          "name": "gpt-5-3-codex",
+        "gpt-5.3-codex": {
+          "id": "gpt-5.3-codex",
+          "name": "gpt-5.3-codex",
           "modalities": {
             "input": ["text", "image"],
             "output": ["text"]
