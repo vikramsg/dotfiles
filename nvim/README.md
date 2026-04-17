@@ -61,10 +61,11 @@ To update binaries, try doing `:Mason` inside Neovim and doing `U`.
 
 Headless Neovim tests live in `nvim/tests`.
 
-Run them with:
+From the repo root, run them with:
 
 ```sh
-cd /home/vikram_orbio_earth/personal/dotfiles/nvim && nvim --headless -u "/home/vikram_orbio_earth/personal/dotfiles/nvim/init.lua" "+lua require('tests.run').run()" +qa
+cd nvim
+nvim --headless -u init.lua "+lua require('tests.run').run()" +qa
 ```
 
 The Diffview picker spec opens a real temporary git repo, launches `:DiffviewOpen`, opens `:DiffviewPicker`, and asserts the Snacks picker items and confirmation handoff stay backed by the live Diffview session.

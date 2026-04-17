@@ -1278,23 +1278,10 @@ require("lazy").setup({
 			end
 
 			local function get_diffview_picker_files(view)
-				if not (view and view.panel) then
-					return {}
-				end
-
 				return view.panel:ordered_file_list()
 			end
 
 			local function get_diffview_review_winid(view)
-				local current_winid = vim.api.nvim_get_current_win()
-				if view.cur_layout and view.cur_layout.windows then
-					for _, win in ipairs(view.cur_layout.windows) do
-						if win.id == current_winid and vim.api.nvim_win_is_valid(win.id) then
-							return win.id
-						end
-					end
-				end
-
 				if view.cur_layout then
 					local main_win = view.cur_layout:get_main_win()
 					if main_win and main_win.id and vim.api.nvim_win_is_valid(main_win.id) then
