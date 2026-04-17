@@ -18,13 +18,13 @@
       "~/go/**": "allow"
     },
     "glob": {
-      "*.local/**": "allow",
+      "~/.local/**": "allow",
       "~/.cache/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"
     },
     "grep": {
-      "*.local/**": "allow",
+      "~/.local/**": "allow",
       "~/.cache/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"

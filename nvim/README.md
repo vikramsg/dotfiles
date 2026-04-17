@@ -57,6 +57,18 @@ Nvim LSP binaries are controlled by `Mason`.
 Binaries are installed at `~/.local/share/nvim/mason/bin`.
 To update binaries, try doing `:Mason` inside Neovim and doing `U`.
 
+## Tests
+
+Headless Neovim tests live in `nvim/tests`.
+
+Run them with:
+
+```sh
+cd /home/vikram_orbio_earth/personal/dotfiles/nvim && nvim --headless -u "/home/vikram_orbio_earth/personal/dotfiles/nvim/init.lua" "+lua require('tests.run').run()" +qa
+```
+
+The Diffview picker spec opens a real temporary git repo, launches `:DiffviewOpen`, opens `:DiffviewPicker`, and asserts the Snacks picker items and confirmation handoff stay backed by the live Diffview session.
+
 ## Remote issues
 
 1. `ruff`
@@ -109,4 +121,3 @@ Go look at some of the settings [here](https://github.com/nvim-lua/kickstart.nvi
     - Always need to press esc twice now
 2. Make `Cmd + p` work to show recent files. 
 3. Make all files open show up as tabs. 
-

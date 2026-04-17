@@ -55,6 +55,8 @@ Call `planner` first.
 
 Provide:
 - the original user request
+    - **Note**: Always make sure the planner has full context
+    - For eg. if the user says `make the changes` or any other such statement based on a discussion, just passing on the user request is not helpful. Provide a detailed summary so that the request is self-sufficient. 
 - any prior reviewer feedback
 - the requirement that the plan stay minimal, executable, and implementation ready
 - the requirement that verification is planned before implementation

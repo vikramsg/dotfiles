@@ -21,6 +21,7 @@
 -- Git (Diffview & LazyGit):
 --   <leader>gs : Open Diffview (against index/HEAD)
 --   <leader>gm : Open Diffview (against main or master branch)
+--   <leader>gp : Pick a file in the active Diffview
 --   <leader>gb : Show Git blame for current line
 --   <leader>gS : Close Diffview & cleanup buffers
 --   <leader>gM : Close Diffview & cleanup buffers
@@ -1262,6 +1263,106 @@ require("lazy").setup({
 				})
 			end
 
+			local function get_current_diffview_view()
+				local ok, lib = pcall(require, "diffview.lib")
+				if not ok then
+					return nil, "Diffview is unavailable"
+				end
+
+				local view = lib.get_current_view()
+				if not (view and view.panel) then
+					return nil, "No active Diffview view"
+				end
+
+				return view
+			end
+
+			local function get_diffview_picker_files(view)
+				if not (view and view.panel) then
+					return {}
+				end
+
+				return view.panel:ordered_file_list()
+			end
+
+			local function get_diffview_review_winid(view)
+				local current_winid = vim.api.nvim_get_current_win()
+				if view.cur_layout and view.cur_layout.windows then
+					for _, win in ipairs(view.cur_layout.windows) do
+						if win.id == current_winid and vim.api.nvim_win_is_valid(win.id) then
+							return win.id
+						end
+					end
+				end
+
+				if view.cur_layout then
+					local main_win = view.cur_layout:get_main_win()
+					if main_win and main_win.id and vim.api.nvim_win_is_valid(main_win.id) then
+						return main_win.id
+					end
+				end
+			end
+
+			local function focus_diffview_review_win(view, winid)
+				if winid and vim.api.nvim_win_is_valid(winid) then
+					vim.api.nvim_set_current_win(winid)
+					return
+				end
+
+				if view and view.cur_layout then
+					local main_win = view.cur_layout:get_main_win()
+					if main_win and main_win.id and vim.api.nvim_win_is_valid(main_win.id) then
+						vim.api.nvim_set_current_win(main_win.id)
+					end
+				end
+			end
+
+			local function open_diffview_picker()
+				local view, err = get_current_diffview_view()
+				if not view then
+					vim.notify(err, vim.log.levels.WARN)
+					return
+				end
+
+				local files = get_diffview_picker_files(view)
+				if #files == 0 then
+					vim.notify("No files in the active Diffview", vim.log.levels.WARN)
+					return
+				end
+
+				local review_winid = get_diffview_review_winid(view)
+				Snacks.picker({
+					source = "diffview_picker",
+					title = "Diffview Files",
+					layout = { preset = "select" },
+					finder = function()
+						return vim.tbl_map(function(file)
+							return {
+								text = file.path,
+								path = file.path,
+								file = file.absolute_path,
+								diffview_file = file,
+							}
+						end, files)
+					end,
+					actions = {
+						confirm = function(picker, item)
+							picker:close()
+							if not (item and item.diffview_file) then
+								return
+							end
+
+							vim.schedule(function()
+								view:set_file(item.diffview_file, false, true)
+								vim.schedule(function()
+									focus_diffview_review_win(view, review_winid)
+								end)
+							end)
+						end,
+					},
+				})
+			end
+
 			---Shorten a slash-separated path by keeping the filename and N parent directories,
 			---while reducing earlier directories to a single character.
 			---@param path string
@@ -1358,6 +1459,7 @@ require("lazy").setup({
 
 			-- Open Diffview (against index/HEAD)
 			vim.keymap.set("n", "<leader>gs", "<cmd>DiffviewOpen<CR>", { desc = "Git status (Diffview)" })
+			vim.keymap.set("n", "<leader>gp", open_diffview_picker, { desc = "Pick Diffview file" })
 
 			-- Open Diffview against main or master branch
 			vim.keymap.set("n", "<leader>gm", function()
@@ -1390,6 +1492,10 @@ require("lazy").setup({
 
 			-- Close current file history
 			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewClose<CR>", { desc = "Close Git history view" })
+
+			vim.api.nvim_create_user_command("DiffviewPicker", open_diffview_picker, {
+				desc = "Pick a file from the active Diffview",
+			})
 		end,
 	},
 
