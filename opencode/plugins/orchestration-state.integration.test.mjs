@@ -248,40 +248,25 @@ test(
 )
 
 test(
-  "real OpenCode run creates separate persisted runs across CLI invocations",
+  "real OpenCode run resumes the same nonterminal persisted run across CLI invocations",
   { timeout: 120000 },
   async () => {
     const tempHome = makeHome()
     installOpencodeConfig(tempHome)
     const worktree = makeWorkspace()
-    const request1 = "persistent state smoke 1"
-    const request2 = "persistent state smoke 2"
 
-    assertRunSucceeded(runOrchestrate(worktree, request1, tempHome))
-    assertRunSucceeded(runOrchestrate(worktree, request2, tempHome))
+    assertRunSucceeded(runOrchestrate(worktree, "persistent state smoke 1", tempHome))
+    assertRunSucceeded(runOrchestrate(worktree, "persistent state smoke 2", tempHome))
 
     const tasksRoot = path.join(worktree, ".agents", "tasks")
     const runIds = fs.readdirSync(tasksRoot).filter((entry) => entry !== "index.json")
 
-    assert.equal(runIds.length, 2)
+    assert.equal(runIds.length, 1)
 
-    const persistedRuns = runIds
-      .map((runId) => {
-        const runDir = path.join(tasksRoot, runId)
-        return {
-          runId,
-          request: fs.readFileSync(path.join(runDir, "request.md"), "utf8"),
-          state: JSON.parse(fs.readFileSync(path.join(runDir, "state.json"), "utf8")),
-        }
-      })
-      .sort((left, right) => left.request.localeCompare(right.request))
+    const runId = runIds[0]
+    const state = JSON.parse(fs.readFileSync(path.join(tasksRoot, runId, "state.json"), "utf8"))
 
-    assert.equal(persistedRuns[0].request, `${request1}\n`)
-    assert.equal(persistedRuns[1].request, `${request2}\n`)
-    assert.equal(persistedRuns[0].state.runId, persistedRuns[0].runId)
-    assert.equal(persistedRuns[1].state.runId, persistedRuns[1].runId)
-    assert.equal(typeof persistedRuns[0].state.sessionID, "string")
-    assert.equal(typeof persistedRuns[1].state.sessionID, "string")
-    assert.notEqual(persistedRuns[0].state.sessionID, persistedRuns[1].state.sessionID)
+    assert.equal(state.runId, runId)
+    assert.equal(state.resumeCount, 1)
   },
 )

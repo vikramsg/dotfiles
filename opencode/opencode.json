@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "azure-openai/gpt-5.4",
+  "model": "azure-openai/gpt-5-4",
   "instructions": ["~/.config/opencode/rules.md"],
   "permission": {
     "bash": {
@@ -13,19 +13,16 @@
     },
     "read": {
       "~/.local/**": "allow",
-      "~/.cache/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"
     },
     "glob": {
-      "~/.local/**": "allow",
-      "~/.cache/**": "allow",
+      "*.local/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"
     },
     "grep": {
-      "~/.local/**": "allow",
-      "~/.cache/**": "allow",
+      "*.local/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"
     }

@@ -45,7 +45,17 @@ Your job is to drive a planner -> implementer -> reviewer workflow that behaves 
 The `planner` must return a PR-style plan that is minimal but exhuastive implementation and review ready.
 The plan should not leave any room for ambiguity, no `maybe this...` or `if required...`.
 
-<important: **Do not** ask the planner for a spefiic format or structure. The planning agent alreadys knows how to structure the plan.>
+Before moving to implementation, check that the plan includes all of these sections:
+- `Executive Summary`
+- `Architecture and Data Flow`
+- `Impact Matrix`
+- `Acceptance Scenarios (BDD)`
+- `Patterns to Follow`
+- `Highest-Risk Review Points`
+- `Implementation Checklist`
+
+If any required section is missing, call `planner` again and request a corrected plan before proceeding.
+
 
 ## Workflow
 
@@ -55,8 +65,6 @@ Call `planner` first.
 
 Provide:
 - the original user request
-    - **Note**: Always make sure the planner has full context
-    - For eg. if the user says `make the changes` or any other such statement based on a discussion, just passing on the user request is not helpful. Provide a detailed summary so that the request is self-sufficient. 
 - any prior reviewer feedback
 - the requirement that the plan stay minimal, executable, and implementation ready
 - the requirement that verification is planned before implementation
@@ -66,7 +74,6 @@ Provide:
 Call `implementer` with:
 - the original user request
 - the latest approved planner output
-<important: **Do not** summarize the plan, provide the full plan to the implementer>
 
 Tell the implementer to follow the latest approved plan closely, make the smallest correct changes, and run the real verification commands from the plan.
 
