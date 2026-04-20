@@ -33,6 +33,8 @@ You do not implement code.
 4. If reviewer feedback exists, incorporate it explicitly.
 5. Include real verification commands the implementer and reviewer should run.
 6. Prefer verification-first guidance: confirm failing tests or checks before implementation, then rerun targeted and broad verification after the change.
+    - Don't abuse TDD. Do not write unnecessary verifications like tests on docstrings or code comments. 
+    - Tests are for behaviour changes.
 7. Do not drop required sections, diagrams, or review guidance even when the plan is short.
 
 ## Output format

@@ -1304,46 +1304,265 @@ require("lazy").setup({
 				end
 			end
 
+			local function run_git_command(args, cwd, ok_codes)
+				local result = vim.system(vim.list_extend({ "git" }, args), {
+					cwd = cwd,
+					text = true,
+				}):wait()
+				local allowed_codes = ok_codes or { 0 }
+
+				for _, code in ipairs(allowed_codes) do
+					if result.code == code then
+						return result
+					end
+				end
+
+				return nil, vim.trim(result.stderr or result.stdout or "")
+			end
+
+			local function split_nonempty_lines(text)
+				if not text or text == "" then
+					return {}
+				end
+
+				return vim.split(vim.trim(text), "\n", { plain = true, trimempty = true })
+			end
+
+			local function resolve_git_toplevel()
+				local result, err = run_git_command({ "rev-parse", "--show-toplevel" }, vim.fn.getcwd())
+				if not result then
+					return nil, err ~= "" and err or "Not in a git repository"
+				end
+
+				return vim.fs.normalize(vim.trim(result.stdout or ""))
+			end
+
+			local function resolve_base_ref(repo_root)
+				for _, ref in ipairs({ "main", "master" }) do
+					if run_git_command({ "rev-parse", "--verify", ref }, repo_root) then
+						return ref
+					end
+				end
+
+				return nil, "Failed: Neither 'main' nor 'master' branch found"
+			end
+
+			local function get_current_repo_relative_path(repo_root)
+				if vim.bo.buftype ~= "" then
+					return nil
+				end
+
+				local current_file = vim.fs.normalize(vim.api.nvim_buf_get_name(0))
+				if current_file == "" then
+					return nil
+				end
+
+				local normalized_root = vim.fs.normalize(repo_root)
+				local prefix = normalized_root .. "/"
+				if current_file:sub(1, #prefix) ~= prefix then
+					return nil
+				end
+
+				return current_file:sub(#prefix + 1)
+			end
+
+			local function list_changed_files_against(base, repo_root)
+				local tracked, tracked_err = run_git_command({ "diff", "--name-only", "--relative", base, "--" }, repo_root)
+				if not tracked then
+					return nil, tracked_err
+				end
+
+				local untracked, untracked_err = run_git_command({ "ls-files", "--others", "--exclude-standard" }, repo_root)
+				if not untracked then
+					return nil, untracked_err
+				end
+
+				local paths = {}
+				local seen = {}
+
+				for _, path in ipairs(split_nonempty_lines(tracked.stdout)) do
+					if not seen[path] then
+						seen[path] = true
+						paths[#paths + 1] = path
+					end
+				end
+
+				for _, path in ipairs(split_nonempty_lines(untracked.stdout)) do
+					if not seen[path] then
+						seen[path] = true
+						paths[#paths + 1] = path
+					end
+				end
+
+				return paths
+			end
+
+			local function build_untracked_file_diff(repo_root, path, absolute_path)
+				if not vim.loop.fs_stat(absolute_path) then
+					return ""
+				end
+
+				local result = run_git_command({ "diff", "--no-index", "--no-color", "--", "/dev/null", absolute_path }, repo_root, { 0, 1 })
+				if result and result.stdout and result.stdout ~= "" then
+					return result.stdout
+				end
+
+				return table.concat({
+					"diff --git a/" .. path .. " b/" .. path,
+					"--- /dev/null",
+					"+++ b/" .. path,
+				}, "\n")
+			end
+
+			local function build_picker_diff(diff_target, repo_root, path, absolute_path)
+				local diff_result = run_git_command(
+					{ "--no-pager", "diff", "--no-ext-diff", "--no-color", diff_target, "--", path },
+					repo_root
+				)
+				if diff_result and diff_result.stdout and diff_result.stdout ~= "" then
+					return diff_result.stdout
+				end
+
+				local untracked = run_git_command({ "ls-files", "--others", "--exclude-standard", "--", path }, repo_root)
+				if untracked and vim.trim(untracked.stdout or "") ~= "" then
+					return build_untracked_file_diff(repo_root, path, absolute_path)
+				end
+
+				return diff_result and diff_result.stdout or ""
+			end
+
+			local function open_diffview_for_base(base, repo_root, selected_file)
+				local diffview_cmd = "DiffviewOpen -C=" .. vim.fn.fnameescape(repo_root) .. " " .. base
+				local target_file = selected_file or get_current_repo_relative_path(repo_root)
+
+				if target_file and target_file ~= "" then
+					diffview_cmd = diffview_cmd .. " --selected-file=" .. vim.fn.fnameescape(target_file)
+				end
+
+				vim.cmd(diffview_cmd)
+			end
+
+			local function build_diffview_picker_context()
+				local view = get_current_diffview_view()
+				if view then
+					local repo_root = view.adapter and view.adapter.ctx and view.adapter.ctx.toplevel or nil
+					return {
+						mode = "active_view",
+						view = view,
+						review_winid = get_diffview_review_winid(view),
+						repo_root = repo_root,
+						diff_target = (view.rev_arg and view.rev_arg ~= "") and view.rev_arg or "HEAD",
+						files = get_diffview_picker_files(view),
+					}
+				end
+
+				local repo_root, root_err = resolve_git_toplevel()
+				if not repo_root then
+					return nil, root_err
+				end
+
+				local base, base_err = resolve_base_ref(repo_root)
+				if not base then
+					return nil, base_err
+				end
+
+				local files, files_err = list_changed_files_against(base, repo_root)
+				if not files then
+					return nil, files_err
+				end
+
+				return {
+					mode = "base_diff",
+					base = base,
+					repo_root = repo_root,
+					diff_target = base,
+					files = vim.tbl_map(function(path)
+						return {
+							path = path,
+							absolute_path = vim.fs.normalize(repo_root .. "/" .. path),
+						}
+					end, files),
+				}
+			end
+
+			local function build_diffview_picker_items(ctx)
+				return vim.tbl_map(function(file)
+					local item = {
+						text = file.path,
+						path = file.path,
+						file = file.absolute_path,
+						cwd = ctx.repo_root,
+						diffview_file = ctx.mode == "active_view" and file or nil,
+					}
+
+					item.resolve = function(resolved_item)
+						resolved_item.diff = build_picker_diff(ctx.diff_target, ctx.repo_root, resolved_item.path, resolved_item.file)
+					end
+
+					return item
+				end, ctx.files)
+			end
+
+			local function focus_diffview_picker_current_file(picker, ctx)
+				local current_path = ctx.repo_root and get_current_repo_relative_path(ctx.repo_root) or nil
+				if not current_path then
+					return
+				end
+
+				for index, item in ipairs(picker:items()) do
+					if item.path == current_path then
+						picker.list:view(index, 1)
+						return
+					end
+				end
+			end
+
 			local function open_diffview_picker()
-				local view, err = get_current_diffview_view()
-				if not view then
+				local ctx, err = build_diffview_picker_context()
+				if not ctx then
 					vim.notify(err, vim.log.levels.WARN)
 					return
 				end
 
-				local files = get_diffview_picker_files(view)
-				if #files == 0 then
-					vim.notify("No files in the active Diffview", vim.log.levels.WARN)
+				if #ctx.files == 0 then
+					vim.notify("No files available for Diffview picker", vim.log.levels.WARN)
 					return
 				end
 
-				local review_winid = get_diffview_review_winid(view)
 				Snacks.picker({
 					source = "diffview_picker",
 					title = "Diffview Files",
-					layout = { preset = "select" },
+					format = "file",
+					preview = "diff",
+					layout = { preset = "vertical" },
 					finder = function()
-						return vim.tbl_map(function(file)
-							return {
-								text = file.path,
-								path = file.path,
-								file = file.absolute_path,
-								diffview_file = file,
-							}
-						end, files)
+						return build_diffview_picker_items(ctx)
+					end,
+					on_show = function(picker)
+						vim.schedule(function()
+							focus_diffview_picker_current_file(picker, ctx)
+						end)
 					end,
 					actions = {
 						confirm = function(picker, item)
 							picker:close()
-							if not (item and item.diffview_file) then
+							if not item then
 								return
 							end
 
 							vim.schedule(function()
-								view:set_file(item.diffview_file, false, true)
-								vim.schedule(function()
-									focus_diffview_review_win(view, review_winid)
-								end)
+								if ctx.mode == "active_view" then
+									if not item.diffview_file then
+										return
+									end
+
+									ctx.view:set_file(item.diffview_file, false, true)
+									vim.schedule(function()
+										focus_diffview_review_win(ctx.view, ctx.review_winid)
+									end)
+								else
+									open_diffview_for_base(ctx.base, ctx.repo_root, item.path)
+								end
 							end)
 						end,
 					},
@@ -1394,6 +1613,7 @@ require("lazy").setup({
 			end
 
 			require("diffview").setup({
+				diff_binaries = true,
 				view = {
 					default = { winbar_info = true },
 					file_history = { winbar_info = true },
@@ -1450,19 +1670,19 @@ require("lazy").setup({
 
 			-- Open Diffview against main or master branch
 			vim.keymap.set("n", "<leader>gm", function()
-				vim.fn.system("git rev-parse --verify main 2>/dev/null")
-				if vim.v.shell_error == 0 then
-					vim.cmd("DiffviewOpen main")
+				local repo_root, root_err = resolve_git_toplevel()
+				if not repo_root then
+					vim.api.nvim_err_writeln(root_err)
 					return
 				end
 
-				vim.fn.system("git rev-parse --verify master 2>/dev/null")
-				if vim.v.shell_error == 0 then
-					vim.cmd("DiffviewOpen master")
+				local base, base_err = resolve_base_ref(repo_root)
+				if not base then
+					vim.api.nvim_err_writeln(base_err)
 					return
 				end
 
-				vim.api.nvim_err_writeln("Failed: Neither 'main' nor 'master' branch found")
+				open_diffview_for_base(base, repo_root)
 			end, { desc = "Git diff against main or master branch" })
 
 			-- Close Diffview
@@ -1481,7 +1701,7 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>gH", "<cmd>DiffviewClose<CR>", { desc = "Close Git history view" })
 
 			vim.api.nvim_create_user_command("DiffviewPicker", open_diffview_picker, {
-				desc = "Pick a file from the active Diffview",
+				desc = "Pick a file from Diffview or the base diff",
 			})
 		end,
 	},
