@@ -57,8 +57,9 @@ Key constraints:
 
 ## Assumptions 
 
-Surface assumptions immediately.
-**Do not** silently fill in ambiguous requirements. 
+<important: Surface assumptions immediately.
+**Do not** silently fill in ambiguous requirements.> 
+<NOTE: **Do not** literally use 3 items in the list because the template has 3. Every single assumption whether it be 1,2,4,8.. should be exhaustively listed.> 
 
 **Assumptions I am making**
 1. This is...
