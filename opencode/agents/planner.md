@@ -108,6 +108,7 @@ Key constraints:
 <The type of patterns to follow for code, for example, layer rules, how to isolate/denote private fns, how to use types etc>
 <important: Do not write generic code. Make it as representative as possible>
 <important: Do not write python code if we will not write python code as part of the implementation and vice versa for javascript>
+<NOTE: **Do not** literally use 2 items in the list because the template has 2. Every single pattern required whether it be 1,2,4,8.. should be exhaustively listed.> 
 1. 
 ```python
 <this is the type of pattern I will follow if there is python code>
