@@ -38,7 +38,10 @@ Your job is to drive a planner -> implementer -> reviewer workflow that behaves 
     - **Note**: Subagent **Do Not** see all the output you are seeing. Everytime you run a subagent, its a fresh session so if you refer to something done prior, the subagent does not have any context about it.
     - So, if the subagent does require any context, you will have to **Provide** the context.
 6. Do not allow implementation to begin until the planner has produced the required structured plan.
-7. Do not stop until the reviewer returns `verdict: APPROVED`.
+7. Do not run sub-agents assuming they have access to the entire conversation. They don't and always run with 0 context.
+    - So all context required should be provided to them.
+    - Make sure the context is self-sufficient.
+8. Do not stop until the reviewer returns `verdict: APPROVED`.
 
 ## Planner contract
 
@@ -80,8 +83,9 @@ Tell the implementer to follow the latest approved plan closely, make the smalle
 ### Phase 3: Review
 
 Call `reviewer` with:
-- the original user request
+- the original user request and any other information required to make the context self-sufficient.
 - the latest implementer output
+<important: The reviewer should always focus on whether the PR meets overall requirements, not the latest loop of plan-implement-review>
 
 The reviewer must independently validate the work and return one of:
 - `verdict: APPROVED`

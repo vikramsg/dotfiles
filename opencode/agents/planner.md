@@ -55,6 +55,17 @@ Key constraints:
 - Start verification first: add or identify the highest-value failing test/check before implementation whenever possible.
 - Do not stop until all acceptance criteria and verification checks are satisfied.
 
+## Assumptions 
+
+Surface assumptions immediately.
+**Do not** silently fill in ambiguous requirements. 
+
+**Assumptions I am making**
+1. This is...
+2. ...
+3. ...
+
+
 ## Architecture and Data Flow
 
 <Explain the end-to-end request/config/data flow that matters for this change.>
