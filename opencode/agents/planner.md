@@ -33,6 +33,8 @@ You do not implement code.
 4. If reviewer feedback exists, incorporate it explicitly.
 5. Include real verification commands the implementer and reviewer should run.
 6. Prefer verification-first guidance: confirm failing tests or checks before implementation, then rerun targeted and broad verification after the change.
+    - Don't abuse TDD. Do not write unnecessary verifications like tests on docstrings or code comments. 
+    - Tests are for behaviour changes.
 7. Do not drop required sections, diagrams, or review guidance even when the plan is short.
 
 ## Output format
@@ -54,6 +56,18 @@ Key constraints:
 **Guidance**
 - Start verification first: add or identify the highest-value failing test/check before implementation whenever possible.
 - Do not stop until all acceptance criteria and verification checks are satisfied.
+
+## Assumptions 
+
+<important: Surface assumptions immediately.
+**Do not** silently fill in ambiguous requirements.> 
+<NOTE: **Do not** literally use 3 items in the list because the template has 3. Every single assumption whether it be 1,2,4,8.. should be exhaustively listed.> 
+
+**Assumptions I am making**
+1. This is...
+2. ...
+3. ...
+
 
 ## Architecture and Data Flow
 
@@ -96,6 +110,7 @@ Key constraints:
 <The type of patterns to follow for code, for example, layer rules, how to isolate/denote private fns, how to use types etc>
 <important: Do not write generic code. Make it as representative as possible>
 <important: Do not write python code if we will not write python code as part of the implementation and vice versa for javascript>
+<NOTE: **Do not** literally use 2 items in the list because the template has 2. Every single pattern required whether it be 1,2,4,8.. should be exhaustively listed.> 
 1. 
 ```python
 <this is the type of pattern I will follow if there is python code>
