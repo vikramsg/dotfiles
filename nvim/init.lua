@@ -21,7 +21,7 @@
 -- Git (Diffview & LazyGit):
 --   <leader>gs : Open Diffview (against index/HEAD)
 --   <leader>gm : Open Diffview (against main or master branch)
---   <leader>gp : Pick a file in the active Diffview
+--   <leader>gp : Open picker with all files different from main. Enter opens file in Diffview view
 --   <leader>gb : Show Git blame for current line
 --   <leader>gS : Close Diffview & cleanup buffers
 --   <leader>gM : Close Diffview & cleanup buffers
@@ -1367,12 +1367,14 @@ require("lazy").setup({
 			end
 
 			local function list_changed_files_against(base, repo_root)
-				local tracked, tracked_err = run_git_command({ "diff", "--name-only", "--relative", base, "--" }, repo_root)
+				local tracked, tracked_err =
+					run_git_command({ "diff", "--name-only", "--relative", base, "--" }, repo_root)
 				if not tracked then
 					return nil, tracked_err
 				end
 
-				local untracked, untracked_err = run_git_command({ "ls-files", "--others", "--exclude-standard" }, repo_root)
+				local untracked, untracked_err =
+					run_git_command({ "ls-files", "--others", "--exclude-standard" }, repo_root)
 				if not untracked then
 					return nil, untracked_err
 				end
@@ -1402,7 +1404,11 @@ require("lazy").setup({
 					return ""
 				end
 
-				local result = run_git_command({ "diff", "--no-index", "--no-color", "--", "/dev/null", absolute_path }, repo_root, { 0, 1 })
+				local result = run_git_command(
+					{ "diff", "--no-index", "--no-color", "--", "/dev/null", absolute_path },
+					repo_root,
+					{ 0, 1 }
+				)
 				if result and result.stdout and result.stdout ~= "" then
 					return result.stdout
 				end
@@ -1423,7 +1429,8 @@ require("lazy").setup({
 					return diff_result.stdout
 				end
 
-				local untracked = run_git_command({ "ls-files", "--others", "--exclude-standard", "--", path }, repo_root)
+				local untracked =
+					run_git_command({ "ls-files", "--others", "--exclude-standard", "--", path }, repo_root)
 				if untracked and vim.trim(untracked.stdout or "") ~= "" then
 					return build_untracked_file_diff(repo_root, path, absolute_path)
 				end
@@ -1496,7 +1503,8 @@ require("lazy").setup({
 					}
 
 					item.resolve = function(resolved_item)
-						resolved_item.diff = build_picker_diff(ctx.diff_target, ctx.repo_root, resolved_item.path, resolved_item.file)
+						resolved_item.diff =
+							build_picker_diff(ctx.diff_target, ctx.repo_root, resolved_item.path, resolved_item.file)
 					end
 
 					return item
