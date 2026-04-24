@@ -253,37 +253,16 @@ The provider should be available under `Other`.
 Enter your key there.
 
 
-## OpenAI Priority Tier
+### OpenAI
 
-For a static Codex-like fast-tier setup, this repo now uses plain agent config instead of plugin state.
+To connect to OpenAI via `oauth` which is how Codex connects to it,
+do `opencode auth login` but from a system where the browser has access to your terminal.
 
-```json
-{
-  "agent": {
-    "build": {
-      "options": {
-        "serviceTier": "priority"
-      }
-    },
-    "plan": {
-      "options": {
-        "serviceTier": "priority"
-      }
-    }
-  }
-}
-```
+Note also that the plugin `"opencode-websearch-cited@1.2.0"` messes with this so for the login process, remove that plugin and add it back after finishing. 
 
-What this does:
+Inside the login dropdown, select `OpenAI - ChatGPT Plus (browser)` and then login to the browser.
 
-- Applies OpenAI `serviceTier: "priority"` to both the `build` and `plan` agents.
-- Only affects providers that use the OpenAI Responses option surface.
-
-Important caveat:
-
-- OpenCode validates `serviceTier` support per model. If the selected model does not support `priority`, the provider layer removes `service_tier` from the request rather than crashing.
-
-
+Once you have the login finished, open `~/.local/share/opencode/auth.json` and copy the `openai` section to the same file on your VM.
 
 ## Ref
 
