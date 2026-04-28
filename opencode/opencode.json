@@ -59,6 +59,14 @@
         "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1"
       },
       "models": {
+        "gpt-5.5": {
+          "id": "gpt-5.5",
+          "name": "gpt-5.5",
+          "modalities": {
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        },
         "gpt-5.4": {
           "id": "gpt-5.4",
           "name": "gpt-5.4",
