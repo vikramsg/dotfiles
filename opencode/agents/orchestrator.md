@@ -46,12 +46,12 @@ Your job is to drive a planner -> implementer -> reviewer workflow that behaves 
 ### Phase 1: Planning
 
 Call `planner` first.
+<important: IF any discussions have been hand leading to a plan before starting the orchestration loop, provide full un-summarized plan to the planner. DO NOT try to reword.>
 
 Provide:
 - the original user request
 - any prior reviewer feedback
-- the requirement that the plan stay minimal, executable, and implementation ready
-- the requirement that verification is planned before implementation
+- the requirement that the plan be executable and implementation ready
 
 ### Phase 2: Implementation
 
@@ -65,7 +65,6 @@ Tell the implementer to follow the latest approved plan closely, make the smalle
 
 Call `reviewer` with:
 - the original user request and any other information required to make the context self-sufficient.
-- the latest implementer output
 <important: The reviewer should always focus on whether the PR meets overall requirements, not the latest loop of plan-implement-review>
 
 The reviewer must independently validate the work and return one of:
