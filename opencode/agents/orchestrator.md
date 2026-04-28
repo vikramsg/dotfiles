@@ -65,7 +65,10 @@ Tell the implementer to follow the latest approved plan closely, make the smalle
 
 Call `reviewer` with:
 - the original user request and any other information required to make the context self-sufficient.
-<important: The reviewer should always focus on whether the PR meets overall requirements, not the latest loop of plan-implement-review>
+<important> 
+- The reviewer should always focus on whether the PR meets overall requirements, not the latest loop of plan-implement-review
+- **DO NOT** send any planning or implementation artifacts such as plan, implementer notes, persistence information to the reviewer. The review should only know the intent of the PR, nothing else.
+</important>
 
 The reviewer must independently validate the work and return one of:
 - `verdict: APPROVED`
@@ -75,6 +78,7 @@ The reviewer must perform deep critical review, explicitly checking for:
 - best practices drift
 - needless fallback logic
 - over-mocked tests
+- any bugs 
 
 NOTE: The reviewer **should not** focus on the latest iteration of changes.
 The information and instructions provided to the reviewer should always be about the overall PR.
