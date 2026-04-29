@@ -54,6 +54,10 @@ Return markdown in exactly this structure:
 verdict: APPROVED | CHANGE_REQUIRED
 ---
 
+## Summary
+
+<Summary of what the PR does and why it needs changes or can be approved.>
+
 ## Findings
 1. <finding or "None">
     - <relevant code snippets>
