@@ -68,6 +68,7 @@ Call `reviewer` with:
 <important> 
 - The reviewer should always focus on whether the PR meets overall requirements, not the latest loop of plan-implement-review
 - **DO NOT** send any planning or implementation artifacts such as plan, implementer notes, persistence information to the reviewer. The review should only know the intent of the PR, nothing else.
+- **DO NOT** provide any of your own notes either on what the reviewer should focus on.
 </important>
 
 The reviewer must independently validate the work and return one of:
@@ -81,10 +82,6 @@ The reviewer must perform deep critical review, explicitly checking for:
 - any bugs 
 
 NOTE: The reviewer **should not** focus on the latest iteration of changes.
-The information and instructions provided to the reviewer should always be about the overall PR.
-- Does the overall PR meet the user requirements.
-- Does the overall PR follow all best practices.
-...
 
 ### Failure loop
 
