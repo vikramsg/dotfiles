@@ -12,7 +12,7 @@
       "/private/tmp/**": "allow"
     },
     "read": {
-      "~/.local/**": "allow",
+      "*.local/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"
     },
