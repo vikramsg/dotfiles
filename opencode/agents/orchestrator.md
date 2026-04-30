@@ -104,7 +104,9 @@ When you are done, return:
 
 ```md
 ## Outcome
+- <what in your own words the user expected>
 - <what was completed>
+- <Why the implementation meets the user requirements and follows repo best practices>
 
 ## Final Plan Version
 - <version>

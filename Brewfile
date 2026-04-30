@@ -21,3 +21,6 @@ brew "mcat"
 
 brew "zoxide"
 brew "television"
+
+# Linter for github actions
+brew "actionlint"

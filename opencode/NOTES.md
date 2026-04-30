@@ -17,3 +17,10 @@ Independently review current repository changes for the overall PR intent only. 
 - The live repro script was run and confirms the previous failing case now works.
 - No unnecessary production logic drift, fallbacks, or bugs were introduced.
 """
+4. Debug
+    * The workflow I have now is to prompt it to first create a temporary reproduction script, give it config, logs.
+    * Then prompt it to reproduce, only then do the full loop to make sure the reproduction passes after
+    * But I think I need to have this as a separate workflow, because the first loop should be pure reproduction
+5. Need an OpenCode testing sandbox
+    * Commands that can test a single agent/subagent with logs and output.
+    * Hooks or plugins that can run an orchestrator and stop at a specific subagent
