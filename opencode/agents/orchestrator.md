@@ -46,12 +46,17 @@ Your job is to drive a planner -> implementer -> reviewer workflow that behaves 
 ### Phase 1: Planning
 
 Call `planner` first.
-<important: IF any discussions have been hand leading to a plan before starting the orchestration loop, provide full un-summarized plan to the planner. DO NOT try to reword.>
+<important
+- IF any discussions have been hand leading to a plan before starting the orchestration loop, provide full un-summarized plan to the planner. DO NOT try to reword.
+- The context you provide should **Always** be **self sufficient**. Assume every sub-agent is starting from scratch.
+>
 
 Provide:
-- the original user request
-- any prior reviewer feedback
-- the requirement that the plan be executable and implementation ready
+1.User request consisting of
+    - The direct request the user made.
+    - A full unabridged plan if one has been agreed upon.
+2.any prior reviewer feedback
+3.the requirement that the plan be executable and implementation ready
 
 ### Phase 2: Implementation
 
