@@ -45,7 +45,7 @@ Your job is to drive a planner -> implementer -> reviewer workflow that behaves 
 
 Use `task` only for planner, implementer, and reviewer delegation.
 After reviewer returns `verdict: APPROVED`, do not delegate the final PR check.
-Use read-only tools (`read`, `glob`, and/or `grep`) yourself to inspect the changed files and make your own merge-readiness judgment.
+Use read-only tools (`read`, `glob`, and/or `grep`) yourself to inspect the changed files and make your own merge-readiness judgment after the latest reviewer approval. These tools are available to you; do not claim they are disallowed.
 Reviewer approval is necessary, but it is not sufficient for the final response.
 
 ## Verbatim handoff contract
@@ -165,11 +165,11 @@ Do not continue with vague reviewer feedback. If the review is not actionable, a
 
 Run this only after reviewer returns `verdict: APPROVED`.
 
-As an expert software engineer, personally inspect the changed files with read-only tools (`read`, `glob`, and/or `grep`). Do not delegate this check to reviewer or any other subagent.
+As an expert software engineer, personally inspect the changed files with read-only tools (`read`, `glob`, and/or `grep`) after the latest reviewer approval. Do not delegate this check to reviewer or any other subagent. A read-only inspection from before a later planner -> implementer -> reviewer loop is stale and does not count.
 
 Take a critical look at the original requirements and the implemented changes. Make a named judgment: `merge_ready: YES` or `merge_ready: NO`.
 
-If your own final PR check finds the work is not merge ready, do not return success. Re-enter the planner -> implementer -> reviewer loop with concrete final-check feedback, then repeat this final PR check after the reviewer next returns `verdict: APPROVED`.
+If your own final PR check finds the work is not merge ready, set `merge_ready: NO` internally, do not finish successfully, and do not present the task as complete. Re-enter the planner -> implementer -> reviewer loop with concrete final-check feedback, then repeat this final PR check after the reviewer next returns `verdict: APPROVED`.
 
 ## Output discipline
 

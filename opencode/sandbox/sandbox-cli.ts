@@ -49,6 +49,14 @@ type SandboxPaths = {
 
 type EventValue = null | boolean | number | string | EventValue[] | { [key: string]: EventValue }
 
+type FinalCheckToolCall = {
+  tool: string
+  callID: string | null
+  args: Record<string, unknown> | null
+  observedAt: string
+  observedSequence?: number
+}
+
 const usage = `Usage: sandbox-cli <subcommand> <args...>
 
 Subcommands:
@@ -300,11 +308,14 @@ import path from "node:path"
 
 const readOnlyTools = new Set(["read", "glob", "grep"])
 const state = {
+  sequence: 0,
   reviewerApproved: false,
   reviewerApprovalCallID: null,
   reviewerApprovalObservedAt: null,
+  latestReviewerApprovalSequence: null,
   readOnlyToolAfterApproval: false,
   firstReadOnlyToolAfterApproval: null,
+  readOnlyToolsAfterApproval: [],
   postApprovalLoopReentry: false,
   postApprovalLoopSubagents: [],
 }
@@ -324,6 +335,11 @@ function hasReviewerApproval(output) {
   return /verdict:\\s*APPROVED\\b/i.test(text)
 }
 
+function nextSequence() {
+  state.sequence += 1
+  return state.sequence
+}
+
 function writeMarker() {
   const markerPath = process.env.OPENCODE_SANDBOX_FINAL_CHECK_MARKER
   if (!markerPath) return
@@ -332,6 +348,7 @@ function writeMarker() {
 }
 
 function observe(input, output = null) {
+  const observedSequence = nextSequence()
   const tool = input?.tool || ""
   if (tool === "task") {
     const subagent = getSubagent(input?.args)
@@ -339,20 +356,23 @@ function observe(input, output = null) {
       state.reviewerApproved = true
       state.reviewerApprovalCallID = input.callID || null
       state.reviewerApprovalObservedAt = new Date().toISOString()
+      state.latestReviewerApprovalSequence = observedSequence
       writeMarker()
       return
     }
     if (state.reviewerApproved && ["planner", "implementer", "reviewer"].includes(subagent)) {
       state.postApprovalLoopReentry = true
-      state.postApprovalLoopSubagents.push({ subagent, callID: input.callID || null, observedAt: new Date().toISOString() })
+      state.postApprovalLoopSubagents.push({ subagent, callID: input.callID || null, observedAt: new Date().toISOString(), observedSequence })
       writeMarker()
     }
     return
   }
   if (state.reviewerApproved && readOnlyTools.has(tool)) {
+    const call = { tool, callID: input.callID || null, args: input.args || null, observedAt: new Date().toISOString(), observedSequence }
     state.readOnlyToolAfterApproval = true
+    state.readOnlyToolsAfterApproval.push(call)
     if (!state.firstReadOnlyToolAfterApproval) {
-      state.firstReadOnlyToolAfterApproval = { tool, callID: input.callID || null, args: input.args || null, observedAt: new Date().toISOString() }
+      state.firstReadOnlyToolAfterApproval = call
     }
     writeMarker()
   }
@@ -504,8 +524,197 @@ async function validateSingle(paths: SandboxPaths, markerPath: string, agent: st
   return errors.length === 0
 }
 
+async function collectKnownWorktreeFiles(root: string): Promise<string[]> {
+  const files: string[] = []
+  async function visit(dir: string): Promise<void> {
+    let entries
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const candidate = path.join(dir, entry.name)
+      if (entry.isDirectory()) await visit(candidate)
+      else if (entry.isFile()) files.push(path.resolve(candidate))
+    }
+  }
+  await visit(root)
+  return files
+}
+
+function normalizedTrustedOwner(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function trustedOwnerFromCorrelatedEvent(event: EventValue): string | null {
+  if (!event || typeof event !== "object" || Array.isArray(event)) return null
+  const record = event as Record<string, EventValue>
+  return normalizedTrustedOwner(record.agent) || normalizedTrustedOwner(record.agentID) || normalizedTrustedOwner(record.agentId)
+}
+
+function eventMessageID(event: EventValue): string | null {
+  if (!event || typeof event !== "object" || Array.isArray(event)) return null
+  const record = event as Record<string, EventValue>
+  const direct = normalizedTrustedOwner(record.messageID) || normalizedTrustedOwner(record.messageId)
+  if (direct) return direct
+  const part = record.part
+  if (!part || typeof part !== "object" || Array.isArray(part)) return null
+  const partRecord = part as Record<string, EventValue>
+  return normalizedTrustedOwner(partRecord.messageID) || normalizedTrustedOwner(partRecord.messageId)
+}
+
+function parseLogMessageAgents(log: string): Map<string, string> {
+  const owners = new Map<string, string>()
+  let pending: { sessionID: string, messageID: string } | null = null
+  for (const line of log.split(/\n/)) {
+    const processorMatch = line.match(/\bservice=session\.processor\b.*\bsession\.id=([^\s]+).*\bmessageID=([^\s]+)\b/) ||
+      line.match(/\bservice=session\.processor\b.*\bmessageID=([^\s]+).*\bsession\.id=([^\s]+)\b/)
+    if (processorMatch) {
+      pending = processorMatch[0].includes("session.id=") && processorMatch[0].indexOf("session.id=") < processorMatch[0].indexOf("messageID=")
+        ? { sessionID: processorMatch[1], messageID: processorMatch[2] }
+        : { sessionID: processorMatch[2], messageID: processorMatch[1] }
+      continue
+    }
+    if (!pending) continue
+    if (line.includes("service=session.processor")) {
+      pending = null
+      continue
+    }
+    const llmMatch = line.match(/\bservice=llm\b.*\bsession\.id=([^\s]+).*\bagent=([^\s]+)\b/) ||
+      line.match(/\bservice=llm\b.*\bagent=([^\s]+).*\bsession\.id=([^\s]+)\b/)
+    if (!llmMatch) continue
+    const sessionIDFirst = llmMatch[0].indexOf("session.id=") < llmMatch[0].indexOf("agent=")
+    const sessionID = sessionIDFirst ? llmMatch[1] : llmMatch[2]
+    const agent = sessionIDFirst ? llmMatch[2] : llmMatch[1]
+    if (sessionID === pending.sessionID) owners.set(pending.messageID, agent)
+    pending = null
+  }
+  return owners
+}
+
+function trustedOwnerForCall(events: EventValue[], callID: string | null, logMessageAgents: Map<string, string>): string | null {
+  if (!callID) return null
+  let owner: string | null = null
+  for (const event of events) {
+    if (!containsValue(event, callID)) continue
+    const eventOwner = trustedOwnerFromCorrelatedEvent(event)
+    if (eventOwner) owner = eventOwner
+    const messageID = eventMessageID(event)
+    if (!owner && messageID) owner = logMessageAgents.get(messageID) || null
+  }
+  return owner
+}
+
+function isOrchestratorOwned(call: FinalCheckToolCall, events: EventValue[], logMessageAgents: Map<string, string>): boolean {
+  return trustedOwnerForCall(events, call.callID, logMessageAgents) === "orchestrator"
+}
+
+function isInsideDirectory(candidate: string, root: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate))
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+}
+
+function stringArg(args: Record<string, unknown> | null, name: string): string | null {
+  const value = args?.[name]
+  return typeof value === "string" && value.trim() ? value : null
+}
+
+function stringArgs(args: Record<string, unknown> | null, names: string[]): string[] {
+  return names.flatMap((name) => {
+    const value = stringArg(args, name)
+    return value ? [value] : []
+  })
+}
+
+const forbiddenArtifactNames = new Set([
+  "request.md",
+  "state.json",
+  "plan.md",
+  "review.md",
+  "verification.md",
+])
+
+function isForbiddenFinalCheckTarget(candidate: string): boolean {
+  const normalized = candidate.replaceAll("\\", "/")
+  if (normalized.split("/").includes(".agents") && normalized.split("/").includes("tasks")) return true
+  const basename = path.posix.basename(normalized)
+  if (forbiddenArtifactNames.has(basename)) return true
+  return [...forbiddenArtifactNames].some((name) => normalized.endsWith(`/${name}`))
+}
+
+function isRelatedPath(candidate: string, worktree: string, knownWorktreeFiles: string[]): boolean {
+  if (isForbiddenFinalCheckTarget(candidate)) return false
+  if (candidate.startsWith("~")) return false
+  const resolved = path.isAbsolute(candidate) ? path.resolve(candidate) : path.resolve(worktree, candidate)
+  return isInsideDirectory(resolved, worktree) || knownWorktreeFiles.includes(resolved)
+}
+
+function isKnownWorktreeFileTarget(candidate: string, worktree: string, knownWorktreeFiles: string[]): boolean {
+  if (isForbiddenFinalCheckTarget(candidate)) return false
+  if (candidate.startsWith("~")) return false
+  const resolved = path.isAbsolute(candidate) ? path.resolve(candidate) : path.resolve(worktree, candidate)
+  return knownWorktreeFiles.includes(resolved)
+}
+
+function isRelatedToWorktree(call: FinalCheckToolCall, worktree: string, knownWorktreeFiles: string[]): boolean {
+  if (call.tool === "read") {
+    const target = stringArg(call.args, "filePath") || stringArg(call.args, "path")
+    return Boolean(target && isKnownWorktreeFileTarget(target, worktree, knownWorktreeFiles))
+  }
+  if (call.tool === "glob" || call.tool === "grep") {
+    const targetArgNames = call.tool === "glob" ? ["path", "pattern"] : ["path", "include"]
+    if (stringArgs(call.args, targetArgNames).some(isForbiddenFinalCheckTarget)) return false
+    const basePath = stringArg(call.args, "path")
+    if (basePath) return isRelatedPath(basePath, worktree, knownWorktreeFiles)
+    const pattern = stringArg(call.args, "pattern")
+    return Boolean(pattern && isRelatedPath(pattern, worktree, knownWorktreeFiles))
+  }
+  return false
+}
+
+function finalCheckToolCalls(marker: Record<string, any>): FinalCheckToolCall[] {
+  const calls = Array.isArray(marker.readOnlyToolsAfterApproval) ? marker.readOnlyToolsAfterApproval : []
+  if (calls.length > 0) return calls
+  return marker.firstReadOnlyToolAfterApproval ? [marker.firstReadOnlyToolAfterApproval] : []
+}
+
+function finalResponseEvents(events: EventValue[]): EventValue[] {
+  return events.filter((event) => {
+    if (!event || typeof event !== "object" || Array.isArray(event)) return false
+    if (event.role === "assistant") return true
+    return event.type === "assistant" || event.type === "text" || (event.type === "message" && event.role !== "user")
+  })
+}
+
+function finalAssistantResponse(events: EventValue[]): EventValue | null {
+  const responses = finalResponseEvents(events)
+  return responses.length > 0 ? responses[responses.length - 1] : null
+}
+
+function explicitMergeReadiness(event: EventValue): "YES" | "NO" | null {
+  let last: "YES" | "NO" | null = null
+  const visit = (value: EventValue): void => {
+    if (typeof value === "string") {
+      for (const match of value.matchAll(/merge_ready\s*:\s*(YES|NO)\b/gi)) last = match[1].toUpperCase() as "YES" | "NO"
+      return
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item)
+      return
+    }
+    if (value && typeof value === "object") for (const item of Object.values(value)) visit(item)
+  }
+  visit(event)
+  return last
+}
+
 async function validateFinalCheck(paths: SandboxPaths, markerPath: string): Promise<boolean> {
   const { events, errors } = await commonValidation(paths)
+  const log = existsSync(paths.logFile) ? await fs.readFile(paths.logFile, "utf8") : ""
+  const logMessageAgents = parseLogMessageAgents(log)
+  const knownWorktreeFiles = await collectKnownWorktreeFiles(paths.worktree)
+  const finalResponse = finalAssistantResponse(events)
   if (!existsSync(markerPath)) {
     errors.push("final-check marker was not written")
   } else {
@@ -513,15 +722,32 @@ async function validateFinalCheck(paths: SandboxPaths, markerPath: string): Prom
       const marker = JSON.parse(await fs.readFile(markerPath, "utf8"))
       if (marker.reviewerApproved !== true) errors.push("reviewer approval was not observed")
       if (marker.readOnlyToolAfterApproval !== true) errors.push("no read/glob/grep tool call observed after reviewer approval")
-      const tool = marker.firstReadOnlyToolAfterApproval?.tool
-      if (marker.readOnlyToolAfterApproval === true && !["read", "glob", "grep"].includes(tool)) errors.push(`unexpected read-only tool marker: ${tool || "<missing>"}`)
+      const calls = finalCheckToolCalls(marker)
+      const unexpectedTool = calls.find((call) => !["read", "glob", "grep"].includes(call.tool))?.tool
+      if (marker.readOnlyToolAfterApproval === true && unexpectedTool) errors.push(`unexpected read-only tool marker: ${unexpectedTool}`)
+      const latestApprovalSequence = typeof marker.latestReviewerApprovalSequence === "number" ? marker.latestReviewerApprovalSequence : null
+      const callsAfterLatestApproval = latestApprovalSequence === null
+        ? calls
+        : calls.filter((call) => typeof call.observedSequence === "number" && call.observedSequence > latestApprovalSequence)
+      const qualifyingCall = callsAfterLatestApproval.find((call) => isOrchestratorOwned(call, events, logMessageAgents) && isRelatedToWorktree(call, paths.worktree, knownWorktreeFiles))
+      if (marker.readOnlyToolAfterApproval === true && latestApprovalSequence !== null && callsAfterLatestApproval.length === 0) {
+        errors.push("no orchestrator-owned read/glob/grep tool call inspected sandbox worktree changes after latest reviewer approval")
+      } else if (marker.readOnlyToolAfterApproval === true && !qualifyingCall) {
+        if (!callsAfterLatestApproval.some((call) => trustedOwnerForCall(events, call.callID, logMessageAgents))) {
+          errors.push("read/glob/grep ownership could not be validated from trusted runtime data after reviewer approval")
+        }
+        errors.push("no orchestrator-owned read/glob/grep tool call inspected sandbox worktree changes after reviewer approval")
+      }
     } catch (error) {
       errors.push(`final-check marker is not valid JSON: ${(error as Error).message}`)
     }
   }
-  if (!events.some((event) => containsTextMatching(event, /Orchestrator Merge-Readiness Judgment/i))) {
+  if (!finalResponse || !containsTextMatching(finalResponse, /Orchestrator Merge-Readiness Judgment/i)) {
     errors.push("final response does not contain orchestrator merge-readiness judgment")
   }
+  const mergeReady = finalResponse ? explicitMergeReadiness(finalResponse) : null
+  if (!mergeReady) errors.push("final response missing explicit merge-readiness judgment: merge_ready: YES or merge_ready: NO")
+  else if (mergeReady === "NO") errors.push("final explicit merge-readiness judgment is merge_ready: NO")
   for (const error of errors) console.error(`validation error: ${error}`)
   return errors.length === 0
 }

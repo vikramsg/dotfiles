@@ -22,8 +22,11 @@ import { pathToFileURL } from "node:url"
 const args = process.argv.slice(2)
 const agentIndex = args.indexOf("--agent")
 const commandIndex = args.indexOf("--command")
+const dirIndex = args.indexOf("--dir")
 const runAgent = agentIndex >= 0 ? args[agentIndex + 1] : null
 const isOrchestrator = commandIndex >= 0 && args[commandIndex + 1] === "orchestrate"
+const worktreeDir = dirIndex >= 0 ? args[dirIndex + 1] : process.cwd()
+const changedFile = path.join(worktreeDir, "final-pr-check-sandbox.txt")
 const callID = "call-123"
 const target = process.env.OPENCODE_SANDBOX_SINGLE_AGENT || process.env.OPENCODE_SANDBOX_STOP_AT || "planner"
 async function loadGeneratedHooks() {
@@ -59,16 +62,79 @@ if (${JSON.stringify(events)} === "bad") {
   fs.writeSync(1, JSON.stringify({ type: "step_start", args }) + "\\n")
   fs.writeSync(1, JSON.stringify({ type: "tool", callID, nested: { value: callID }, agent: runAgent, target }) + "\\n")
 }
-if (${JSON.stringify(events)} === "final-check-approved" || ${JSON.stringify(events)} === "final-check-missing-read" || ${JSON.stringify(events)} === "final-check-missing-judgment") {
+const finalCheckEvents = new Set(["final-check-approved", "final-check-log-owner-read", "final-check-missing-read", "final-check-missing-judgment", "final-check-subagent-read", "final-check-unrelated-read", "final-check-merge-no", "final-check-missing-owner-read", "final-check-unknown-owner-read", "final-check-nonexistent-worktree-read", "final-check-spoofed-owner", "final-check-spoofed-agent", "final-check-agents-tasks-read", "final-check-earlier-merge-ready", "final-check-stale-read-after-loop", "final-check-forbidden-glob-pattern", "final-check-forbidden-grep-include", "final-check-forbidden-glob-path", "final-check-forbidden-grep-path"])
+if (finalCheckEvents.has(${JSON.stringify(events)})) {
   const reviewerInput = { tool: "task", args: { subagent_type: "reviewer", prompt: "review this" }, callID: "review-call" }
   await invokeGeneratedHook("tool.execute.after", reviewerInput, { title: "reviewer", output: "verdict: APPROVED\\n", args: reviewerInput.args })
   fs.writeSync(1, JSON.stringify({ type: "tool", tool: "task", callID: "review-call", args: reviewerInput.args, output: "verdict: APPROVED" }) + "\\n")
-  if (${JSON.stringify(events)} !== "final-check-missing-read") {
-    const readInput = { tool: "read", args: { filePath: "/tmp/final-pr-check-demo.txt" }, callID: "read-call" }
+  if (${JSON.stringify(events)} !== "final-check-missing-read" && !["final-check-forbidden-glob-pattern", "final-check-forbidden-grep-include", "final-check-forbidden-glob-path", "final-check-forbidden-grep-path"].includes(${JSON.stringify(events)})) {
+    fs.writeFileSync(changedFile, "one sentence\\n")
+    const readTarget = ${JSON.stringify(events)} === "final-check-unrelated-read"
+      ? "/tmp/final-pr-check-demo.txt"
+      : ${JSON.stringify(events)} === "final-check-nonexistent-worktree-read"
+        ? path.join(worktreeDir, "missing-final-pr-check-sandbox.txt")
+        : ${JSON.stringify(events)} === "final-check-agents-tasks-read"
+          ? path.join(worktreeDir, ".agents", "tasks", "task-123", "request.md")
+          : changedFile
+    if (${JSON.stringify(events)} === "final-check-agents-tasks-read") {
+      fs.mkdirSync(path.dirname(readTarget), { recursive: true })
+      fs.writeFileSync(readTarget, "internal artifact\\n")
+    }
+    const readOwner = ${JSON.stringify(events)} === "final-check-subagent-read"
+      ? "reviewer"
+      : ${JSON.stringify(events)} === "final-check-missing-owner-read" || ${JSON.stringify(events)} === "final-check-spoofed-owner" || ${JSON.stringify(events)} === "final-check-spoofed-agent"
+        ? undefined
+        : ${JSON.stringify(events)} === "final-check-unknown-owner-read"
+          ? "unknown-agent"
+          : "orchestrator"
+    const readArgs = ${JSON.stringify(events)} === "final-check-spoofed-owner"
+      ? { filePath: readTarget, owner: "orchestrator" }
+      : ${JSON.stringify(events)} === "final-check-spoofed-agent"
+        ? { filePath: readTarget, agent: "orchestrator" }
+        : { filePath: readTarget }
+    const readInput = {
+      tool: "read",
+      sessionID: "session-123",
+      args: readArgs,
+      callID: "read-call",
+    }
     await invokeGeneratedHook("tool.execute.after", readInput, { title: "read", output: "one sentence" })
-    fs.writeSync(1, JSON.stringify({ type: "tool", tool: "read", callID: "read-call", args: readInput.args }) + "\\n")
+    const readEvent = ${JSON.stringify(events)} === "final-check-log-owner-read"
+      ? { type: "tool_use", part: { type: "tool", tool: "read", callID: "read-call", messageID: "msg-read-owner" } }
+      : { type: "tool", tool: "read", callID: "read-call", args: readInput.args, agent: readOwner }
+    fs.writeSync(1, JSON.stringify(readEvent) + "\\n")
   }
-  const finalText = ${JSON.stringify(events)} === "final-check-missing-judgment" ? "## Outcome\\n- done" : "## Orchestrator Merge-Readiness Judgment\\n- merge_ready: YES\\n- I inspected the changed files with read-only tools."
+  if (["final-check-forbidden-glob-pattern", "final-check-forbidden-grep-include", "final-check-forbidden-glob-path", "final-check-forbidden-grep-path"].includes(${JSON.stringify(events)})) {
+    fs.writeFileSync(changedFile, "one sentence\\n")
+    const forbiddenArtifact = path.join(worktreeDir, ".agents", "tasks", "task-123", "request.md")
+    const toolInput = ${JSON.stringify(events)} === "final-check-forbidden-glob-pattern"
+      ? { tool: "glob", sessionID: "session-123", args: { path: worktreeDir, pattern: forbiddenArtifact }, callID: "glob-call" }
+      : ${JSON.stringify(events)} === "final-check-forbidden-grep-include"
+        ? { tool: "grep", sessionID: "session-123", args: { path: worktreeDir, pattern: "one", include: forbiddenArtifact }, callID: "grep-call" }
+      : ${JSON.stringify(events)} === "final-check-forbidden-glob-path"
+        ? { tool: "glob", sessionID: "session-123", args: { path: forbiddenArtifact, pattern: "*.md" }, callID: "glob-call" }
+        : { tool: "grep", sessionID: "session-123", args: { path: forbiddenArtifact, pattern: "one" }, callID: "grep-call" }
+    await invokeGeneratedHook("tool.execute.after", toolInput, { title: toolInput.tool, output: "one sentence" })
+    fs.writeSync(1, JSON.stringify({ type: "tool", tool: toolInput.tool, callID: toolInput.callID, args: toolInput.args, agent: "orchestrator" }) + "\\n")
+  }
+  if (${JSON.stringify(events)} === "final-check-stale-read-after-loop") {
+    const plannerInput = { tool: "task", args: { subagent_type: "planner", prompt: "fix after final check" }, callID: "planner-call-2" }
+    await invokeGeneratedHook("tool.execute.after", plannerInput, { title: "planner", output: "updated plan", args: plannerInput.args })
+    fs.writeSync(1, JSON.stringify({ type: "tool", tool: "task", callID: "planner-call-2", args: plannerInput.args, output: "updated plan" }) + "\\n")
+    const reviewerInput2 = { tool: "task", args: { subagent_type: "reviewer", prompt: "review this again" }, callID: "review-call-2" }
+    await invokeGeneratedHook("tool.execute.after", reviewerInput2, { title: "reviewer", output: "verdict: APPROVED\\n", args: reviewerInput2.args })
+    fs.writeSync(1, JSON.stringify({ type: "tool", tool: "task", callID: "review-call-2", args: reviewerInput2.args, output: "verdict: APPROVED" }) + "\\n")
+  }
+  if (${JSON.stringify(events)} === "final-check-earlier-merge-ready") {
+    fs.writeSync(1, JSON.stringify({ type: "message", role: "assistant", text: "## Orchestrator Merge-Readiness Judgment\\n- merge_ready: YES\\n- earlier non-final response" }) + "\\n")
+  }
+  const finalText = ${JSON.stringify(events)} === "final-check-missing-judgment"
+    ? "## Orchestrator Merge-Readiness Judgment\\n- done"
+    : ${JSON.stringify(events)} === "final-check-earlier-merge-ready"
+      ? "## Outcome\\n- done"
+    : ${JSON.stringify(events)} === "final-check-merge-no"
+      ? "## Orchestrator Merge-Readiness Judgment\\n- merge_ready: NO\\n- I inspected the changed files with read-only tools."
+      : "## Orchestrator Merge-Readiness Judgment\\n- merge_ready: YES\\n- I inspected the changed files with read-only tools."
   fs.writeSync(1, JSON.stringify({ type: "message", role: "assistant", text: finalText }) + "\\n")
 } else {
   const taskArgs = { subagent_type: target, prompt: ${JSON.stringify(highEntropyTaskPrompt)} }
@@ -232,7 +298,14 @@ test("orchestrator-final-check succeeds when approval is followed by read-only i
   assert.equal(marker.reviewerApproved, true)
   assert.equal(marker.readOnlyToolAfterApproval, true)
   assert.equal(marker.firstReadOnlyToolAfterApproval.tool, "read")
+  assert.equal(Object.hasOwn(marker.firstReadOnlyToolAfterApproval, "owner"), false)
   assert.match(result.stdout, /Final-check marker:/)
+})
+
+test("orchestrator-final-check resolves ownership from trusted runtime log correlation", async () => {
+  const log = "INFO service=session.processor session.id=session-123 messageID=msg-read-owner process\nINFO service=llm session.id=session-123 agent=orchestrator mode=primary stream\n"
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-log-owner-read", log } })
+  assert.equal(result.status, 0, result.stderr)
 })
 
 test("orchestrator-final-check fails without read-only inspection after approval", async () => {
@@ -241,10 +314,100 @@ test("orchestrator-final-check fails without read-only inspection after approval
   assert.match(result.stderr, /no read\/glob\/grep tool call observed after reviewer approval/)
 })
 
+test("orchestrator-final-check rejects subagent-owned read-only inspection after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-subagent-read" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects missing-owner read-only inspection after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-missing-owner-read" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects spoofed args owner after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-spoofed-owner" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects spoofed args agent after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-spoofed-agent" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects unknown-owner read-only inspection after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-unknown-owner-read" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects nonexistent in-worktree read target after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-nonexistent-worktree-read" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects unrelated read-only target after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-unrelated-read" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects agents/tasks artifact target after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-agents-tasks-read" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects stale read before latest approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-stale-read-after-loop" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after latest reviewer approval/)
+})
+
+test("orchestrator-final-check rejects forbidden glob pattern with valid worktree path", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-forbidden-glob-pattern" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects forbidden grep include with valid worktree path", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-forbidden-grep-include" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects forbidden glob path after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-forbidden-glob-path" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
+test("orchestrator-final-check rejects forbidden grep path after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-forbidden-grep-path" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no orchestrator-owned read\/glob\/grep tool call inspected sandbox worktree changes after reviewer approval/)
+})
+
 test("orchestrator-final-check fails without orchestrator merge-readiness judgment", async () => {
   const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-missing-judgment" } })
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /final response does not contain orchestrator merge-readiness judgment/)
+  assert.match(result.stderr, /final response missing explicit merge-readiness judgment/)
+})
+
+test("orchestrator-final-check rejects earlier assistant merge_ready YES without final judgment", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-earlier-merge-ready" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /final response missing explicit merge-readiness judgment/)
+})
+
+test("orchestrator-final-check rejects final merge_ready NO", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-merge-no" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /final explicit merge-readiness judgment is merge_ready: NO/)
 })
 
 test("orchestrator prompt requires direct final read-only merge-readiness judgment", async () => {
