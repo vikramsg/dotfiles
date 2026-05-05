@@ -59,13 +59,26 @@ if (${JSON.stringify(events)} === "bad") {
   fs.writeSync(1, JSON.stringify({ type: "step_start", args }) + "\\n")
   fs.writeSync(1, JSON.stringify({ type: "tool", callID, nested: { value: callID }, agent: runAgent, target }) + "\\n")
 }
-const taskArgs = { subagent_type: target, prompt: ${JSON.stringify(highEntropyTaskPrompt)} }
-const taskInput = { tool: "task", args: taskArgs, callID }
-const beforeTaskInput = { tool: "task", args: { subagent_type: target + "-stale", prompt: "STALE-BEFORE-PROMPT" }, callID }
-const beforeTaskOutput = { args: taskArgs }
-const afterTaskOutput = { title: null, output: null, args: { subagent_type: target + "-stale", prompt: "STALE-AFTER-PROMPT" } }
-await invokeGeneratedHook("tool.execute.before", beforeTaskInput, beforeTaskOutput)
-await invokeGeneratedHook("tool.execute.after", taskInput, afterTaskOutput)
+if (${JSON.stringify(events)} === "final-check-approved" || ${JSON.stringify(events)} === "final-check-missing-read" || ${JSON.stringify(events)} === "final-check-missing-judgment") {
+  const reviewerInput = { tool: "task", args: { subagent_type: "reviewer", prompt: "review this" }, callID: "review-call" }
+  await invokeGeneratedHook("tool.execute.after", reviewerInput, { title: "reviewer", output: "verdict: APPROVED\\n", args: reviewerInput.args })
+  fs.writeSync(1, JSON.stringify({ type: "tool", tool: "task", callID: "review-call", args: reviewerInput.args, output: "verdict: APPROVED" }) + "\\n")
+  if (${JSON.stringify(events)} !== "final-check-missing-read") {
+    const readInput = { tool: "read", args: { filePath: "/tmp/final-pr-check-demo.txt" }, callID: "read-call" }
+    await invokeGeneratedHook("tool.execute.after", readInput, { title: "read", output: "one sentence" })
+    fs.writeSync(1, JSON.stringify({ type: "tool", tool: "read", callID: "read-call", args: readInput.args }) + "\\n")
+  }
+  const finalText = ${JSON.stringify(events)} === "final-check-missing-judgment" ? "## Outcome\\n- done" : "## Orchestrator Merge-Readiness Judgment\\n- merge_ready: YES\\n- I inspected the changed files with read-only tools."
+  fs.writeSync(1, JSON.stringify({ type: "message", role: "assistant", text: finalText }) + "\\n")
+} else {
+  const taskArgs = { subagent_type: target, prompt: ${JSON.stringify(highEntropyTaskPrompt)} }
+  const taskInput = { tool: "task", args: taskArgs, callID }
+  const beforeTaskInput = { tool: "task", args: { subagent_type: target + "-stale", prompt: "STALE-BEFORE-PROMPT" }, callID }
+  const beforeTaskOutput = { args: taskArgs }
+  const afterTaskOutput = { title: null, output: null, args: { subagent_type: target + "-stale", prompt: "STALE-AFTER-PROMPT" } }
+  await invokeGeneratedHook("tool.execute.before", beforeTaskInput, beforeTaskOutput)
+  await invokeGeneratedHook("tool.execute.after", taskInput, afterTaskOutput)
+}
 const signal = ${JSON.stringify(signal)}
 if (signal) {
   await new Promise((resolve) => setTimeout(resolve, 10))
@@ -210,4 +223,33 @@ test("real database path in log causes final status 1", async () => {
   const result = await runCli(["single-agent", "planner", "prompt"], { fakeOptions: { log: `using ${realDb}\n` } })
   assert.equal(result.status, 1)
   assert.match(result.stderr, /validation error: log contains user OpenCode database path/)
+})
+
+test("orchestrator-final-check succeeds when approval is followed by read-only inspection and judgment", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-approved" } })
+  assert.equal(result.status, 0, result.stderr)
+  const marker = JSON.parse(await readFile(path.join(result.sandboxRoot, "output", "final-check-marker.json"), "utf8"))
+  assert.equal(marker.reviewerApproved, true)
+  assert.equal(marker.readOnlyToolAfterApproval, true)
+  assert.equal(marker.firstReadOnlyToolAfterApproval.tool, "read")
+  assert.match(result.stdout, /Final-check marker:/)
+})
+
+test("orchestrator-final-check fails without read-only inspection after approval", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-missing-read" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /no read\/glob\/grep tool call observed after reviewer approval/)
+})
+
+test("orchestrator-final-check fails without orchestrator merge-readiness judgment", async () => {
+  const result = await runCli(["orchestrator-final-check", "make", "a", "tiny", "change"], { fakeOptions: { events: "final-check-missing-judgment" } })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /final response does not contain orchestrator merge-readiness judgment/)
+})
+
+test("orchestrator prompt requires direct final read-only merge-readiness judgment", async () => {
+  const prompt = await readFile(path.join(repoOpencode, "agents", "orchestrator.md"), "utf8")
+  assert.match(prompt, /After reviewer returns `verdict: APPROVED`/)
+  assert.match(prompt, /Use read-only tools \(`read`, `glob`, and\/or `grep`\) yourself/)
+  assert.match(prompt, /## Orchestrator Merge-Readiness Judgment/)
 })

@@ -8,6 +8,7 @@
  *
  * Usage from the repository root:
  *   just opencode-sandbox orchestrator-until <subagent> <prompt...>
+ *   just opencode-sandbox orchestrator-final-check <prompt...>
  *   just opencode-sandbox single-agent <agent> <prompt...>
  *
  * Environment variables:
@@ -52,6 +53,7 @@ const usage = `Usage: sandbox-cli <subcommand> <args...>
 
 Subcommands:
   orchestrator-until <subagent> <prompt...>
+  orchestrator-final-check <prompt...>
   single-agent <agent> <prompt...>`
 
 function failUsage(message?: string): never {
@@ -292,6 +294,79 @@ export async function SingleAgentObserverPlugin() {
 `)
 }
 
+async function writeFinalCheckPlugin(file: string): Promise<void> {
+  await fs.writeFile(file, `import fs from "node:fs"
+import path from "node:path"
+
+const readOnlyTools = new Set(["read", "glob", "grep"])
+const state = {
+  reviewerApproved: false,
+  reviewerApprovalCallID: null,
+  reviewerApprovalObservedAt: null,
+  readOnlyToolAfterApproval: false,
+  firstReadOnlyToolAfterApproval: null,
+  postApprovalLoopReentry: false,
+  postApprovalLoopSubagents: [],
+}
+
+function getSubagent(args) {
+  return args?.subagent_type || args?.subagentType || args?.agent || ""
+}
+
+function normalizeText(value) {
+  if (typeof value === "string") return value
+  if (value === undefined || value === null) return ""
+  return JSON.stringify(value)
+}
+
+function hasReviewerApproval(output) {
+  const text = normalizeText(output?.output ?? output)
+  return /verdict:\\s*APPROVED\\b/i.test(text)
+}
+
+function writeMarker() {
+  const markerPath = process.env.OPENCODE_SANDBOX_FINAL_CHECK_MARKER
+  if (!markerPath) return
+  fs.mkdirSync(path.dirname(markerPath), { recursive: true })
+  fs.writeFileSync(markerPath, \`\${JSON.stringify(state, null, 2)}\n\`)
+}
+
+function observe(input, output = null) {
+  const tool = input?.tool || ""
+  if (tool === "task") {
+    const subagent = getSubagent(input?.args)
+    if (subagent === "reviewer" && hasReviewerApproval(output)) {
+      state.reviewerApproved = true
+      state.reviewerApprovalCallID = input.callID || null
+      state.reviewerApprovalObservedAt = new Date().toISOString()
+      writeMarker()
+      return
+    }
+    if (state.reviewerApproved && ["planner", "implementer", "reviewer"].includes(subagent)) {
+      state.postApprovalLoopReentry = true
+      state.postApprovalLoopSubagents.push({ subagent, callID: input.callID || null, observedAt: new Date().toISOString() })
+      writeMarker()
+    }
+    return
+  }
+  if (state.reviewerApproved && readOnlyTools.has(tool)) {
+    state.readOnlyToolAfterApproval = true
+    if (!state.firstReadOnlyToolAfterApproval) {
+      state.firstReadOnlyToolAfterApproval = { tool, callID: input.callID || null, args: input.args || null, observedAt: new Date().toISOString() }
+    }
+    writeMarker()
+  }
+}
+
+export async function FinalCheckObserverPlugin() {
+  writeMarker()
+  return {
+    "tool.execute.after": async (input, output) => { observe(input, output) },
+  }
+}
+`)
+}
+
 async function runOpencode(args: string[], env: NodeJS.ProcessEnv, paths: SandboxPaths, watchMarker?: string): Promise<number> {
   const stdout = createWriteStream(paths.eventsFile)
   const stderr = createWriteStream(paths.logFile)
@@ -372,6 +447,13 @@ function containsValue(value: EventValue, expected: string): boolean {
   return false
 }
 
+function containsTextMatching(value: EventValue, pattern: RegExp): boolean {
+  if (typeof value === "string") return pattern.test(value)
+  if (Array.isArray(value)) return value.some((item) => containsTextMatching(item, pattern))
+  if (value && typeof value === "object") return Object.values(value).some((item) => containsTextMatching(item, pattern))
+  return false
+}
+
 async function commonValidation(paths: SandboxPaths): Promise<{ events: EventValue[], errors: string[] }> {
   const errors: string[] = []
   const log = existsSync(paths.logFile) ? await fs.readFile(paths.logFile, "utf8") : ""
@@ -417,6 +499,28 @@ async function validateSingle(paths: SandboxPaths, markerPath: string, agent: st
         errors.push(`single-agent marker is not valid JSON: ${(error as Error).message}`)
       }
     }
+  }
+  for (const error of errors) console.error(`validation error: ${error}`)
+  return errors.length === 0
+}
+
+async function validateFinalCheck(paths: SandboxPaths, markerPath: string): Promise<boolean> {
+  const { events, errors } = await commonValidation(paths)
+  if (!existsSync(markerPath)) {
+    errors.push("final-check marker was not written")
+  } else {
+    try {
+      const marker = JSON.parse(await fs.readFile(markerPath, "utf8"))
+      if (marker.reviewerApproved !== true) errors.push("reviewer approval was not observed")
+      if (marker.readOnlyToolAfterApproval !== true) errors.push("no read/glob/grep tool call observed after reviewer approval")
+      const tool = marker.firstReadOnlyToolAfterApproval?.tool
+      if (marker.readOnlyToolAfterApproval === true && !["read", "glob", "grep"].includes(tool)) errors.push(`unexpected read-only tool marker: ${tool || "<missing>"}`)
+    } catch (error) {
+      errors.push(`final-check marker is not valid JSON: ${(error as Error).message}`)
+    }
+  }
+  if (!events.some((event) => containsTextMatching(event, /Orchestrator Merge-Readiness Judgment/i))) {
+    errors.push("final response does not contain orchestrator merge-readiness judgment")
   }
   for (const error of errors) console.error(`validation error: ${error}`)
   return errors.length === 0
@@ -482,6 +586,44 @@ async function runOrchestratorUntil(args: string[]): Promise<number> {
   const status = existsSync(stopMarker) && validationOk ? 0 : 1
   await writeStatuses(paths, rawStatus, status)
   printOrchestratorSummary(paths, stopPlugin, stopMarker, rawStatus, status)
+  return status
+}
+
+async function runOrchestratorFinalCheck(args: string[]): Promise<number> {
+  if (args.length < 1) failUsage()
+  const prompt = args.join(" ")
+  if (!await commandExists("opencode")) {
+    console.error("error: opencode CLI was not found on PATH")
+    return 127
+  }
+
+  const paths = await makeSandboxPaths()
+  const observerPlugin = path.join(paths.pluginDir, "final-check-observer.js")
+  const marker = path.join(paths.outputDir, "final-check-marker.json")
+  await linkRepoDir(path.join(paths.opencodeRoot, "agents"), path.join(paths.opencodeConfigDir, "agents"))
+  await linkRepoDir(path.join(paths.opencodeRoot, "commands"), path.join(paths.opencodeConfigDir, "commands"))
+  await writeFinalCheckPlugin(observerPlugin)
+  await writeSandboxConfig(paths, observerPlugin)
+  await cleanupKnownFiles([marker, paths.statusFile, paths.rawStatusFile])
+  await fs.writeFile(paths.commandFile, `XDG_CONFIG_HOME=${shellQuote(paths.configHome)} XDG_DATA_HOME=${shellQuote(paths.dataHome)} XDG_CACHE_HOME=${shellQuote(paths.cacheHome)} XDG_STATE_HOME=${shellQuote(paths.stateHome)} OPENCODE_SANDBOX_FINAL_CHECK_MARKER=${shellQuote(marker)} opencode run --dir ${shellQuote(paths.worktree)} --command orchestrate --format json --print-logs --log-level DEBUG ${shellQuote(prompt)}\n`)
+  await fs.writeFile(paths.metadataFile, `${JSON.stringify({ sandboxRoot: paths.sandboxRoot, configHome: paths.configHome, dataHome: paths.dataHome, cacheHome: paths.cacheHome, stateHome: paths.stateHome, worktree: paths.worktree, outputDir: paths.outputDir, prompt, observerPlugin, finalCheckMarker: marker, generatedAt: new Date().toISOString() }, null, 2)}\n`)
+  printStartupSummary("orchestrator-final-check", paths, [
+    ["Generated observer plugin", observerPlugin],
+    ["Final-check marker", marker],
+  ])
+
+  const rawStatus = await runOpencode(["run", "--dir", paths.worktree, "--command", "orchestrate", "--format", "json", "--print-logs", "--log-level", "DEBUG", prompt], {
+    XDG_CONFIG_HOME: paths.configHome,
+    XDG_DATA_HOME: paths.dataHome,
+    XDG_CACHE_HOME: paths.cacheHome,
+    XDG_STATE_HOME: paths.stateHome,
+    OPENCODE_SANDBOX_FINAL_CHECK_MARKER: marker,
+  }, paths)
+  let status = rawStatus
+  if (status === 0 && await hasEventError(paths.eventsFile)) status = 1
+  if (!await validateFinalCheck(paths, marker)) status = 1
+  await writeStatuses(paths, rawStatus, status)
+  printFinalCheckSummary(paths, observerPlugin, marker, rawStatus, status)
   return status
 }
 
@@ -601,6 +743,20 @@ function printOrchestratorSummary(paths: SandboxPaths, stopPlugin: string, stopM
   console.log(`Script exit status: ${paths.statusFile} (${status})`)
 }
 
+function printFinalCheckSummary(paths: SandboxPaths, observerPlugin: string, marker: string, rawStatus: number, status: number): void {
+  console.log(`Sandbox root: ${paths.sandboxRoot}`)
+  console.log(`Worktree: ${paths.worktree}`)
+  console.log(`Generated config: ${path.join(paths.opencodeConfigDir, "opencode.json")}`)
+  console.log(`Generated observer plugin: ${observerPlugin}`)
+  console.log(`Command: ${paths.commandFile}`)
+  console.log(`Metadata: ${paths.metadataFile}`)
+  console.log(`Logs: ${paths.logFile}`)
+  console.log(`Raw events: ${paths.eventsFile}`)
+  console.log(`Final-check marker: ${marker}`)
+  console.log(`OpenCode CLI exit status: ${paths.rawStatusFile} (${rawStatus})`)
+  console.log(`Script exit status: ${paths.statusFile} (${status})`)
+}
+
 function printSingleSummary(paths: SandboxPaths, observerPlugin: string, marker: string, rawStatus: number, status: number): void {
   console.log(`Sandbox root: ${paths.sandboxRoot}`)
   console.log(`Worktree: ${paths.worktree}`)
@@ -620,6 +776,7 @@ async function main(): Promise<number> {
   if (!subcommand) failUsage()
   try {
     if (subcommand === "orchestrator-until") return await runOrchestratorUntil(args)
+    if (subcommand === "orchestrator-final-check") return await runOrchestratorFinalCheck(args)
     if (subcommand === "single-agent") return await runSingleAgent(args)
     failUsage(`unknown subcommand: ${subcommand}`)
   } catch (error) {
