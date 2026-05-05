@@ -5,6 +5,8 @@
 # - $$ expands to shell PID and can corrupt paths (for example 721854CONFIG_FILE).
 # - Use {{...}} only for just-level interpolation.
 
+set positional-arguments := true
+
 # List available commands
 default:
     @just --list
@@ -116,6 +118,10 @@ opencode-doctor:
             exit 1; \
         fi; \
         echo "OpenCode persistence smoke check passed in $TMPDIR"
+
+# Run OpenCode sandbox CLI
+opencode-sandbox +args:
+    @npm --prefix "{{justfile_directory()}}/opencode" run --silent sandbox -- "$@"
 
 
 # Set up Ghostty symlink
