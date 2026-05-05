@@ -18,6 +18,10 @@ Use it to debug or test the orchestrator and agents without touching normal Open
 
 Runs the orchestrator with the prompt and stops when the requested subagent is observed. By default it stops after the target subagent runs.
 
+### `orchestrator-final-check <prompt...>`
+
+Runs the full orchestrator flow and validates the final PR check behavior. The sandbox observes reviewer approval, requires a later `read`, `glob`, or `grep` tool call by the orchestrator, and checks the final output for `Orchestrator Merge-Readiness Judgment`.
+
 ### `single-agent <agent> <prompt...>`
 
 Runs one agent directly with the prompt. For subagent-mode agents, the CLI generates a sandbox-only primary harness agent that calls the requested real subagent.
@@ -27,6 +31,7 @@ Runs one agent directly with the prompt. For subagent-mode agents, the CLI gener
 ```sh
 just opencode-sandbox orchestrator-until planner "Plan this change"
 OPENCODE_SANDBOX_STOP_PHASE=before just opencode-sandbox orchestrator-until implementer "Prompt"
+just opencode-sandbox orchestrator-final-check "Make a harmless text-file change and complete review"
 just opencode-sandbox single-agent reviewer "Review this change"
 ```
 
@@ -45,6 +50,7 @@ Artifacts are written under `<sandbox-root>/output`:
 - `opencode.log`: OpenCode stderr and debug logs.
 - `events.jsonl`: Raw OpenCode JSON event stream.
 - `stop-marker.json`: Marker written by `orchestrator-until` when the target subagent is observed.
+- `final-check-marker.json`: Marker written by `orchestrator-final-check` with reviewer approval and post-approval read-only tool observations.
 - `single-agent-marker.json`: Marker written for `single-agent` subagent-mode runs.
 - `opencode-exit-status.txt`: Raw `opencode` process exit status.
 - `exit-status.txt`: Sandbox CLI validation exit status.

@@ -13,3 +13,5 @@
     * Hooks or plugins that can run an orchestrator and stop at a specific subagent
 7. Once the testing sandbox is ready, then make sure you can test out each subagent with the sandbox. 
     * Maybe even run it on a specific repo and branch?
+8. RULES.md
+    * Even if we have opencode config in repo, we can still uses untracked rules to customize
