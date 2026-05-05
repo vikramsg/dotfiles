@@ -8,6 +8,7 @@ import path from "node:path"
 
 const repoOpencode = path.resolve(import.meta.dirname, "..")
 const cli = path.join(repoOpencode, "sandbox", "dist", "sandbox-cli.js")
+const highEntropyTaskPrompt = Array.from({ length: 80 }, (_, index) => `VX-CAPTURE-${index.toString().padStart(2, "0")}-{A|B}->C`).join("\n")
 
 async function makeFakeOpencode({ marker = true, log = "", events = "default", signal = null } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "fake-opencode-"))
@@ -58,10 +59,13 @@ if (${JSON.stringify(events)} === "bad") {
   fs.writeSync(1, JSON.stringify({ type: "step_start", args }) + "\\n")
   fs.writeSync(1, JSON.stringify({ type: "tool", callID, nested: { value: callID }, agent: runAgent, target }) + "\\n")
 }
-const taskInput = { tool: "task", args: { subagent_type: target }, callID }
-const taskOutput = { title: null, output: null }
-await invokeGeneratedHook("tool.execute.before", taskInput, taskOutput)
-await invokeGeneratedHook("tool.execute.after", taskInput, taskOutput)
+const taskArgs = { subagent_type: target, prompt: ${JSON.stringify(highEntropyTaskPrompt)} }
+const taskInput = { tool: "task", args: taskArgs, callID }
+const beforeTaskInput = { tool: "task", args: { subagent_type: target + "-stale", prompt: "STALE-BEFORE-PROMPT" }, callID }
+const beforeTaskOutput = { args: taskArgs }
+const afterTaskOutput = { title: null, output: null, args: { subagent_type: target + "-stale", prompt: "STALE-AFTER-PROMPT" } }
+await invokeGeneratedHook("tool.execute.before", beforeTaskInput, beforeTaskOutput)
+await invokeGeneratedHook("tool.execute.after", taskInput, afterTaskOutput)
 const signal = ${JSON.stringify(signal)}
 if (signal) {
   await new Promise((resolve) => setTimeout(resolve, 10))
@@ -100,9 +104,48 @@ async function runCli(args, { env = {}, fakeOptions } = {}) {
 test("orchestrator-until planner succeeds with generated stop marker", async () => {
   const result = await runCli(["orchestrator-until", "planner", "make", "a", "plan"])
   assert.equal(result.status, 0, result.stderr)
+  const metadata = JSON.parse(await readFile(path.join(result.sandboxRoot, "output", "metadata.json"), "utf8"))
   const marker = JSON.parse(await readFile(path.join(result.sandboxRoot, "output", "stop-marker.json"), "utf8"))
+  assert.equal(Object.hasOwn(metadata, "stateRoot"), false)
   assert.equal(marker.subagent, "planner")
+  assert.equal(marker.inputArgs.prompt, highEntropyTaskPrompt)
+  assert.ok(marker.inputArgs.prompt.length > 1200)
+  assert.doesNotMatch(marker.inputArgs.prompt, /\.agents\/tasks/)
+  assert.doesNotMatch(marker.inputArgs.prompt, /request\.md/)
+  assert.doesNotMatch(marker.inputArgs.prompt, /NO_[A-Z_]*PLAN[A-Z_]*/)
+  assert.doesNotMatch(marker.inputArgs.prompt, /BEGIN_VERBATIM_USER_PLAN/)
+  assert.doesNotMatch(result.stdout, /Persistent state root/)
+  assert.doesNotMatch(result.stdout, /\.agents\/tasks/)
   assert.equal(await readFile(path.join(result.sandboxRoot, "output", "exit-status.txt"), "utf8"), "0\n")
+})
+
+test("orchestrator-until captures full task args before execution", async () => {
+  const result = await runCli(["orchestrator-until", "planner", "make", "a", "plan"], { env: { OPENCODE_SANDBOX_STOP_PHASE: "before" } })
+  assert.equal(result.status, 0, result.stderr)
+  const marker = JSON.parse(await readFile(path.join(result.sandboxRoot, "output", "stop-marker.json"), "utf8"))
+  assert.equal(marker.phase, "before")
+  assert.equal(marker.subagent, "planner")
+  assert.equal(marker.observedSubagent, "planner")
+  assert.equal(marker.inputArgs.subagent_type, "planner")
+  assert.equal(marker.inputArgs.prompt, highEntropyTaskPrompt)
+  assert.notEqual(marker.inputArgs.prompt, "STALE-BEFORE-PROMPT")
+  assert.ok(marker.inputArgs.prompt.length > 1200)
+  assert.doesNotMatch(marker.inputArgs.prompt, /\.agents\/tasks/)
+  assert.doesNotMatch(marker.inputArgs.prompt, /request\.md/)
+  assert.doesNotMatch(marker.inputArgs.prompt, /NO_[A-Z_]*PLAN[A-Z_]*/)
+})
+
+test("orchestrator-until captures after execution args from input instead of stale hook output", async () => {
+  const result = await runCli(["orchestrator-until", "planner", "make", "a", "plan"])
+  assert.equal(result.status, 0, result.stderr)
+  const marker = JSON.parse(await readFile(path.join(result.sandboxRoot, "output", "stop-marker.json"), "utf8"))
+  assert.equal(marker.phase, "after")
+  assert.equal(marker.subagent, "planner")
+  assert.equal(marker.observedSubagent, "planner")
+  assert.equal(marker.inputArgs.subagent_type, "planner")
+  assert.equal(marker.inputArgs.prompt, highEntropyTaskPrompt)
+  assert.notEqual(marker.inputArgs.prompt, "STALE-AFTER-PROMPT")
+  assert.ok(marker.inputArgs.prompt.length > 1200)
 })
 
 test("orchestrator-until preserves prompt tokens that start with dash", async () => {

@@ -188,9 +188,13 @@ async function writeStopPlugin(file: string): Promise<void> {
   await fs.writeFile(file, `import fs from "node:fs"
 import path from "node:path"
 
-function getSubagent(input, hookOutput = null) {
-  return input?.args?.subagent_type || input?.args?.subagentType || input?.args?.agent ||
-    hookOutput?.args?.subagent_type || hookOutput?.args?.subagentType || hookOutput?.args?.agent || ""
+function actualArgsForPhase(phase, input, hookOutput = null) {
+  if (phase === "before") return hookOutput?.args ?? input?.args ?? null
+  return input?.args ?? hookOutput?.args ?? null
+}
+
+function getSubagent(args) {
+  return args?.subagent_type || args?.subagentType || args?.agent || ""
 }
 
 function normalizeText(value) {
@@ -211,7 +215,7 @@ function writeStopMarker(payload) {
   fs.writeFileSync(markerPath, \`\${JSON.stringify(payload, null, 2)}\n\`)
 }
 
-function stopNow({ phase, subagent, input, output = null, observedSubagent = subagent }) {
+function stopNow({ phase, subagent, input, output = null, observedSubagent = subagent, inputArgs = null }) {
   const target = process.env.OPENCODE_SANDBOX_STOP_AT || ""
   writeStopMarker({
     stopped: true,
@@ -220,6 +224,7 @@ function stopNow({ phase, subagent, input, output = null, observedSubagent = sub
     observedSubagent,
     target,
     callID: input.callID || null,
+    inputArgs,
     title: output?.title || null,
     outputPreview: output ? preview(output.output) : null,
     stoppedAt: new Date().toISOString(),
@@ -229,11 +234,12 @@ function stopNow({ phase, subagent, input, output = null, observedSubagent = sub
 
 function stopIfMatched(phase, input, output = null, hookOutput = null) {
   if (input?.tool !== "task") return
-  const subagent = getSubagent(input, hookOutput)
+  const actualArgs = actualArgsForPhase(phase, input, hookOutput)
+  const subagent = getSubagent(actualArgs)
   const target = process.env.OPENCODE_SANDBOX_STOP_AT || ""
   const expectedPhase = process.env.OPENCODE_SANDBOX_STOP_PHASE || "after"
   if (phase !== expectedPhase || subagent !== target) return
-  stopNow({ phase, subagent, input, output })
+  stopNow({ phase, subagent, input, output, inputArgs: actualArgs })
 }
 
 export async function StopAtSubagentPlugin() {
@@ -289,16 +295,21 @@ export async function SingleAgentObserverPlugin() {
 async function runOpencode(args: string[], env: NodeJS.ProcessEnv, paths: SandboxPaths, watchMarker?: string): Promise<number> {
   const stdout = createWriteStream(paths.eventsFile)
   const stderr = createWriteStream(paths.logFile)
-  const child = spawn("opencode", args, { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] })
+  const child = spawn("opencode", args, { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" })
   child.stdout.pipe(stdout)
   child.stderr.pipe(stderr)
 
   let watcher: NodeJS.Timeout | undefined
+  let delayedSigtermTimer: NodeJS.Timeout | undefined
+  let killTimer: NodeJS.Timeout | undefined
   if (watchMarker) {
     watcher = setInterval(() => {
       if (existsSync(watchMarker) && lstatSync(watchMarker).size > 0) {
         clearInterval(watcher)
-        setTimeout(() => child.kill("SIGTERM"), 1000)
+        delayedSigtermTimer = setTimeout(() => {
+          signalProcessGroup(child.pid, "SIGTERM")
+          killTimer = setTimeout(() => signalProcessGroup(child.pid, "SIGKILL"), 5000)
+        }, 1000)
       }
     }, 200)
   }
@@ -307,8 +318,21 @@ async function runOpencode(args: string[], env: NodeJS.ProcessEnv, paths: Sandbo
     child.on("close", (code, signal) => resolve(closeStatus(code, signal)))
   })
   if (watcher) clearInterval(watcher)
+  if (delayedSigtermTimer) clearTimeout(delayedSigtermTimer)
+  if (killTimer) clearTimeout(killTimer)
   await Promise.all([new Promise((resolve) => stdout.end(resolve)), new Promise((resolve) => stderr.end(resolve))])
   return status
+}
+
+function signalProcessGroup(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (!pid) return
+  try {
+    process.kill(process.platform === "win32" ? pid : -pid, signal)
+  } catch {
+    try {
+      process.kill(pid, signal)
+    } catch {}
+  }
 }
 
 function closeStatus(code: number | null, signal: NodeJS.Signals | null): number {
@@ -437,13 +461,12 @@ async function runOrchestratorUntil(args: string[]): Promise<number> {
   await writeSandboxConfig(paths, stopPlugin)
   await cleanupKnownFiles([stopMarker, paths.statusFile, paths.rawStatusFile])
   await fs.writeFile(paths.commandFile, `XDG_CONFIG_HOME=${shellQuote(paths.configHome)} XDG_DATA_HOME=${shellQuote(paths.dataHome)} XDG_CACHE_HOME=${shellQuote(paths.cacheHome)} XDG_STATE_HOME=${shellQuote(paths.stateHome)} OPENCODE_SANDBOX_STOP_AT=${shellQuote(stopAt)} OPENCODE_SANDBOX_STOP_PHASE=${shellQuote(stopPhase)} OPENCODE_SANDBOX_STOP_MARKER=${shellQuote(stopMarker)} opencode run --dir ${shellQuote(paths.worktree)} --command orchestrate --format json --print-logs --log-level DEBUG ${shellQuote(prompt)}\n`)
-  await fs.writeFile(paths.metadataFile, `${JSON.stringify({ sandboxRoot: paths.sandboxRoot, configHome: paths.configHome, dataHome: paths.dataHome, cacheHome: paths.cacheHome, stateHome: paths.stateHome, worktree: paths.worktree, outputDir: paths.outputDir, stopAt, stopPhase, prompt, stopPlugin, stopMarker, stateRoot: path.join(paths.worktree, ".agents", "tasks"), generatedAt: new Date().toISOString() }, null, 2)}\n`)
+  await fs.writeFile(paths.metadataFile, `${JSON.stringify({ sandboxRoot: paths.sandboxRoot, configHome: paths.configHome, dataHome: paths.dataHome, cacheHome: paths.cacheHome, stateHome: paths.stateHome, worktree: paths.worktree, outputDir: paths.outputDir, stopAt, stopPhase, prompt, stopPlugin, stopMarker, generatedAt: new Date().toISOString() }, null, 2)}\n`)
   printStartupSummary("orchestrator-until", paths, [
     ["Generated stop plugin", stopPlugin],
     ["Stop target", stopAt],
     ["Stop phase", stopPhase],
     ["Stop marker", stopMarker],
-    ["Persistent state root", path.join(paths.worktree, ".agents", "tasks")],
   ])
 
   const rawStatus = await runOpencode(["run", "--dir", paths.worktree, "--command", "orchestrate", "--format", "json", "--print-logs", "--log-level", "DEBUG", prompt], {
@@ -574,7 +597,6 @@ function printOrchestratorSummary(paths: SandboxPaths, stopPlugin: string, stopM
   console.log(`Logs: ${paths.logFile}`)
   console.log(`Raw events: ${paths.eventsFile}`)
   console.log(`Stop marker: ${stopMarker}`)
-  console.log(`Persistent state root: ${path.join(paths.worktree, ".agents", "tasks")}`)
   console.log(`OpenCode CLI exit status: ${paths.rawStatusFile} (${rawStatus})`)
   console.log(`Script exit status: ${paths.statusFile} (${status})`)
 }
