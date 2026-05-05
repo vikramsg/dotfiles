@@ -438,6 +438,13 @@ async function runOrchestratorUntil(args: string[]): Promise<number> {
   await cleanupKnownFiles([stopMarker, paths.statusFile, paths.rawStatusFile])
   await fs.writeFile(paths.commandFile, `XDG_CONFIG_HOME=${shellQuote(paths.configHome)} XDG_DATA_HOME=${shellQuote(paths.dataHome)} XDG_CACHE_HOME=${shellQuote(paths.cacheHome)} XDG_STATE_HOME=${shellQuote(paths.stateHome)} OPENCODE_SANDBOX_STOP_AT=${shellQuote(stopAt)} OPENCODE_SANDBOX_STOP_PHASE=${shellQuote(stopPhase)} OPENCODE_SANDBOX_STOP_MARKER=${shellQuote(stopMarker)} opencode run --dir ${shellQuote(paths.worktree)} --command orchestrate --format json --print-logs --log-level DEBUG ${shellQuote(prompt)}\n`)
   await fs.writeFile(paths.metadataFile, `${JSON.stringify({ sandboxRoot: paths.sandboxRoot, configHome: paths.configHome, dataHome: paths.dataHome, cacheHome: paths.cacheHome, stateHome: paths.stateHome, worktree: paths.worktree, outputDir: paths.outputDir, stopAt, stopPhase, prompt, stopPlugin, stopMarker, stateRoot: path.join(paths.worktree, ".agents", "tasks"), generatedAt: new Date().toISOString() }, null, 2)}\n`)
+  printStartupSummary("orchestrator-until", paths, [
+    ["Generated stop plugin", stopPlugin],
+    ["Stop target", stopAt],
+    ["Stop phase", stopPhase],
+    ["Stop marker", stopMarker],
+    ["Persistent state root", path.join(paths.worktree, ".agents", "tasks")],
+  ])
 
   const rawStatus = await runOpencode(["run", "--dir", paths.worktree, "--command", "orchestrate", "--format", "json", "--print-logs", "--log-level", "DEBUG", prompt], {
     XDG_CONFIG_HOME: paths.configHome,
@@ -487,6 +494,13 @@ async function runSingleAgent(args: string[]): Promise<number> {
   await cleanupKnownFiles([marker, paths.statusFile, paths.rawStatusFile])
   await fs.writeFile(paths.commandFile, `XDG_CONFIG_HOME=${shellQuote(paths.configHome)} XDG_DATA_HOME=${shellQuote(paths.dataHome)} XDG_CACHE_HOME=${shellQuote(paths.cacheHome)} XDG_STATE_HOME=${shellQuote(paths.stateHome)} OPENCODE_SANDBOX_SINGLE_AGENT=${shellQuote(agentName)} OPENCODE_SANDBOX_SINGLE_AGENT_MARKER=${shellQuote(marker)} opencode run --dir ${shellQuote(paths.worktree)} --agent ${shellQuote(runAgent)} --format json --print-logs --log-level DEBUG ${shellQuote(runPrompt)}\n`)
   await fs.writeFile(paths.metadataFile, `${JSON.stringify({ sandboxRoot: paths.sandboxRoot, configHome: paths.configHome, dataHome: paths.dataHome, cacheHome: paths.cacheHome, stateHome: paths.stateHome, worktree: paths.worktree, outputDir: paths.outputDir, agent: agentName, agentMode, runAgent, prompt, observerPlugin, singleAgentMarker: marker, generatedAt: new Date().toISOString() }, null, 2)}\n`)
+  printStartupSummary("single-agent", paths, [
+    ["Generated observer plugin", observerPlugin],
+    ["Agent", agentName],
+    ["Agent mode", agentMode],
+    ["Run agent", runAgent],
+    ["Single-agent marker", marker],
+  ])
   const rawStatus = await runOpencode(["run", "--dir", paths.worktree, "--agent", runAgent, "--format", "json", "--print-logs", "--log-level", "DEBUG", runPrompt], {
     XDG_CONFIG_HOME: paths.configHome,
     XDG_DATA_HOME: paths.dataHome,
@@ -534,6 +548,20 @@ Return the subagent output and nothing else.
 async function writeStatuses(paths: SandboxPaths, rawStatus: number, status: number): Promise<void> {
   await fs.writeFile(paths.statusFile, `${status}\n`)
   await fs.writeFile(paths.rawStatusFile, `${rawStatus}\n`)
+}
+
+function printStartupSummary(subcommand: string, paths: SandboxPaths, details: [string, string][]): void {
+  console.log(`Starting OpenCode sandbox: ${subcommand}`)
+  console.log(`Sandbox root: ${paths.sandboxRoot}`)
+  console.log(`Worktree: ${paths.worktree}`)
+  console.log(`Generated config: ${path.join(paths.opencodeConfigDir, "opencode.json")}`)
+  console.log(`Output dir: ${paths.outputDir}`)
+  console.log(`Command: ${paths.commandFile}`)
+  console.log(`Metadata: ${paths.metadataFile}`)
+  console.log(`Logs: ${paths.logFile}`)
+  console.log(`Raw events: ${paths.eventsFile}`)
+  for (const [label, value] of details) console.log(`${label}: ${value}`)
+  console.log("Running OpenCode...")
 }
 
 function printOrchestratorSummary(paths: SandboxPaths, stopPlugin: string, stopMarker: string, rawStatus: number, status: number): void {

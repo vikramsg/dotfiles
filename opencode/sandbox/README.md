@@ -49,6 +49,19 @@ Artifacts are written under `<sandbox-root>/output`:
 - `opencode-exit-status.txt`: Raw `opencode` process exit status.
 - `exit-status.txt`: Sandbox CLI validation exit status.
 
+## Verification
+
+Run these from the repo root after changing sandbox code:
+
+```sh
+npm --prefix opencode run build
+npm --prefix opencode run test:sandbox
+```
+
+`npm --prefix opencode run build` runs the OpenCode package build. It checks the orchestration-state plugin and compiles the sandbox TypeScript CLI.
+
+`npm --prefix opencode run test:sandbox` builds the sandbox CLI and runs the sandbox CLI tests. The tests use a fake `opencode` executable, so they do not make real model calls.
+
 ## Notes
 
 - The CLI creates isolated XDG config, data, cache, and state homes under the sandbox root.
