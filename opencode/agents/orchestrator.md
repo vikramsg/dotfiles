@@ -54,7 +54,7 @@ Call `planner` first.
 Provide:
 1.User request consisting of
     - The direct request the user made.
-    - A full unabridged plan if one has been agreed upon.
+    - A full unabridged plan if one has been agreed upon. **Do not** try to reword it. Send it full.
 2.any prior reviewer feedback
 3.the requirement that the plan be executable and implementation ready
 

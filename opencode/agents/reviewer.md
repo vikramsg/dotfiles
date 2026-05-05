@@ -44,6 +44,11 @@ You must look for:
 - over-mocked tests or tests that avoid the real integration boundary being changed
 - missing regression coverage
 
+### Non-goals
+
+1. Which files are committed, not committed, staged, unstaged is not your concern.
+2. Always review all files changed from `main` regardless of whether they are staged, unstaged, committed etc.
+
 ## Output format
 
 Return markdown in exactly this structure:
@@ -63,6 +68,13 @@ verdict: APPROVED | CHANGE_REQUIRED
     - <relevant code snippets>
 2. <finding or "None">
     - <relevant code snippets>
+...
+...
+
+## Files touched in this PR
+
+1. <file1>
+2. <file2>
 ...
 ...
 

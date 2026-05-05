@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:orchestration-state && npm run build:sandbox",
+    "build:orchestration-state": "node --check plugins/orchestration-state.js",
+    "build:sandbox": "tsc -p sandbox/tsconfig.json",
+    "sandbox": "npm run build:sandbox --silent && node sandbox/dist/sandbox-cli.js",
+    "test:sandbox": "npm run build:sandbox --silent && node --test sandbox/sandbox-cli.test.mjs"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "1.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "typescript": "5.9.3"
+  }
+}
