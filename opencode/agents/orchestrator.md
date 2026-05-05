@@ -101,6 +101,13 @@ If the reviewer returns `verdict: CHANGE_REQUIRED`:
 
 Do not continue with vague reviewer feedback. If the review is not actionable, ask for concrete required fixes.
 
+### Final PR check
+
+As an expert software engineer, read the files changed.
+Take a critical look at the requirements and changes.
+Is the PR merge ready? If not why not?
+If it is not in fact PR ready, run the loop again and make sure it becomes merge ready. 
+
 ## Output discipline
 
 Keep your own responses compact.

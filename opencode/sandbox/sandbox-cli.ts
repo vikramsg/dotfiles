@@ -1,3 +1,21 @@
+/**
+ * OpenCode sandbox CLI for running real OpenCode in isolated sandbox flows.
+ *
+ * This exists to debug and test the orchestrator and individual agents without
+ * touching the normal OpenCode config, data, cache, or state directories. Each
+ * run creates isolated XDG homes under the sandbox root while preserving the
+ * command, metadata, logs, raw events, and marker/status files for inspection.
+ *
+ * Usage from the repository root:
+ *   just opencode-sandbox orchestrator-until <subagent> <prompt...>
+ *   just opencode-sandbox single-agent <agent> <prompt...>
+ *
+ * Environment variables:
+ *   OPENCODE_SANDBOX_ROOT       Override the sandbox root directory.
+ *   OPENCODE_SANDBOX_MODEL      Override the model written to sandbox config.
+ *   OPENCODE_SANDBOX_STOP_PHASE Stop before or after the target subagent
+ *                               for orchestrator-until runs; defaults to after.
+ */
 import { spawn } from "node:child_process"
 import { createWriteStream } from "node:fs"
 import * as fs from "node:fs/promises"
