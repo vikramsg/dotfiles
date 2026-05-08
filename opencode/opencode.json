@@ -13,16 +13,19 @@
     },
     "read": {
       "*.local/**": "allow",
+      "*.config/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"
     },
     "glob": {
       "*.local/**": "allow",
+      "*.config/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"
     },
     "grep": {
       "*.local/**": "allow",
+      "*.config/**": "allow",
       "/opt/homebrew/lib/**": "allow",
       "~/go/**": "allow"
     }
