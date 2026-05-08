@@ -219,6 +219,43 @@ vim.api.nvim_create_autocmd("FileType", {
 	end,
 })
 
+local dotfiles_typescript_indentexpr = "v:lua.dotfiles_typescript_indentexpr()"
+
+local function set_dotfiles_typescript_indentexpr()
+	if
+		vim.bo.indentexpr ~= dotfiles_typescript_indentexpr
+		and (not vim.b.dotfiles_typescript_indentexpr or vim.b.dotfiles_typescript_indentexpr == "")
+	then
+		vim.b.dotfiles_typescript_indentexpr = vim.bo.indentexpr
+	end
+	vim.bo.indentexpr = dotfiles_typescript_indentexpr
+end
+
+vim.api.nvim_create_autocmd("FileType", {
+	desc = "Keep TypeScript comment continuation aligned with previous comment line",
+	group = vim.api.nvim_create_augroup("typescript_comment_indent", { clear = true }),
+	pattern = { "typescript", "typescriptreact" },
+	callback = set_dotfiles_typescript_indentexpr,
+})
+
+function _G.dotfiles_typescript_indentexpr()
+	local current_lnum = vim.v.lnum
+	local current_line = vim.fn.getline(current_lnum)
+	local previous_lnum = current_lnum - 1
+	local previous_line = previous_lnum >= 1 and vim.fn.getline(previous_lnum) or ""
+
+	if current_line:match("^%s*//") and previous_line:match("^%s*//") then
+		return vim.fn.indent(previous_lnum)
+	end
+
+	local original = vim.b.dotfiles_typescript_indentexpr
+	if original and original ~= "" then
+		return vim.fn.eval(original)
+	end
+
+	return -1
+end
+
 ------------------------------------------------------------------------------
 -- Toggle autocomplete
 ------------------------------------------------------------------------------
@@ -1790,6 +1827,13 @@ require("lazy").setup({
 			end, { desc = "View exported Review Markdown" })
 		end,
 	},
+})
+
+vim.api.nvim_create_autocmd("FileType", {
+	desc = "Keep TypeScript comment indentation after plugin indent setup",
+	group = vim.api.nvim_create_augroup("typescript_comment_indent", { clear = false }),
+	pattern = { "typescript", "typescriptreact" },
+	callback = set_dotfiles_typescript_indentexpr,
 })
 
 require("noice").setup({
