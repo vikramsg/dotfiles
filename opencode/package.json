@@ -6,13 +6,16 @@
     "build:orchestration-state": "node --check plugins/orchestration-state.js",
     "build:sandbox": "tsc -p sandbox/tsconfig.json",
     "sandbox": "npm run build:sandbox --silent && node sandbox/dist/sandbox-cli.js",
-    "test:sandbox": "npm run build:sandbox --silent && node --test sandbox/sandbox-cli.test.mjs"
+    "sandbox:v2": "npm run build:sandbox --silent && node sandbox/dist/cli-v2.js",
+    "test:sandbox": "npm run build:sandbox --silent && node --test sandbox/sandbox-cli.test.mjs",
+    "test:sandbox:v2": "vitest run sandbox/cli-v2.test.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.4.2"
   },
   "devDependencies": {
     "@types/node": "latest",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "latest"
   }
 }
