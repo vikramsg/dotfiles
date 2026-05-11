@@ -97,6 +97,11 @@ alias python="echo 'Do not use python\nUse uv for all Python related usage.'"
 alias python3="echo 'Do not use python3\nUse uv for all Python related usage.'"
 
 #########################################
+# Opencode pinned version 
+alias oc-ping="OPENCODE_DISABLE_AUTOUPDATE=1 npx -y opencode-ai@1.14.30"
+
+
+#########################################
 # gcloud commands
 alias gcloud-auth="gcloud auth login"
 alias gs="gcloud storage"
