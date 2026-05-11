@@ -8,5 +8,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["sandbox-cli.ts"]
+  "include": ["sandbox-cli.ts", "cli-v2.ts"]
 }
