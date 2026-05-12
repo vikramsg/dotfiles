@@ -1,5 +1,6 @@
 1. Orchestrator issues
-    - The orchestrator keeps not sending full context.
+    - Not very good at phasing. 
+    - Does not know how to make reviewer do only 1 phase at a time. 
 2. Make planner use the subagent instead of duplicating.
 3. When using, always make the planner first come up with a plan.
     - Then look at whether the orcehstrator is giving all of it.
