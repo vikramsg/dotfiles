@@ -29,9 +29,11 @@ Host vm.dotfiles
     # If multiple tabs try to own the same LocalForward ports, ssh will fail with:
     # "bind [127.0.0.1]:PORT: Address already in use".
     # Keep all shared forwards on exactly one host alias to avoid collisions.
+    LocalForward 4173 localhost:4173
     LocalForward 5173 localhost:5173
     LocalForward 8080 localhost:8080
     LocalForward 8081 localhost:8081
+    LocalForward 8801 localhost:8801
     LocalForward 19876 localhost:19876
     LocalForward 54321 localhost:54321
     LocalForward 54323 localhost:54323
