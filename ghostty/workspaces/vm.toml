@@ -37,3 +37,7 @@ command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0
 [[tabs]]
 name = "btop"
 command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.btop"
+
+[[tabs]]
+name = "ports"
+command = "uvx ssh-auto-forward vm"
