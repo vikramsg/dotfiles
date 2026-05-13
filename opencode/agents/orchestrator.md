@@ -141,7 +141,11 @@ The reviewer must perform deep critical review, explicitly checking for:
 - over-mocked tests
 - any bugs 
 
-NOTE: The reviewer **should not** focus on the latest iteration of changes.
+NOTE: 
+1. The reviewer **should not** focus on the latest iteration of changes.
+2. Gatekeep the reviewer output. Often because of insufficient context about the state prior to the current plan-implement-review loop, the reviewer suggestions include deleting and reverting changes.
+    - In this case, rerun the reviewer with the additional context.
+    - **Do not** just blindly pass on the reviewer suggestions to the planner.
 
 ### Failure loop
 
