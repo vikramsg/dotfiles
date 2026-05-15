@@ -13,6 +13,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLogger, type Logger, silentLogger } from "./logger.js";
 import z from "zod";
 
+let logger: Logger = silentLogger;
+
 // Minimal generic single-agent sandbox runner for exercising one OpenCode agent in isolation.
 export type Path = string;
 
@@ -27,8 +29,7 @@ type CliIO = {
 
 export interface SingleAgentSandboxSourceFiles {
   sourceConfigFile: Path;
-  // FIXME: Why is the assumption that there is a single plugin file?
-  sourcePluginFile: Path;
+  sourcePluginFiles: Path[];
   sourceAgentFile: Path;
 }
 
@@ -59,29 +60,8 @@ export interface SingleAgentSandboxSpec extends SingleAgentSandboxSourceFiles {
 
 export interface PreparedSingleAgentSandbox {
   layout: SingleAgentSandboxLayout;
-  // FIXME: Why does the sandbox plugin file an input
-  // Plugin is a directory no? Or maybe a set of files?
-  sandboxPluginFile: Path;
+  sandboxPluginFiles: readonly Path[];
   sandboxAgentFile: Path;
-}
-
-// FIXME: Why is each type of file copy its own args?
-// We should just have source, dest and that's it
-export interface CopyAgentFileToSandboxArgs {
-  sourceAgentFile: Path;
-  sandboxAgentFile: Path;
-}
-
-export interface CopyPluginFileToSandboxArgs {
-  sourcePluginFile: Path;
-  sandboxPluginFile: Path;
-}
-
-export interface CopyConfigFileToSandboxArgs {
-  sourceConfigFile: Path;
-  sandboxConfigFile: Path;
-  sourcePluginFile: Path;
-  sandboxPluginFile: Path;
 }
 
 export interface RunSingleAgentInSandboxArgs {
@@ -111,8 +91,6 @@ const defaultIO: CliIO = {
   stderr: process.stderr,
 };
 
-let logger: Logger = silentLogger;
-
 function currentPackageRoot(): Path {
   const modulePath = fileURLToPath(import.meta.url);
   const moduleDir = path.dirname(modulePath);
@@ -120,23 +98,6 @@ function currentPackageRoot(): Path {
   return path.basename(moduleDir) === "dist"
     ? path.dirname(path.dirname(moduleDir))
     : path.dirname(moduleDir);
-}
-
-function resolveSourceFiles(
-  sourceRoot: Path,
-  options: { config?: Path; plugin?: Path; agentFile: Path },
-): SingleAgentSandboxSourceFiles {
-  return {
-    sourceConfigFile: path.resolve(
-      sourceRoot,
-      options.config ?? "opencode.json",
-    ),
-    sourcePluginFile: path.resolve(
-      sourceRoot,
-      options.plugin ?? path.join("plugins", "orchestration-state.js"),
-    ),
-    sourceAgentFile: path.resolve(sourceRoot, options.agentFile),
-  };
 }
 
 function defaultHelloWorldSpec(
@@ -160,32 +121,6 @@ function defaultHelloWorldSpec(
       "fixtures",
       "agents",
       "hello-world.md",
-    ),
-  };
-}
-
-function defaultStrictPlanSpec(
-  sourceRoot: Path,
-  sandboxRoot: Path,
-  prompt: string,
-): SingleAgentSandboxSpec {
-  return {
-    sourceRoot,
-    sandboxRoot,
-    agentName: "strict-plan",
-    prompt,
-    sourceConfigFile: path.join(sourceRoot, "opencode.json"),
-    sourcePluginFile: path.join(
-      sourceRoot,
-      "plugins",
-      "orchestration-state.js",
-    ),
-    sourceAgentFile: path.join(
-      sourceRoot,
-      "sandbox",
-      "fixtures",
-      "agents",
-      "strict-plan.md",
     ),
   };
 }
@@ -333,35 +268,29 @@ export async function prepareSingleAgentSandbox(
 
   log.info("sandbox.prepare.start");
 
-  const layout = await createSingleAgentSandboxLayout(
-    { sandboxRoot: spec.sandboxRoot },
-  );
+  const layout = await createSingleAgentSandboxLayout({
+    sandboxRoot: spec.sandboxRoot,
+  });
   const sandboxPluginFile = path.join(
     layout.pluginDir,
     path.basename(spec.sourcePluginFile),
   );
   const sandboxAgentFile = path.join(layout.agentDir, `${spec.agentName}.md`);
 
-  await copyPluginFileToSandbox(
-    {
-      sourcePluginFile: spec.sourcePluginFile,
-      sandboxPluginFile,
-    },
-  );
-  await copyConfigFileToSandbox(
-    {
-      sourceConfigFile: spec.sourceConfigFile,
-      sandboxConfigFile: layout.sandboxConfigFile,
-      sourcePluginFile: spec.sourcePluginFile,
-      sandboxPluginFile,
-    },
-  );
-  await copyAgentFileToSandbox(
-    {
-      sourceAgentFile: spec.sourceAgentFile,
-      sandboxAgentFile,
-    },
-  );
+  await copyPluginFileToSandbox({
+    sourcePluginFile: spec.sourcePluginFile,
+    sandboxPluginFile,
+  });
+  await copyConfigFileToSandbox({
+    sourceConfigFile: spec.sourceConfigFile,
+    sandboxConfigFile: layout.sandboxConfigFile,
+    sourcePluginFile: spec.sourcePluginFile,
+    sandboxPluginFile,
+  });
+  await copyAgentFileToSandbox({
+    sourceAgentFile: spec.sourceAgentFile,
+    sandboxAgentFile,
+  });
 
   log.info("sandbox.prepare.done", {
     sandboxConfigFile: layout.sandboxConfigFile,
