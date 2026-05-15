@@ -1,5 +1,5 @@
 import { cac } from "cac";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import {
   copyFile,
@@ -157,11 +157,23 @@ export async function createSingleAgentSandboxLayout(
   };
 }
 
+async function isDirectory(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export async function defaultHelloWorldSpec(
   sourceRoot: Path,
   sandboxRoot: Path,
 ): Promise<SingleAgentSandboxSpec> {
-  const pluginDirFiles = await readdir(path.join(sourceRoot, "plugins"));
+  const pluginDir = path.join(sourceRoot, "plugins");
+  const pluginDirFiles = (await isDirectory(pluginDir))
+    ? await readdir(pluginDir)
+    : [];
+
   const pluginFiles = pluginDirFiles.filter(
     (entry) => path.extname(entry) === "js",
   );
@@ -442,11 +454,10 @@ export async function runCli(
     return typeof result === "number" ? result : 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error("cli.error", { message });
-    io.stderr.write(`${message}\n`);
+    const stack = error instanceof Error ? error.stack : undefined;
+    logger.error("cli.error", { message, stack });
+    io.stderr.write(`${stack ?? message}\n`);
     return 1;
-  } finally {
-    console.info = originalInfo;
   }
 }
 
