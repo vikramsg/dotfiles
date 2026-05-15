@@ -16,3 +16,6 @@
     * Maybe even run it on a specific repo and branch?
 8. RULES.md
     * Even if we have opencode config in repo, we can still uses untracked rules to customize
+9. Permission issues
+    * even after giving *.local permissions it keeps doing arbitrary permission questions
+10. Add a teaching agent. That does not read files and only answers based on idiomatic usage

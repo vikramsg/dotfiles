@@ -2,12 +2,14 @@ local M = {}
 
 local specs = {
 	"tests.diffview_picker_spec",
+	"tests.typescript_indent_spec",
 }
 
 function M.run()
 	local failures = {}
 
 	for _, spec in ipairs(specs) do
+		local cwd = vim.fn.getcwd()
 		package.loaded[spec] = nil
 		local ok, mod = pcall(require, spec)
 		if not ok then
@@ -20,6 +22,7 @@ function M.run()
 				failures[#failures + 1] = string.format("%s failed\n%s", spec, err)
 			end
 		end
+		vim.cmd("cd " .. vim.fn.fnameescape(cwd))
 	end
 
 	if #failures > 0 then
