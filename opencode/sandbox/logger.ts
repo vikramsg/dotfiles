@@ -92,7 +92,9 @@ function formatField(value: unknown): string {
 function currentCallsite(): string {
   // Capturing TypeScript file/line data requires stack inspection, which is
   // relatively expensive. Use callsite logging with care and avoid adding extra
-  // stack inspection on hot paths.
+  // stack inspection on hot paths. This should eventually be gated behind an
+  // environment variable, the same way pretty console logging should eventually
+  // be gated behind an environment variable.
   const stack = new Error().stack ?? "";
   const frame = stack
     .split("\n")
