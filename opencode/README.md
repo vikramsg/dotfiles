@@ -69,6 +69,10 @@ Opencode stores files under
 
 ### Persistent orchestration state install contract
 
+**NOTE**: We have disabled orchestration state plugins by moving them to `plugins2`. 
+They haven't proven to be useful and with `opencode` moving to integrate more session management
+maybe we will get something better natively.
+
 The orchestration state integration is loaded from the installed config path, not from this repo checkout directly.
 
 - `~/.config/opencode/opencode.json` contains `./plugins/orchestration-state.js`.
