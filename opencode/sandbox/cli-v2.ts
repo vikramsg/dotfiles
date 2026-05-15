@@ -1,19 +1,11 @@
 import { cac } from "cac";
 import { readdir, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import {
-  copyFile,
-  mkdir,
-  mkdtemp,
-  readFile,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLogger, type Logger, silentLogger } from "./logger.js";
-import z from "zod";
-import repl from "node:repl";
 
 let logger: Logger = silentLogger;
 
@@ -177,8 +169,7 @@ export async function defaultHelloWorldSpec(
   const pluginFiles = pluginDirFiles.filter(
     (entry) => path.extname(entry) === "js",
   );
-  // FIXME: Change to debug
-  logger.info("HelloWorldSpec", { pluginFiles });
+  logger.debug("HelloWorldSpec", { pluginFiles });
 
   return {
     sourceRoot,
@@ -358,7 +349,6 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
   //           // ToDo: What happens if the path already exists?
   //           (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
   //       );
-  //       repl.start({ prompt: "debug> " });
   //
   //       const sourceFiles = resolveSourceFiles(sourceRoot, {
   //         config: options.config,
@@ -424,7 +414,6 @@ export async function runCli(
 ): Promise<number> {
   logger = createLogger();
   const cli = createCli(io, deps);
-  const originalInfo = console.info;
 
   try {
     console.info = (message?: unknown) => {
