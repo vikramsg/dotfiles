@@ -35,6 +35,39 @@ just opencode-sandbox orchestrator-final-check "Make a harmless text-file change
 just opencode-sandbox single-agent reviewer "Review this change"
 ```
 
+## CLI v2
+
+`cli-v2.ts` is the in-progress rewrite of the sandbox CLI. Run it through the package script:
+
+```sh
+npm --prefix opencode run sandbox:v2 -- <command> <args...>
+```
+
+Examples:
+
+```sh
+npm --prefix opencode run sandbox:v2 -- hello
+npm --prefix opencode run sandbox:v2 -- hello-world
+npm --prefix opencode run sandbox:v2 -- strict-plan --prompt "Plan a no-op documentation check."
+npm --prefix opencode run sandbox:v2 -- single-agent --agent custom-agent --agent-file ./sandbox/fixtures/agents/hello-world.md --prompt "Run this agent."
+```
+
+Current capabilities:
+
+- Creates isolated XDG config, data, cache, and state homes under the sandbox root.
+- Copies one selected local plugin into the sandbox config directory.
+- Copies one selected agent file into the sandbox agent directory.
+- Rewrites the selected local plugin entry in the copied OpenCode config.
+- Runs `opencode run --agent <agent>` inside the sandbox worktree.
+- Provides fixture commands for `hello-world` and `strict-plan`.
+
+Current limitations:
+
+- Does not yet support `orchestrator-until` or `orchestrator-final-check`.
+- Does not yet write output artifacts such as `events.jsonl`, `opencode.log`, `metadata.json`, or status files.
+- Does not yet generate observer or stop plugins.
+- Does not yet generate a harness for subagent-mode agents.
+
 ## Environment variables
 
 - `OPENCODE_SANDBOX_ROOT`: Override the sandbox root. If unset, a temporary sandbox root is created.
