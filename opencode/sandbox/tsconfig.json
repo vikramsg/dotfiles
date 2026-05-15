@@ -6,7 +6,8 @@
     "strict": true,
     "outDir": "dist",
     "rootDir": ".",
+    "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["sandbox-cli.ts", "cli-v2.ts"]
+  "include": ["sandbox-cli.ts", "cli-v2.ts", "logger.ts"]
 }
