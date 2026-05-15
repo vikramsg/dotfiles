@@ -173,6 +173,158 @@ local function test_open_line_after_block_uses_typescript_indent()
 	})
 end
 
+local function test_open_line_after_jsdoc_opener_aligns_star_body()
+	open_typescript_buffer({
+		"/**",
+		" */",
+	})
+	assert_typescript_indent_options("typescript")
+
+	vim.api.nvim_win_set_cursor(0, { 1, 0 })
+	feed("oOpenCode sandbox CLI<Esc>")
+
+	assert_lines({
+		"/**",
+		" * OpenCode sandbox CLI",
+		" */",
+	})
+end
+
+local function test_open_line_after_jsdoc_opener_with_trailing_text_aligns_star_body()
+	open_typescript_buffer({
+		"/** summary",
+		" */",
+	})
+	assert_typescript_indent_options("typescript")
+
+	vim.api.nvim_win_set_cursor(0, { 1, 0 })
+	feed("omore detail<Esc>")
+
+	assert_lines({
+		"/** summary",
+		" * more detail",
+		" */",
+	})
+end
+
+local function test_insert_enter_after_jsdoc_opener_with_trailing_text_aligns_star_body()
+	open_typescript_buffer({
+		"/** summary",
+		" */",
+	})
+	assert_typescript_indent_options("typescript")
+
+	vim.api.nvim_win_set_cursor(0, { 1, #"/** summary" })
+	feed("A<CR>more detail<Esc>")
+
+	assert_lines({
+		"/** summary",
+		" * more detail",
+		" */",
+	})
+end
+
+local function test_open_line_after_jsdoc_body_aligns_to_previous_star_body()
+	open_typescript_buffer({
+		"/**",
+		" * first line",
+		" */",
+	})
+	assert_typescript_indent_options("typescript")
+
+	vim.api.nvim_win_set_cursor(0, { 2, 0 })
+	feed("osecond line<Esc>")
+
+	assert_lines({
+		"/**",
+		" * first line",
+		" * second line",
+		" */",
+	})
+end
+
+local function test_reindent_block_comment_star_from_column_zero_aligns_to_previous_body_line()
+	open_typescript_buffer({
+		"/**",
+		" * previous",
+		"* bad",
+		" */",
+	})
+	assert_typescript_indent_options("typescript")
+
+	vim.api.nvim_win_set_cursor(0, { 3, 0 })
+	feed("==")
+
+	assert_lines({
+		"/**",
+		" * previous",
+		" * bad",
+		" */",
+	})
+end
+
+local function test_reindent_block_comment_star_from_deep_indent_aligns_to_previous_body_line()
+	open_typescript_buffer({
+		"/**",
+		" * previous",
+		"         * too deep",
+		" */",
+	})
+	assert_typescript_indent_options("typescript")
+
+	vim.api.nvim_win_set_cursor(0, { 3, 0 })
+	feed("==")
+
+	assert_lines({
+		"/**",
+		" * previous",
+		" * too deep",
+		" */",
+	})
+end
+
+local function test_open_line_after_nested_jsdoc_opener_aligns_star_body()
+	open_typescript_buffer({
+		"if (enabled) {",
+		"  /**",
+		"   */",
+		"}",
+	})
+	assert_typescript_indent_options("typescript")
+
+	vim.api.nvim_win_set_cursor(0, { 2, 0 })
+	feed("onested detail<Esc>")
+
+	assert_lines({
+		"if (enabled) {",
+		"  /**",
+		"   * nested detail",
+		"   */",
+		"}",
+	})
+end
+
+local function test_open_line_after_nested_jsdoc_opener_with_trailing_text_aligns_star_body()
+	open_typescript_buffer({
+		"if (enabled) {",
+		"  /** summary",
+		"   */",
+		"}",
+	})
+	assert_typescript_indent_options("typescript")
+
+	vim.api.nvim_win_set_cursor(0, { 2, 0 })
+	feed("onested detail<Esc>")
+
+	assert_lines({
+		"if (enabled) {",
+		"  /** summary",
+		"   * nested detail",
+		"   */",
+		"}",
+	})
+end
+
 local function test_typescriptreact_open_line_preserves_indented_comment()
 	open_typescriptreact_buffer({
 		"const value = (",
@@ -194,6 +346,102 @@ local function test_typescriptreact_open_line_preserves_indented_comment()
 	})
 end
 
+local function test_typescriptreact_reindent_block_comment_star_aligns_to_previous_body_line()
+	open_typescriptreact_buffer({
+		"/**",
+		" * previous",
+		"* tsx continuation",
+		" */",
+	})
+	assert_typescript_indent_options("typescriptreact")
+
+	vim.api.nvim_win_set_cursor(0, { 3, 0 })
+	feed("==")
+
+	assert_lines({
+		"/**",
+		" * previous",
+		" * tsx continuation",
+		" */",
+	})
+end
+
+local function test_typescriptreact_open_line_after_jsdoc_opener_with_trailing_text_aligns_star_body()
+	open_typescriptreact_buffer({
+		"/** summary",
+		" */",
+	})
+	assert_typescript_indent_options("typescriptreact")
+
+	vim.api.nvim_win_set_cursor(0, { 1, 0 })
+	feed("otsx detail<Esc>")
+
+	assert_lines({
+		"/** summary",
+		" * tsx detail",
+		" */",
+	})
+end
+
+local function test_closed_single_line_block_comment_delegates_to_typescript_indent()
+	open_typescript_buffer({
+		"if (enabled) {",
+		"  /** summary */",
+		"* not a continuation",
+		"}",
+	})
+	assert_typescript_indent_options("typescript")
+	vim.b.dotfiles_typescript_indentexpr = "7"
+
+	vim.api.nvim_win_set_cursor(0, { 3, 0 })
+	feed("==")
+
+	assert_lines({
+		"if (enabled) {",
+		"  /** summary */",
+		"       * not a continuation",
+		"}",
+	})
+end
+
+local function test_line_after_closed_block_comment_delegates_to_typescript_indent()
+	open_typescript_buffer({
+		"/**",
+		" */",
+		"* outside block comment",
+	})
+	assert_typescript_indent_options("typescript")
+	vim.b.dotfiles_typescript_indentexpr = "6"
+
+	vim.api.nvim_win_set_cursor(0, { 3, 0 })
+	feed("==")
+
+	assert_lines({
+		"/**",
+		" */",
+		"      * outside block comment",
+	})
+end
+
+local function test_line_after_inline_closed_star_body_delegates_to_typescript_indent()
+	open_typescript_buffer({
+		"/**",
+		" * summary */",
+		"* outside block comment",
+	})
+	assert_typescript_indent_options("typescript")
+	vim.b.dotfiles_typescript_indentexpr = "5"
+
+	vim.api.nvim_win_set_cursor(0, { 3, 0 })
+	feed("==")
+
+	assert_lines({
+		"/**",
+		" * summary */",
+		"     * outside block comment",
+	})
+end
+
 local function run_case(fn)
 	local ok, err = pcall(fn)
 	vim.cmd("silent! noautocmd setlocal nomodified")
@@ -211,7 +459,20 @@ function M.run()
 	run_case(test_reindent_standalone_comment_uses_typescript_indent)
 	run_case(test_reindent_misindented_comment_continuation_aligns_to_previous_comment)
 	run_case(test_open_line_after_block_uses_typescript_indent)
+	run_case(test_open_line_after_jsdoc_opener_aligns_star_body)
+	run_case(test_open_line_after_jsdoc_opener_with_trailing_text_aligns_star_body)
+	run_case(test_insert_enter_after_jsdoc_opener_with_trailing_text_aligns_star_body)
+	run_case(test_open_line_after_jsdoc_body_aligns_to_previous_star_body)
+	run_case(test_reindent_block_comment_star_from_column_zero_aligns_to_previous_body_line)
+	run_case(test_reindent_block_comment_star_from_deep_indent_aligns_to_previous_body_line)
+	run_case(test_open_line_after_nested_jsdoc_opener_aligns_star_body)
+	run_case(test_open_line_after_nested_jsdoc_opener_with_trailing_text_aligns_star_body)
 	run_case(test_typescriptreact_open_line_preserves_indented_comment)
+	run_case(test_typescriptreact_reindent_block_comment_star_aligns_to_previous_body_line)
+	run_case(test_typescriptreact_open_line_after_jsdoc_opener_with_trailing_text_aligns_star_body)
+	run_case(test_closed_single_line_block_comment_delegates_to_typescript_indent)
+	run_case(test_line_after_closed_block_comment_delegates_to_typescript_indent)
+	run_case(test_line_after_inline_closed_star_body_delegates_to_typescript_indent)
 	return true
 end
 

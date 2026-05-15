@@ -219,18 +219,28 @@ vim.api.nvim_create_autocmd("FileType", {
 	end,
 })
 
+-- Buffer-local TypeScript/TSX indentexpr installed by this dotfiles config.
+-- Keeping the expression in one constant lets setup detect whether the wrapper
+-- is already active before saving the plugin-provided fallback indentexpr.
 local dotfiles_typescript_indentexpr = "v:lua.dotfiles_typescript_indentexpr()"
 
+---Install the dotfiles TypeScript indent wrapper while preserving the original.
+---Only JSDoc/block-comment continuation edge cases are customized; all other
+---TypeScript/TSX indentation falls back to the saved Neovim/plugin indentexpr.
 local function set_dotfiles_typescript_indentexpr()
 	if
 		vim.bo.indentexpr ~= dotfiles_typescript_indentexpr
 		and (not vim.b.dotfiles_typescript_indentexpr or vim.b.dotfiles_typescript_indentexpr == "")
 	then
+		-- Save the current TypeScript indentexpr once so normal code indentation
+		-- continues to be owned by Neovim/plugins after the wrapper handles comments.
 		vim.b.dotfiles_typescript_indentexpr = vim.bo.indentexpr
 	end
 	vim.bo.indentexpr = dotfiles_typescript_indentexpr
 end
 
+-- Register before plugin setup so buffers opened during plain filetype detection
+-- get the TypeScript/TSX comment wrapper even before lazy-loaded indent plugins run.
 vim.api.nvim_create_autocmd("FileType", {
 	desc = "Keep TypeScript comment continuation aligned with previous comment line",
 	group = vim.api.nvim_create_augroup("typescript_comment_indent", { clear = true }),
@@ -238,14 +248,65 @@ vim.api.nvim_create_autocmd("FileType", {
 	callback = set_dotfiles_typescript_indentexpr,
 })
 
+---Return true when a TypeScript block comment starts here and remains open.
+---Openers may include trailing summary text, but same-line `*/` comments are
+---already closed and must continue through the original TypeScript indentexpr.
+---@param line string
+---@return boolean
+local function is_typescript_block_comment_opener(line)
+	if line:find("%*/") then
+		return false
+	end
+
+	return line:match("^%s*/%*%*?") ~= nil
+end
+
+---Return true when a TypeScript block comment body/closing line begins with `*`.
+---Malformed body lines can be at column zero or over-indented, so the match must
+---accept any leading whitespace before letting the surrounding comment context decide.
+---@param line string
+---@return boolean
+local function is_typescript_block_comment_star_line(line)
+	return line:match("^%s*%*") ~= nil
+end
+
+---Return true when a TypeScript block comment line closes the comment.
+---A following `*` line after any `*/` is outside the block comment, so it must
+---not inherit comment-body alignment from the just-closed TypeScript/JSDoc comment.
+---@param line string
+---@return boolean
+local function is_typescript_block_comment_closer(line)
+	return line:find("%*/") ~= nil
+end
+
+---Return a custom indent only for dotfiles-managed TypeScript comment cases.
+---All non-comment lines continue to use Neovim's original TypeScript indentexpr.
+---@return integer
 function _G.dotfiles_typescript_indentexpr()
 	local current_lnum = vim.v.lnum
 	local current_line = vim.fn.getline(current_lnum)
 	local previous_lnum = current_lnum - 1
 	local previous_line = previous_lnum >= 1 and vim.fn.getline(previous_lnum) or ""
 
+	-- Preserve the existing `//` continuation fix before delegating to TypeScript indent.
 	if current_line:match("^%s*//") and previous_line:match("^%s*//") then
 		return vim.fn.indent(previous_lnum)
+	end
+
+	-- Keep JSDoc/block-comment `*` lines in the conventional column for TypeScript/TSX.
+	-- Neovim's TypeScript cindent can otherwise put malformed continuations at column 0
+	-- or far too deep, so only open comment-context lines are handled before fallback.
+	if is_typescript_block_comment_star_line(current_line) then
+		if is_typescript_block_comment_opener(previous_line) then
+			return vim.fn.indent(previous_lnum) + 1
+		end
+
+		if
+			is_typescript_block_comment_star_line(previous_line)
+			and not is_typescript_block_comment_closer(previous_line)
+		then
+			return vim.fn.indent(previous_lnum)
+		end
 	end
 
 	local original = vim.b.dotfiles_typescript_indentexpr
@@ -1829,6 +1890,8 @@ require("lazy").setup({
 	},
 })
 
+-- Register again after plugin setup because TypeScript indent plugins can rewrite
+-- `indentexpr`; reapplying here keeps the wrapper active while preserving fallback.
 vim.api.nvim_create_autocmd("FileType", {
 	desc = "Keep TypeScript comment indentation after plugin indent setup",
 	group = vim.api.nvim_create_augroup("typescript_comment_indent", { clear = false }),
