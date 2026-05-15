@@ -148,6 +148,16 @@ File locations and config are defined in the config file.
 tsc -p sandbox/tsconfig.json
 ```
 
+### Debugging
+
+**Using a REPL**
+
+```typescript
+import repl from "node:repl";
+
+repl.start({ prompt: "debug> " });
+```
+
 ## Prompt
 
 ```

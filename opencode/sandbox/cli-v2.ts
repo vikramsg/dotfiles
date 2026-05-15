@@ -1,4 +1,5 @@
 import { cac } from "cac";
+import { readdir } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import {
   copyFile,
@@ -12,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLogger, type Logger, silentLogger } from "./logger.js";
 import z from "zod";
+import repl from "node:repl";
 
 let logger: Logger = silentLogger;
 
@@ -79,7 +81,6 @@ const Command = {
   Hello: "hello",
   HelloWorldSandbox: "hello-world",
   SingleAgent: "single-agent",
-  StrictPlanSandbox: "strict-plan",
 } as const;
 
 const HelloWorldPrompt = "Respond with hello world.";
@@ -98,31 +99,6 @@ function currentPackageRoot(): Path {
   return path.basename(moduleDir) === "dist"
     ? path.dirname(path.dirname(moduleDir))
     : path.dirname(moduleDir);
-}
-
-function defaultHelloWorldSpec(
-  sourceRoot: Path,
-  sandboxRoot: Path,
-): SingleAgentSandboxSpec {
-  return {
-    sourceRoot,
-    sandboxRoot,
-    agentName: "hello-world",
-    prompt: HelloWorldPrompt,
-    sourceConfigFile: path.join(sourceRoot, "opencode.json"),
-    sourcePluginFile: path.join(
-      sourceRoot,
-      "plugins",
-      "orchestration-state.js",
-    ),
-    sourceAgentFile: path.join(
-      sourceRoot,
-      "sandbox",
-      "fixtures",
-      "agents",
-      "hello-world.md",
-    ),
-  };
 }
 
 /**
@@ -181,80 +157,32 @@ export async function createSingleAgentSandboxLayout(
   };
 }
 
-export async function copyPluginFileToSandbox(
-  args: CopyPluginFileToSandboxArgs,
-): Promise<void> {
-  logger.info("sandbox.plugin.copy.start", {
-    sourcePluginFile: args.sourcePluginFile,
-    sandboxPluginFile: args.sandboxPluginFile,
-  });
-  await copyFile(args.sourcePluginFile, args.sandboxPluginFile);
-  logger.info("sandbox.plugin.copy.done", {
-    sandboxPluginFile: args.sandboxPluginFile,
-  });
-}
-
-function rewriteSelectedPluginEntry(
-  entry: unknown,
-  args: CopyConfigFileToSandboxArgs,
-): unknown {
-  if (typeof entry !== "string") {
-    return entry;
-  }
-
-  // OpenCode resolves local plugin entries relative to the config file being read.
-  const sourceConfigDir = path.dirname(args.sourceConfigFile);
-  const resolvedEntry = path.isAbsolute(entry)
-    ? path.resolve(entry)
-    : path.resolve(sourceConfigDir, entry);
-  const selectedPlugin = path.resolve(args.sourcePluginFile);
-
-  return resolvedEntry === selectedPlugin ? args.sandboxPluginFile : entry;
-}
-
-/**
- * Copies a source OpenCode config into the sandbox and rewrites only the selected
- * local plugin path. Package plugin entries are preserved for OpenCode to load.
- */
-export async function copyConfigFileToSandbox(
-  args: CopyConfigFileToSandboxArgs,
-): Promise<void> {
-  logger.info("sandbox.config.copy.start", {
-    sourceConfigFile: args.sourceConfigFile,
-    sandboxConfigFile: args.sandboxConfigFile,
-  });
-  const config = JSON.parse(await readFile(args.sourceConfigFile, "utf8")) as {
-    plugin?: unknown;
-  };
-
-  if (Array.isArray(config.plugin)) {
-    config.plugin = config.plugin.map((entry) =>
-      rewriteSelectedPluginEntry(entry, args),
-    );
-  } else if (typeof config.plugin === "string") {
-    config.plugin = rewriteSelectedPluginEntry(config.plugin, args);
-  }
-
-  await writeFile(
-    args.sandboxConfigFile,
-    `${JSON.stringify(config, null, 2)}\n`,
+export async function defaultHelloWorldSpec(
+  sourceRoot: Path,
+  sandboxRoot: Path,
+): Promise<SingleAgentSandboxSpec> {
+  const pluginDirFiles = await readdir(path.join(sourceRoot, "plugins"));
+  const pluginFiles = pluginDirFiles.filter(
+    (entry) => path.extname(entry) === "js",
   );
-  logger.info("sandbox.config.copy.done", {
-    sandboxConfigFile: args.sandboxConfigFile,
-  });
-}
+  // FIXME: Change to debug
+  logger.info("HelloWorldSpec", { pluginFiles });
 
-export async function copyAgentFileToSandbox(
-  args: CopyAgentFileToSandboxArgs,
-): Promise<void> {
-  logger.info("sandbox.agent.copy.start", {
-    sourceAgentFile: args.sourceAgentFile,
-    sandboxAgentFile: args.sandboxAgentFile,
-  });
-  await copyFile(args.sourceAgentFile, args.sandboxAgentFile);
-  logger.info("sandbox.agent.copy.done", {
-    sandboxAgentFile: args.sandboxAgentFile,
-  });
+  return {
+    sourceRoot,
+    sandboxRoot,
+    agentName: "Hello World",
+    prompt: HelloWorldPrompt,
+    sourceConfigFile: path.join(sourceRoot, "opencode.json"),
+    sourcePluginFiles: pluginFiles,
+    sourceAgentFile: path.join(
+      sourceRoot,
+      "sandbox",
+      "fixtures",
+      "agents",
+      "hello-world.md",
+    ),
+  };
 }
 
 export async function prepareSingleAgentSandbox(
@@ -271,34 +199,27 @@ export async function prepareSingleAgentSandbox(
   const layout = await createSingleAgentSandboxLayout({
     sandboxRoot: spec.sandboxRoot,
   });
-  const sandboxPluginFile = path.join(
-    layout.pluginDir,
-    path.basename(spec.sourcePluginFile),
+  const sandboxPluginFiles = spec.sourcePluginFiles.map((entry) =>
+    path.join(layout.pluginDir, path.basename(entry)),
   );
-  const sandboxAgentFile = path.join(layout.agentDir, `${spec.agentName}.md`);
+  spec.sourcePluginFiles.map(
+    async (entry) =>
+      await copyFile(entry, path.join(layout.pluginDir, path.basename(entry))),
+  );
 
-  await copyPluginFileToSandbox({
-    sourcePluginFile: spec.sourcePluginFile,
-    sandboxPluginFile,
-  });
-  await copyConfigFileToSandbox({
-    sourceConfigFile: spec.sourceConfigFile,
-    sandboxConfigFile: layout.sandboxConfigFile,
-    sourcePluginFile: spec.sourcePluginFile,
-    sandboxPluginFile,
-  });
-  await copyAgentFileToSandbox({
-    sourceAgentFile: spec.sourceAgentFile,
-    sandboxAgentFile,
-  });
+  const sandboxAgentFile = path.join(layout.agentDir, `${spec.agentName}.md`);
+  await copyFile(spec.sourceAgentFile, sandboxAgentFile);
+
+  await copyFile(spec.sourceConfigFile, layout.sandboxConfigFile);
+  await copyFile(spec.sourceAgentFile, sandboxAgentFile);
 
   log.info("sandbox.prepare.done", {
     sandboxConfigFile: layout.sandboxConfigFile,
-    sandboxPluginFile,
+    sandboxPluginFiles,
     sandboxAgentFile,
   });
 
-  return { layout, sandboxPluginFile, sandboxAgentFile };
+  return { layout, sandboxPluginFiles, sandboxAgentFile };
 }
 
 export async function runSingleAgentInSandbox(
@@ -388,70 +309,70 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
     return 0;
   });
 
-  cli
-    .command(
-      Command.SingleAgent,
-      "Run one explicit agent in an isolated OpenCode sandbox",
-    )
-    .option("--orig <path>", "Source OpenCode config root")
-    .option("--dest <path>", "Sandbox destination directory")
-    .option(
-      "--config <path>",
-      "Source OpenCode config file, relative to --orig unless absolute",
-    )
-    // FIXME: This spec is wrong, it is directory
-    // In that directory we copy every file that is a .js file
-    .option(
-      "--plugin <path>",
-      "Source local plugin file, relative to --orig unless absolute",
-    )
-    .option("--agent <name>", "OpenCode agent name to run")
-    .option(
-      "--agent-file <path>",
-      "Source agent file, relative to --orig unless absolute",
-    )
-    .option("--prompt <text>", "Prompt/message passed to opencode run")
-    .action(
-      async (options: {
-        orig?: Path;
-        dest?: Path;
-        config?: Path;
-        plugin?: Path;
-        agent?: string;
-        agentFile?: Path;
-        prompt?: string;
-      }) => {
-        const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
-        const sandboxRoot = path.resolve(
-          options.dest ??
-            // ToDo: What happens if the path already exists?
-            (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
-        );
-        const sourceFiles = resolveSourceFiles(sourceRoot, {
-          config: options.config,
-          plugin: options.plugin,
-          agentFile: requiredOption(options.agentFile, "--agent-file"),
-        });
-        const spec: SingleAgentSandboxSpec = {
-          sourceRoot,
-          sandboxRoot,
-          agentName: requiredOption(options.agent, "--agent"),
-          prompt: requiredOption(options.prompt, "--prompt"),
-          ...sourceFiles,
-        };
-        const prepared = await prepareSingleAgentSandbox(spec);
-
-        return runSingleAgentInSandbox(
-          {
-            layout: prepared.layout,
-            agentName: spec.agentName,
-            prompt: spec.prompt,
-          },
-          io,
-          deps,
-        );
-      },
-    );
+  // cli
+  //   .command(
+  //     Command.SingleAgent,
+  //     "Run one explicit agent in an isolated OpenCode sandbox",
+  //   )
+  //   .option("--orig <path>", "Source OpenCode config root")
+  //   .option("--dest <path>", "Sandbox destination directory")
+  //   .option(
+  //     "--config <path>",
+  //     "Source OpenCode config file, relative to --orig unless absolute",
+  //   )
+  //   .option(
+  //     "--plugin-dir <path>",
+  //     "Source local plugin dir, relative to --orig unless absolute",
+  //   )
+  //   .option("--agent <name>", "OpenCode agent name to run")
+  //   .option(
+  //     "--agent-file <path>",
+  //     "Source agent file, relative to --orig unless absolute",
+  //   )
+  //   .option("--prompt <text>", "Prompt/message passed to opencode run")
+  //   .action(
+  //     async (options: {
+  //       orig?: Path;
+  //       dest?: Path;
+  //       config?: Path;
+  //       plugin?: Path;
+  //       agent?: string;
+  //       agentFile?: Path;
+  //       prompt?: string;
+  //     }) => {
+  //       const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
+  //       const sandboxRoot = path.resolve(
+  //         options.dest ??
+  //           // ToDo: What happens if the path already exists?
+  //           (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
+  //       );
+  //       repl.start({ prompt: "debug> " });
+  //
+  //       const sourceFiles = resolveSourceFiles(sourceRoot, {
+  //         config: options.config,
+  //         plugin: options.plugin,
+  //         agentFile: requiredOption(options.agentFile, "--agent-file"),
+  //       });
+  //       const spec: SingleAgentSandboxSpec = {
+  //         sourceRoot,
+  //         sandboxRoot,
+  //         agentName: requiredOption(options.agent, "--agent"),
+  //         prompt: requiredOption(options.prompt, "--prompt"),
+  //         ...sourceFiles,
+  //       };
+  //       const prepared = await prepareSingleAgentSandbox(spec);
+  //
+  //       return runSingleAgentInSandbox(
+  //         {
+  //           layout: prepared.layout,
+  //           agentName: spec.agentName,
+  //           prompt: spec.prompt,
+  //         },
+  //         io,
+  //         deps,
+  //       );
+  //     },
+  //   );
 
   cli
     .command(
@@ -466,40 +387,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         options.dest ??
           (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
       );
-      const spec = defaultHelloWorldSpec(sourceRoot, sandboxRoot);
-      const prepared = await prepareSingleAgentSandbox(spec);
-
-      return runSingleAgentInSandbox(
-        {
-          layout: prepared.layout,
-          agentName: spec.agentName,
-          prompt: spec.prompt,
-        },
-        io,
-        deps,
-      );
-    });
-
-  cli
-    .command(
-      Command.StrictPlanSandbox,
-      "Run the strict-plan agent in an isolated OpenCode sandbox",
-    )
-    .example("Run the strict-plan agent in an isolated OpenCode sandbox")
-    .option("--orig <path>", "Source OpenCode config root")
-    .option("--dest <path>", "Sandbox destination directory")
-    .option("--prompt <text>", "Prompt/message passed to opencode run")
-    .action(async (options: { orig?: Path; dest?: Path; prompt?: string }) => {
-      const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
-      const sandboxRoot = path.resolve(
-        options.dest ??
-          (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
-      );
-      const spec = defaultStrictPlanSpec(
-        sourceRoot,
-        sandboxRoot,
-        requiredOption(options.prompt, "--prompt"),
-      );
+      const spec = await defaultHelloWorldSpec(sourceRoot, sandboxRoot);
       const prepared = await prepareSingleAgentSandbox(spec);
 
       return runSingleAgentInSandbox(
