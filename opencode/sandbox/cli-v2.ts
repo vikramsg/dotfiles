@@ -93,7 +93,6 @@ export interface RunSingleAgentInSandboxArgs {
 export type RunDeps = {
   env?: NodeJS.ProcessEnv;
   cwd?: Path;
-  logger?: Logger;
 };
 
 const Command = {
@@ -111,6 +110,8 @@ const defaultIO: CliIO = {
   stdout: process.stdout,
   stderr: process.stderr,
 };
+
+let logger: Logger = silentLogger;
 
 function currentPackageRoot(): Path {
   const modulePath = fileURLToPath(import.meta.url);
@@ -195,7 +196,6 @@ function defaultStrictPlanSpec(
  */
 export async function createSingleAgentSandboxLayout(
   args: CreateSingleAgentSandboxLayoutArgs,
-  logger: Logger = silentLogger,
 ): Promise<SingleAgentSandboxLayout> {
   const sandboxRoot = path.resolve(args.sandboxRoot);
   const log = logger.bind({ sandboxRoot });
@@ -248,7 +248,6 @@ export async function createSingleAgentSandboxLayout(
 
 export async function copyPluginFileToSandbox(
   args: CopyPluginFileToSandboxArgs,
-  logger: Logger = silentLogger,
 ): Promise<void> {
   logger.info("sandbox.plugin.copy.start", {
     sourcePluginFile: args.sourcePluginFile,
@@ -284,7 +283,6 @@ function rewriteSelectedPluginEntry(
  */
 export async function copyConfigFileToSandbox(
   args: CopyConfigFileToSandboxArgs,
-  logger: Logger = silentLogger,
 ): Promise<void> {
   logger.info("sandbox.config.copy.start", {
     sourceConfigFile: args.sourceConfigFile,
@@ -313,7 +311,6 @@ export async function copyConfigFileToSandbox(
 
 export async function copyAgentFileToSandbox(
   args: CopyAgentFileToSandboxArgs,
-  logger: Logger = silentLogger,
 ): Promise<void> {
   logger.info("sandbox.agent.copy.start", {
     sourceAgentFile: args.sourceAgentFile,
@@ -327,7 +324,6 @@ export async function copyAgentFileToSandbox(
 
 export async function prepareSingleAgentSandbox(
   spec: SingleAgentSandboxSpec,
-  logger: Logger = silentLogger,
 ): Promise<PreparedSingleAgentSandbox> {
   const log = logger.bind({
     agentName: spec.agentName,
@@ -339,7 +335,6 @@ export async function prepareSingleAgentSandbox(
 
   const layout = await createSingleAgentSandboxLayout(
     { sandboxRoot: spec.sandboxRoot },
-    log,
   );
   const sandboxPluginFile = path.join(
     layout.pluginDir,
@@ -352,7 +347,6 @@ export async function prepareSingleAgentSandbox(
       sourcePluginFile: spec.sourcePluginFile,
       sandboxPluginFile,
     },
-    log,
   );
   await copyConfigFileToSandbox(
     {
@@ -361,14 +355,12 @@ export async function prepareSingleAgentSandbox(
       sourcePluginFile: spec.sourcePluginFile,
       sandboxPluginFile,
     },
-    log,
   );
   await copyAgentFileToSandbox(
     {
       sourceAgentFile: spec.sourceAgentFile,
       sandboxAgentFile,
     },
-    log,
   );
 
   log.info("sandbox.prepare.done", {
@@ -385,7 +377,7 @@ export async function runSingleAgentInSandbox(
   io: CliIO,
   deps: RunDeps = {},
 ): Promise<number> {
-  const log = (deps.logger ?? createLogger()).bind({
+  const log = logger.bind({
     agentName: args.agentName,
     sandboxRoot: args.layout.sandboxRoot,
     worktree: args.layout.worktree,
@@ -461,7 +453,6 @@ function requiredOption(value: string | undefined, name: string): string {
 
 export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
   const cli = cac("cli-v2");
-  const logger = deps.logger ?? createLogger();
 
   cli.command(Command.Hello, "Print hello world").action(() => {
     io.stdout.write("hello world\n");
@@ -519,7 +510,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           prompt: requiredOption(options.prompt, "--prompt"),
           ...sourceFiles,
         };
-        const prepared = await prepareSingleAgentSandbox(spec, logger);
+        const prepared = await prepareSingleAgentSandbox(spec);
 
         return runSingleAgentInSandbox(
           {
@@ -528,7 +519,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
             prompt: spec.prompt,
           },
           io,
-          { ...deps, logger },
+          deps,
         );
       },
     );
@@ -547,7 +538,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
       );
       const spec = defaultHelloWorldSpec(sourceRoot, sandboxRoot);
-      const prepared = await prepareSingleAgentSandbox(spec, logger);
+      const prepared = await prepareSingleAgentSandbox(spec);
 
       return runSingleAgentInSandbox(
         {
@@ -556,7 +547,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           prompt: spec.prompt,
         },
         io,
-        { ...deps, logger },
+        deps,
       );
     });
 
@@ -580,7 +571,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         sandboxRoot,
         requiredOption(options.prompt, "--prompt"),
       );
-      const prepared = await prepareSingleAgentSandbox(spec, logger);
+      const prepared = await prepareSingleAgentSandbox(spec);
 
       return runSingleAgentInSandbox(
         {
@@ -589,7 +580,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           prompt: spec.prompt,
         },
         io,
-        { ...deps, logger },
+        deps,
       );
     });
 
@@ -602,8 +593,8 @@ export async function runCli(
   io: CliIO = defaultIO,
   deps: RunDeps = {},
 ): Promise<number> {
-  const logger = deps.logger ?? createLogger();
-  const cli = createCli(io, { ...deps, logger });
+  logger = createLogger();
+  const cli = createCli(io, deps);
   const originalInfo = console.info;
 
   try {
