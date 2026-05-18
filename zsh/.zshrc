@@ -99,7 +99,7 @@ fi
 #########################################
 # Opencode pinned version 
 alias oc-ping="OPENCODE_DISABLE_AUTOUPDATE=1 npx -y opencode-ai@1.14.30"
-alias opencode="OPENCODE_DISABLE_AUTOUPDATE=1 npx -y opencode-ai@1.14.43"
+alias opencode="OPENCODE_DISABLE_AUTOUPDATE=1 npx -y opencode-ai@1.14.40"
 
 
 #########################################
