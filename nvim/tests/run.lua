@@ -7,6 +7,7 @@ local specs = {
 
 function M.run()
 	local failures = {}
+	local initial_cwd = vim.fn.getcwd()
 
 	for _, spec in ipairs(specs) do
 		local cwd = vim.fn.getcwd()
@@ -24,6 +25,8 @@ function M.run()
 		end
 		vim.cmd("cd " .. vim.fn.fnameescape(cwd))
 	end
+
+	vim.cmd("cd " .. vim.fn.fnameescape(initial_cwd))
 
 	if #failures > 0 then
 		vim.api.nvim_err_writeln(table.concat(failures, "\n\n"))
