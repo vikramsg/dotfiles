@@ -1,0 +1,13 @@
+# Safe example Harlequin config.
+# Copy this file to config.toml and replace placeholders with local values.
+
+default_profile = "example-postgres"
+
+[profiles.example-postgres]
+adapter = "postgres"
+host = "localhost"
+port = 5432
+dbname = "YOUR_DATABASE_NAME"
+user = "YOUR_DATABASE_USER"
+password = "YOUR_DATABASE_PASSWORD"
+keymap_name = ["default_keys"]

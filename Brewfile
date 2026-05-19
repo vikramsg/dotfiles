@@ -22,5 +22,8 @@ brew "mcat"
 brew "zoxide"
 brew "television"
 
+# Terminal database client.
+brew "harlequin"
+
 # Linter for github actions
 brew "actionlint"
