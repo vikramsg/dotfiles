@@ -219,8 +219,20 @@ television:
     ln -sfn {{justfile_directory()}}/television/cable ~/.config/television/cable
     @echo "Television symlink created at ~/.config/television/cable -> {{justfile_directory()}}/television/cable"
 
+# Set up Harlequin symlink
+harlequin:
+    @echo "Setting up Harlequin symlink..."
+    mkdir -p ~/.config/harlequin
+    @if [ ! -f {{justfile_directory()}}/harlequin/config.toml ]; then \
+        echo "Missing local Harlequin config: {{justfile_directory()}}/harlequin/config.toml"; \
+        echo "Create it from harlequin/config.example.toml and fill in local credentials."; \
+        exit 1; \
+    fi
+    ln -sfn {{justfile_directory()}}/harlequin/config.toml ~/.config/harlequin/config.toml
+    @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
+
 # Set up all symlinks
-all: nvim tmux opencode ghostty screenshot lch bin zsh lazygit television
+all: nvim tmux opencode ghostty screenshot lch bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

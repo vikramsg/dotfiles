@@ -77,6 +77,23 @@ Key constraints:
 <MANDATORY ASCII diagram>
 ```
 ---
+## Patterns to Follow
+
+<The type of patterns to follow for code, for example, layer rules, how to isolate/denote private fns, how to use types etc>
+<important: Do not write generic code. Make it as representative as possible>
+<important: Do not write python code if we will not write python code as part of the implementation and vice versa for javascript>
+<NOTE: **Do not** literally use 2 items in the list because the template has 2. Every single pattern required whether it be 1,2,4,8.. should be exhaustively listed.> 
+1. 
+```python
+<this is the type of pattern I will follow if there is python code>
+```
+
+2.
+```javascript
+<this is the type of pattern I will follow if there was javascript code>
+```
+
+---
 
 ## Impact Matrix
 
@@ -105,57 +122,6 @@ Key constraints:
 <Add as many scenarios as needed to cover the requested change and regressions.>
 
 ---
-## Patterns to Follow
-
-<The type of patterns to follow for code, for example, layer rules, how to isolate/denote private fns, how to use types etc>
-<important: Do not write generic code. Make it as representative as possible>
-<important: Do not write python code if we will not write python code as part of the implementation and vice versa for javascript>
-<NOTE: **Do not** literally use 2 items in the list because the template has 2. Every single pattern required whether it be 1,2,4,8.. should be exhaustively listed.> 
-1. 
-```python
-<this is the type of pattern I will follow if there is python code>
-```
-
-2.
-```javascript
-<this is the type of pattern I will follow if there was javascript code>
-```
-
----
-
-## Highest-Risk Review Points
-
-These are the places where a reviewer is most likely to find subtle bugs or prompt-contract drift.
-
-### 1. <specific risk title>
-
-Why this is risky:
-- ...
-- ...
-
-What to inspect:
-- `<path>`
-- `<path>`
-
-What should be true:
-- ...
-- ...
-
-### 2. <specific risk title>
-
-Why this is risky:
-- ...
-- ...
-
-What to inspect:
-- `<path>`
-- `<path>`
-
-What should be true:
-- ...
-- ...
-
----
 
 ## Implementation Checklist
 
@@ -168,7 +134,6 @@ What should be true:
 7. Re-run targeted verification.
 8. Run broader verification commands for formatting, linting, typechecking, CLI loading, and tests as relevant.
 9. Re-check the acceptance scenarios against the implemented behavior.
-10. Prepare concise reviewer guidance that highlights the highest-risk inspection points.
 ```
 
 Do not include filler. Do not include implementation details that are unrelated to the request.

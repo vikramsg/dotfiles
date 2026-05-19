@@ -1,0 +1,411 @@
+# Safe example Harlequin config.
+# Copy this file to config.toml and replace placeholders with local values.
+
+default_profile = "example-postgres"
+
+[profiles.example-postgres]
+adapter = "postgres"
+host = "localhost"
+port = 5432
+dbname = "YOUR_DATABASE_NAME"
+user = "YOUR_DATABASE_USER"
+password = "YOUR_DATABASE_PASSWORD"
+keymap_name = ["default_keys"]
+
+[[keymaps.default_keys]]
+keys = "ctrl+q"
+action = "quit"
+
+[[keymaps.default_keys]]
+keys = "f1"
+action = "help"
+
+[[keymaps.default_keys]]
+keys = "f2"
+action = "focus_query_editor"
+
+[[keymaps.default_keys]]
+keys = "f5"
+action = "focus_results_viewer"
+
+[[keymaps.default_keys]]
+keys = "f6"
+action = "focus_data_catalog"
+
+[[keymaps.default_keys]]
+keys = "f8"
+action = "show_query_history"
+
+[[keymaps.default_keys]]
+keys = "ctrl+b,f9"
+action = "toggle_sidebar"
+
+[[keymaps.default_keys]]
+keys = "f10"
+action = "toggle_full_screen"
+
+[[keymaps.default_keys]]
+keys = "f12"
+action = "show_debug_info"
+
+[[keymaps.default_keys]]
+keys = "ctrl+e"
+action = "show_data_exporter"
+
+[[keymaps.default_keys]]
+keys = "ctrl+r"
+action = "refresh_catalog"
+
+[[keymaps.default_keys]]
+keys = "tab"
+action = "focus_next"
+
+[[keymaps.default_keys]]
+keys = "shift+tab"
+action = "focus_previous"
+
+[[keymaps.default_keys]]
+keys = "ctrl+n"
+action = "code_editor.new_buffer"
+
+[[keymaps.default_keys]]
+keys = "ctrl+w"
+action = "code_editor.close_buffer"
+
+[[keymaps.default_keys]]
+keys = "ctrl+k"
+action = "code_editor.next_buffer"
+
+[[keymaps.default_keys]]
+keys = "ctrl+enter,ctrl+t"
+action = "code_editor.run_query"
+key_display = "^enter or ^t"
+
+[[keymaps.default_keys]]
+keys = "f4"
+action = "code_editor.format_buffer"
+
+[[keymaps.default_keys]]
+keys = "ctrl+s"
+action = "code_editor.save_buffer"
+
+[[keymaps.default_keys]]
+keys = "ctrl+o"
+action = "code_editor.load_buffer"
+
+[[keymaps.default_keys]]
+keys = "ctrl+f"
+action = "code_editor.find"
+
+[[keymaps.default_keys]]
+keys = "f3"
+action = "code_editor.find_next"
+
+[[keymaps.default_keys]]
+keys = "ctrl+g"
+action = "code_editor.goto_line"
+
+[[keymaps.default_keys]]
+keys = "up"
+action = "code_editor.cursor_up"
+
+[[keymaps.default_keys]]
+keys = "down"
+action = "code_editor.cursor_down"
+
+[[keymaps.default_keys]]
+keys = "left"
+action = "code_editor.cursor_left"
+
+[[keymaps.default_keys]]
+keys = "right"
+action = "code_editor.cursor_right"
+
+[[keymaps.default_keys]]
+keys = "ctrl+left"
+action = "code_editor.cursor_word_left"
+
+[[keymaps.default_keys]]
+keys = "ctrl+right"
+action = "code_editor.cursor_word_right"
+
+[[keymaps.default_keys]]
+keys = "home"
+action = "code_editor.cursor_line_start"
+
+[[keymaps.default_keys]]
+keys = "end"
+action = "code_editor.cursor_line_end"
+
+[[keymaps.default_keys]]
+keys = "ctrl+home"
+action = "code_editor.cursor_doc_start"
+
+[[keymaps.default_keys]]
+keys = "ctrl+end"
+action = "code_editor.cursor_doc_end"
+
+[[keymaps.default_keys]]
+keys = "pageup"
+action = "code_editor.cursor_page_up"
+
+[[keymaps.default_keys]]
+keys = "pagedown"
+action = "code_editor.cursor_page_down"
+
+[[keymaps.default_keys]]
+keys = "shift+up"
+action = "code_editor.select_up"
+
+[[keymaps.default_keys]]
+keys = "shift+down"
+action = "code_editor.select_down"
+
+[[keymaps.default_keys]]
+keys = "shift+left"
+action = "code_editor.select_left"
+
+[[keymaps.default_keys]]
+keys = "shift+right"
+action = "code_editor.select_right"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+left"
+action = "code_editor.select_word_left"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+right"
+action = "code_editor.select_word_right"
+
+[[keymaps.default_keys]]
+keys = "shift+home"
+action = "code_editor.select_line_start"
+
+[[keymaps.default_keys]]
+keys = "shift+end"
+action = "code_editor.select_line_end"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+home"
+action = "code_editor.select_doc_start"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+end"
+action = "code_editor.select_doc_end"
+
+[[keymaps.default_keys]]
+keys = "ctrl+a"
+action = "code_editor.select_all"
+
+[[keymaps.default_keys]]
+keys = "ctrl+up"
+action = "code_editor.scroll_up_one"
+
+[[keymaps.default_keys]]
+keys = "ctrl+down"
+action = "code_editor.scroll_down_one"
+
+[[keymaps.default_keys]]
+keys = "ctrl+underscore"
+action = "code_editor.toggle_comment"
+
+[[keymaps.default_keys]]
+keys = "ctrl+c"
+action = "code_editor.copy"
+
+[[keymaps.default_keys]]
+keys = "ctrl+u,ctrl+v,shift+insert"
+action = "code_editor.paste"
+
+[[keymaps.default_keys]]
+keys = "ctrl+z"
+action = "code_editor.undo"
+
+[[keymaps.default_keys]]
+keys = "ctrl+y"
+action = "code_editor.redo"
+
+[[keymaps.default_keys]]
+keys = "backspace"
+action = "code_editor.delete_left"
+
+[[keymaps.default_keys]]
+keys = "delete"
+action = "code_editor.delete_right"
+
+[[keymaps.default_keys]]
+keys = "shift+delete"
+action = "code_editor.delete_line"
+
+[[keymaps.default_keys]]
+keys = "j"
+action = "data_catalog.previous_tab"
+
+[[keymaps.default_keys]]
+keys = "k"
+action = "data_catalog.next_tab"
+
+[[keymaps.default_keys]]
+keys = "ctrl+enter,ctrl+j"
+action = "data_catalog.insert_name"
+key_display = "^enter or ^j"
+
+[[keymaps.default_keys]]
+keys = "ctrl+c"
+action = "data_catalog.copy_name"
+
+[[keymaps.default_keys]]
+keys = "enter"
+action = "data_catalog.select_cursor"
+
+[[keymaps.default_keys]]
+keys = "space"
+action = "data_catalog.toggle_node"
+
+[[keymaps.default_keys]]
+keys = "up"
+action = "data_catalog.cursor_up"
+
+[[keymaps.default_keys]]
+keys = "down"
+action = "data_catalog.cursor_down"
+
+[[keymaps.default_keys]]
+keys = "full_stop"
+action = "data_catalog.show_context_menu"
+
+[[keymaps.default_keys]]
+keys = "escape"
+action = "data_catalog.hide_context_menu"
+
+[[keymaps.default_keys]]
+keys = "j"
+action = "results_viewer.previous_tab"
+
+[[keymaps.default_keys]]
+keys = "k"
+action = "results_viewer.next_tab"
+
+[[keymaps.default_keys]]
+keys = "ctrl+c"
+action = "results_viewer.copy_selection"
+
+[[keymaps.default_keys]]
+keys = "enter"
+action = "results_viewer.select_cursor"
+
+[[keymaps.default_keys]]
+keys = "up"
+action = "results_viewer.cursor_up"
+
+[[keymaps.default_keys]]
+keys = "down"
+action = "results_viewer.cursor_down"
+
+[[keymaps.default_keys]]
+keys = "left"
+action = "results_viewer.cursor_left"
+
+[[keymaps.default_keys]]
+keys = "right"
+action = "results_viewer.cursor_right"
+
+[[keymaps.default_keys]]
+keys = "ctrl+left"
+action = "results_viewer.cursor_row_start"
+
+[[keymaps.default_keys]]
+keys = "ctrl+right"
+action = "results_viewer.cursor_row_end"
+
+[[keymaps.default_keys]]
+keys = "ctrl+up,home"
+action = "results_viewer.cursor_column_start"
+
+[[keymaps.default_keys]]
+keys = "ctrl+down,end"
+action = "results_viewer.cursor_column_end"
+
+[[keymaps.default_keys]]
+keys = "tab"
+action = "results_viewer.cursor_next_cell"
+
+[[keymaps.default_keys]]
+keys = "shift+tab"
+action = "results_viewer.cursor_previous_cell"
+
+[[keymaps.default_keys]]
+keys = "pageup"
+action = "results_viewer.cursor_page_up"
+
+[[keymaps.default_keys]]
+keys = "pagedown"
+action = "results_viewer.cursor_page_down"
+
+[[keymaps.default_keys]]
+keys = "ctrl+home"
+action = "results_viewer.cursor_table_start"
+
+[[keymaps.default_keys]]
+keys = "ctrl+end"
+action = "results_viewer.cursor_table_end"
+
+[[keymaps.default_keys]]
+keys = "shift+up"
+action = "results_viewer.select_up"
+
+[[keymaps.default_keys]]
+keys = "shift+down"
+action = "results_viewer.select_down"
+
+[[keymaps.default_keys]]
+keys = "shift+left"
+action = "results_viewer.select_left"
+
+[[keymaps.default_keys]]
+keys = "shift+right"
+action = "results_viewer.select_right"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+left"
+action = "results_viewer.select_row_start"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+right"
+action = "results_viewer.select_row_end"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+up,shift+home"
+action = "results_viewer.select_column_start"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+down,shift+end"
+action = "results_viewer.select_column_end"
+
+[[keymaps.default_keys]]
+keys = "shift+pageup"
+action = "results_viewer.select_page_up"
+
+[[keymaps.default_keys]]
+keys = "shift+pagedown"
+action = "results_viewer.select_page_down"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+home"
+action = "results_viewer.select_table_start"
+
+[[keymaps.default_keys]]
+keys = "ctrl+shift+end"
+action = "results_viewer.select_table_end"
+
+[[keymaps.default_keys]]
+keys = "ctrl+a"
+action = "results_viewer.select_all"
+
+[[keymaps.default_keys]]
+keys = "enter"
+action = "history_screen.select_query"
+
+[[keymaps.default_keys]]
+keys = "escape"
+action = "history_screen.cancel"
