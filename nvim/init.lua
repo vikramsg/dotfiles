@@ -345,6 +345,7 @@ local function reveal_current_file_in_explorer()
 	if explorer then
 		if reveal_hidden and not explorer.opts.hidden then
 			set_snacks_explorer_hidden(explorer, true)
+			set_snacks_explorer_ignored(explorer, true)
 			explorer.list:set_target()
 			explorer:find()
 		end
@@ -354,6 +355,7 @@ local function reveal_current_file_in_explorer()
 
 	Snacks.explorer({
 		hidden = reveal_hidden,
+		ignored = reveal_hidden,
 		on_show = function(picker)
 			reveal_file_in_explorer(picker, file)
 		end,
