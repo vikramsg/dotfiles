@@ -8,8 +8,20 @@ import { createLogger, type Logger, silentLogger } from "./logger.js";
 
 let logger: Logger = silentLogger;
 
-class UsageError extends Error {
+class CleanCliError extends Error {
+  override name = "CleanCliError";
+}
+
+class UsageError extends CleanCliError {
   override name = "UsageError";
+}
+
+class ConfigValidationError extends CleanCliError {
+  override name = "ConfigValidationError";
+}
+
+function isCleanCliError(error: unknown): boolean {
+  return error instanceof CleanCliError;
 }
 
 // Minimal generic single-agent sandbox runner for exercising one OpenCode agent in isolation.
@@ -102,8 +114,39 @@ function currentPackageRoot(): Path {
 export async function createSingleAgentSandboxLayout(
   args: CreateSingleAgentSandboxLayoutArgs,
 ): Promise<SingleAgentSandboxLayout> {
-  const sandboxRoot = path.resolve(args.sandboxRoot);
+  const layout = deriveSingleAgentSandboxLayout(args);
+  const { sandboxRoot } = layout;
   const log = logger.bind({ sandboxRoot });
+
+  log.info("sandbox.layout.create.start");
+
+  await Promise.all([
+    mkdir(layout.pluginDir, { recursive: true }),
+    mkdir(layout.agentDir, { recursive: true }),
+    mkdir(layout.dataHome, { recursive: true }),
+    mkdir(layout.cacheHome, { recursive: true }),
+    mkdir(layout.stateHome, { recursive: true }),
+    mkdir(layout.worktree, { recursive: true }),
+    mkdir(layout.output, { recursive: true }),
+  ]);
+
+  log.info("sandbox.layout.create.done", {
+    configHome: layout.configHome,
+    dataHome: layout.dataHome,
+    cacheHome: layout.cacheHome,
+    stateHome: layout.stateHome,
+    opencodeConfigDir: layout.opencodeConfigDir,
+    worktree: layout.worktree,
+    output: layout.output,
+  });
+
+  return layout;
+}
+
+function deriveSingleAgentSandboxLayout(
+  args: CreateSingleAgentSandboxLayoutArgs,
+): SingleAgentSandboxLayout {
+  const sandboxRoot = path.resolve(args.sandboxRoot);
   const configHome = path.join(sandboxRoot, "config");
   const dataHome = path.join(sandboxRoot, "data");
   const cacheHome = path.join(sandboxRoot, "cache");
@@ -113,28 +156,6 @@ export async function createSingleAgentSandboxLayout(
   const agentDir = path.join(opencodeConfigDir, "agents");
   const worktree = path.join(sandboxRoot, "worktree");
   const output = path.join(sandboxRoot, "output");
-
-  log.info("sandbox.layout.create.start");
-
-  await Promise.all([
-    mkdir(pluginDir, { recursive: true }),
-    mkdir(agentDir, { recursive: true }),
-    mkdir(dataHome, { recursive: true }),
-    mkdir(cacheHome, { recursive: true }),
-    mkdir(stateHome, { recursive: true }),
-    mkdir(worktree, { recursive: true }),
-    mkdir(output, { recursive: true }),
-  ]);
-
-  log.info("sandbox.layout.create.done", {
-    configHome,
-    dataHome,
-    cacheHome,
-    stateHome,
-    opencodeConfigDir,
-    worktree,
-    output,
-  });
 
   return {
     sandboxRoot,
@@ -186,7 +207,7 @@ async function assertFileExists(
       throw new Error("not a file");
     }
   } catch {
-    throw new Error(
+    throw new ConfigValidationError(
       `Configured local plugin does not exist: ${configuredEntry} -> ${file}`,
     );
   }
@@ -211,7 +232,7 @@ async function resolveConfiguredLocalPlugins(
   return pluginEntries
     .filter((entry): entry is string => {
       if (typeof entry === "string" && path.isAbsolute(entry)) {
-        throw new Error(
+        throw new ConfigValidationError(
           `Absolute local plugin paths are not supported in sandbox config: ${entry}`,
         );
       }
@@ -222,7 +243,7 @@ async function resolveConfiguredLocalPlugins(
       const sandboxFile = path.resolve(sandboxConfigDir, entry);
 
       if (!isInsideDirectory(layout.pluginDir, sandboxFile)) {
-        throw new Error(
+        throw new ConfigValidationError(
           `Configured local plugin escapes sandbox plugin directory: ${entry} -> ${sandboxFile}`,
         );
       }
@@ -237,7 +258,7 @@ async function resolveConfiguredLocalPlugins(
 
 function assertSafeAgentName(agentName: string): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(agentName)) {
-    throw new Error(`Invalid agent name: ${agentName}`);
+    throw new ConfigValidationError(`Invalid agent name: ${agentName}`);
   }
 }
 

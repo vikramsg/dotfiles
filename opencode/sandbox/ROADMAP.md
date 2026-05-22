@@ -27,30 +27,26 @@
 
    Current runs use `opencode run --dir <worktree> --agent <agent> <prompt>`. Prefer `opencode run --dir <worktree> --agent <agent> --format json --print-logs --log-level DEBUG <prompt>` so output can be inspected and validated.
 
-3. Validate `agentName` before writing `${agentName}.md`.
-
-   Reject path separators, `..`, empty names, and other unsafe values before deriving sandbox file paths. A conservative pattern such as `/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/` is enough for the current use case.
-
-4. Stop using inherited stdio in `runSingleAgentInSandbox`.
+3. Stop using inherited stdio in `runSingleAgentInSandbox`.
 
    Use piped stdio so stdout can be saved to `events.jsonl` and stderr can be saved to `opencode.log`. Keep terminal output to short summaries through the injected `CliIO` interface.
 
-5. Preserve signal exit statuses.
+4. Preserve signal exit statuses.
 
    Map signal exits to shell-style statuses, such as `SIGINT -> 130` and `SIGTERM -> 143`, instead of collapsing them to `1`.
 
-6. Improve config sandboxing through an explicit transform.
+5. Improve config sandboxing through an explicit transform.
 
    Keep config copying explicit, but add an optional config transform hook so callers can override `instructions`, model, or plugins without making sandbox preparation magical.
 
-7. Reduce command action duplication.
+6. Reduce command action duplication.
 
    The command actions repeat source-root resolution, sandbox-root resolution, spec creation, preparation, and execution. Extract small helpers only where they remove direct duplication without introducing a framework.
 
-8. Support `OPENCODE_SANDBOX_ROOT`.
+7. Support `OPENCODE_SANDBOX_ROOT`.
 
     Prefer `--dest` when provided, otherwise use `OPENCODE_SANDBOX_ROOT`, otherwise create a temporary root. Read injected `deps.env` before falling back to `process.env`.
 
-9. Remove or use unused spec fields.
+8. Remove or use unused spec fields.
 
     `sourceRoot` is currently carried in `SingleAgentSandboxSpec` but is not used after construction. Either write it to metadata or remove it from the spec.

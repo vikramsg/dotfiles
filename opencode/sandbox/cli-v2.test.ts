@@ -173,6 +173,45 @@ describe("cli-v2", () => {
         sourceAgentFile: agent,
       }),
     ).rejects.toThrow(`Configured local plugin does not exist: ./plugins/missing.js -> ${missingPlugin}`)
+
+    await expect(readdir(path.join(path.resolve(dest), "config", "opencode"))).rejects.toThrow()
+  })
+
+  it("returns a clean validation error when a local plugin is missing", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const agent = path.join(orig, "agents", "test.md")
+    const missingPlugin = path.join(orig, "plugins", "missing.js")
+    let stderr = ""
+
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: ["./plugins/missing.js"] }))
+    await writeFile(agent, "test agent\n")
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "single-agent",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--agent",
+        "custom-agent",
+        "--agent-file",
+        "agents/test.md",
+        "--prompt",
+        "hello",
+      ],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toBe(`Configured local plugin does not exist: ./plugins/missing.js -> ${missingPlugin}\n`)
+    expect(stderr).not.toContain("Error:")
+    expect(stderr).not.toContain("at ")
+    expect(stderr).not.toContain("cli-v2.ts")
   })
 
   it("rejects absolute local plugin paths before copying sandbox files", async () => {

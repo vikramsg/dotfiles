@@ -72,14 +72,11 @@ Current limitations:
 
 ## Environment variables
 
-- `OPENCODE_SANDBOX_ROOT`: Override the sandbox root. If unset, a temporary sandbox root is created.
 - `OPENCODE_SANDBOX_LOG_LEVEL`: Override CLI v2 diagnostic logging level. Defaults to `info`; use `debug` for verbose sandbox diagnostics.
-- `OPENCODE_SANDBOX_MODEL`: Override the model written to the generated sandbox config.
-- `OPENCODE_SANDBOX_STOP_PHASE`: For `orchestrator-until` only. Defaults to `after`; `before` is also allowed.
 
-## Output artifacts
+## Legacy CLI Output Artifacts
 
-Artifacts are written under `<sandbox-root>/output`:
+The original `sandbox-cli.ts` writes artifacts under `<sandbox-root>/output`:
 
 - `command.txt`: Reproducible command with sandbox environment variables.
 - `metadata.json`: Sandbox paths and run metadata.
@@ -109,7 +106,6 @@ CLI v2 tests assert the clean user-facing stderr contract and intentionally do n
 ## Notes
 
 - The CLI creates isolated XDG config, data, cache, and state homes under the sandbox root.
-- It copies `auth.json` and `mcp-auth.json` into the sandbox data directory if they are present.
 - The sandbox is intentionally left in place for inspection after each run.
 - Database files are not deleted; cleanup is limited to known marker and status files.
 - Subcommands belong to the CLI. The `justfile` is only the forwarding entrypoint.
