@@ -1,4 +1,5 @@
 import { cac } from "cac";
+import { z } from "zod";
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, stat } from "node:fs/promises";
 import os from "node:os";
@@ -218,6 +219,11 @@ async function assertFileExists(
   }
 }
 
+const OpenCodeConfigSchema = z.object({
+  plugin: z.array(z.string()).optional(),
+});
+type OpenCodeConfig = z.infer<typeof OpenCodeConfigSchema>;
+
 async function resolveConfiguredLocalPlugins(
   sourceConfigFile: Path,
   layout: SingleAgentSandboxLayout,
@@ -232,21 +238,18 @@ async function resolveConfiguredLocalPlugins(
     );
   }
 
-  let config: { plugin?: unknown };
-  try {
-    config = JSON.parse(configText) as { plugin?: unknown };
-  } catch {
+  let parseResult = OpenCodeConfigSchema.safeParse(JSON.parse(configText));
+  if (!parseResult.success)
     throw new ConfigValidationError(
       `Could not parse config file ${sourceConfigFile}`,
     );
-  }
-  const rawPlugin = config.plugin;
-  const pluginEntries =
-    typeof rawPlugin === "string"
-      ? [rawPlugin]
-      : Array.isArray(rawPlugin)
-        ? rawPlugin
-        : [];
+
+  const config: OpenCodeConfig = parseResult.data;
+  const pluginEntries = config.plugin;
+
+  if (!pluginEntries) return [];
+
+  // Parse the plugins to find if there are local plugins to copy
   const sourceConfigDir = path.dirname(sourceConfigFile);
   const sandboxConfigDir = path.dirname(layout.sandboxConfigFile);
 
