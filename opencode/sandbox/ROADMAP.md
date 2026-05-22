@@ -2,9 +2,12 @@
 
 ## Direction
 
-`cli-v2.ts` should stay small, composable, and testable. The rewrite should not copy all of `sandbox-cli.ts` at once. The best path is to harden the current single-agent sandbox abstraction until it is reliable, inspectable, and easy to extend.
+1. `cli-v2.ts` should be a well architected CLI that allows tesing `opencode` without touching global `opencode` config.
+2. `DSPy` integration so that any agent can be optimized.
+    * Eventually also multi-agent optimization
+3. Both `cli-v2.ts` and `DSPy` should be packagable into a single artifact for eventual release as a separate repo.
 
-## Improvements
+## CLI Architecture Improvements
 
 ### High-Prio
 
