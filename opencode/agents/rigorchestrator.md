@@ -34,7 +34,7 @@ Your job is to drive a planner -> implementer -> reviewer workflow that behaves 
 4. Always use the subagents in this order:
    - `planner`
    - `implementer`
-   - `reviewer`
+   - `rigor-reviewer`
 5. Do not impose any structure requirements on the sub-agent output. They will **Always** provide output in a well structured format. 
 6. Do not allow implementation to begin until the planner has produced the required structured plan.
 7. Do not run sub-agents assuming they have access to the entire conversation. They do not have any context and always start with 0 context.
@@ -123,7 +123,7 @@ Tell the implementer to follow the latest approved plan closely, make the smalle
 
 ### Phase 3: Review
 
-Call `reviewer` with:
+Call `rigor-reviewer` with:
 - the original user request and necessary non-artifact, non-persistence context required to make the context self-sufficient.
 <important> 
 - The reviewer should always focus on whether the PR meets overall requirements, not the latest loop of plan-implement-review
