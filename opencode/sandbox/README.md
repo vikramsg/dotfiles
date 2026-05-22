@@ -86,12 +86,12 @@ Captured `scenario` and `evaluate` runs write artifacts under `<sandbox-root>/ou
 - `stdout.txt`: captured `opencode run` stdout.
 - `stderr.txt`: captured `opencode run` stderr.
 - `transcript.jsonl`: trace events recorded by the generated sandbox trace/expectation plugin or by an instrumented test `opencode`.
-- `final-response.md`: captured stdout used as the fallback final response.
+- `final-response.md`: captured stdout retained for inspection only; final-response scoring requires an explicit `final_response` trace event from the primary/orchestrator assistant.
 - `status.json`: exit status, timeout flag, and signal.
 - `metadata.json`: command and worktree metadata.
 - `evaluation.json`: top-level `passed` result, raw OpenCode `status`, assertion results, trace errors, and score inputs written by `evaluate`.
 
-Malformed, missing, or empty required traces are reported as failed `evaluate` results with non-empty `trace_errors` instead of falling back to fixture transcripts; `evaluate --json` still writes parseable evaluation JSON to stdout and `output/evaluation.json`. Completed evaluations exit `0` only when `evaluation.json.passed` is `true`; failed assertions, trace expectation errors, timeouts, and non-zero OpenCode statuses return `1` while preserving raw run details in the artifacts.
+Malformed, missing, or empty required traces are reported as failed `evaluate` results with non-empty `trace_errors` instead of falling back to fixture transcripts; captured stdout remains available in `stdout.txt` but does not satisfy final-response assertions. `evaluate --json` still writes parseable evaluation JSON to stdout and `output/evaluation.json`. Completed evaluations exit `0` only when `evaluation.json.passed` is `true`; failed assertions, trace expectation errors, timeouts, and non-zero OpenCode statuses return `1` while preserving raw run details in the artifacts.
 
 ## Environment variables
 

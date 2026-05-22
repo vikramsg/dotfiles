@@ -786,6 +786,19 @@ function parseAgentCandidates(raw?: string | string[]): Record<string, Path> {
   return candidates;
 }
 
+function validateAgentCandidates(
+  candidates: Record<string, Path>,
+  scenario: ScenarioFile,
+): void {
+  const scenarioAgentNames = new Set(Object.keys(scenario.agents));
+
+  for (const agentName of Object.keys(candidates)) {
+    if (!scenarioAgentNames.has(agentName)) {
+      throw new UsageError(`Unknown --agent-candidate agent: ${agentName}`);
+    }
+  }
+}
+
 async function prepareScenarioSandbox(args: {
   sourceRoot: Path;
   sandboxRoot: Path;
@@ -896,13 +909,28 @@ function taskPrompt(args) {
 }
 
 function finalContent(input, output) {
-  const message = output?.message ?? output ?? input?.message ?? (input?.role === "assistant" ? input : undefined)
-  if (!message) return ""
-  if (message?.role && message.role !== "assistant") return ""
-  const agent = message?.agent ?? message?.agentName ?? message?.metadata?.agent ?? output?.agent ?? input?.agent
-  if (agent && agent !== primaryAgent && agent !== "orchestrator") return ""
-  return normalizeText(message?.content ?? message?.parts ?? output?.content ?? output?.parts)
+  const message = output?.message ?? input?.message
+  if (!message || message.role !== "assistant") return ""
+  const agent = message.agent ?? message.agentName ?? message.metadata?.agent
+  if (agent !== primaryAgent && agent !== "orchestrator") return ""
+  return normalizeText(message.content ?? message.parts)
 }
+
+function validateUnconsumedExpectations() {
+  for (const [agent, expected] of Object.entries(scriptedSubagents)) {
+    const observed = consumed[agent] || 0
+    if (observed < expected.length) {
+      appendEvent({
+        type: "trace_error",
+        agent,
+        sequence: observed + 1,
+        message: "Unconsumed scripted task output for " + agent + " at call " + (observed + 1),
+      })
+    }
+  }
+}
+
+process.once("exit", validateUnconsumedExpectations)
 
 function recordTaskExpectation(agent, sequence, observedOutput) {
   const expected = scriptedSubagents[agent]
@@ -1000,7 +1028,7 @@ async function readTraceEventsForEvaluation(layout: SingleAgentSandboxLayout): P
 function evaluateTrace(
   events: TraceEvent[],
   expected: ExpectedAssertions,
-  finalResponse: string,
+  _finalResponse: string,
   status: number,
   traceReadErrors: string[] = [],
 ): EvaluationResult {
@@ -1009,7 +1037,7 @@ function evaluateTrace(
   const finalEvent = [...events]
     .reverse()
     .find((event): event is { type: "final_response"; content: string } => event.type === "final_response");
-  const resolvedFinalResponse = finalEvent?.content ?? finalResponse;
+  const resolvedFinalResponse = finalEvent?.content ?? "";
   const approvedIndex = events.findIndex(
     (event) => event.type === "task" && event.agent === "reviewer" && /verdict:\s*APPROVED/i.test(event.output),
   );
@@ -1217,6 +1245,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         );
         const bundle = await readScenarioBundle(requiredOption(options.scenario, "--scenario"));
         const candidates = parseAgentCandidates(options.agentCandidate);
+        validateAgentCandidates(candidates, bundle.scenario);
         const timeoutMs = parsePositiveIntegerOption(options.timeoutMs, "--timeout-ms");
         const prepared = await prepareScenarioSandbox({ sourceRoot, sandboxRoot, bundle, agentCandidates: candidates });
         if (options.prepareOnly) return 0;
@@ -1253,6 +1282,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         );
         const bundle = await readScenarioBundle(requiredOption(options.scenario, "--scenario"));
         const candidates = parseAgentCandidates(options.agentCandidate);
+        validateAgentCandidates(candidates, bundle.scenario);
         const timeoutMs = parsePositiveIntegerOption(options.timeoutMs, "--timeout-ms");
         const prepared = await prepareScenarioSandbox({ sourceRoot, sandboxRoot, bundle, agentCandidates: candidates });
         const run = await runCapturedOpencodeInSandbox(
