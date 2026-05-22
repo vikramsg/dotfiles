@@ -943,7 +943,7 @@ function recordTaskExpectation(agent, sequence, observedOutput) {
     appendEvent({ type: "trace_error", agent, sequence, message: "Exhausted scripted task outputs for " + agent + " at call " + sequence })
     return
   }
-  if (observedOutput !== expectedOutput && !observedOutput.includes(expectedOutput)) {
+  if (observedOutput !== expectedOutput) {
     appendEvent({ type: "trace_error", agent, sequence, message: "Scripted output mismatch for " + agent + " call " + sequence })
   }
 }

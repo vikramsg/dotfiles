@@ -116,110 +116,46 @@ Use hard zero scores for safety-critical contract violations, such as leaking pl
 
 ## Current `cli-v2` State
 
-`sandbox/cli-v2.ts` is currently a minimal single-agent runner.
+`sandbox/cli-v2.ts` now supports single-agent smoke runs plus deterministic scenario/evaluate runs that produce structured artifacts for scoring.
 
 It can:
 
 - create an isolated XDG layout;
-- copy `opencode.json`;
-- copy configured local plugins;
-- copy one selected agent markdown file;
-- run `opencode run --dir <worktree> --agent <agent> <prompt>`.
+- copy `opencode.json` and configured local plugins;
+- copy one selected agent markdown file for `single-agent` runs;
+- load prompts from `--prompt` or `--prompt-file`;
+- run `opencode run --dir <worktree> --agent <agent> <prompt>`;
+- capture structured output files under `output/`, including `result.json`, `stdout.txt`, `stderr.txt`, `status.json`, `metadata.json`, `final-response.md`, `transcript.jsonl`, and `evaluation.json`;
+- prepare multi-agent scenario sandboxes from `scenario.json` files;
+- copy scenario fixture directories into a clean worktree;
+- inject candidate agent files with `--agent-candidate agent=file` without modifying repo agents;
+- install a generated trace plugin for scripted subagent scenarios;
+- record task, read-only tool-after-approval, and final-response trace events;
+- validate scripted subagent output with exact equality;
+- run `scenario` and `evaluate` commands with optional timeouts and JSON evaluation output;
+- evaluate trace assertions into `score_inputs`, `trace_errors`, and assertion results suitable for a DSPy metric.
 
-This is useful for smoke tests, but it is not enough for DSPy optimization of orchestrator behavior because orchestrator quality depends on multi-agent task calls and trace-level behavior.
+This is enough for the non-DSPy checkpoint: candidate prompts can be sandboxed, traced, and scored without adding a Python harness. The remaining work is to connect DSPy to these existing scenario/evaluate entrypoints and tighten repeatability controls as needed for optimization runs.
 
 ## Required `cli-v2` Additions
 
-### 1. Multi-Agent Sandbox Preparation
+### 1. DSPy Harness Adapter
 
-Add support for copying multiple agent files into the sandbox.
-
-Example CLI shape:
-
-```bash
-cli-v2 scenario \
-  --orig . \
-  --dest /tmp/opencode-scenario \
-  --config opencode.json \
-  --agents agents/orchestrator.md,agents/planner.md,agents/implementer.md,agents/reviewer.md \
-  --primary-agent orchestrator \
-  --prompt-file sandbox/scenarios/reviewer-overreach/request.md
-```
-
-The current `single-agent` command should remain useful for smoke tests. The scenario command should be separate because optimization needs richer inputs and outputs.
-
-### 2. Prompt File Support
-
-Add `--prompt-file <path>` anywhere `--prompt <text>` is supported.
-
-Large scenario prompts are hard to maintain as shell arguments. Files also make scenario fixtures easier to review.
-
-### 3. Structured Output Capture
-
-Add a run mode that captures stdout/stderr instead of inheriting stdio.
-
-Recommended output files:
-
-```text
-output/result.json
-output/stdout.txt
-output/stderr.txt
-output/transcript.jsonl
-output/final-response.md
-```
-
-DSPy needs a structured prediction object to score. Human-readable inherited terminal output is insufficient for optimization.
-
-### 4. Scenario Worktree Seeding
-
-Add support for copying fixture files into the sandbox worktree before running OpenCode.
-
-Example:
-
-```bash
-cli-v2 scenario \
-  --fixture-dir sandbox/scenarios/reviewer-overreach/worktree \
-  --expected sandbox/scenarios/reviewer-overreach/expected.json
-```
-
-Every optimization trial should start from the same clean worktree.
-
-### 5. Deterministic Subagent Stubbing
-
-The orchestrator must be tested against controlled planner, implementer, and reviewer behavior.
-
-Possible implementations:
-
-- scripted mock agent markdown files;
-- a local sandbox plugin that records and stubs `task` calls;
-- a fake `opencode` binary for unit-level CLI tests;
-- a trace recorder that observes real task calls and validates them after the run.
-
-The most useful long-term approach is a task-call recorder/stubber that captures:
-
-- subagent name;
-- exact prompt sent;
-- exact scripted output returned;
-- call order;
-- final orchestrator response.
-
-### 6. Trace Assertions
-
-Add an evaluation command that returns JSON suitable for DSPy metrics.
-
-Example:
+Build the external harness around the existing `evaluate` command:
 
 ```bash
 cli-v2 evaluate \
   --scenario sandbox/scenarios/reviewer-overreach/scenario.json \
-  --agent-candidate /tmp/candidate-orchestrator.md
+  --agent-candidate orchestrator=/tmp/candidate-orchestrator.md \
+  --json
 ```
 
-Example result shape:
+The harness should treat the JSON result as the prediction object. Important fields already available are:
 
 ```json
 {
   "status": 0,
+  "passed": true,
   "score_inputs": {
     "task_calls": [],
     "reviewer_prompts": [],
@@ -227,35 +163,33 @@ Example result shape:
     "implementer_prompts": [],
     "readonly_tools_after_approval": [],
     "final_response": ""
-  }
+  },
+  "trace_errors": [],
+  "assertions": []
 }
 ```
 
-### 7. Timeout And Repeatability Controls
+### 2. Timeout And Repeatability Controls
 
 DSPy may run many candidate trials. The CLI should make runs bounded and reproducible.
 
-Add:
+Already available:
 
 - `--timeout-ms`
+- `--json`
+- explicit `--dest` for keeping or inspecting a sandbox
+
+Still useful future additions:
+
 - `--max-steps`
 - `--seed`
-- `--keep-sandbox`
-- `--json`
 - `--quiet`
 - `--run-id`
+- a first-class `--keep-sandbox` convenience flag when `--dest` is omitted
 
-### 8. Candidate Agent Injection
+### 3. Scenario And Metric Expansion
 
-DSPy needs to test candidate prompt files without overwriting repo agents.
-
-Add:
-
-```bash
---agent-candidate orchestrator=/tmp/candidate-orchestrator.md
-```
-
-The scenario runner should copy the candidate file into the sandbox as `agents/orchestrator.md`, while copying stable dependencies from the repo.
+Continue adding scenario fixtures and assertion types only when they expose behavior needed by DSPy scoring. Existing scenario files already cover multi-agent copying, fixture seeding, candidate replacement, trace recording, and assertion evaluation.
 
 ## Suggested Scenario File Format
 

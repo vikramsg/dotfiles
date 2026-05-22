@@ -1093,6 +1093,12 @@ await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planne
       calls: `await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "plan" } }, { output: "different planner output" })`,
       message: "Scripted output mismatch for planner call 1",
     },
+    {
+      name: "prefixed mismatched",
+      scriptedSubagents: { planner: ["expected planner output"] },
+      calls: `await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "plan" } }, { output: "unexpected prefix\\nexpected planner output" })`,
+      message: "Scripted output mismatch for planner call 1",
+    },
   ])("fails evaluation for $name scripted task expectations", async ({ scriptedSubagents, calls, message }) => {
     const orig = await tempDir()
     const scenarioRoot = await tempDir("cli-v2-scenario-")
