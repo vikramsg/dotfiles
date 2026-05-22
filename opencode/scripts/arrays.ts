@@ -43,9 +43,18 @@ const orders: Order[] = [
   { id: "order-004", total: 60, status: "paid" },
 ];
 
-console.log("numbers", numbers);
-console.log("names", names);
-console.log("flags", flags);
-console.log("users", users);
-console.log("products", products);
-console.log("orders", orders);
+const ada_user = users.filter((user) => user.name === "Ada"); // Will return only the user named Ada
+console.log("Ada user", ada_user);
+
+const user_map = users.map((user) => user.active); // Creates an array of all active member of user
+console.log("User Map", user_map);
+
+interface UserStatus {
+  name: string;
+  status: boolean;
+}
+const new_map: UserStatus[] = users.map((user) => ({
+  name: user.name,
+  status: false,
+})); // Creates a new array from existing array
+console.log("New Map", new_map);
