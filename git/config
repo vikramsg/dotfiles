@@ -1,8 +1,0 @@
-[push]
-	default = current
-
-[branch]
-	autoSetupMerge = simple
-
-[include]
-	path = ~/.config/git/identity.local
