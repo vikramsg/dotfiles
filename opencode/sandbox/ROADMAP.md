@@ -19,6 +19,10 @@
 
    Add a helper that copies `auth.json` and `mcp-auth.json` from the user OpenCode data directory into the sandbox data directory. Keep this behavior explicit and separate from config copying.
 
+3. Split into multiple modules once we go beyond single agent.
+
+    Requires figuring out ideal folder structure as well
+
 
 ### Possible 
 

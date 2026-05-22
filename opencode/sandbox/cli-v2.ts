@@ -28,7 +28,6 @@ function isCacUsageError(error: unknown): boolean {
   return error instanceof Error && error.name === "CACError";
 }
 
-// Minimal generic single-agent sandbox runner for exercising one OpenCode agent in isolation.
 export type Path = string;
 
 type Writer = {
