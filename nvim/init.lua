@@ -318,6 +318,13 @@ local function path_has_hidden_segment(path)
 	return false
 end
 
+---@param path string
+---@return boolean
+local function path_is_git_ignored(path)
+	local result = vim.system({ "git", "-C", vim.fs.dirname(path), "check-ignore", "-q", "--", path }):wait()
+	return result.code == 0
+end
+
 ---Ensures the explorer is rooted correctly, opens the file path in the tree, and reveals it.
 ---@param picker snacks.Picker
 ---@param file string
@@ -340,12 +347,23 @@ local function reveal_current_file_in_explorer()
 	end
 
 	local reveal_hidden = path_has_hidden_segment(file)
+	local reveal_ignored = path_is_git_ignored(file)
 	local explorer = Snacks.picker.get({ source = "explorer" })[1]
 
 	if explorer then
+		local filters_changed = false
+
 		if reveal_hidden and not explorer.opts.hidden then
 			set_snacks_explorer_hidden(explorer, true)
+			filters_changed = true
+		end
+
+		if reveal_ignored and not explorer.opts.ignored then
 			set_snacks_explorer_ignored(explorer, true)
+			filters_changed = true
+		end
+
+		if filters_changed then
 			explorer.list:set_target()
 			explorer:find()
 		end
@@ -355,7 +373,7 @@ local function reveal_current_file_in_explorer()
 
 	Snacks.explorer({
 		hidden = reveal_hidden,
-		ignored = reveal_hidden,
+		ignored = reveal_ignored,
 		on_show = function(picker)
 			reveal_file_in_explorer(picker, file)
 		end,
