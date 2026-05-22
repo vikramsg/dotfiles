@@ -1,5 +1,6 @@
 # OpenCode Tips & Configuration
 
+
 This repository tracks configuration and learnings about the `opencode` CLI agent.
 
 ## Configuration Modes
