@@ -4,7 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type Logger, silentLogger } from "./logger.js";
+import { createLogger, type Logger, silentLogger } from "./logger.js";
 
 let logger: Logger = silentLogger;
 
@@ -65,7 +65,6 @@ export interface RunSingleAgentInSandboxArgs {
 export type RunDeps = {
   env?: NodeJS.ProcessEnv;
   cwd?: Path;
-  logger?: Logger;
 };
 
 const Command = {
@@ -492,7 +491,7 @@ export async function runCli(
 ): Promise<number> {
   const originalConsoleInfo = console.info;
   const originalLogger = logger;
-  logger = deps.logger ?? silentLogger;
+  logger = createLogger();
   const cli = createCli(io, deps);
 
   try {

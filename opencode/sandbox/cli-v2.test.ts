@@ -450,23 +450,10 @@ describe("cli-v2", () => {
 
   it("returns a clean validation error for missing single-agent options", async () => {
     let stderr = ""
-    const errors: Array<{ event: string; fields?: Record<string, unknown> }> = []
-    const logger = {
-      bind() {
-        return logger
-      },
-      debug() {},
-      info() {},
-      warn() {},
-      error(event: string, fields?: Record<string, unknown>) {
-        errors.push({ event, fields })
-      },
-    }
 
     const status = await runCli(
       ["node", "cli-v2", "single-agent"],
       { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
-      { logger },
     )
 
     expect(status).toBe(1)
@@ -474,10 +461,6 @@ describe("cli-v2", () => {
     expect(stderr).not.toContain("Error:")
     expect(stderr).not.toContain("at ")
     expect(stderr).not.toContain("cli-v2.ts")
-    expect(errors).toHaveLength(1)
-    expect(errors[0]?.event).toBe("cli.error")
-    expect(errors[0]?.fields?.message).toBe("--agent is required")
-    expect(errors[0]?.fields?.stack).toEqual(expect.stringContaining("Error: --agent is required"))
   })
 
   it("does not advertise or run unsupported commands", async () => {

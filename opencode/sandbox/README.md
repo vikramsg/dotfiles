@@ -54,6 +54,7 @@ npm --prefix opencode run sandbox:v2 -- single-agent --agent custom-agent --agen
 Current capabilities:
 
 - Creates isolated XDG config, data, cache, and state homes under the sandbox root.
+- Emits pretty `pino` diagnostic logs to the terminal stderr while keeping captured user-facing validation stderr clean.
 - Copies the OpenCode config as-is into the sandbox config directory; plugin entries are not rewritten.
 - Copies configured relative local plugin files only when their normalized sandbox destination remains under `config/opencode/plugins`.
 - Rejects absolute local plugin paths because the config is copied as-is and cannot safely point at a sandbox copy.
@@ -72,6 +73,7 @@ Current limitations:
 ## Environment variables
 
 - `OPENCODE_SANDBOX_ROOT`: Override the sandbox root. If unset, a temporary sandbox root is created.
+- `OPENCODE_SANDBOX_LOG_LEVEL`: Override CLI v2 diagnostic logging level. Defaults to `info`; use `debug` for verbose sandbox diagnostics.
 - `OPENCODE_SANDBOX_MODEL`: Override the model written to the generated sandbox config.
 - `OPENCODE_SANDBOX_STOP_PHASE`: For `orchestrator-until` only. Defaults to `after`; `before` is also allowed.
 
@@ -102,6 +104,7 @@ npm --prefix opencode run test:sandbox:v2
 `npm --prefix opencode run build` runs the OpenCode package build. It checks the orchestration-state plugin and compiles the sandbox TypeScript CLI.
 
 `npm --prefix opencode run test:sandbox:v2` builds the sandbox CLI and runs the CLI v2 sandbox tests. The tests use a fake `opencode` executable, so they do not make real model calls.
+CLI v2 tests assert the clean user-facing stderr contract and intentionally do not mock or assert logger internals; real `pino` diagnostics may appear on terminal stderr during test runs.
 
 ## Notes
 
