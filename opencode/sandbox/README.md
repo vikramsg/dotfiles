@@ -91,7 +91,7 @@ Captured `scenario` and `evaluate` runs write artifacts under `<sandbox-root>/ou
 - `metadata.json`: command and worktree metadata.
 - `evaluation.json`: top-level `passed` result, raw OpenCode `status`, assertion results, trace errors, and score inputs written by `evaluate`.
 
-Malformed, missing, or empty required traces fail with a clean validation error during `evaluate` instead of falling back to fixture transcripts. Completed evaluations exit `0` only when `evaluation.json.passed` is `true`; failed assertions, trace expectation errors, timeouts, and non-zero OpenCode statuses return `1` while preserving raw run details in the artifacts.
+Malformed, missing, or empty required traces are reported as failed `evaluate` results with non-empty `trace_errors` instead of falling back to fixture transcripts; `evaluate --json` still writes parseable evaluation JSON to stdout and `output/evaluation.json`. Completed evaluations exit `0` only when `evaluation.json.passed` is `true`; failed assertions, trace expectation errors, timeouts, and non-zero OpenCode statuses return `1` while preserving raw run details in the artifacts.
 
 ## Environment variables
 

@@ -157,6 +157,10 @@ type TraceEvent =
   | { type: "trace_error"; message: string; agent?: string; sequence?: number }
   | { type: "final_response"; content: string };
 
+type TraceReadResult =
+  | { events: TraceEvent[]; traceErrors: [] }
+  | { events: []; traceErrors: string[] };
+
 type AssertionSpec =
   | { name: string; type: "taskPromptExcludes"; agent: string; forbidden: string[] }
   | { name: string; type: "taskPromptIncludes"; agent: string; required: string[] }
@@ -809,7 +813,7 @@ async function prepareScenarioSandbox(args: {
   }
 
   if (scenario.scriptedSubagents) {
-    await installSandboxTracePlugin(prepared.layout, scenario.scriptedSubagents);
+    await installSandboxTracePlugin(prepared.layout, scenario.scriptedSubagents, scenario.primaryAgent);
   }
 
   await writeFile(
@@ -832,6 +836,7 @@ async function prepareScenarioSandbox(args: {
 async function installSandboxTracePlugin(
   layout: SingleAgentSandboxLayout,
   scriptedSubagents: Record<string, string[]>,
+  primaryAgent: string,
 ): Promise<void> {
   const pluginFile = path.join(layout.pluginDir, "sandbox-task-trace.js");
   await writeFile(
@@ -841,6 +846,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 const scriptedSubagents = ${JSON.stringify(scriptedSubagents, null, 2)}
+const primaryAgent = ${JSON.stringify(primaryAgent)}
 const consumed = Object.fromEntries(Object.keys(scriptedSubagents).map((agent) => [agent, 0]))
 const readOnlyTools = new Set(["read", "glob", "grep", "list"])
 let reviewerApproved = false
@@ -890,7 +896,12 @@ function taskPrompt(args) {
 }
 
 function finalContent(input, output) {
-  return normalizeText(output?.message ?? output?.content ?? output?.parts ?? input?.message ?? input?.content ?? input?.parts ?? output ?? input)
+  const message = output?.message ?? output ?? input?.message ?? (input?.role === "assistant" ? input : undefined)
+  if (!message) return ""
+  if (message?.role && message.role !== "assistant") return ""
+  const agent = message?.agent ?? message?.agentName ?? message?.metadata?.agent ?? output?.agent ?? input?.agent
+  if (agent && agent !== primaryAgent && agent !== "orchestrator") return ""
+  return normalizeText(message?.content ?? message?.parts ?? output?.content ?? output?.parts)
 }
 
 function recordTaskExpectation(agent, sequence, observedOutput) {
@@ -961,31 +972,29 @@ export const SandboxTraceStubPlugin = SandboxTracePlugin
   await writeFile(layout.sandboxConfigFile, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-async function readTraceEventsRequired(layout: SingleAgentSandboxLayout): Promise<TraceEvent[]> {
+async function readTraceEventsForEvaluation(layout: SingleAgentSandboxLayout): Promise<TraceReadResult> {
   const transcriptFile = path.join(layout.output, "transcript.jsonl");
   let text: string;
   try {
     text = await readFile(transcriptFile, "utf8");
   } catch {
-    throw new ConfigValidationError(`Required trace file was not written: ${transcriptFile}`);
+    return { events: [], traceErrors: [`Required trace file was not written: ${transcriptFile}`] };
   }
 
   const events: TraceEvent[] = [];
-  text
-    .split(/\r?\n/)
-    .forEach((line, index) => {
-      if (!line) return;
-      try {
-        events.push(JSON.parse(line) as TraceEvent);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new ConfigValidationError(`Malformed trace ${transcriptFile} line ${index + 1}: ${message}`);
-      }
-    });
-  if (events.length === 0) {
-    throw new ConfigValidationError(`Required trace file contained no events: ${transcriptFile}`);
+  for (const [index, line] of text.split(/\r?\n/).entries()) {
+    if (!line) continue;
+    try {
+      events.push(JSON.parse(line) as TraceEvent);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { events: [], traceErrors: [`Malformed trace ${transcriptFile} line ${index + 1}: ${message}`] };
+    }
   }
-  return events;
+  if (events.length === 0) {
+    return { events: [], traceErrors: [`Required trace file contained no events: ${transcriptFile}`] };
+  }
+  return { events, traceErrors: [] };
 }
 
 function evaluateTrace(
@@ -993,6 +1002,7 @@ function evaluateTrace(
   expected: ExpectedAssertions,
   finalResponse: string,
   status: number,
+  traceReadErrors: string[] = [],
 ): EvaluationResult {
   const taskCalls = events.filter((event): event is { type: "task" } & TaskCallTrace => event.type === "task");
   const traceErrors = events.filter((event): event is { type: "trace_error"; message: string; agent?: string; sequence?: number } => event.type === "trace_error");
@@ -1027,8 +1037,11 @@ function evaluateTrace(
       message: traceErrors.map((event) => event.message).join("; "),
     });
   }
+  for (const message of traceReadErrors) {
+    assertions.push({ name: "trace", passed: false, message });
+  }
 
-  return { passed: false, status, score_inputs, trace_errors: traceErrors.map((event) => event.message), assertions };
+  return { passed: false, status, score_inputs, trace_errors: [...traceErrors.map((event) => event.message), ...traceReadErrors], assertions };
 }
 
 function runAssertion(
@@ -1252,8 +1265,10 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           io,
           deps,
         );
-        const events = run.timedOut ? [] : await readTraceEventsRequired(prepared.layout);
-        const evaluation = evaluateTrace(events, bundle.expected, run.stdout, run.status);
+        const trace = run.timedOut
+          ? { events: [], traceErrors: [] }
+          : await readTraceEventsForEvaluation(prepared.layout);
+        const evaluation = evaluateTrace(trace.events, bundle.expected, run.stdout, run.status, trace.traceErrors);
         evaluation.timed_out = run.timedOut;
         evaluation.passed = evaluationPassed(evaluation);
         await writeFile(
