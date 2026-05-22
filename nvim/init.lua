@@ -318,6 +318,14 @@ local function path_has_hidden_segment(path)
 	return false
 end
 
+---Returns true when Git would ignore the path, including via an ignored parent directory.
+---@param path string
+---@return boolean
+local function path_is_git_ignored(path)
+	local result = vim.system({ "git", "-C", vim.fs.dirname(path), "check-ignore", "-q", "--", path }):wait()
+	return result.code == 0
+end
+
 ---Ensures the explorer is rooted correctly, opens the file path in the tree, and reveals it.
 ---@param picker snacks.Picker
 ---@param file string
@@ -331,7 +339,7 @@ local function reveal_file_in_explorer(picker, file)
 	actions.update(picker, { target = file, refresh = true })
 end
 
----Reveals the current buffer's file in the explorer and unhides hidden paths when required.
+---Reveals the current buffer's file in the explorer, enabling hidden/ignored filters when required.
 local function reveal_current_file_in_explorer()
 	local file = vim.fs.normalize(vim.fn.expand("%:p"))
 	if file == "" then
@@ -340,12 +348,25 @@ local function reveal_current_file_in_explorer()
 	end
 
 	local reveal_hidden = path_has_hidden_segment(file)
+	local reveal_ignored = path_is_git_ignored(file)
 	local explorer = Snacks.picker.get({ source = "explorer" })[1]
 
 	if explorer then
+		local filters_changed = false
+
+		-- Hidden and ignored are independent filters: an ignored file may not be dot-prefixed,
+		-- and hidden may already be enabled while ignored is still filtering the target out.
 		if reveal_hidden and not explorer.opts.hidden then
 			set_snacks_explorer_hidden(explorer, true)
+			filters_changed = true
+		end
+
+		if reveal_ignored and not explorer.opts.ignored then
 			set_snacks_explorer_ignored(explorer, true)
+			filters_changed = true
+		end
+
+		if filters_changed then
 			explorer.list:set_target()
 			explorer:find()
 		end
@@ -355,7 +376,7 @@ local function reveal_current_file_in_explorer()
 
 	Snacks.explorer({
 		hidden = reveal_hidden,
-		ignored = reveal_hidden,
+		ignored = reveal_ignored,
 		on_show = function(picker)
 			reveal_file_in_explorer(picker, file)
 		end,
