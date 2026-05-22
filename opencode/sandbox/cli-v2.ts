@@ -21,7 +21,11 @@ class ConfigValidationError extends CleanCliError {
 }
 
 function isCleanCliError(error: unknown): boolean {
-  return error instanceof CleanCliError;
+  return error instanceof CleanCliError || isCacUsageError(error);
+}
+
+function isCacUsageError(error: unknown): boolean {
+  return error instanceof Error && error.name === "CACError";
 }
 
 // Minimal generic single-agent sandbox runner for exercising one OpenCode agent in isolation.
@@ -185,7 +189,9 @@ type ConfiguredLocalPlugin = {
 function isRelativeLocalPluginEntry(entry: unknown): entry is string {
   return (
     typeof entry === "string" &&
-    (entry.startsWith("./") || entry.startsWith("../"))
+    (entry.startsWith("./") ||
+      entry.startsWith("../") ||
+      entry.startsWith("plugins/"))
   );
 }
 

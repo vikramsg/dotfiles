@@ -130,6 +130,37 @@ describe("cli-v2", () => {
     expect(await readFile(expectedAgentFile, "utf8")).toBe("string plugin test agent\n")
   })
 
+  it("prepares a single-agent sandbox with a bare relative local plugin path", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const config = path.join(orig, "opencode.json")
+    const plugin = path.join(orig, "plugins", "local.js")
+    const agent = path.join(orig, "agents", "hello-world.md")
+    const configText = JSON.stringify({ plugin: ["plugins/local.js"] }, null, 2)
+    const pluginText = "export const local = true\n"
+
+    await mkdir(path.dirname(plugin), { recursive: true })
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(config, configText)
+    await writeFile(plugin, pluginText)
+    await writeFile(agent, "bare relative plugin test agent\n")
+
+    const prepared = await prepareSingleAgentSandbox({
+      sourceRoot: orig,
+      sandboxRoot: dest,
+      agentName: "custom-agent",
+      prompt: "Use the custom agent.",
+      sourceConfigFile: config,
+      sourceAgentFile: agent,
+    })
+
+    const expectedPluginFile = path.join(prepared.layout.pluginDir, "local.js")
+
+    expect(await readFile(prepared.layout.sandboxConfigFile, "utf8")).toBe(configText)
+    expect(prepared.sandboxPluginFiles).toEqual([expectedPluginFile])
+    expect(await readFile(expectedPluginFile, "utf8")).toBe(pluginText)
+  })
+
   it.each(["../evil", "evil/name", "evil\\name", "", "..", "evil name", "evil.name", "evil$name"])(
     "rejects unsafe agent name %j before preparing files",
     async (agentName) => {
@@ -535,6 +566,21 @@ describe("cli-v2", () => {
 
     expect(status).toBe(1)
     expect(stderr).toBe("--agent is required\n")
+    expect(stderr).not.toContain("Error:")
+    expect(stderr).not.toContain("at ")
+    expect(stderr).not.toContain("cli-v2.ts")
+  })
+
+  it("returns a clean usage error for unknown single-agent options", async () => {
+    let stderr = ""
+
+    const status = await runCli(
+      ["node", "cli-v2", "single-agent", "--unknown"],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toBe("Unknown option `--unknown`\n")
     expect(stderr).not.toContain("Error:")
     expect(stderr).not.toContain("at ")
     expect(stderr).not.toContain("cli-v2.ts")

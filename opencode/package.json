@@ -5,6 +5,7 @@
     "build": "npm run build:orchestration-state && npm run build:sandbox",
     "build:orchestration-state": "node --check plugins2/orchestration-state.js",
     "build:sandbox": "tsc -p sandbox/tsconfig.json",
+    "arrays": "tsc -p scripts/tsconfig.json && node scripts/dist/arrays.js",
     "sandbox": "npm run build:sandbox --silent && node sandbox/dist/sandbox-cli.js",
     "sandbox:v2": "npm run build:sandbox --silent && node --enable-source-maps sandbox/dist/cli-v2.js",
     "test:sandbox": "npm run build:sandbox --silent && node --test sandbox/sandbox-cli.test.mjs",
