@@ -8,6 +8,10 @@ import { createLogger, type Logger, silentLogger } from "./logger.js";
 
 let logger: Logger = silentLogger;
 
+class UsageError extends Error {
+  override name = "UsageError";
+}
+
 // Minimal generic single-agent sandbox runner for exercising one OpenCode agent in isolation.
 export type Path = string;
 
@@ -380,7 +384,7 @@ export async function runSingleAgentInSandbox(
 
 function requiredOption(value: string | undefined, name: string): string {
   if (!value) {
-    throw new Error(`${name} is required`);
+    throw new UsageError(`${name} is required`);
   }
 
   return value;
@@ -522,8 +526,9 @@ export async function runCli(
     return typeof result === "number" ? result : 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : undefined;
-    logger.error("cli.error", { message, stack });
+    if (!(error instanceof UsageError)) {
+      logger.error("cli.error", { message });
+    }
     io.stderr.write(`${message}\n`);
     return 1;
   } finally {
