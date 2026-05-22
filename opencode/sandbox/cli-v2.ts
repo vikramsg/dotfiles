@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLogger, type Logger, silentLogger } from "./logger.js";
+import { error } from "node:console";
 
 let logger: Logger = silentLogger;
 
@@ -238,7 +239,17 @@ async function resolveConfiguredLocalPlugins(
     );
   }
 
-  let parseResult = OpenCodeConfigSchema.safeParse(JSON.parse(configText));
+  let parsedConfig: object | undefined;
+  try {
+    parsedConfig = JSON.parse(configText);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new ConfigValidationError(
+      `Could not parse sourceFile: ${sourceConfigFile}: ${message}`,
+    );
+  }
+
+  let parseResult = OpenCodeConfigSchema.safeParse(parsedConfig);
   if (!parseResult.success)
     throw new ConfigValidationError(
       `Could not parse config file ${sourceConfigFile}`,

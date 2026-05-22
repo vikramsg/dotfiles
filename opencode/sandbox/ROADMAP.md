@@ -57,3 +57,7 @@
 8. Remove or use unused spec fields.
 
     `sourceRoot` is currently carried in `SingleAgentSandboxSpec` but is not used after construction. Either write it to metadata or remove it from the spec.
+
+9. Figure out why the DB keeps getting migrated?
+
+    Are we copying over the DB?
