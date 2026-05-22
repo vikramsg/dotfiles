@@ -176,8 +176,9 @@ const newMap: UserStatus[] = users.map((user) => ({
 //   { name: 'Guido', status: false } 
 // ] 
 
-const adaUser = users.find((user) => user.name === "Ada");
+const adaUser: User | undefined = users.find((user) => user.name === "Ada");
 // { name: "Ada", age: 30, active: true }
+// undefined in case nothing was found
 ```
 
 **Rules of thumb**:
@@ -240,6 +241,22 @@ import repl from "node:repl";
 
 repl.start({ prompt: "debug> " });
 ```
+
+### tsx
+
+The tool `tsx` can be used to directly run TypeScript scripts.
+Add to the local env using
+
+```bash 
+npm install --save-dev tsx
+```
+
+Use via
+
+```bash
+npx tsx scripts/arrays.ts
+```
+
 
 ## Prompt
 
