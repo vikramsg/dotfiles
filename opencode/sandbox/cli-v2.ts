@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLogger, type Logger, silentLogger } from "./logger.js";
-import { error } from "node:console";
 
 let logger: Logger = silentLogger;
 
@@ -220,10 +219,13 @@ async function assertFileExists(
   }
 }
 
+// OpenCode accepts plugin as either a single entry or an array; normalize to an array for sandbox copying.
 const OpenCodeConfigSchema = z.object({
-  plugin: z.array(z.string()).optional(),
+  plugin: z
+    .union([z.string().transform((entry) => [entry]), z.array(z.string())])
+    .optional()
+    .default([]),
 });
-type OpenCodeConfig = z.infer<typeof OpenCodeConfigSchema>;
 
 async function resolveConfiguredLocalPlugins(
   sourceConfigFile: Path,
@@ -239,26 +241,22 @@ async function resolveConfiguredLocalPlugins(
     );
   }
 
-  let parsedConfig: object | undefined;
+  let parsedConfig: unknown;
   try {
     parsedConfig = JSON.parse(configText);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  } catch {
     throw new ConfigValidationError(
-      `Could not parse sourceFile: ${sourceConfigFile}: ${message}`,
+      `Could not parse config file ${sourceConfigFile}`,
     );
   }
 
-  let parseResult = OpenCodeConfigSchema.safeParse(parsedConfig);
+  const parseResult = OpenCodeConfigSchema.safeParse(parsedConfig);
   if (!parseResult.success)
     throw new ConfigValidationError(
       `Could not parse config file ${sourceConfigFile}`,
     );
 
-  const config: OpenCodeConfig = parseResult.data;
-  const pluginEntries = config.plugin;
-
-  if (!pluginEntries) return [];
+  const pluginEntries = parseResult.data.plugin;
 
   // Parse the plugins to find if there are local plugins to copy
   const sourceConfigDir = path.dirname(sourceConfigFile);
