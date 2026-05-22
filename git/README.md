@@ -54,9 +54,7 @@ The local branch name, for example `dspy`.
 
 The upstream branch configured for that local branch, for example `origin/cli-v2-v2`.
 
-The confusing push error happens when those names differ. In the observed case, the local branch was named `dspy`, but it was configured to track `origin/cli-v2-v2`.
-
-With Git's default `push.default=simple`, plain `git push` refuses in that situation because Git assumes pushing a local branch to a differently named upstream branch may be accidental.
+When those names differ, and with Git's default `push.default=simple`, plain `git push` refuses in that situation because Git assumes pushing a local branch to a differently named upstream branch may be accidental.
 
 This config sets:
 
