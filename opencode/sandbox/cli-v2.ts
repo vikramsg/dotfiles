@@ -178,6 +178,7 @@ type AssertionResult = {
 };
 
 type EvaluationResult = {
+  passed: boolean;
   status: number;
   timed_out?: boolean;
   error?: string;
@@ -192,6 +193,15 @@ type EvaluationResult = {
   trace_errors: string[];
   assertions: AssertionResult[];
 };
+
+function evaluationPassed(evaluation: EvaluationResult): boolean {
+  return (
+    evaluation.status === 0 &&
+    evaluation.timed_out !== true &&
+    evaluation.trace_errors.length === 0 &&
+    evaluation.assertions.every((assertion) => assertion.passed)
+  );
+}
 
 const Command = {
   Hello: "hello",
@@ -1018,7 +1028,7 @@ function evaluateTrace(
     });
   }
 
-  return { status, score_inputs, trace_errors: traceErrors.map((event) => event.message), assertions };
+  return { passed: false, status, score_inputs, trace_errors: traceErrors.map((event) => event.message), assertions };
 }
 
 function runAssertion(
@@ -1245,15 +1255,15 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         const events = run.timedOut ? [] : await readTraceEventsRequired(prepared.layout);
         const evaluation = evaluateTrace(events, bundle.expected, run.stdout, run.status);
         evaluation.timed_out = run.timedOut;
+        evaluation.passed = evaluationPassed(evaluation);
         await writeFile(
           path.join(prepared.layout.output, "evaluation.json"),
           `${JSON.stringify(evaluation, null, 2)}\n`,
         );
         if (options.json) {
           io.stdout.write(`${JSON.stringify(evaluation, null, 2)}\n`);
-          return 0;
         }
-        return evaluation.assertions.every((assertion) => assertion.passed) ? 0 : 1;
+        return evaluation.passed ? 0 : 1;
       },
     );
 

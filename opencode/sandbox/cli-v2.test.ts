@@ -795,10 +795,11 @@ describe("cli-v2", () => {
     )
 
     expect(stderr).toBe("")
-    expect(status).toBe(0)
+    expect(status).toBe(1)
     const evaluation = JSON.parse(stdout)
     const outputDir = path.join(path.resolve(dest), "output")
     expect(evaluation.status).toBe(7)
+    expect(evaluation.passed).toBe(false)
     expect(evaluation.assertions).toEqual([{ name: "final", passed: true }])
     expect(evaluation.score_inputs.planner_prompts).toEqual(["make a plan"])
     expect(evaluation.score_inputs.readonly_tools_after_approval).toEqual([{ tool: "read", phase: "final-check" }])
@@ -862,24 +863,26 @@ console.log("candidate run")
     )
     await chmod(fakeOpencode, 0o755)
 
-    async function evaluate(dest: string, candidate: string) {
+    async function evaluate(dest: string, candidate: string, expectedStatus: number) {
       let stdout = ""
       const status = await runCli(
         ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--agent-candidate", `orchestrator=${candidate}`, "--json"],
         { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
         { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
       )
-      expect(status).toBe(0)
+      expect(status).toBe(expectedStatus)
       return JSON.parse(stdout)
     }
 
-    const good = await evaluate(goodDest, goodCandidate)
-    const bad = await evaluate(badDest, badCandidate)
+    const good = await evaluate(goodDest, goodCandidate, 0)
+    const bad = await evaluate(badDest, badCandidate, 1)
     const generatedPlugin = await readFile(path.join(path.resolve(goodDest), "config", "opencode", "plugins", "sandbox-task-trace.js"), "utf8")
 
     expect(good.score_inputs.planner_prompts).toEqual(["GOOD candidate prompt"])
+    expect(good.passed).toBe(true)
     expect(good.assertions[0]).toEqual({ name: "candidate_prompt", passed: true })
     expect(bad.score_inputs.planner_prompts).toEqual(["BAD candidate prompt"])
+    expect(bad.passed).toBe(false)
     expect(bad.assertions[0].passed).toBe(false)
     expect(generatedPlugin).toContain("export async function SandboxTracePlugin")
     expect(generatedPlugin).toContain("tool.execute.after")
@@ -924,6 +927,7 @@ await hooks["chat.message"]({}, { content: "final from plugin" })
     expect(transcript.map((event) => event.type)).toEqual(["task", "task", "tool", "final_response"])
     expect(transcript[2]).toMatchObject({ type: "tool", tool: "read", phase: "after-approval", args: JSON.stringify({ filePath: "status.txt" }), output: "pending", result: "pending", success: true })
     expect(evaluation.trace_errors).toEqual([])
+    expect(evaluation.passed).toBe(true)
     expect(evaluation.score_inputs.final_response).toBe("final from plugin")
     expect(evaluation.score_inputs.readonly_tools_after_approval[0]).toMatchObject({ tool: "read", output: "pending" })
     expect(generatedPlugin).toContain("export async function SandboxTracePlugin")
@@ -967,8 +971,9 @@ await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planne
     )
 
     const evaluation = JSON.parse(stdout)
-    expect(status).toBe(0)
+    expect(status).toBe(1)
     expect(evaluation.trace_errors).toEqual([message])
+    expect(evaluation.passed).toBe(false)
     expect(evaluation.assertions).toContainEqual({ name: "trace_expectations", passed: false, message })
   })
 
@@ -991,7 +996,8 @@ await hooks["chat.message"]({}, { content: "done" })
     )
 
     expect(status).toBe(0)
-    await expect(readFile(path.join(path.resolve(dest), "output", "evaluation.json"), "utf8")).resolves.toContain("trace_errors")
+    const evaluation = JSON.parse(await readFile(path.join(path.resolve(dest), "output", "evaluation.json"), "utf8"))
+    expect(evaluation.passed).toBe(true)
   })
 
   it("returns one from non-JSON evaluate when an assertion fails", async () => {
@@ -1104,9 +1110,10 @@ writeFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, "not json\\n")
 
     const evaluation = JSON.parse(stdout)
     const outputDir = path.join(path.resolve(dest), "output")
-    expect(status).toBe(0)
+    expect(status).toBe(1)
     expect(evaluation.status).toBe(124)
     expect(evaluation.timed_out).toBe(true)
+    expect(evaluation.passed).toBe(false)
     expect(JSON.parse(await readFile(path.join(outputDir, "status.json"), "utf8")).timed_out).toBe(true)
     expect(JSON.parse(await readFile(path.join(outputDir, "result.json"), "utf8")).timedOut).toBe(true)
     expect(JSON.parse(await readFile(path.join(outputDir, "evaluation.json"), "utf8"))).toEqual(evaluation)

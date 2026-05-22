@@ -68,6 +68,7 @@ Current capabilities:
 - `evaluate` runs the same captured primary-agent path and scores the required `transcript.jsonl`; static `scenario.transcript` data is not the default scoring path.
 - `--agent-candidate agent=/path/to/file.md` replaces a scenario agent before running, so scores are derived from the candidate behavior observed in the sandbox trace.
 - `--timeout-ms <number>` terminates long-running captured scenario/evaluation runs and records timeout status in artifacts.
+- `evaluate --json` writes the parseable evaluation JSON to stdout before exiting non-zero when the evaluation fails.
 
 Current limitations:
 
@@ -88,9 +89,9 @@ Captured `scenario` and `evaluate` runs write artifacts under `<sandbox-root>/ou
 - `final-response.md`: captured stdout used as the fallback final response.
 - `status.json`: exit status, timeout flag, and signal.
 - `metadata.json`: command and worktree metadata.
-- `evaluation.json`: assertion results and score inputs written by `evaluate`.
+- `evaluation.json`: top-level `passed` result, raw OpenCode `status`, assertion results, trace errors, and score inputs written by `evaluate`.
 
-Malformed, missing, or empty required traces fail with a clean validation error during `evaluate` instead of falling back to fixture transcripts.
+Malformed, missing, or empty required traces fail with a clean validation error during `evaluate` instead of falling back to fixture transcripts. Completed evaluations exit `0` only when `evaluation.json.passed` is `true`; failed assertions, trace expectation errors, timeouts, and non-zero OpenCode statuses return `1` while preserving raw run details in the artifacts.
 
 ## Environment variables
 
