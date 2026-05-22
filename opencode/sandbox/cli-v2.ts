@@ -217,8 +217,24 @@ async function resolveConfiguredLocalPlugins(
   sourceConfigFile: Path,
   layout: SingleAgentSandboxLayout,
 ): Promise<ConfiguredLocalPlugin[]> {
-  const configText = await readFile(sourceConfigFile, "utf8");
-  const config = JSON.parse(configText) as { plugin?: unknown };
+  let configText: string;
+  try {
+    configText = await readFile(sourceConfigFile, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new ConfigValidationError(
+      `Could not read config file ${sourceConfigFile}: ${message}`,
+    );
+  }
+
+  let config: { plugin?: unknown };
+  try {
+    config = JSON.parse(configText) as { plugin?: unknown };
+  } catch {
+    throw new ConfigValidationError(
+      `Could not parse config file ${sourceConfigFile}`,
+    );
+  }
   const rawPlugin = config.plugin;
   const pluginEntries =
     typeof rawPlugin === "string"

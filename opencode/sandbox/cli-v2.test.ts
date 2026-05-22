@@ -214,6 +214,44 @@ describe("cli-v2", () => {
     expect(stderr).not.toContain("cli-v2.ts")
   })
 
+  it("returns a clean validation error when opencode.json is malformed", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const agent = path.join(orig, "agents", "test.md")
+    let stderr = ""
+
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), "{ invalid json")
+    await writeFile(agent, "test agent\n")
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "single-agent",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--agent",
+        "custom-agent",
+        "--agent-file",
+        "agents/test.md",
+        "--prompt",
+        "hello",
+      ],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toBe(
+      `Could not parse config file ${path.join(orig, "opencode.json")}\n`,
+    )
+    expect(stderr).not.toContain("Error:")
+    expect(stderr).not.toContain("at ")
+    expect(stderr).not.toContain("cli-v2.ts")
+  })
+
   it("rejects absolute local plugin paths before copying sandbox files", async () => {
     const orig = await tempDir()
     const dest = await tempDir("cli-v2-sandbox-")
