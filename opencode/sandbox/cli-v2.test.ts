@@ -677,6 +677,7 @@ describe("cli-v2", () => {
         dest,
         "--scenario",
         path.join(scenarioRoot, "scenario.json"),
+        "--prepare-only",
         "--agent-candidate",
         `orchestrator=${candidate}`,
       ],
@@ -757,7 +758,179 @@ describe("cli-v2", () => {
     expect(evaluation.score_inputs.readonly_tools_after_approval).toEqual([{ tool: "read", phase: "final-check" }])
     expect(await readFile(path.join(outputDir, "stdout.txt"), "utf8")).toBe("done from stdout\n")
     expect(await readFile(path.join(outputDir, "stderr.txt"), "utf8")).toBe("stderr text\n")
-    expect(JSON.parse(await readFile(path.join(outputDir, "status.json"), "utf8"))).toEqual({ status: 7 })
+    expect(JSON.parse(await readFile(path.join(outputDir, "status.json"), "utf8"))).toEqual({ status: 7, timed_out: false, signal: null })
+    expect(JSON.parse(await readFile(path.join(outputDir, "evaluation.json"), "utf8"))).toEqual(evaluation)
+  })
+
+  it("runs scripted scenarios through opencode so candidate content changes the score", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    const goodDest = await tempDir("cli-v2-sandbox-")
+    const badDest = await tempDir("cli-v2-sandbox-")
+    const goodCandidate = path.join(scenarioRoot, "good-orchestrator.md")
+    const badCandidate = path.join(scenarioRoot, "bad-orchestrator.md")
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "repo orchestrator\n")
+    await writeFile(path.join(orig, "agents", "planner.md"), "planner\n")
+    await writeFile(goodCandidate, "GOOD candidate prompt\n")
+    await writeFile(badCandidate, "BAD candidate prompt\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Plan the request.\n")
+    await writeFile(
+      path.join(scenarioRoot, "expected.json"),
+      JSON.stringify({ assertions: [{ name: "candidate_prompt", type: "taskPromptIncludes", agent: "planner", required: ["GOOD candidate prompt"] }] }, null, 2),
+    )
+    await writeFile(
+      path.join(scenarioRoot, "scenario.json"),
+      JSON.stringify(
+        {
+          name: "candidate-score",
+          primaryAgent: "orchestrator",
+          agents: { orchestrator: "agents/orchestrator.md", planner: "agents/planner.md" },
+          promptFile: "request.md",
+          fixtureDir: "worktree",
+          expectedFile: "expected.json",
+          scriptedSubagents: { planner: ["scripted planner output"] },
+          transcript: [{ type: "task", agent: "planner", prompt: "synthetic stale prompt", output: "scripted planner output" }],
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      fakeOpencode,
+      `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs"
+import path from "node:path"
+const args = process.argv.slice(2)
+const agent = args[args.indexOf("--agent") + 1]
+const agentFile = path.join(process.env.XDG_CONFIG_HOME, "opencode", "agents", agent + ".md")
+const prompt = readFileSync(agentFile, "utf8").trim()
+writeFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, JSON.stringify({ type: "task", agent: "planner", prompt, output: "scripted planner output" }) + "\\n")
+console.log("candidate run")
+`,
+    )
+    await chmod(fakeOpencode, 0o755)
+
+    async function evaluate(dest: string, candidate: string) {
+      let stdout = ""
+      const status = await runCli(
+        ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--agent-candidate", `orchestrator=${candidate}`, "--json"],
+        { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+        { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+      )
+      expect(status).toBe(0)
+      return JSON.parse(stdout)
+    }
+
+    const good = await evaluate(goodDest, goodCandidate)
+    const bad = await evaluate(badDest, badCandidate)
+    const generatedPlugin = await readFile(path.join(path.resolve(goodDest), "config", "opencode", "plugins", "sandbox-task-trace.js"), "utf8")
+
+    expect(good.score_inputs.planner_prompts).toEqual(["GOOD candidate prompt"])
+    expect(good.assertions[0]).toEqual({ name: "candidate_prompt", passed: true })
+    expect(bad.score_inputs.planner_prompts).toEqual(["BAD candidate prompt"])
+    expect(bad.assertions[0].passed).toBe(false)
+    expect(generatedPlugin).toContain("export async function SandboxTraceStubPlugin")
+    expect(generatedPlugin).toContain("tool.execute.after")
+    expect(generatedPlugin).toContain("scripted planner output")
+  })
+
+  it("fails clearly when a required trace is malformed", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stderr = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "scenario.json"), JSON.stringify({ name: "bad-trace", primaryAgent: "orchestrator", agents: { orchestrator: "agents/orchestrator.md" }, promptFile: "request.md", fixtureDir: "worktree", expectedFile: "expected.json" }, null, 2))
+    await writeFile(fakeOpencode, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs"
+writeFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, "not json\\n")
+`)
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toContain("Malformed trace")
+    expect(stderr).toContain("line 1")
+  })
+
+  it("fails clearly when a required trace is missing", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stderr = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "scenario.json"), JSON.stringify({ name: "missing-trace", primaryAgent: "orchestrator", agents: { orchestrator: "agents/orchestrator.md" }, promptFile: "request.md", fixtureDir: "worktree", expectedFile: "expected.json" }, null, 2))
+    await writeFile(fakeOpencode, "#!/usr/bin/env node\nprocess.exit(0)\n")
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json")],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toContain("Required trace file was not written")
+  })
+
+  it("terminates timed out evaluations and writes structured artifacts", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "scenario.json"), JSON.stringify({ name: "timeout", primaryAgent: "orchestrator", agents: { orchestrator: "agents/orchestrator.md" }, promptFile: "request.md", fixtureDir: "worktree", expectedFile: "expected.json" }, null, 2))
+    await writeFile(fakeOpencode, "#!/usr/bin/env node\nsetTimeout(() => {}, 10000)\n")
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--timeout-ms", "25", "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    const outputDir = path.join(path.resolve(dest), "output")
+    expect(status).toBe(0)
+    expect(evaluation.status).toBe(124)
+    expect(evaluation.timed_out).toBe(true)
+    expect(JSON.parse(await readFile(path.join(outputDir, "status.json"), "utf8")).timed_out).toBe(true)
+    expect(JSON.parse(await readFile(path.join(outputDir, "result.json"), "utf8")).timedOut).toBe(true)
     expect(JSON.parse(await readFile(path.join(outputDir, "evaluation.json"), "utf8"))).toEqual(evaluation)
   })
 

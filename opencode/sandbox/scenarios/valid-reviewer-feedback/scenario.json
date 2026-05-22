@@ -1,0 +1,28 @@
+{
+  "name": "valid-reviewer-feedback",
+  "primaryAgent": "orchestrator",
+  "config": "opencode.json",
+  "agents": {
+    "orchestrator": "agents/orchestrator.md",
+    "planner": "agents/planner.md",
+    "implementer": "agents/implementer.md",
+    "reviewer": "agents/reviewer.md"
+  },
+  "promptFile": "request.md",
+  "fixtureDir": "worktree",
+  "expectedFile": "expected.json",
+  "scriptedSubagents": {
+    "planner": [
+      "PLAN VERSION: 1\n\nMake the local status update.",
+      "PLAN VERSION: 2\n\nAddress reviewer feedback: Add the missing acceptance note."
+    ],
+    "implementer": [
+      "## Implementation Summary\n- Made the local status update.",
+      "## Implementation Summary\n- Added the missing acceptance note."
+    ],
+    "reviewer": [
+      "---\nverdict: CHANGE_REQUIRED\n---\n\nAdd the missing acceptance note.",
+      "---\nverdict: APPROVED\n---\n\nLooks good."
+    ]
+  }
+}

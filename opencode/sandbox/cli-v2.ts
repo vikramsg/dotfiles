@@ -100,6 +100,15 @@ export interface RunSingleAgentInSandboxArgs {
   prompt: string;
 }
 
+type CapturedRunResult = {
+  status: number;
+  stdout: string;
+  stderr: string;
+  command: string[];
+  timedOut: boolean;
+  signal?: NodeJS.Signals | null;
+};
+
 export type RunDeps = {
   env?: NodeJS.ProcessEnv;
   cwd?: Path;
@@ -144,6 +153,7 @@ type TraceEvent =
 type AssertionSpec =
   | { name: string; type: "taskPromptExcludes"; agent: string; forbidden: string[] }
   | { name: string; type: "taskPromptIncludes"; agent: string; required: string[] }
+  | { name: string; type: "taskCallCount"; agent: string; equals?: number; atLeast?: number }
   | { name: string; type: "finalResponseExcludes"; forbidden: string[] }
   | { name: string; type: "finalResponseIncludes"; required: string[] }
   | { name: string; type: "hasReadonlyToolAfterApproval" }
@@ -161,6 +171,8 @@ type AssertionResult = {
 
 type EvaluationResult = {
   status: number;
+  timed_out?: boolean;
+  error?: string;
   score_inputs: {
     task_calls: TaskCallTrace[];
     reviewer_prompts: string[];
@@ -612,20 +624,27 @@ export async function runSingleAgentInSandbox(
 
 async function writeCapturedArtifacts(
   layout: SingleAgentSandboxLayout,
-  result: { status: number; stdout: string; stderr: string; command: string[] },
+  result: CapturedRunResult,
 ): Promise<void> {
   await mkdir(layout.output, { recursive: true });
+  const metadataFile = path.join(layout.output, "metadata.json");
+  let existingMetadata: Record<string, unknown> = {};
+  try {
+    existingMetadata = JSON.parse(await readFile(metadataFile, "utf8")) as Record<string, unknown>;
+  } catch {
+    existingMetadata = {};
+  }
   await Promise.all([
     writeFile(path.join(layout.output, "stdout.txt"), result.stdout),
     writeFile(path.join(layout.output, "stderr.txt"), result.stderr),
     writeFile(path.join(layout.output, "final-response.md"), result.stdout),
     writeFile(
       path.join(layout.output, "status.json"),
-      `${JSON.stringify({ status: result.status }, null, 2)}\n`,
+      `${JSON.stringify({ status: result.status, timed_out: result.timedOut, signal: result.signal ?? null }, null, 2)}\n`,
     ),
     writeFile(
-      path.join(layout.output, "metadata.json"),
-      `${JSON.stringify({ command: result.command, worktree: layout.worktree }, null, 2)}\n`,
+      metadataFile,
+      `${JSON.stringify({ ...existingMetadata, command: result.command, worktree: layout.worktree }, null, 2)}\n`,
     ),
     writeFile(
       path.join(layout.output, "result.json"),
@@ -635,10 +654,10 @@ async function writeCapturedArtifacts(
 }
 
 async function runCapturedOpencodeInSandbox(
-  args: RunSingleAgentInSandboxArgs,
+  args: RunSingleAgentInSandboxArgs & { timeoutMs?: number },
   io: CliIO,
   deps: RunDeps = {},
-): Promise<number> {
+): Promise<CapturedRunResult> {
   const command = [
     "run",
     "--dir",
@@ -666,6 +685,27 @@ async function runCapturedOpencodeInSandbox(
     });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    let killTimer: NodeJS.Timeout | undefined;
+    const timeoutTimer = args.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          stderr += `opencode timed out after ${args.timeoutMs}ms\n`;
+          child.kill("SIGTERM");
+          killTimer = setTimeout(() => child.kill("SIGKILL"), 1000);
+        }, args.timeoutMs)
+      : undefined;
+
+    async function finish(status: number, signal: NodeJS.Signals | null = null) {
+      if (settled) return;
+      settled = true;
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (killTimer) clearTimeout(killTimer);
+      const result: CapturedRunResult = { status, stdout, stderr, command, timedOut, signal };
+      await writeCapturedArtifacts(args.layout, result);
+      resolve(result);
+    }
 
     child.stdout?.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");
@@ -682,19 +722,26 @@ async function runCapturedOpencodeInSandbox(
           : `Failed to run opencode: ${error.message}\n`;
       stderr += message;
       io.stderr.write(message);
-      await writeCapturedArtifacts(args.layout, { status, stdout, stderr, command });
-      resolve(status);
+      await finish(status);
     });
 
     child.on("exit", async (code, signal) => {
-      const status = code ?? 1;
+      const status = timedOut ? 124 : (code ?? 1);
       if (code === null) {
         stderr += `opencode exited from signal ${signal ?? "unknown"}\n`;
       }
-      await writeCapturedArtifacts(args.layout, { status, stdout, stderr, command });
-      resolve(status);
+      await finish(status, signal);
     });
   });
+}
+
+function parsePositiveIntegerOption(raw: unknown, name: string): number | undefined {
+  if (raw === undefined || raw === false) return undefined;
+  const text = String(raw);
+  if (!/^[1-9]\d*$/.test(text)) {
+    throw new UsageError(`${name} must be a positive integer`);
+  }
+  return Number(text);
 }
 
 function parseAgentCandidates(raw?: string | string[]): Record<string, Path> {
@@ -770,7 +817,89 @@ async function installSandboxTracePlugin(
   const pluginFile = path.join(layout.pluginDir, "sandbox-task-trace.js");
   await writeFile(
     pluginFile,
-    `// Generated by sandbox cli-v2 for deterministic scenario traces.\nexport const scriptedSubagents = ${JSON.stringify(scriptedSubagents, null, 2)};\n`,
+    `// Generated by sandbox cli-v2 for deterministic scenario traces.
+import fs from "node:fs"
+import path from "node:path"
+
+const scriptedSubagents = ${JSON.stringify(scriptedSubagents, null, 2)}
+const consumed = Object.fromEntries(Object.keys(scriptedSubagents).map((agent) => [agent, 0]))
+const readOnlyTools = new Set(["read", "glob", "grep", "list"])
+let reviewerApproved = false
+
+function traceFile() {
+  return process.env.OPENCODE_SANDBOX_TRACE_FILE || path.join(process.env.OPENCODE_SANDBOX_OUTPUT_DIR || process.cwd(), "transcript.jsonl")
+}
+
+function appendEvent(event) {
+  const file = traceFile()
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.appendFileSync(file, JSON.stringify(event) + "\\n")
+}
+
+function normalizeText(value) {
+  if (typeof value === "string") return value
+  if (value === undefined || value === null) return ""
+  if (Array.isArray(value)) return value.map(normalizeText).join("\\n")
+  if (typeof value === "object") {
+    if (typeof value.text === "string") return value.text
+    if (typeof value.content === "string") return value.content
+    if (typeof value.output === "string") return value.output
+  }
+  return JSON.stringify(value)
+}
+
+function taskAgent(args) {
+  return args?.subagent_type || args?.subagentType || args?.agent || args?.agentName || ""
+}
+
+function taskPrompt(args) {
+  for (const key of ["prompt", "description", "message", "input", "task"]) {
+    const text = normalizeText(args?.[key])
+    if (text) return text
+  }
+  return normalizeText(args)
+}
+
+function replaceOutput(output, scriptedOutput) {
+  if (!output || typeof output !== "object") return
+  if ("output" in output) output.output = scriptedOutput
+  else if ("content" in output) output.content = scriptedOutput
+  else output.output = scriptedOutput
+}
+
+function finalContent(input, output) {
+  return normalizeText(output?.message ?? output?.content ?? output?.parts ?? input?.message ?? input?.content ?? input?.parts ?? output ?? input)
+}
+
+export async function SandboxTraceStubPlugin() {
+  return {
+    "tool.execute.after": async (input, output) => {
+      const tool = input?.tool || ""
+      if (tool === "task") {
+        const agent = taskAgent(input?.args)
+        if (!agent) return output
+        const index = consumed[agent] || 0
+        const scriptedOutput = scriptedSubagents[agent]?.[index]
+        if (scriptedOutput === undefined) return output
+        consumed[agent] = index + 1
+        replaceOutput(output, scriptedOutput)
+        if (agent === "reviewer" && /verdict:\\s*APPROVED\\b/i.test(scriptedOutput)) reviewerApproved = true
+        appendEvent({ type: "task", agent, prompt: taskPrompt(input?.args), output: scriptedOutput, sequence: index + 1 })
+        return output
+      }
+      if (reviewerApproved && readOnlyTools.has(tool)) {
+        appendEvent({ type: "tool", tool, phase: "after-approval" })
+      }
+      return output
+    },
+    "chat.message": async (input, output) => {
+      const content = finalContent(input, output)
+      if (content) appendEvent({ type: "final_response", content })
+      return output
+    },
+  }
+}
+`,
   );
 
   const config = JSON.parse(await readFile(layout.sandboxConfigFile, "utf8")) as {
@@ -785,35 +914,31 @@ async function installSandboxTracePlugin(
   await writeFile(layout.sandboxConfigFile, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-function syntheticTraceFromScenario(bundle: ScenarioBundle): TraceEvent[] {
-  if (bundle.scenario.transcript) {
-    return bundle.scenario.transcript;
+async function readTraceEventsRequired(layout: SingleAgentSandboxLayout): Promise<TraceEvent[]> {
+  const transcriptFile = path.join(layout.output, "transcript.jsonl");
+  let text: string;
+  try {
+    text = await readFile(transcriptFile, "utf8");
+  } catch {
+    throw new ConfigValidationError(`Required trace file was not written: ${transcriptFile}`);
   }
+
   const events: TraceEvent[] = [];
-  for (const [agent, outputs] of Object.entries(bundle.scenario.scriptedSubagents ?? {})) {
-    outputs.forEach((output, index) => {
-      events.push({
-        type: "task",
-        agent,
-        prompt: index === 0 ? bundle.prompt : output,
-        output,
-      });
+  text
+    .split(/\r?\n/)
+    .forEach((line, index) => {
+      if (!line) return;
+      try {
+        events.push(JSON.parse(line) as TraceEvent);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new ConfigValidationError(`Malformed trace ${transcriptFile} line ${index + 1}: ${message}`);
+      }
     });
+  if (events.length === 0) {
+    throw new ConfigValidationError(`Required trace file contained no events: ${transcriptFile}`);
   }
   return events;
-}
-
-async function readTraceEvents(layout: SingleAgentSandboxLayout): Promise<TraceEvent[]> {
-  const transcriptFile = path.join(layout.output, "transcript.jsonl");
-  try {
-    const text = await readFile(transcriptFile, "utf8");
-    return text
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as TraceEvent);
-  } catch {
-    return [];
-  }
 }
 
 function evaluateTrace(
@@ -872,6 +997,16 @@ function runAssertion(
       return missing
         ? { name: assertion.name, passed: false, message: `${assertion.agent} prompt missed required text: ${missing}` }
         : { name: assertion.name, passed: true };
+    }
+    case "taskCallCount": {
+      const count = taskCalls.filter((call) => call.agent === assertion.agent).length;
+      if (assertion.equals !== undefined && count !== assertion.equals) {
+        return { name: assertion.name, passed: false, message: `${assertion.agent} task call count was ${count}, expected ${assertion.equals}` };
+      }
+      if (assertion.atLeast !== undefined && count < assertion.atLeast) {
+        return { name: assertion.name, passed: false, message: `${assertion.agent} task call count was ${count}, expected at least ${assertion.atLeast}` };
+      }
+      return { name: assertion.name, passed: true };
     }
     case "finalResponseExcludes": {
       const forbidden = assertion.forbidden.find((text) => finalResponse.includes(text));
@@ -978,17 +1113,21 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
     );
 
   cli
-    .command(Command.Scenario, "Prepare a deterministic scenario sandbox")
+    .command(Command.Scenario, "Run a deterministic scenario sandbox")
     .option("--orig <path>", "Source OpenCode config root")
     .option("--dest <path>", "Sandbox destination directory")
     .option("--scenario <path>", "Scenario JSON file")
     .option("--agent-candidate <agent=file>", "Candidate agent replacement")
+    .option("--timeout-ms <number>", "Maximum opencode runtime in milliseconds")
+    .option("--prepare-only", "Prepare the sandbox without running opencode")
     .action(
       async (options: {
         orig?: Path;
         dest?: Path;
         scenario?: Path;
         agentCandidate?: string | string[];
+        timeoutMs?: string;
+        prepareOnly?: boolean;
       }) => {
         const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
         const sandboxRoot = path.resolve(
@@ -997,8 +1136,15 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         );
         const bundle = await readScenarioBundle(requiredOption(options.scenario, "--scenario"));
         const candidates = parseAgentCandidates(options.agentCandidate);
-        await prepareScenarioSandbox({ sourceRoot, sandboxRoot, bundle, agentCandidates: candidates });
-        return 0;
+        const timeoutMs = parsePositiveIntegerOption(options.timeoutMs, "--timeout-ms");
+        const prepared = await prepareScenarioSandbox({ sourceRoot, sandboxRoot, bundle, agentCandidates: candidates });
+        if (options.prepareOnly) return 0;
+        const run = await runCapturedOpencodeInSandbox(
+          { layout: prepared.layout, agentName: bundle.scenario.primaryAgent, prompt: bundle.prompt, timeoutMs },
+          io,
+          deps,
+        );
+        return run.status;
       },
     );
 
@@ -1008,6 +1154,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
     .option("--dest <path>", "Sandbox destination directory")
     .option("--scenario <path>", "Scenario JSON file")
     .option("--agent-candidate <agent=file>", "Candidate agent replacement")
+    .option("--timeout-ms <number>", "Maximum opencode runtime in milliseconds")
     .option("--json", "Write evaluation JSON to stdout")
     .action(
       async (options: {
@@ -1015,6 +1162,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         dest?: Path;
         scenario?: Path;
         agentCandidate?: string | string[];
+        timeoutMs?: string;
         json?: boolean;
       }) => {
         const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
@@ -1024,42 +1172,21 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         );
         const bundle = await readScenarioBundle(requiredOption(options.scenario, "--scenario"));
         const candidates = parseAgentCandidates(options.agentCandidate);
+        const timeoutMs = parsePositiveIntegerOption(options.timeoutMs, "--timeout-ms");
         const prepared = await prepareScenarioSandbox({ sourceRoot, sandboxRoot, bundle, agentCandidates: candidates });
-        let status = 0;
-        let events = syntheticTraceFromScenario(bundle);
-        let finalResponse = "";
-
-        if (!bundle.scenario.scriptedSubagents) {
-          status = await runCapturedOpencodeInSandbox(
-            {
-              layout: prepared.layout,
-              agentName: bundle.scenario.primaryAgent,
-              prompt: bundle.prompt,
-            },
-            io,
-            deps,
-          );
-          events = await readTraceEvents(prepared.layout);
-          try {
-            finalResponse = await readFile(path.join(prepared.layout.output, "final-response.md"), "utf8");
-          } catch {
-            finalResponse = "";
-          }
-        } else {
-          finalResponse = events.find((event): event is { type: "final_response"; content: string } => event.type === "final_response")?.content ?? "";
-          await writeFile(
-            path.join(prepared.layout.output, "transcript.jsonl"),
-            events.map((event) => JSON.stringify(event)).join("\n") + (events.length ? "\n" : ""),
-          );
-          await writeCapturedArtifacts(prepared.layout, {
-            status,
-            stdout: finalResponse,
-            stderr: "",
-            command: ["scripted", bundle.scenario.name],
-          });
-        }
-
-        const evaluation = evaluateTrace(events, bundle.expected, finalResponse, status);
+        const run = await runCapturedOpencodeInSandbox(
+          {
+            layout: prepared.layout,
+            agentName: bundle.scenario.primaryAgent,
+            prompt: bundle.prompt,
+            timeoutMs,
+          },
+          io,
+          deps,
+        );
+        const events = run.timedOut ? [] : await readTraceEventsRequired(prepared.layout);
+        const evaluation = evaluateTrace(events, bundle.expected, run.stdout, run.status);
+        evaluation.timed_out = run.timedOut;
         await writeFile(
           path.join(prepared.layout.output, "evaluation.json"),
           `${JSON.stringify(evaluation, null, 2)}\n`,

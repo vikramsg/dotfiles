@@ -1,0 +1,22 @@
+{
+  "assertions": [
+    {
+      "name": "valid_feedback_forwarded_to_planner",
+      "type": "taskPromptIncludes",
+      "agent": "planner",
+      "required": ["Add the missing acceptance note."]
+    },
+    {
+      "name": "planner_rerun_after_feedback",
+      "type": "taskCallCount",
+      "agent": "planner",
+      "atLeast": 2
+    },
+    {
+      "name": "reviewer_rerun_after_feedback",
+      "type": "taskCallCount",
+      "agent": "reviewer",
+      "atLeast": 2
+    }
+  ]
+}

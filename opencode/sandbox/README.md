@@ -37,7 +37,7 @@ just opencode-sandbox single-agent reviewer "Review this change"
 
 ## CLI v2
 
-`cli-v2.ts` is the in-progress rewrite of the sandbox CLI. It currently supports only `hello`, `hello-world`, and explicit `single-agent` runs. Run it through the package script:
+`cli-v2.ts` is the in-progress rewrite of the sandbox CLI. It supports `hello`, `hello-world`, explicit `single-agent` runs, and scenario/evaluation runs for candidate agent checks. Run it through the package script:
 
 ```sh
 npm --prefix opencode run sandbox:v2 -- <command> <args...>
@@ -49,6 +49,8 @@ Examples:
 npm --prefix opencode run sandbox:v2 -- hello
 npm --prefix opencode run sandbox:v2 -- hello-world
 npm --prefix opencode run sandbox:v2 -- single-agent --agent custom-agent --agent-file ./sandbox/fixtures/agents/hello-world.md --prompt "Run this agent."
+npm --prefix opencode run sandbox:v2 -- scenario --scenario sandbox/scenarios/passing-positive/scenario.json --timeout-ms 60000
+npm --prefix opencode run sandbox:v2 -- evaluate --scenario sandbox/scenarios/reviewer-overreach/scenario.json --agent-candidate orchestrator=/tmp/candidate.md --json
 ```
 
 Current capabilities:
@@ -62,13 +64,32 @@ Current capabilities:
 - Copies one selected agent file into the sandbox agent directory under the requested agent name.
 - Runs `opencode run --agent <agent>` inside the sandbox worktree.
 - Provides fixture commands for `hello` and `hello-world`, plus explicit `single-agent` runs.
+- `scenario` prepares the sandbox, copies fixture worktree files, installs a generated trace/stub plugin when `scriptedSubagents` are configured, then runs the primary agent through `opencode run`.
+- `evaluate` runs the same captured primary-agent path and scores the required `transcript.jsonl`; static `scenario.transcript` data is not the default scoring path.
+- `--agent-candidate agent=/path/to/file.md` replaces a scenario agent before running, so scores are derived from the candidate behavior observed in the sandbox trace.
+- `--timeout-ms <number>` terminates long-running captured scenario/evaluation runs and records timeout status in artifacts.
 
 Current limitations:
 
 - Does not yet support orchestrator commands such as `orchestrator-until` or `orchestrator-final-check`.
-- Does not yet write output artifacts such as `events.jsonl`, `opencode.log`, `metadata.json`, or status files.
-- Does not yet generate observer or stop plugins.
+- Scenario/evaluation deterministic scoring depends on the sandbox trace/stub plugin mutating scripted subagent task outputs and recording candidate task prompts. It is not a DSPy optimizer.
+- Does not yet generate stop plugins for CLI v2 orchestrator convenience commands.
 - Does not yet generate a harness for subagent-mode agents.
+
+## CLI v2 Scenario Artifacts
+
+Captured `scenario` and `evaluate` runs write artifacts under `<sandbox-root>/output`:
+
+- `result.json`: structured command, stdout/stderr, exit status, timeout flag, and signal.
+- `stdout.txt`: captured `opencode run` stdout.
+- `stderr.txt`: captured `opencode run` stderr.
+- `transcript.jsonl`: trace events recorded by the generated sandbox trace/stub plugin or by an instrumented test `opencode`.
+- `final-response.md`: captured stdout used as the fallback final response.
+- `status.json`: exit status, timeout flag, and signal.
+- `metadata.json`: command and worktree metadata.
+- `evaluation.json`: assertion results and score inputs written by `evaluate`.
+
+Malformed, missing, or empty required traces fail with a clean validation error during `evaluate` instead of falling back to fixture transcripts.
 
 ## Environment variables
 

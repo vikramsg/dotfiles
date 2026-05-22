@@ -1,5 +1,5 @@
 {
-  "name": "approved-final-check-fails",
+  "name": "reviewer-isolation",
   "primaryAgent": "orchestrator",
   "config": "opencode.json",
   "agents": {
@@ -12,8 +12,8 @@
   "fixtureDir": "worktree",
   "expectedFile": "expected.json",
   "scriptedSubagents": {
-    "planner": ["PLAN VERSION: 1\n\nMake the requested edit."],
-    "implementer": ["## Implementation Summary\n- Made the requested edit."],
+    "planner": ["PLAN VERSION: 1\n\nKeep reviewer context isolated."],
+    "implementer": ["## Implementation Summary\n- Made the isolated change."],
     "reviewer": ["---\nverdict: APPROVED\n---\n\nLooks good."]
   }
 }
