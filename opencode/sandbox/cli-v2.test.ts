@@ -283,6 +283,46 @@ describe("cli-v2", () => {
     expect(stderr).not.toContain("cli-v2.ts")
   })
 
+  it.each([
+    ["invalid plugin item type", ["./plugins/local.js", 123]],
+    ["invalid plugin field shape", { path: "./plugins/local.js" }],
+  ])("returns a clean validation error for %s", async (_name, plugin) => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const agent = path.join(orig, "agents", "test.md")
+    const config = path.join(orig, "opencode.json")
+    let stderr = ""
+
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(config, JSON.stringify({ plugin }))
+    await writeFile(agent, "test agent\n")
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "single-agent",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--agent",
+        "custom-agent",
+        "--agent-file",
+        "agents/test.md",
+        "--prompt",
+        "hello",
+      ],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toContain(`Could not parse config file ${config}`)
+    expect(stderr).not.toContain("Error:")
+    expect(stderr).not.toContain("at ")
+    expect(stderr).not.toContain("cli-v2.ts")
+  })
+
   it("rejects absolute local plugin paths before copying sandbox files", async () => {
     const orig = await tempDir()
     const dest = await tempDir("cli-v2-sandbox-")

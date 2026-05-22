@@ -126,6 +126,74 @@ type Status = typeof Status[keyof typeof Status];
 // Use built-in enum when your codebase already uses it heavily, or when a framework/library expects it.
 ```
 
+### Arrays
+
+Recall that arrays can be defines in the following manner.
+
+```typescript
+string[] // This is an array
+Array<string> // Same as string[]
+```
+
+But how we do we array wide operations?
+In Python we can usually do list or dict comprehensions.
+In Typescript, we use the `map` or `filter` functions that can be applied directly to arrays.
+For eg.
+
+```typescript
+type User = {
+  name: string;
+  age: number;
+  active: boolean;
+};
+
+const users: User[] = [
+  { name: "Ada", age: 30, active: true },
+  { name: "Grace", age: 25, active: false },
+  { name: "Linus", age: 54, active: true },
+  { name: "Guido", age: 68, active: false },
+];
+
+const adaUser = users.filter((user)=>{return user.name === "Ada"}); // Will return only the user named Ada
+const adaUser = users.filter((user)=> user.name === "Ada" ); // Does the same thing, but notice that we can omit the return if we got rid of {} 
+// [ { name: 'Ada', age: 30, active: true } ]
+
+const userMap = users.map((user) => user.active); // Creates an array of booleans 
+// [ true, false, true, false ]
+
+interface UserStatus {
+  name: string;
+  status: boolean;
+}
+const newMap: UserStatus[] = users.map((user) => ({
+  name: user.name,
+  status: false,
+})); // Creates a new array from existing array
+// [ 
+//   { name: 'Ada', status: false }, 
+//   { name: 'Grace', status: false }, 
+//   { name: 'Linus', status: false }, 
+//   { name: 'Guido', status: false } 
+// ] 
+
+const adaUser: User | undefined = users.find((user) => user.name === "Ada");
+// { name: "Ada", age: 30, active: true }
+// undefined in case nothing was found
+```
+
+**Rules of thumb**:
+```
+map    // transform every item into a new array
+filter // keep all matching items
+find   // return the first matching item, or undefined
+```
+
+**Note**
+
+`map` and `filter` do not modify the original array. They return a new array. 
+This is a big reason they are idiomatic.
+
+
 ## Running Essentials
 
 ### Using build scripts defined in `package.json`
@@ -148,6 +216,22 @@ File locations and config are defined in the config file.
 tsc -p sandbox/tsconfig.json
 ```
 
+For individual scripts, use
+
+```bash
+tsc scripts/arrays.ts # Creates arrays.js in same folder as arrays.ts
+
+tsc scripts/arrays.ts --outDir scripts/dist # Creates arrays.js inside scripts/dist
+```
+
+### Running
+
+A `js` file can be run by doing
+
+```bash
+node scripts/dist/arrays.js
+```
+
 ### Debugging
 
 **Using a REPL**
@@ -157,6 +241,28 @@ import repl from "node:repl";
 
 repl.start({ prompt: "debug> " });
 ```
+
+### tsx
+
+The tool `tsx` can be used to directly run TypeScript scripts.
+Add to the local env using
+
+```bash 
+npm install --save-dev tsx
+```
+
+Use via
+
+```bash
+npx tsx scripts/arrays.ts
+```
+
+## ToDo
+
+1. Add a section on Zod.
+    - Write down basic syntax and include the fact that we separately define schema and then define type using `z.infer`.
+    - Note that there's no inbuilt parsing. Parsing must be done separately with error handling and then passed to `zod`.
+    - Note down how various types are handled, how optional is handled, arrays, defaults.
 
 ## Prompt
 

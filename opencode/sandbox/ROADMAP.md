@@ -2,9 +2,12 @@
 
 ## Direction
 
-`cli-v2.ts` should stay small, composable, and testable. The rewrite should not copy all of `sandbox-cli.ts` at once. The best path is to harden the current single-agent sandbox abstraction until it is reliable, inspectable, and easy to extend.
+1. `cli-v2.ts` should be a well architected CLI that allows tesing `opencode` without touching global `opencode` config.
+2. `DSPy` integration so that any agent can be optimized.
+    * Eventually also multi-agent optimization
+3. Both `cli-v2.ts` and `DSPy` should be packagable into a single artifact for eventual release as a separate repo.
 
-## Improvements
+## CLI Architecture Improvements
 
 ### High-Prio
 
@@ -15,6 +18,10 @@
 2. Copy auth files explicitly.
 
    Add a helper that copies `auth.json` and `mcp-auth.json` from the user OpenCode data directory into the sandbox data directory. Keep this behavior explicit and separate from config copying.
+
+3. Split into multiple modules once we go beyond single agent.
+
+    Requires figuring out ideal folder structure as well
 
 
 ### Possible 
@@ -50,3 +57,7 @@
 8. Remove or use unused spec fields.
 
     `sourceRoot` is currently carried in `SingleAgentSandboxSpec` but is not used after construction. Either write it to metadata or remove it from the spec.
+
+9. Figure out why the DB keeps getting migrated?
+
+    Are we copying over the DB?

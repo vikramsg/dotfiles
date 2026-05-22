@@ -1,4 +1,5 @@
 import { cac } from "cac";
+import { z } from "zod";
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, stat } from "node:fs/promises";
 import os from "node:os";
@@ -28,7 +29,6 @@ function isCacUsageError(error: unknown): boolean {
   return error instanceof Error && error.name === "CACError";
 }
 
-// Minimal generic single-agent sandbox runner for exercising one OpenCode agent in isolation.
 export type Path = string;
 
 type Writer = {
@@ -219,6 +219,14 @@ async function assertFileExists(
   }
 }
 
+// OpenCode accepts plugin as either a single entry or an array; normalize to an array for sandbox copying.
+const OpenCodeConfigSchema = z.object({
+  plugin: z
+    .union([z.string().transform((entry) => [entry]), z.array(z.string())])
+    .optional()
+    .default([]),
+});
+
 async function resolveConfiguredLocalPlugins(
   sourceConfigFile: Path,
   layout: SingleAgentSandboxLayout,
@@ -233,21 +241,24 @@ async function resolveConfiguredLocalPlugins(
     );
   }
 
-  let config: { plugin?: unknown };
+  let parsedConfig: unknown;
   try {
-    config = JSON.parse(configText) as { plugin?: unknown };
+    parsedConfig = JSON.parse(configText);
   } catch {
     throw new ConfigValidationError(
       `Could not parse config file ${sourceConfigFile}`,
     );
   }
-  const rawPlugin = config.plugin;
-  const pluginEntries =
-    typeof rawPlugin === "string"
-      ? [rawPlugin]
-      : Array.isArray(rawPlugin)
-        ? rawPlugin
-        : [];
+
+  const parseResult = OpenCodeConfigSchema.safeParse(parsedConfig);
+  if (!parseResult.success)
+    throw new ConfigValidationError(
+      `Could not parse config file ${sourceConfigFile}`,
+    );
+
+  const pluginEntries = parseResult.data.plugin;
+
+  // Parse the plugins to find if there are local plugins to copy
   const sourceConfigDir = path.dirname(sourceConfigFile);
   const sandboxConfigDir = path.dirname(layout.sandboxConfigFile);
 
