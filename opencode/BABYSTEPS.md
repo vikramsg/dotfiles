@@ -257,6 +257,12 @@ Use via
 npx tsx scripts/arrays.ts
 ```
 
+## ToDo
+
+1. Add a section on Zod.
+    - Write down basic syntax and include the fact that we separately define schema and then define type using `z.infer`.
+    - Note that there's no inbuilt parsing. Parsing must be done separately with error handling and then passed to `zod`.
+    - Note down how various types are handled, how optional is handled, arrays, defaults.
 
 ## Prompt
 
