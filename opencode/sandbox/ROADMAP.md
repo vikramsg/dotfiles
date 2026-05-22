@@ -4,7 +4,20 @@
 
 `cli-v2.ts` should stay small, composable, and testable. The rewrite should not copy all of `sandbox-cli.ts` at once. The best path is to harden the current single-agent sandbox abstraction until it is reliable, inspectable, and easy to extend.
 
-## Highest-Value Improvements
+## Improvements
+
+### High-Prio
+
+1. Add metadata
+
+   Write a `metadata.json` file containing sandbox paths, source files, copied sandbox files, agent name, prompt, and generation time. This makes failed real runs inspectable after the process exits.
+
+2. Copy auth files explicitly.
+
+   Add a helper that copies `auth.json` and `mcp-auth.json` from the user OpenCode data directory into the sandbox data directory. Keep this behavior explicit and separate from config copying.
+
+
+### Possible 
 
 1. Add run artifacts to `cli-v2.ts`.
 
@@ -26,30 +39,18 @@
 
    Map signal exits to shell-style statuses, such as `SIGINT -> 130` and `SIGTERM -> 143`, instead of collapsing them to `1`.
 
-6. Add metadata.
-
-   Write a `metadata.json` file containing sandbox paths, source files, copied sandbox files, agent name, prompt, and generation time. This makes failed real runs inspectable after the process exits.
-
-7. Improve config sandboxing through an explicit transform.
+6. Improve config sandboxing through an explicit transform.
 
    Keep config copying explicit, but add an optional config transform hook so callers can override `instructions`, model, or plugins without making sandbox preparation magical.
 
-8. Copy auth files explicitly.
-
-   Add a helper that copies `auth.json` and `mcp-auth.json` from the user OpenCode data directory into the sandbox data directory. Keep this behavior explicit and separate from config copying.
-
-9. Reduce command action duplication.
+7. Reduce command action duplication.
 
    The command actions repeat source-root resolution, sandbox-root resolution, spec creation, preparation, and execution. Extract small helpers only where they remove direct duplication without introducing a framework.
 
-10. Support `OPENCODE_SANDBOX_ROOT`.
+8. Support `OPENCODE_SANDBOX_ROOT`.
 
     Prefer `--dest` when provided, otherwise use `OPENCODE_SANDBOX_ROOT`, otherwise create a temporary root. Read injected `deps.env` before falling back to `process.env`.
 
-11. Fix small CLI UX issues.
-
-    Add the missing newline after `No command provided.`. Consider returning usage status `64` for usage errors later, but that is lower priority.
-
-12. Remove or use unused spec fields.
+9. Remove or use unused spec fields.
 
     `sourceRoot` is currently carried in `SingleAgentSandboxSpec` but is not used after construction. Either write it to metadata or remove it from the spec.
