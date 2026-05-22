@@ -287,6 +287,19 @@ export async function prepareSingleAgentSandbox(
 ): Promise<PreparedSingleAgentSandbox> {
   assertSafeAgentName(spec.agentName);
 
+  const validationLayout = deriveSingleAgentSandboxLayout({
+    sandboxRoot: spec.sandboxRoot,
+  });
+  const configuredPlugins = await resolveConfiguredLocalPlugins(
+    spec.sourceConfigFile,
+    validationLayout,
+  );
+  await Promise.all(
+    configuredPlugins.map((plugin) =>
+      assertFileExists(plugin.sourceFile, plugin.entry),
+    ),
+  );
+
   const log = logger.bind({
     agentName: spec.agentName,
     sandboxRoot: spec.sandboxRoot,
@@ -299,16 +312,6 @@ export async function prepareSingleAgentSandbox(
     sandboxRoot: spec.sandboxRoot,
   });
   const sandboxAgentFile = path.join(layout.agentDir, `${spec.agentName}.md`);
-
-  const configuredPlugins = await resolveConfiguredLocalPlugins(
-    spec.sourceConfigFile,
-    layout,
-  );
-  await Promise.all(
-    configuredPlugins.map((plugin) =>
-      assertFileExists(plugin.sourceFile, plugin.entry),
-    ),
-  );
 
   await copyFile(spec.sourceConfigFile, layout.sandboxConfigFile);
   await Promise.all(
@@ -547,7 +550,7 @@ export async function runCli(
     return typeof result === "number" ? result : 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!(error instanceof UsageError)) {
+    if (!isCleanCliError(error)) {
       logger.error("cli.error", { message });
     }
     io.stderr.write(`${message}\n`);
