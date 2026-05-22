@@ -1,12 +1,10 @@
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import {
-  copyAgentFileToSandbox,
-  copyConfigFileToSandbox,
-  copyPluginFileToSandbox,
   createSingleAgentSandboxLayout,
+  prepareSingleAgentSandbox,
   runCli,
 } from "./cli-v2.js"
 
@@ -16,117 +14,38 @@ async function tempDir(name = "cli-v2-test-") {
 
 async function writeSourceFiles(root: string) {
   const config = path.join(root, "opencode.json")
-  const plugin = path.join(root, "plugins", "orchestration-state.js")
+  const pluginA = path.join(root, "plugins", "orchestration-state.js")
+  const pluginB = path.join(root, "plugins", "stop-marker.js")
+  const ignoredPlugin = path.join(root, "plugins", "ignored.ts")
   const agent = path.join(root, "agents", "hello-world.md")
+  const configText = JSON.stringify(
+    {
+      plugin: ["opencode-websearch-cited@1.2.0", "./plugins/orchestration-state.js"],
+    },
+    null,
+    2,
+  )
 
-  await mkdir(path.dirname(plugin), { recursive: true })
+  await mkdir(path.dirname(pluginA), { recursive: true })
   await mkdir(path.dirname(agent), { recursive: true })
 
-  await writeFile(
-    config,
-    JSON.stringify(
-      {
-        plugin: ["opencode-websearch-cited@1.2.0", "./plugins/orchestration-state.js"],
-      },
-      null,
-      2,
-    ),
-  )
-  await writeFile(plugin, "export const plugin = true\n")
+  await writeFile(config, configText)
+  await writeFile(pluginA, "export const pluginA = true\n")
+  await writeFile(pluginB, "export const pluginB = true\n")
+  await writeFile(ignoredPlugin, "export const ignored = true\n")
   await writeFile(agent, "---\ndescription: hello world\n---\n\nSay hello world.\n")
 
   return {
     sourceConfigFile: config,
-    sourcePluginFile: plugin,
+    pluginA,
+    pluginB,
+    ignoredPlugin,
     sourceAgentFile: agent,
+    configText,
   }
 }
 
 describe("cli-v2", () => {
-  it("prints strict-plan command help without running the sandbox", async () => {
-    let stdout = ""
-    let stderr = ""
-
-    const status = await runCli(["node", "cli-v2", "strict-plan", "--help"], {
-      stdout: {
-        write(text) {
-          stdout += text
-        },
-      },
-      stderr: {
-        write(text) {
-          stderr += text
-        },
-      },
-    })
-
-    expect(status).toBe(0)
-    expect(stdout).toContain("Run the strict-plan agent")
-    expect(stdout).toContain("--prompt <text>")
-    expect(stderr).toBe("")
-  })
-
-  it("documents strict-plan native OpenCode plan source provenance", async () => {
-    const prompt = await readFile(
-      path.join(process.cwd(), "sandbox", "fixtures", "agents", "strict-plan.md"),
-      "utf8",
-    )
-
-    expect(prompt).toContain("native agent `plan`")
-    expect(prompt).toContain("packages/opencode/src/agent/agent.ts")
-    expect(prompt).toContain("packages/opencode/src/session/prompt/plan.txt")
-    expect(prompt).toContain("OpenCode 1.14.41")
-    expect(prompt).not.toContain("opencode/agents/planner.md")
-  })
-
-  it("documents strict-plan native read-only behavior", async () => {
-    const prompt = await readFile(
-      path.join(process.cwd(), "sandbox", "fixtures", "agents", "strict-plan.md"),
-      "utf8",
-    )
-
-    expect(prompt).toContain("Plan mode is read-only")
-    expect(prompt).toContain("reading, searching, thinking")
-    expect(prompt).toContain("delegated exploration")
-    expect(prompt).toContain("Do not edit, write, implement")
-    expect(prompt).toContain("mutate files")
-    expect(prompt).toContain("non-read-only tools")
-    expect(prompt).toContain("change system state")
-    expect(prompt).toContain("Ask clarifying questions")
-    expect(prompt).toContain("requirements are blocked")
-    expect(prompt).toContain("well-formed, concise, executable plan")
-  })
-
-  it("documents strict-plan final output and language contracts", async () => {
-    const prompt = await readFile(
-      path.join(process.cwd(), "sandbox", "fixtures", "agents", "strict-plan.md"),
-      "utf8",
-    )
-
-    for (const section of [
-      "`Executive Summary`",
-      "`Assumptions`",
-      "`Architecture and Data Flow`",
-      "`Impact Matrix`",
-      "`Acceptance Scenarios`",
-      "`Patterns`",
-      "`Implementation Checklist`",
-      "`Verification Commands`",
-      "`Review Focus`",
-    ]) {
-      expect(prompt).toContain(section)
-    }
-
-    expect(prompt).toContain("Assumptions is mandatory")
-    expect(prompt).toContain("Patterns is mandatory")
-    expect(prompt).toContain("docstring")
-    expect(prompt).toContain("where comments or docstrings should be added")
-    expect(prompt).toContain("where comments or docstrings should not be added")
-    expect(prompt).toContain("why")
-    expect(prompt).toContain("Do not use vague `if`, `maybe`, or `but` language")
-    expect(prompt).toContain("If X is found, do A; otherwise do B")
-  })
-
   it("creates the sandbox directory layout with typed paths", async () => {
     const dest = await tempDir("cli-v2-sandbox-")
 
@@ -149,105 +68,232 @@ describe("cli-v2", () => {
     await writeFile(path.join(layout.output, ".keep"), "")
   })
 
-  it("copies config and rewrites only the local plugin to the sandbox plugin", async () => {
+  it("prepares a single-agent sandbox from real source files", async () => {
     const orig = await tempDir()
     const dest = await tempDir("cli-v2-sandbox-")
     const files = await writeSourceFiles(orig)
-    const layout = await createSingleAgentSandboxLayout({ sandboxRoot: dest })
-    const sandboxPluginFile = path.join(layout.pluginDir, path.basename(files.sourcePluginFile))
 
-    await copyPluginFileToSandbox({
-      sourcePluginFile: files.sourcePluginFile,
-      sandboxPluginFile,
-    })
-    await copyConfigFileToSandbox({
+    const prepared = await prepareSingleAgentSandbox({
+      sourceRoot: orig,
+      sandboxRoot: dest,
+      agentName: "custom-agent",
+      prompt: "Use the custom agent.",
       sourceConfigFile: files.sourceConfigFile,
-      sandboxConfigFile: layout.sandboxConfigFile,
-      sourcePluginFile: files.sourcePluginFile,
-      sandboxPluginFile,
-    })
-
-    const copiedPlugin = await readFile(sandboxPluginFile, "utf8")
-    const copiedConfig = JSON.parse(await readFile(layout.sandboxConfigFile, "utf8"))
-
-    expect(copiedPlugin).toBe("export const plugin = true\n")
-    expect(copiedConfig.plugin).toEqual([
-      "opencode-websearch-cited@1.2.0",
-      sandboxPluginFile,
-    ])
-  })
-
-  it("copies an explicit agent file into the sandbox", async () => {
-    const orig = await tempDir()
-    const dest = await tempDir("cli-v2-sandbox-")
-    const files = await writeSourceFiles(orig)
-    const layout = await createSingleAgentSandboxLayout({ sandboxRoot: dest })
-    const sandboxAgentFile = path.join(layout.agentDir, path.basename(files.sourceAgentFile))
-
-    await copyAgentFileToSandbox({
       sourceAgentFile: files.sourceAgentFile,
-      sandboxAgentFile,
     })
 
-    expect(await readFile(sandboxAgentFile, "utf8")).toBe(
+    const expectedPluginFiles = [path.join(prepared.layout.pluginDir, "orchestration-state.js")]
+    const expectedAgentFile = path.join(prepared.layout.agentDir, "custom-agent.md")
+
+    expect(prepared.sandboxPluginFiles).toEqual(expectedPluginFiles)
+    expect(prepared.sandboxAgentFile).toBe(expectedAgentFile)
+    expect(await readFile(prepared.layout.sandboxConfigFile, "utf8")).toBe(files.configText)
+    expect(await readFile(expectedPluginFiles[0], "utf8")).toBe(await readFile(files.pluginA, "utf8"))
+    await expect(readFile(path.join(prepared.layout.pluginDir, "stop-marker.js"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(prepared.layout.pluginDir, "ignored.ts"), "utf8")).rejects.toThrow()
+    expect(await readFile(expectedAgentFile, "utf8")).toBe(
       await readFile(files.sourceAgentFile, "utf8"),
     )
   })
 
-  it("runs a generic single-agent sandbox with an explicit prompt", async () => {
+  it("prepares a single-agent sandbox with a string-form local plugin", async () => {
     const orig = await tempDir()
     const dest = await tempDir("cli-v2-sandbox-")
-    const bin = await tempDir("cli-v2-bin-")
-    const files = await writeSourceFiles(orig)
-    const prompt = "Use the custom agent."
-    const recordPath = path.join(dest, "opencode-record.json")
-    const fakeOpencode = path.join(bin, "opencode")
+    const config = path.join(orig, "opencode.json")
+    const plugin = path.join(orig, "plugins", "local.js")
+    const agent = path.join(orig, "agents", "hello-world.md")
+    const configText = JSON.stringify({ plugin: "./plugins/local.js" }, null, 2)
+    const pluginText = "export const local = true\n"
 
-    const expectedConfigHome = path.join(path.resolve(dest), "config")
-    const expectedAgentFile = path.join(expectedConfigHome, "opencode", "agents", "custom-agent.md")
-    await writeFile(
-      fakeOpencode,
-      `#!/usr/bin/env node\nimport { existsSync, readFileSync, writeFileSync } from "node:fs"\nimport path from "node:path"\nconst args = process.argv.slice(2)\nwriteFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ args, env: process.env }, null, 2))\nconst expectedConfigHome = ${JSON.stringify(expectedConfigHome)}\nconst expectedAgentFile = ${JSON.stringify(expectedAgentFile)}\nif (process.env.XDG_CONFIG_HOME !== expectedConfigHome) { console.error("unexpected XDG_CONFIG_HOME"); process.exit(41) }\nif (args.at(-1) !== ${JSON.stringify(prompt)}) { console.error("unexpected prompt"); process.exit(42) }\nconst agentName = args[args.indexOf("--agent") + 1]\nif (agentName !== "custom-agent") { console.error("unexpected agent"); process.exit(43) }\nconst configFile = path.join(process.env.XDG_CONFIG_HOME, "opencode", "opencode.json")\nif (!existsSync(configFile)) { console.error("missing config"); process.exit(44) }\nconst config = JSON.parse(readFileSync(configFile, "utf8"))\nconst plugins = Array.isArray(config.plugin) ? config.plugin : [config.plugin]\nconst pluginFile = plugins.find((entry) => typeof entry === "string" && entry.endsWith("orchestration-state.js"))\nif (!pluginFile || !existsSync(pluginFile)) { console.error("missing rewritten plugin"); process.exit(45) }\nif (!existsSync(expectedAgentFile)) { console.error("missing requested agent file"); process.exit(46) }\nprocess.exit(0)\n`,
-    )
-    await chmod(fakeOpencode, 0o755)
+    await mkdir(path.dirname(plugin), { recursive: true })
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(config, configText)
+    await writeFile(plugin, pluginText)
+    await writeFile(agent, "string plugin test agent\n")
 
-    const status = await runCli(
-      [
-        "node",
-        "cli-v2",
-        "single-agent",
-        "--orig",
-        orig,
-        "--dest",
-        dest,
-        "--agent",
-        "custom-agent",
-        "--agent-file",
-        files.sourceAgentFile,
-        "--prompt",
-        prompt,
-      ],
-      { stdout: { write() {} }, stderr: { write() {} } },
-      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
-    )
+    const prepared = await prepareSingleAgentSandbox({
+      sourceRoot: orig,
+      sandboxRoot: dest,
+      agentName: "custom-agent",
+      prompt: "Use the custom agent.",
+      sourceConfigFile: config,
+      sourceAgentFile: agent,
+    })
 
-    const record = JSON.parse(await readFile(recordPath, "utf8"))
-    expect(status).toBe(0)
-    expect(record.args).toEqual([
-      "run",
-      "--dir",
-      path.join(path.resolve(dest), "worktree"),
-      "--agent",
-      "custom-agent",
-      prompt,
-    ])
-    expect(await readFile(path.join(path.resolve(dest), "config", "opencode", "agents", "custom-agent.md"), "utf8")).toBe(
-      await readFile(files.sourceAgentFile, "utf8"),
-    )
-    await expect(readFile(path.join(path.resolve(dest), "config", "opencode", "agents", "hello-world.md"), "utf8")).rejects.toThrow()
+    const expectedPluginFile = path.join(prepared.layout.pluginDir, "local.js")
+    const expectedAgentFile = path.join(prepared.layout.agentDir, "custom-agent.md")
+
+    expect(await readFile(prepared.layout.sandboxConfigFile, "utf8")).toBe(configText)
+    expect(prepared.sandboxPluginFiles).toEqual([expectedPluginFile])
+    expect(await readFile(expectedPluginFile, "utf8")).toBe(pluginText)
+    expect(prepared.sandboxAgentFile).toBe(expectedAgentFile)
+    expect(await readFile(expectedAgentFile, "utf8")).toBe("string plugin test agent\n")
   })
 
-  it("invokes fake opencode with isolated XDG env", async () => {
+  it.each(["../evil", "evil/name", "evil\\name", "", "..", "evil name", "evil.name", "evil$name"])(
+    "rejects unsafe agent name %j before preparing files",
+    async (agentName) => {
+      const orig = await tempDir()
+      const dest = await tempDir("cli-v2-sandbox-")
+      const files = await writeSourceFiles(orig)
+
+      await expect(
+        prepareSingleAgentSandbox({
+          sourceRoot: orig,
+          sandboxRoot: dest,
+          agentName,
+          prompt: "Use the custom agent.",
+          sourceConfigFile: files.sourceConfigFile,
+          sourceAgentFile: files.sourceAgentFile,
+        }),
+      ).rejects.toThrow(`Invalid agent name: ${agentName}`)
+
+      await expect(readFile(path.join(dest, "config", "opencode", "agents", "evil.md"), "utf8")).rejects.toThrow()
+      await expect(readFile(path.join(dest, "config", "opencode", "evil.md"), "utf8")).rejects.toThrow()
+    },
+  )
+
+  it("fails clearly when config references a missing local plugin", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const agent = path.join(orig, "agents", "hello-world.md")
+    const missingPlugin = path.join(orig, "plugins", "missing.js")
+
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: ["./plugins/missing.js"] }))
+    await writeFile(agent, "missing plugin test agent\n")
+
+    await expect(
+      prepareSingleAgentSandbox({
+        sourceRoot: orig,
+        sandboxRoot: dest,
+        agentName: "custom-agent",
+        prompt: "Use the custom agent.",
+        sourceConfigFile: path.join(orig, "opencode.json"),
+        sourceAgentFile: agent,
+      }),
+    ).rejects.toThrow(`Configured local plugin does not exist: ./plugins/missing.js -> ${missingPlugin}`)
+  })
+
+  it("rejects absolute local plugin paths before copying sandbox files", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const config = path.join(orig, "opencode.json")
+    const plugin = path.join(orig, "plugins", "absolute.js")
+    const agent = path.join(orig, "agents", "hello-world.md")
+
+    await mkdir(path.dirname(plugin), { recursive: true })
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(config, JSON.stringify({ plugin }, null, 2))
+    await writeFile(plugin, "export const absolute = true\n")
+    await writeFile(agent, "absolute plugin test agent\n")
+
+    await expect(
+      prepareSingleAgentSandbox({
+        sourceRoot: orig,
+        sandboxRoot: dest,
+        agentName: "custom-agent",
+        prompt: "Use the custom agent.",
+        sourceConfigFile: config,
+        sourceAgentFile: agent,
+      }),
+    ).rejects.toThrow(`Absolute local plugin paths are not supported in sandbox config: ${plugin}`)
+
+    const sandboxRoot = path.resolve(dest)
+    await expect(readFile(path.join(sandboxRoot, "config", "opencode", "opencode.json"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(sandboxRoot, "config", "opencode", "plugins", "absolute.js"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(sandboxRoot, "config", "opencode", "agents", "custom-agent.md"), "utf8")).rejects.toThrow()
+  })
+
+  it("rejects traversal plugin entries before copying any plugin files", async () => {
+    const parent = await tempDir("cli-v2-source-parent-")
+    const orig = path.join(parent, "source")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const config = path.join(orig, "opencode.json")
+    const safePlugin = path.join(orig, "plugins", "local.js")
+    const evilPlugin = path.join(parent, "evil.js")
+    const agent = path.join(orig, "agents", "hello-world.md")
+
+    await mkdir(path.dirname(safePlugin), { recursive: true })
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(config, JSON.stringify({ plugin: ["./plugins/local.js", "../evil.js"] }, null, 2))
+    await writeFile(safePlugin, "export const local = true\n")
+    await writeFile(evilPlugin, "export const evil = true\n")
+    await writeFile(agent, "traversal plugin test agent\n")
+
+    await expect(
+      prepareSingleAgentSandbox({
+        sourceRoot: orig,
+        sandboxRoot: dest,
+        agentName: "custom-agent",
+        prompt: "Use the custom agent.",
+        sourceConfigFile: config,
+        sourceAgentFile: agent,
+      }),
+    ).rejects.toThrow("Configured local plugin escapes sandbox plugin directory: ../evil.js ->")
+
+    const sandboxRoot = path.resolve(dest)
+    await expect(readFile(path.join(sandboxRoot, "config", "evil.js"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(sandboxRoot, "config", "opencode", "plugins", "local.js"), "utf8")).rejects.toThrow()
+  })
+
+  it("rejects normalized plugin entries that escape the plugin directory", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const config = path.join(orig, "opencode.json")
+    const evilPlugin = path.join(orig, "evil.js")
+    const agent = path.join(orig, "agents", "hello-world.md")
+
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(config, JSON.stringify({ plugin: ["./plugins/../evil.js"] }, null, 2))
+    await writeFile(evilPlugin, "export const evil = true\n")
+    await writeFile(agent, "normalized traversal plugin test agent\n")
+
+    await expect(
+      prepareSingleAgentSandbox({
+        sourceRoot: orig,
+        sandboxRoot: dest,
+        agentName: "custom-agent",
+        prompt: "Use the custom agent.",
+        sourceConfigFile: config,
+        sourceAgentFile: agent,
+      }),
+    ).rejects.toThrow("Configured local plugin escapes sandbox plugin directory: ./plugins/../evil.js ->")
+
+    await expect(readFile(path.join(path.resolve(dest), "config", "opencode", "evil.js"), "utf8")).rejects.toThrow()
+  })
+
+  it("rejects deep traversal plugin entries before writing outside the sandbox root", async () => {
+    const parent = await tempDir("cli-v2-sandbox-parent-")
+    const sourceRoot = path.join(parent, "source")
+    const sourceConfigDir = path.join(sourceRoot, "config", "opencode")
+    const dest = path.join(parent, "sandbox")
+    const config = path.join(sourceConfigDir, "opencode.json")
+    const escapePlugin = path.join(sourceRoot, "escape.js")
+    const agent = path.join(sourceRoot, "agents", "hello-world.md")
+
+    await mkdir(sourceConfigDir, { recursive: true })
+    await mkdir(path.dirname(agent), { recursive: true })
+    await writeFile(config, JSON.stringify({ plugin: ["../../escape.js"] }, null, 2))
+    await writeFile(escapePlugin, "export const escape = true\n")
+    await writeFile(agent, "deep traversal plugin test agent\n")
+
+    await expect(
+      prepareSingleAgentSandbox({
+        sourceRoot,
+        sandboxRoot: dest,
+        agentName: "custom-agent",
+        prompt: "Use the custom agent.",
+        sourceConfigFile: config,
+        sourceAgentFile: agent,
+      }),
+    ).rejects.toThrow("Configured local plugin escapes sandbox plugin directory: ../../escape.js ->")
+
+    await expect(readFile(path.join(dest, "escape.js"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(parent, "escape.js"), "utf8")).rejects.toThrow()
+  })
+
+  it("invokes hello-world with isolated XDG env and the fixture agent", async () => {
     const dest = await tempDir("cli-v2-sandbox-")
     const bin = await tempDir("cli-v2-bin-")
     const recordPath = path.join(dest, "opencode-record.json")
@@ -256,7 +302,7 @@ describe("cli-v2", () => {
 
     await writeFile(
       fakeOpencode,
-      `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs"\nconst args = process.argv.slice(2)\nwriteFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ args, env: process.env }, null, 2))\nif (!args.includes("Respond with hello world.")) process.exit(42)\nprocess.exit(0)\n`,
+      `#!/usr/bin/env node\nimport { existsSync, readFileSync, writeFileSync } from "node:fs"\nimport path from "node:path"\nconst args = process.argv.slice(2)\nconst configDir = path.join(process.env.XDG_CONFIG_HOME, "opencode")\nconst config = JSON.parse(readFileSync(path.join(configDir, "opencode.json"), "utf8"))\nfor (const entry of config.plugin ?? []) {\n  if (typeof entry === "string" && (entry.startsWith("./") || entry.startsWith("../"))) {\n    if (!existsSync(path.resolve(configDir, entry))) process.exit(43)\n  }\n}\nwriteFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ args, env: process.env }, null, 2))\nif (!args.includes("Respond with hello world.")) process.exit(42)\nprocess.exit(0)\n`,
     )
     await chmod(fakeOpencode, 0o755)
 
@@ -285,63 +331,91 @@ describe("cli-v2", () => {
     )
   })
 
-  it("runs the strict-plan sandbox command with isolated config and prompt", async () => {
+  it("handles hello-world sources without a plugins directory", async () => {
+    const orig = await tempDir()
     const dest = await tempDir("cli-v2-sandbox-")
     const bin = await tempDir("cli-v2-bin-")
-    const prompt = "Plan a no-op documentation check. Do not edit files."
+    const fixtureAgent = path.join(orig, "sandbox", "fixtures", "agents", "hello-world.md")
+    const fakeOpencode = path.join(bin, "opencode")
+
+    await mkdir(path.dirname(fixtureAgent), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), "{\n  \"plugin\": []\n}")
+    await writeFile(fixtureAgent, "hello-world fixture\n")
+    await writeFile(fakeOpencode, "#!/usr/bin/env node\nprocess.exit(0)\n")
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "hello-world", "--orig", orig, "--dest", dest],
+      { stdout: { write() {} }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    expect(status).toBe(0)
+    expect(await readdir(path.join(path.resolve(dest), "config", "opencode", "plugins"))).toEqual([])
+  })
+
+  it("runs a generic single-agent sandbox with explicit files and prompt", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const files = await writeSourceFiles(orig)
+    const prompt = "Use the custom agent."
     const recordPath = path.join(dest, "opencode-record.json")
     const fakeOpencode = path.join(bin, "opencode")
-    const expectedRoot = path.resolve(dest)
-    const expectedConfigHome = path.join(expectedRoot, "config")
-    const expectedAgentFile = path.join(expectedConfigHome, "opencode", "agents", "strict-plan.md")
-    const fixtureAgent = path.join(process.cwd(), "sandbox", "fixtures", "agents", "strict-plan.md")
 
     await writeFile(
       fakeOpencode,
-      `#!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
-import path from "node:path"
-const args = process.argv.slice(2)
-writeFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ args, env: process.env }, null, 2))
-const expectedAgentFile = ${JSON.stringify(expectedAgentFile)}
-if (process.env.XDG_CONFIG_HOME !== ${JSON.stringify(expectedConfigHome)}) process.exit(41)
-if (process.env.XDG_DATA_HOME !== ${JSON.stringify(path.join(expectedRoot, "data"))}) process.exit(42)
-if (process.env.XDG_CACHE_HOME !== ${JSON.stringify(path.join(expectedRoot, "cache"))}) process.exit(43)
-if (process.env.XDG_STATE_HOME !== ${JSON.stringify(path.join(expectedRoot, "state"))}) process.exit(44)
-if (args.join("\u0000") !== ${JSON.stringify(["run", "--dir", path.join(expectedRoot, "worktree"), "--agent", "strict-plan", prompt].join("\u0000"))}) process.exit(45)
-if (!existsSync(expectedAgentFile)) process.exit(46)
-const configFile = path.join(process.env.XDG_CONFIG_HOME, "opencode", "opencode.json")
-if (!existsSync(configFile)) process.exit(47)
-const config = JSON.parse(readFileSync(configFile, "utf8"))
-const plugins = Array.isArray(config.plugin) ? config.plugin : [config.plugin]
-const pluginFile = plugins.find((entry) => typeof entry === "string" && entry.endsWith("orchestration-state.js"))
-if (!pluginFile || !existsSync(pluginFile)) process.exit(48)
-process.exit(0)
-`,
+      `#!/usr/bin/env node\nimport { existsSync, readFileSync, writeFileSync } from "node:fs"\nimport path from "node:path"\nconst args = process.argv.slice(2)\nconst configDir = path.join(process.env.XDG_CONFIG_HOME, "opencode")\nconst config = JSON.parse(readFileSync(path.join(configDir, "opencode.json"), "utf8"))\nfor (const entry of config.plugin ?? []) {\n  if (typeof entry === "string" && (entry.startsWith("./") || entry.startsWith("../"))) {\n    if (!existsSync(path.resolve(configDir, entry))) process.exit(43)\n  }\n}\nwriteFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ args, env: process.env }, null, 2))\nprocess.exit(0)\n`,
     )
     await chmod(fakeOpencode, 0o755)
 
     const status = await runCli(
-      ["node", "cli-v2", "strict-plan", "--dest", dest, "--prompt", prompt],
+      [
+        "node",
+        "cli-v2",
+        "single-agent",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--agent",
+        "custom-agent",
+        "--agent-file",
+        files.sourceAgentFile,
+        "--prompt",
+        prompt,
+      ],
       { stdout: { write() {} }, stderr: { write() {} } },
       { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
     )
 
     const record = JSON.parse(await readFile(recordPath, "utf8"))
+    const sandboxRoot = path.resolve(dest)
+    const sandboxConfigFile = path.join(sandboxRoot, "config", "opencode", "opencode.json")
+    const sandboxPluginDir = path.join(sandboxRoot, "config", "opencode", "plugins")
+    const sandboxAgentFile = path.join(sandboxRoot, "config", "opencode", "agents", "custom-agent.md")
+
     expect(status).toBe(0)
     expect(record.args).toEqual([
       "run",
       "--dir",
-      path.join(expectedRoot, "worktree"),
+      path.join(sandboxRoot, "worktree"),
       "--agent",
-      "strict-plan",
+      "custom-agent",
       prompt,
     ])
-    expect(record.env.XDG_CONFIG_HOME).toBe(expectedConfigHome)
-    expect(record.env.XDG_DATA_HOME).toBe(path.join(expectedRoot, "data"))
-    expect(record.env.XDG_CACHE_HOME).toBe(path.join(expectedRoot, "cache"))
-    expect(record.env.XDG_STATE_HOME).toBe(path.join(expectedRoot, "state"))
-    expect(await readFile(expectedAgentFile, "utf8")).toBe(await readFile(fixtureAgent, "utf8"))
+    expect(record.env.XDG_CONFIG_HOME).toBe(path.join(sandboxRoot, "config"))
+    expect(record.env.XDG_DATA_HOME).toBe(path.join(sandboxRoot, "data"))
+    expect(record.env.XDG_CACHE_HOME).toBe(path.join(sandboxRoot, "cache"))
+    expect(record.env.XDG_STATE_HOME).toBe(path.join(sandboxRoot, "state"))
+    expect(await readFile(sandboxConfigFile, "utf8")).toBe(files.configText)
+    expect((await readdir(sandboxPluginDir)).sort()).toEqual(["orchestration-state.js"])
+    expect(await readFile(path.join(sandboxPluginDir, "orchestration-state.js"), "utf8")).toBe("export const pluginA = true\n")
+    await expect(readFile(path.join(sandboxPluginDir, "stop-marker.js"), "utf8")).rejects.toThrow()
+    expect(await readFile(sandboxAgentFile, "utf8")).toBe(
+      await readFile(files.sourceAgentFile, "utf8"),
+    )
+    await expect(readFile(path.join(sandboxRoot, "config", "opencode", "agents", "hello-world.md"), "utf8")).rejects.toThrow()
   })
 
   it("returns a clean failure when opencode is missing", async () => {
@@ -372,6 +446,103 @@ process.exit(0)
 
     expect(status).toBe(127)
     expect(stderr).toContain("opencode CLI was not found")
+  })
+
+  it("returns a clean validation error for missing single-agent options", async () => {
+    let stderr = ""
+    const errors: Array<{ event: string; fields?: Record<string, unknown> }> = []
+    const logger = {
+      bind() {
+        return logger
+      },
+      debug() {},
+      info() {},
+      warn() {},
+      error(event: string, fields?: Record<string, unknown>) {
+        errors.push({ event, fields })
+      },
+    }
+
+    const status = await runCli(
+      ["node", "cli-v2", "single-agent"],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+      { logger },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toBe("--agent is required\n")
+    expect(stderr).not.toContain("Error:")
+    expect(stderr).not.toContain("at ")
+    expect(stderr).not.toContain("cli-v2.ts")
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.event).toBe("cli.error")
+    expect(errors[0]?.fields?.message).toBe("--agent is required")
+    expect(errors[0]?.fields?.stack).toEqual(expect.stringContaining("Error: --agent is required"))
+  })
+
+  it("does not advertise or run unsupported commands", async () => {
+    let stdout = ""
+    let stderr = ""
+
+    const helpStatus = await runCli(["node", "cli-v2", "--help"], {
+      stdout: { write(text) { stdout += text } },
+      stderr: { write(text) { stderr += text } },
+    })
+    const unknownStatus = await runCli(["node", "cli-v2", "removed-command"], {
+      stdout: { write(text) { stdout += text } },
+      stderr: { write(text) { stderr += text } },
+    })
+
+    expect(helpStatus).toBe(0)
+    expect(stdout).not.toContain("removed-command")
+    expect(unknownStatus).toBe(1)
+    expect(stderr).toContain("Unknown command: removed-command")
+  })
+
+  it("returns success for supported global help and hello --help", async () => {
+    let stdout = ""
+    let stderr = ""
+
+    const globalHelpStatus = await runCli(["node", "cli-v2", "--help"], {
+      stdout: { write(text) { stdout += text } },
+      stderr: { write(text) { stderr += text } },
+    })
+    const helloHelpStatus = await runCli(["node", "cli-v2", "hello", "--help"], {
+      stdout: { write(text) { stdout += text } },
+      stderr: { write(text) { stderr += text } },
+    })
+
+    expect(globalHelpStatus).toBe(0)
+    expect(helloHelpStatus).toBe(0)
+    expect(stderr).toBe("")
+  })
+
+  it("newline-terminates the No command provided error", async () => {
+    let stderr = ""
+
+    const status = await runCli(["node", "cli-v2"], {
+      stdout: { write() {} },
+      stderr: { write(text) { stderr += text } },
+    })
+
+    expect(status).toBe(1)
+    expect(stderr).toBe("No command provided.\n")
+  })
+
+  it("restores console.info after CLI runs", async () => {
+    const originalConsoleInfo = console.info
+
+    await runCli(["node", "cli-v2", "hello"], {
+      stdout: { write() {} },
+      stderr: { write() {} },
+    })
+    expect(console.info).toBe(originalConsoleInfo)
+
+    await runCli(["node", "cli-v2", "removed-command"], {
+      stdout: { write() {} },
+      stderr: { write() {} },
+    })
+    expect(console.info).toBe(originalConsoleInfo)
   })
 
   it("runs the hello command through cac", async () => {

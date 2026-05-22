@@ -32,7 +32,7 @@
 
 7. Improve config sandboxing through an explicit transform.
 
-   Keep `copyConfigFileToSandbox` narrow, but add an optional config transform hook so callers can override `instructions`, model, or plugins without making the copy helper magical.
+   Keep config copying explicit, but add an optional config transform hook so callers can override `instructions`, model, or plugins without making sandbox preparation magical.
 
 8. Copy auth files explicitly.
 
@@ -53,4 +53,3 @@
 12. Remove or use unused spec fields.
 
     `sourceRoot` is currently carried in `SingleAgentSandboxSpec` but is not used after construction. Either write it to metadata or remove it from the spec.
-

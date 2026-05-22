@@ -1,11 +1,10 @@
 import { cac } from "cac";
-import { readdir, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, mkdtemp } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createLogger, type Logger, silentLogger } from "./logger.js";
+import { type Logger, silentLogger } from "./logger.js";
 
 let logger: Logger = silentLogger;
 
@@ -23,7 +22,6 @@ type CliIO = {
 
 export interface SingleAgentSandboxSourceFiles {
   sourceConfigFile: Path;
-  sourcePluginFiles: Path[];
   sourceAgentFile: Path;
 }
 
@@ -67,6 +65,7 @@ export interface RunSingleAgentInSandboxArgs {
 export type RunDeps = {
   env?: NodeJS.ProcessEnv;
   cwd?: Path;
+  logger?: Logger;
 };
 
 const Command = {
@@ -149,11 +148,93 @@ export async function createSingleAgentSandboxLayout(
   };
 }
 
-async function isDirectory(path: string): Promise<boolean> {
+function resolveFromRoot(sourceRoot: Path, filePath: Path): Path {
+  return path.isAbsolute(filePath) ? filePath : path.join(sourceRoot, filePath);
+}
+
+type ConfiguredLocalPlugin = {
+  entry: string;
+  sourceFile: Path;
+  sandboxFile: Path;
+};
+
+function isRelativeLocalPluginEntry(entry: unknown): entry is string {
+  return (
+    typeof entry === "string" &&
+    (entry.startsWith("./") || entry.startsWith("../"))
+  );
+}
+
+function isInsideDirectory(parent: Path, child: Path): boolean {
+  const relative = path.relative(parent, child);
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
+}
+
+async function assertFileExists(
+  file: Path,
+  configuredEntry: string,
+): Promise<void> {
   try {
-    return (await stat(path)).isDirectory();
+    const fileStat = await stat(file);
+    if (!fileStat.isFile()) {
+      throw new Error("not a file");
+    }
   } catch {
-    return false;
+    throw new Error(
+      `Configured local plugin does not exist: ${configuredEntry} -> ${file}`,
+    );
+  }
+}
+
+async function resolveConfiguredLocalPlugins(
+  sourceConfigFile: Path,
+  layout: SingleAgentSandboxLayout,
+): Promise<ConfiguredLocalPlugin[]> {
+  const configText = await readFile(sourceConfigFile, "utf8");
+  const config = JSON.parse(configText) as { plugin?: unknown };
+  const rawPlugin = config.plugin;
+  const pluginEntries =
+    typeof rawPlugin === "string"
+      ? [rawPlugin]
+      : Array.isArray(rawPlugin)
+        ? rawPlugin
+        : [];
+  const sourceConfigDir = path.dirname(sourceConfigFile);
+  const sandboxConfigDir = path.dirname(layout.sandboxConfigFile);
+
+  return pluginEntries
+    .filter((entry): entry is string => {
+      if (typeof entry === "string" && path.isAbsolute(entry)) {
+        throw new Error(
+          `Absolute local plugin paths are not supported in sandbox config: ${entry}`,
+        );
+      }
+
+      return isRelativeLocalPluginEntry(entry);
+    })
+    .map((entry) => {
+      const sandboxFile = path.resolve(sandboxConfigDir, entry);
+
+      if (!isInsideDirectory(layout.pluginDir, sandboxFile)) {
+        throw new Error(
+          `Configured local plugin escapes sandbox plugin directory: ${entry} -> ${sandboxFile}`,
+        );
+      }
+
+      return {
+        entry,
+        sourceFile: path.resolve(sourceConfigDir, entry),
+        sandboxFile,
+      };
+    });
+}
+
+function assertSafeAgentName(agentName: string): void {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(agentName)) {
+    throw new Error(`Invalid agent name: ${agentName}`);
   }
 }
 
@@ -161,23 +242,12 @@ export async function defaultHelloWorldSpec(
   sourceRoot: Path,
   sandboxRoot: Path,
 ): Promise<SingleAgentSandboxSpec> {
-  const pluginDir = path.join(sourceRoot, "plugins");
-  const pluginDirFiles = (await isDirectory(pluginDir))
-    ? await readdir(pluginDir)
-    : [];
-
-  const pluginFiles = pluginDirFiles.filter(
-    (entry) => path.extname(entry) === "js",
-  );
-  logger.debug("HelloWorldSpec", { pluginFiles });
-
   return {
     sourceRoot,
     sandboxRoot,
-    agentName: "Hello World",
+    agentName: "hello-world",
     prompt: HelloWorldPrompt,
     sourceConfigFile: path.join(sourceRoot, "opencode.json"),
-    sourcePluginFiles: pluginFiles,
     sourceAgentFile: path.join(
       sourceRoot,
       "sandbox",
@@ -191,6 +261,8 @@ export async function defaultHelloWorldSpec(
 export async function prepareSingleAgentSandbox(
   spec: SingleAgentSandboxSpec,
 ): Promise<PreparedSingleAgentSandbox> {
+  assertSafeAgentName(spec.agentName);
+
   const log = logger.bind({
     agentName: spec.agentName,
     sandboxRoot: spec.sandboxRoot,
@@ -202,18 +274,29 @@ export async function prepareSingleAgentSandbox(
   const layout = await createSingleAgentSandboxLayout({
     sandboxRoot: spec.sandboxRoot,
   });
-  const sandboxPluginFiles = spec.sourcePluginFiles.map((entry) =>
-    path.join(layout.pluginDir, path.basename(entry)),
-  );
-  spec.sourcePluginFiles.map(
-    async (entry) =>
-      await copyFile(entry, path.join(layout.pluginDir, path.basename(entry))),
-  );
-
   const sandboxAgentFile = path.join(layout.agentDir, `${spec.agentName}.md`);
-  await copyFile(spec.sourceAgentFile, sandboxAgentFile);
+
+  const configuredPlugins = await resolveConfiguredLocalPlugins(
+    spec.sourceConfigFile,
+    layout,
+  );
+  await Promise.all(
+    configuredPlugins.map((plugin) =>
+      assertFileExists(plugin.sourceFile, plugin.entry),
+    ),
+  );
 
   await copyFile(spec.sourceConfigFile, layout.sandboxConfigFile);
+  await Promise.all(
+    configuredPlugins.map(async (plugin) => {
+      await mkdir(path.dirname(plugin.sandboxFile), { recursive: true });
+      await copyFile(plugin.sourceFile, plugin.sandboxFile);
+    }),
+  );
+  const sandboxPluginFiles = configuredPlugins.map(
+    (plugin) => plugin.sandboxFile,
+  );
+
   await copyFile(spec.sourceAgentFile, sandboxAgentFile);
 
   log.info("sandbox.prepare.done", {
@@ -312,69 +395,64 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
     return 0;
   });
 
-  // cli
-  //   .command(
-  //     Command.SingleAgent,
-  //     "Run one explicit agent in an isolated OpenCode sandbox",
-  //   )
-  //   .option("--orig <path>", "Source OpenCode config root")
-  //   .option("--dest <path>", "Sandbox destination directory")
-  //   .option(
-  //     "--config <path>",
-  //     "Source OpenCode config file, relative to --orig unless absolute",
-  //   )
-  //   .option(
-  //     "--plugin-dir <path>",
-  //     "Source local plugin dir, relative to --orig unless absolute",
-  //   )
-  //   .option("--agent <name>", "OpenCode agent name to run")
-  //   .option(
-  //     "--agent-file <path>",
-  //     "Source agent file, relative to --orig unless absolute",
-  //   )
-  //   .option("--prompt <text>", "Prompt/message passed to opencode run")
-  //   .action(
-  //     async (options: {
-  //       orig?: Path;
-  //       dest?: Path;
-  //       config?: Path;
-  //       plugin?: Path;
-  //       agent?: string;
-  //       agentFile?: Path;
-  //       prompt?: string;
-  //     }) => {
-  //       const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
-  //       const sandboxRoot = path.resolve(
-  //         options.dest ??
-  //           // ToDo: What happens if the path already exists?
-  //           (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
-  //       );
-  //
-  //       const sourceFiles = resolveSourceFiles(sourceRoot, {
-  //         config: options.config,
-  //         plugin: options.plugin,
-  //         agentFile: requiredOption(options.agentFile, "--agent-file"),
-  //       });
-  //       const spec: SingleAgentSandboxSpec = {
-  //         sourceRoot,
-  //         sandboxRoot,
-  //         agentName: requiredOption(options.agent, "--agent"),
-  //         prompt: requiredOption(options.prompt, "--prompt"),
-  //         ...sourceFiles,
-  //       };
-  //       const prepared = await prepareSingleAgentSandbox(spec);
-  //
-  //       return runSingleAgentInSandbox(
-  //         {
-  //           layout: prepared.layout,
-  //           agentName: spec.agentName,
-  //           prompt: spec.prompt,
-  //         },
-  //         io,
-  //         deps,
-  //       );
-  //     },
-  //   );
+  cli
+    .command(
+      Command.SingleAgent,
+      "Run one explicit agent in an isolated OpenCode sandbox",
+    )
+    .option("--orig <path>", "Source OpenCode config root")
+    .option("--dest <path>", "Sandbox destination directory")
+    .option(
+      "--config <path>",
+      "Source OpenCode config file, relative to --orig unless absolute",
+    )
+    .option("--agent <name>", "OpenCode agent name to run")
+    .option(
+      "--agent-file <path>",
+      "Source agent file, relative to --orig unless absolute",
+    )
+    .option("--prompt <text>", "Prompt/message passed to opencode run")
+    .action(
+      async (options: {
+        orig?: Path;
+        dest?: Path;
+        config?: Path;
+        agent?: string;
+        agentFile?: Path;
+        prompt?: string;
+      }) => {
+        const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
+        const sandboxRoot = path.resolve(
+          options.dest ??
+            (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
+        );
+        const spec: SingleAgentSandboxSpec = {
+          sourceRoot,
+          sandboxRoot,
+          agentName: requiredOption(options.agent, "--agent"),
+          prompt: requiredOption(options.prompt, "--prompt"),
+          sourceConfigFile: resolveFromRoot(
+            sourceRoot,
+            options.config ?? "opencode.json",
+          ),
+          sourceAgentFile: resolveFromRoot(
+            sourceRoot,
+            requiredOption(options.agentFile, "--agent-file"),
+          ),
+        };
+        const prepared = await prepareSingleAgentSandbox(spec);
+
+        return runSingleAgentInSandbox(
+          {
+            layout: prepared.layout,
+            agentName: spec.agentName,
+            prompt: spec.prompt,
+          },
+          io,
+          deps,
+        );
+      },
+    );
 
   cli
     .command(
@@ -412,7 +490,9 @@ export async function runCli(
   io: CliIO = defaultIO,
   deps: RunDeps = {},
 ): Promise<number> {
-  logger = createLogger();
+  const originalConsoleInfo = console.info;
+  const originalLogger = logger;
+  logger = deps.logger ?? silentLogger;
   const cli = createCli(io, deps);
 
   try {
@@ -423,18 +503,18 @@ export async function runCli(
     // Only parse, do not run when doing run: false
     const parsed = cli.parse(argv, { run: false });
 
-    if (parsed.options.help) {
-      return 0;
-    }
-
     if (!cli.matchedCommand && parsed.args.length > 0) {
-      io.stderr.write(`Unknown command: ${parsed.args.join(" ")}\n`);
+      io.stderr.write(`Unknown command: ${parsed.args[0]}\n`);
       cli.outputHelp();
       return 1;
     }
 
+    if (parsed.options.help) {
+      return 0;
+    }
+
     if (!cli.matchedCommand) {
-      io.stderr.write("No command provided.");
+      io.stderr.write("No command provided.\n");
       cli.outputHelp();
       return 1;
     }
@@ -445,8 +525,11 @@ export async function runCli(
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
     logger.error("cli.error", { message, stack });
-    io.stderr.write(`${stack ?? message}\n`);
+    io.stderr.write(`${message}\n`);
     return 1;
+  } finally {
+    console.info = originalConsoleInfo;
+    logger = originalLogger;
   }
 }
 

@@ -67,23 +67,16 @@ Opencode stores files under
 ~/.config/opencode
 ```
 
-### Persistent orchestration state install contract
+### Persistent orchestration state
 
-**NOTE**: We have disabled orchestration state plugins by moving them to `plugins2`. 
-They haven't proven to be useful and with `opencode` moving to integrate more session management
-maybe we will get something better natively.
+**NOTE**: Orchestration state is currently disabled in the active OpenCode config. The experimental implementation remains under `plugins2` for development/build checking, but `opencode.json` does not enable `./plugins2/orchestration-state.js` or an installed `./plugins/orchestration-state.js` entry.
 
-The orchestration state integration is loaded from the installed config path, not from this repo checkout directly.
-
-- `~/.config/opencode/opencode.json` contains `./plugins/orchestration-state.js`.
-- OpenCode resolves that relative path from `~/.config/opencode/`.
-- If `~/.config/opencode/plugins/orchestration-state.js` is missing, the plugin never loads and `.agents/tasks` is never created.
-- `~/.config/opencode/rules.md` is still part of the normal installed config layout because `opencode.json` references it in `instructions`, but orchestration-state persistence does not depend on that file being present.
 - OpenCode plugin/config changes only apply to newly started OpenCode processes.
-- If you already have an already-running OpenCode session, rerun `just opencode` and then restart that session before checking persistence again.
+- `~/.config/opencode/rules.md` is still part of the normal installed config layout because `opencode.json` references it in `instructions`.
+- If you already have an already-running OpenCode session, rerun `just opencode` and then restart that session before checking config changes.
 - This repo currently documents the explicit restart contract; hot reload is not assumed here.
 
-Whenever you add or change OpenCode plugins in this repo, rerun:
+Whenever you add or change active OpenCode plugins in this repo, rerun:
 
 ```bash
 just opencode
@@ -95,7 +88,7 @@ To verify the live installed layout from an arbitrary worktree, run:
 just opencode-doctor
 ```
 
-That smoke check fails explicitly if the installed plugin path is missing. It then runs `opencode run --command orchestrate ...` against a temporary worktree and confirms that the installed environment creates `.agents/tasks/index.json` plus a persisted `state.json`. After artifact verification, only `opencode run` exit status `0` and the timeout status `124` are accepted; any other non-zero exit fails the smoke check.
+That smoke check verifies the live installed config layout from the current worktree. It should not report `plugins2` as an enabled OpenCode plugin path while orchestration state remains disabled.
 
 ## Favorite Models
 

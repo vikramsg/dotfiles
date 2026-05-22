@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "build": "npm run build:orchestration-state && npm run build:sandbox",
-    "build:orchestration-state": "node --check plugins/orchestration-state.js",
+    "build:orchestration-state": "node --check plugins2/orchestration-state.js",
     "build:sandbox": "tsc -p sandbox/tsconfig.json",
     "sandbox": "npm run build:sandbox --silent && node sandbox/dist/sandbox-cli.js",
     "sandbox:v2": "npm run build:sandbox --silent && node --enable-source-maps sandbox/dist/cli-v2.js",
@@ -12,10 +12,7 @@
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.4.2",
-    "cac": "^7.0.0",
-    "pino": "^9.7.0",
-    "pino-pretty": "^13.0.0",
-    "zod": "^4.4.3"
+    "cac": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "latest",
