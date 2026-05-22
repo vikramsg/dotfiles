@@ -215,6 +215,22 @@ File locations and config are defined in the config file.
 tsc -p sandbox/tsconfig.json
 ```
 
+For individual scripts, use
+
+```bash
+tsc scripts/arrays.ts # Creates arrays.js in same folder as arrays.ts
+
+tsc scripts/arrays.ts --outDir scripts/dist # Creates arrays.js inside scripts/dist
+```
+
+### Running
+
+A `js` file can be run by doing
+
+```bash
+node scripts/dist/arrays.js
+```
+
 ### Debugging
 
 **Using a REPL**
