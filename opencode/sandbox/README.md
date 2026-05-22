@@ -64,7 +64,7 @@ Current capabilities:
 - Copies one selected agent file into the sandbox agent directory under the requested agent name.
 - Runs `opencode run --agent <agent>` inside the sandbox worktree.
 - Provides fixture commands for `hello` and `hello-world`, plus explicit `single-agent` runs.
-- `scenario` prepares the sandbox, copies fixture worktree files, installs a generated trace/stub plugin when `scriptedSubagents` are configured, then runs the primary agent through `opencode run`.
+- `scenario` prepares the sandbox, copies fixture worktree files, installs a generated trace/expectation plugin when `scriptedSubagents` are configured, then runs the primary agent through `opencode run`.
 - `evaluate` runs the same captured primary-agent path and scores the required `transcript.jsonl`; static `scenario.transcript` data is not the default scoring path.
 - `--agent-candidate agent=/path/to/file.md` replaces a scenario agent before running, so scores are derived from the candidate behavior observed in the sandbox trace.
 - `--timeout-ms <number>` terminates long-running captured scenario/evaluation runs and records timeout status in artifacts.
@@ -72,7 +72,8 @@ Current capabilities:
 Current limitations:
 
 - Does not yet support orchestrator commands such as `orchestrator-until` or `orchestrator-final-check`.
-- Scenario/evaluation deterministic scoring depends on the sandbox trace/stub plugin mutating scripted subagent task outputs and recording candidate task prompts. It is not a DSPy optimizer.
+- Scenario/evaluation deterministic scoring depends on the sandbox trace/expectation plugin recording task, read-only tool, and final-response events. `scriptedSubagents` are expected task-output sequences used for validation; unexpected, exhausted, or mismatched task calls fail evaluation instead of being treated as successful fallback behavior.
+- CLI v2 does not yet prove true task short-circuiting/stubbing and is not a DSPy optimizer.
 - Does not yet generate stop plugins for CLI v2 orchestrator convenience commands.
 - Does not yet generate a harness for subagent-mode agents.
 
@@ -83,7 +84,7 @@ Captured `scenario` and `evaluate` runs write artifacts under `<sandbox-root>/ou
 - `result.json`: structured command, stdout/stderr, exit status, timeout flag, and signal.
 - `stdout.txt`: captured `opencode run` stdout.
 - `stderr.txt`: captured `opencode run` stderr.
-- `transcript.jsonl`: trace events recorded by the generated sandbox trace/stub plugin or by an instrumented test `opencode`.
+- `transcript.jsonl`: trace events recorded by the generated sandbox trace/expectation plugin or by an instrumented test `opencode`.
 - `final-response.md`: captured stdout used as the fallback final response.
 - `status.json`: exit status, timeout flag, and signal.
 - `metadata.json`: command and worktree metadata.
