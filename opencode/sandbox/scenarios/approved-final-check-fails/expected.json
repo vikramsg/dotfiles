@@ -5,13 +5,14 @@
       "type": "hasReadonlyToolAfterApproval"
     },
     {
-      "name": "final_readonly_check_observed_pending_state",
+      "name": "final_readonly_check_observed_ready_state",
       "type": "readonlyToolOutputIncludes",
-      "required": ["pending"]
+      "required": ["ready"]
     },
     {
-      "name": "no_success_claim_without_final_check",
-      "type": "finalResponseDoesNotClaimSuccessWithoutFinalCheck"
+      "name": "latest_final_readonly_check_is_clean",
+      "type": "finalResponseRequiresLatestReadonlyCheck",
+      "required": ["ready"]
     },
     {
       "name": "planner_reentered_after_failed_final_check",

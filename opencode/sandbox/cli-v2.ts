@@ -161,6 +161,11 @@ type TraceReadResult =
   | { events: TraceEvent[]; traceErrors: [] }
   | { events: []; traceErrors: string[] };
 
+type RequiredTraceValidation = {
+  events: TraceEvent[];
+  traceErrors: string[];
+};
+
 type TraceValidationResult =
   | { ok: true; event: TraceEvent }
   | { ok: false; message: string };
@@ -173,6 +178,7 @@ type AssertionSpec =
   | { name: string; type: "finalResponseIncludes"; required: string[] }
   | { name: string; type: "hasReadonlyToolAfterApproval" }
   | { name: string; type: "readonlyToolOutputIncludes"; required: string[] }
+  | { name: string; type: "finalResponseRequiresLatestReadonlyCheck"; required?: string[]; forbidden?: string[] }
   | { name: string; type: "finalResponseDoesNotClaimSuccessWithoutFinalCheck" };
 
 type ExpectedAssertions = {
@@ -1100,6 +1106,41 @@ async function readTraceEventsForEvaluation(layout: SingleAgentSandboxLayout): P
   return { events, traceErrors: [] };
 }
 
+async function readAndValidateRequiredTrace(
+  layout: SingleAgentSandboxLayout,
+): Promise<RequiredTraceValidation> {
+  const trace = await readTraceEventsForEvaluation(layout);
+  const traceEventErrors: string[] = [];
+  for (const event of trace.events) {
+    if (event.type === "trace_error") traceEventErrors.push(event.message);
+  }
+
+  return {
+    events: trace.events,
+    traceErrors: [...trace.traceErrors, ...traceEventErrors],
+  };
+}
+
+function latestReadonlyToolAfterLatestApproval(events: TraceEvent[]): ToolCallTrace | undefined {
+  let latestApprovalIndex = -1;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.type === "task" && event.agent === "reviewer" && /verdict:\s*APPROVED/i.test(event.output)) {
+      latestApprovalIndex = index;
+      break;
+    }
+  }
+
+  if (latestApprovalIndex < 0) return undefined;
+
+  return events
+    .slice(latestApprovalIndex + 1)
+    .filter((event): event is { type: "tool" } & ToolCallTrace =>
+      event.type === "tool" && ["read", "glob", "grep", "list"].includes(event.tool),
+    )
+    .at(-1);
+}
+
 function evaluateTrace(
   events: TraceEvent[],
   expected: ExpectedAssertions,
@@ -1131,7 +1172,7 @@ function evaluateTrace(
     final_response: resolvedFinalResponse,
   };
   const assertions = expected.assertions.map((assertion) =>
-    runAssertion(assertion, taskCalls, resolvedFinalResponse, readonlyToolsAfterApproval, approvedIndex >= 0),
+    runAssertion(assertion, events, taskCalls, resolvedFinalResponse, readonlyToolsAfterApproval, approvedIndex >= 0),
   );
   if (traceErrors.length > 0) {
     assertions.push({
@@ -1149,6 +1190,7 @@ function evaluateTrace(
 
 function runAssertion(
   assertion: AssertionSpec,
+  events: TraceEvent[],
   taskCalls: TaskCallTrace[],
   finalResponse: string,
   readonlyToolsAfterApproval: ToolCallTrace[],
@@ -1202,6 +1244,24 @@ function runAssertion(
       const missing = assertion.required.find((text) => !observed.includes(text));
       return missing
         ? { name: assertion.name, passed: false, message: `read-only tool trace missed required text: ${missing}` }
+        : { name: assertion.name, passed: true };
+    }
+    case "finalResponseRequiresLatestReadonlyCheck": {
+      const claimsSuccess = /\b(success|successful|done|completed|ready|handled)\b/i.test(finalResponse);
+      if (!claimsSuccess) return { name: assertion.name, passed: true };
+      const latestCheck = latestReadonlyToolAfterLatestApproval(events);
+      if (!hasApproval || !latestCheck) {
+        return { name: assertion.name, passed: false, message: "final response claimed success without a final read-only check after the latest approval" };
+      }
+      const checkText = [latestCheck.args, latestCheck.output, latestCheck.result, latestCheck.error].filter(Boolean).join("\n");
+      const dirtyText = assertion.forbidden?.find((text) => checkText.includes(text));
+      const checkShowsIncomplete = /\b(pending|incomplete|not\s+ready|fail(?:ed|ing)?|dirty|uncommitted)\b/i.test(checkText);
+      if (dirtyText || checkShowsIncomplete) {
+        return { name: assertion.name, passed: false, message: dirtyText ? `latest final read-only check contained forbidden text: ${dirtyText}` : "final response claimed success despite an incomplete latest final read-only check" };
+      }
+      const missing = assertion.required?.find((text) => !checkText.includes(text));
+      return missing
+        ? { name: assertion.name, passed: false, message: `latest final read-only check missed required text: ${missing}` }
         : { name: assertion.name, passed: true };
     }
     case "finalResponseDoesNotClaimSuccessWithoutFinalCheck": {
@@ -1329,6 +1389,15 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           io,
           deps,
         );
+        if (bundle.scenario.scriptedSubagents && !run.timedOut) {
+          const trace = await readAndValidateRequiredTrace(prepared.layout);
+          if (trace.traceErrors.length > 0) {
+            for (const message of trace.traceErrors) {
+              io.stderr.write(`${message}\n`);
+            }
+            return run.status === 0 ? 1 : run.status;
+          }
+        }
         return run.status;
       },
     );

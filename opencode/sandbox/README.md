@@ -64,7 +64,7 @@ Current capabilities:
 - Copies one selected agent file into the sandbox agent directory under the requested agent name.
 - Runs `opencode run --agent <agent>` inside the sandbox worktree.
 - Provides fixture commands for `hello` and `hello-world`, plus explicit `single-agent` runs.
-- `scenario` prepares the sandbox, copies fixture worktree files, installs a generated trace/expectation plugin when `scriptedSubagents` are configured, then runs the primary agent through `opencode run`.
+- `scenario` prepares the sandbox, copies fixture worktree files, installs a generated trace/expectation plugin when `scriptedSubagents` are configured, then runs the primary agent through `opencode run`; scripted runs fail if the required trace is missing, empty, malformed, invalid, or contains `trace_error` events.
 - `evaluate` runs the same captured primary-agent path and scores the required `transcript.jsonl`; static `scenario.transcript` data is not the default scoring path.
 - `--agent-candidate agent=/path/to/file.md` replaces a scenario agent before running, so scores are derived from the candidate behavior observed in the sandbox trace.
 - `--timeout-ms <number>` terminates long-running captured scenario/evaluation runs and records timeout status in artifacts.
@@ -91,7 +91,9 @@ Captured `scenario` and `evaluate` runs write artifacts under `<sandbox-root>/ou
 - `metadata.json`: command and worktree metadata.
 - `evaluation.json`: top-level `passed` result, raw OpenCode `status`, assertion results, trace errors, and score inputs written by `evaluate`.
 
-Malformed, missing, or empty required traces are reported as failed `evaluate` results with non-empty `trace_errors` instead of falling back to fixture transcripts; captured stdout remains available in `stdout.txt` but does not satisfy final-response assertions. `evaluate --json` still writes parseable evaluation JSON to stdout and `output/evaluation.json`. Completed evaluations exit `0` only when `evaluation.json.passed` is `true`; failed assertions, trace expectation errors, timeouts, and non-zero OpenCode statuses return `1` while preserving raw run details in the artifacts.
+Malformed, missing, empty, invalid, or `trace_error` required traces are reported as failed `evaluate` results with non-empty `trace_errors` instead of falling back to fixture transcripts, and scripted `scenario` runs also exit non-zero for those trace failures. Captured stdout remains available in `stdout.txt` but does not satisfy final-response assertions. `evaluate --json` still writes parseable evaluation JSON to stdout and `output/evaluation.json`. Completed evaluations exit `0` only when `evaluation.json.passed` is `true`; failed assertions, trace expectation errors, timeouts, and non-zero OpenCode statuses return `1` while preserving raw run details in the artifacts.
+
+Final success scoring can use `finalResponseRequiresLatestReadonlyCheck`, which checks the latest read-only tool call after the latest reviewer approval. Earlier dirty checks do not fail the assertion once the orchestrator re-enters the loop, gets a later approval, performs a later clean read-only check, and only then claims success.
 
 ## Environment variables
 

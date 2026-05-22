@@ -131,9 +131,9 @@ It can:
 - inject candidate agent files with `--agent-candidate agent=file` without modifying repo agents;
 - install a generated trace plugin for scripted subagent scenarios;
 - record task, read-only tool-after-approval, and final-response trace events;
-- validate scripted subagent output with exact equality;
+- validate scripted subagent output with exact equality and fail both `scenario` and `evaluate` on missing, empty, malformed, invalid, or `trace_error` traces;
 - run `scenario` and `evaluate` commands with optional timeouts and JSON evaluation output;
-- evaluate trace assertions into `score_inputs`, `trace_errors`, and assertion results suitable for a DSPy metric.
+- evaluate trace assertions into `score_inputs`, `trace_errors`, and assertion results suitable for a DSPy metric, including an order-aware latest post-approval read-only final-check assertion.
 
 This is enough for the non-DSPy checkpoint: candidate prompts can be sandboxed, traced, and scored without adding a Python harness. The remaining work is to connect DSPy to these existing scenario/evaluate entrypoints and tighten repeatability controls as needed for optimization runs.
 

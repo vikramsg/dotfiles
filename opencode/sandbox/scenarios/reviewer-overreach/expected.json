@@ -4,7 +4,13 @@
       "name": "reviewer_task_called",
       "type": "taskCallCount",
       "agent": "reviewer",
-      "atLeast": 1
+      "atLeast": 2
+    },
+    {
+      "name": "reviewer_reentered_with_additional_context",
+      "type": "taskPromptIncludes",
+      "agent": "reviewer",
+      "required": ["app.txt"]
     },
     {
       "name": "reviewer_overreach_not_forwarded_to_planner",
