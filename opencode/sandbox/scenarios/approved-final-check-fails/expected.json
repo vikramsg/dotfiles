@@ -12,6 +12,24 @@
     {
       "name": "no_success_claim_without_final_check",
       "type": "finalResponseDoesNotClaimSuccessWithoutFinalCheck"
+    },
+    {
+      "name": "planner_reentered_after_failed_final_check",
+      "type": "taskCallCount",
+      "agent": "planner",
+      "atLeast": 2
+    },
+    {
+      "name": "implementer_reentered_after_failed_final_check",
+      "type": "taskCallCount",
+      "agent": "implementer",
+      "atLeast": 2
+    },
+    {
+      "name": "reviewer_reentered_after_failed_final_check",
+      "type": "taskCallCount",
+      "agent": "reviewer",
+      "atLeast": 2
     }
   ]
 }

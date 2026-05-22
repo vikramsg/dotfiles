@@ -12,8 +12,17 @@
   "fixtureDir": "worktree",
   "expectedFile": "expected.json",
   "scriptedSubagents": {
-    "planner": ["PLAN VERSION: 1\n\nMake the requested edit."],
-    "implementer": ["## Implementation Summary\n- Made the requested edit."],
-    "reviewer": ["---\nverdict: APPROVED\n---\n\nLooks good."]
+    "planner": [
+      "PLAN VERSION: 1\n\nMake the requested edit.",
+      "PLAN VERSION: 2\n\nResolve the pending final check before finishing."
+    ],
+    "implementer": [
+      "## Implementation Summary\n- Made the requested edit.",
+      "## Implementation Summary\n- Resolved the pending final check."
+    ],
+    "reviewer": [
+      "---\nverdict: APPROVED\n---\n\nLooks good.",
+      "---\nverdict: APPROVED\n---\n\nPending state addressed."
+    ]
   }
 }

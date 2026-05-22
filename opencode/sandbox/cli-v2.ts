@@ -161,6 +161,10 @@ type TraceReadResult =
   | { events: TraceEvent[]; traceErrors: [] }
   | { events: []; traceErrors: string[] };
 
+type TraceValidationResult =
+  | { ok: true; event: TraceEvent }
+  | { ok: false; message: string };
+
 type AssertionSpec =
   | { name: string; type: "taskPromptExcludes"; agent: string; forbidden: string[] }
   | { name: string; type: "taskPromptIncludes"; agent: string; required: string[] }
@@ -205,6 +209,71 @@ function evaluationPassed(evaluation: EvaluationResult): boolean {
     evaluation.trace_errors.length === 0 &&
     evaluation.assertions.every((assertion) => assertion.passed)
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) > 0;
+}
+
+function validateOptionalPositiveInteger(value: Record<string, unknown>, key: string): string | undefined {
+  return value[key] === undefined || isPositiveInteger(value[key])
+    ? undefined
+    : `${key} must be a positive integer`;
+}
+
+function validateOptionalString(value: Record<string, unknown>, key: string): string | undefined {
+  return value[key] === undefined || typeof value[key] === "string"
+    ? undefined
+    : `${key} must be a string`;
+}
+
+function validateRequiredString(value: Record<string, unknown>, key: string): string | undefined {
+  return typeof value[key] === "string" ? undefined : `${key} must be a string`;
+}
+
+function validateTraceEvent(value: unknown): TraceValidationResult {
+  if (!isRecord(value)) {
+    return { ok: false, message: "event must be an object" };
+  }
+
+  switch (value.type) {
+    case "task": {
+      const error =
+        validateRequiredString(value, "agent") ??
+        validateRequiredString(value, "prompt") ??
+        validateRequiredString(value, "output") ??
+        validateOptionalPositiveInteger(value, "sequence");
+      return error ? { ok: false, message: error } : { ok: true, event: value as TraceEvent };
+    }
+    case "tool": {
+      const error =
+        validateRequiredString(value, "tool") ??
+        validateOptionalString(value, "phase") ??
+        validateOptionalString(value, "args") ??
+        validateOptionalString(value, "output") ??
+        validateOptionalString(value, "result") ??
+        validateOptionalString(value, "error") ??
+        (value.success === undefined || typeof value.success === "boolean" ? undefined : "success must be a boolean");
+      return error ? { ok: false, message: error } : { ok: true, event: value as TraceEvent };
+    }
+    case "trace_error": {
+      const error =
+        validateRequiredString(value, "message") ??
+        validateOptionalString(value, "agent") ??
+        validateOptionalPositiveInteger(value, "sequence");
+      return error ? { ok: false, message: error } : { ok: true, event: value as TraceEvent };
+    }
+    case "final_response": {
+      const error = validateRequiredString(value, "content");
+      return error ? { ok: false, message: error } : { ok: true, event: value as TraceEvent };
+    }
+    default:
+      return { ok: false, message: "unknown event type" };
+  }
 }
 
 const Command = {
@@ -1012,12 +1081,18 @@ async function readTraceEventsForEvaluation(layout: SingleAgentSandboxLayout): P
   const events: TraceEvent[] = [];
   for (const [index, line] of text.split(/\r?\n/).entries()) {
     if (!line) continue;
+    let parsed: unknown;
     try {
-      events.push(JSON.parse(line) as TraceEvent);
+      parsed = JSON.parse(line);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { events: [], traceErrors: [`Malformed trace ${transcriptFile} line ${index + 1}: ${message}`] };
     }
+    const validated = validateTraceEvent(parsed);
+    if (!validated.ok) {
+      return { events: [], traceErrors: [`Invalid trace ${transcriptFile} line ${index + 1}: ${validated.message}`] };
+    }
+    events.push(validated.event);
   }
   if (events.length === 0) {
     return { events: [], traceErrors: [`Required trace file contained no events: ${transcriptFile}`] };
