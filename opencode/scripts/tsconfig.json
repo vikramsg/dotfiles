@@ -9,5 +9,5 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["sandbox-cli.ts", "cli-v2.ts", "logger.ts"]
+  "include": ["arrays.ts"]
 }

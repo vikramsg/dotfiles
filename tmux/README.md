@@ -37,6 +37,16 @@ After installing, you **must restart the tmux server** completely for it to pick
 3.  Press `prefix` + `U` to update plugins.
 4.  Press `prefix` + `alt` + `u` to remove/uninstall plugins not on the plugin list.
 
+### Usage on 2 screens.
+
+If we want windows in the same tmux session appear in 2 screens, `tmux` has a native way to handle this.
+
+The following will attach a new session linked to the existing sesssion.
+Then attach to the session in the second screen.
+```bash
+tmux new-session -t mysession -s mysession-2
+```
+
 ## Testing Configuration Changes
 
 Before applying changes to your main `tmux.conf`, you can test them safely in an isolated environment without affecting your running sessions. This is highly recommended to prevent breaking your daily workflow.

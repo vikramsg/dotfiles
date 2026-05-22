@@ -35,15 +35,48 @@ just opencode-sandbox orchestrator-final-check "Make a harmless text-file change
 just opencode-sandbox single-agent reviewer "Review this change"
 ```
 
+## CLI v2
+
+`cli-v2.ts` is the in-progress rewrite of the sandbox CLI. It currently supports only `hello`, `hello-world`, and explicit `single-agent` runs. Run it through the package script:
+
+```sh
+npm --prefix opencode run sandbox:v2 -- <command> <args...>
+```
+
+Examples:
+
+```sh
+npm --prefix opencode run sandbox:v2 -- hello
+npm --prefix opencode run sandbox:v2 -- hello-world
+npm --prefix opencode run sandbox:v2 -- single-agent --agent custom-agent --agent-file ./sandbox/fixtures/agents/hello-world.md --prompt "Run this agent."
+```
+
+Current capabilities:
+
+- Creates isolated XDG config, data, cache, and state homes under the sandbox root.
+- Emits pretty `pino` diagnostic logs to the terminal stderr while keeping captured user-facing validation stderr clean.
+- Copies the OpenCode config as-is into the sandbox config directory; plugin entries are not rewritten.
+- Copies configured relative local plugin files only when their normalized sandbox destination remains under `config/opencode/plugins`.
+- Rejects absolute local plugin paths because the config is copied as-is and cannot safely point at a sandbox copy.
+- Leaves package plugin entries for OpenCode to resolve; missing configured local plugin files fail sandbox preparation.
+- Copies one selected agent file into the sandbox agent directory under the requested agent name.
+- Runs `opencode run --agent <agent>` inside the sandbox worktree.
+- Provides fixture commands for `hello` and `hello-world`, plus explicit `single-agent` runs.
+
+Current limitations:
+
+- Does not yet support orchestrator commands such as `orchestrator-until` or `orchestrator-final-check`.
+- Does not yet write output artifacts such as `events.jsonl`, `opencode.log`, `metadata.json`, or status files.
+- Does not yet generate observer or stop plugins.
+- Does not yet generate a harness for subagent-mode agents.
+
 ## Environment variables
 
-- `OPENCODE_SANDBOX_ROOT`: Override the sandbox root. If unset, a temporary sandbox root is created.
-- `OPENCODE_SANDBOX_MODEL`: Override the model written to the generated sandbox config.
-- `OPENCODE_SANDBOX_STOP_PHASE`: For `orchestrator-until` only. Defaults to `after`; `before` is also allowed.
+- `OPENCODE_SANDBOX_LOG_LEVEL`: Override CLI v2 diagnostic logging level. Defaults to `info`; use `debug` for verbose sandbox diagnostics.
 
-## Output artifacts
+## Legacy CLI Output Artifacts
 
-Artifacts are written under `<sandbox-root>/output`:
+The original `sandbox-cli.ts` writes artifacts under `<sandbox-root>/output`:
 
 - `command.txt`: Reproducible command with sandbox environment variables.
 - `metadata.json`: Sandbox paths and run metadata.
@@ -60,18 +93,19 @@ Artifacts are written under `<sandbox-root>/output`:
 Run these from the repo root after changing sandbox code:
 
 ```sh
+npm --prefix opencode run build:sandbox
 npm --prefix opencode run build
-npm --prefix opencode run test:sandbox
+npm --prefix opencode run test:sandbox:v2
 ```
 
 `npm --prefix opencode run build` runs the OpenCode package build. It checks the orchestration-state plugin and compiles the sandbox TypeScript CLI.
 
-`npm --prefix opencode run test:sandbox` builds the sandbox CLI and runs the sandbox CLI tests. The tests use a fake `opencode` executable, so they do not make real model calls.
+`npm --prefix opencode run test:sandbox:v2` builds the sandbox CLI and runs the CLI v2 sandbox tests. The tests use a fake `opencode` executable, so they do not make real model calls.
+CLI v2 tests assert the clean user-facing stderr contract and intentionally do not mock or assert logger internals; real `pino` diagnostics may appear on terminal stderr during test runs.
 
 ## Notes
 
 - The CLI creates isolated XDG config, data, cache, and state homes under the sandbox root.
-- It copies `auth.json` and `mcp-auth.json` into the sandbox data directory if they are present.
 - The sandbox is intentionally left in place for inspection after each run.
 - Database files are not deleted; cleanup is limited to known marker and status files.
 - Subcommands belong to the CLI. The `justfile` is only the forwarding entrypoint.

@@ -8,8 +8,8 @@ number
 boolean
 null
 undefined
-string[]
-Array<string>
+string[] // This is an array
+Array<string> // Same as string[]
 object
 unknown
 any
@@ -148,4 +148,20 @@ File locations and config are defined in the config file.
 tsc -p sandbox/tsconfig.json
 ```
 
+### Debugging
 
+**Using a REPL**
+
+```typescript
+import repl from "node:repl";
+
+repl.start({ prompt: "debug> " });
+```
+
+## Prompt
+
+```
+You will act as a typescript teacher. 
+You will not look at any files unless I ask you to. 
+I know Python well including Pydantic but I am taking babysteps with Typescript
+```
