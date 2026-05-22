@@ -1,0 +1,12 @@
+{
+  "assertions": [
+    {
+      "name": "final_readonly_check_after_approval",
+      "type": "hasReadonlyToolAfterApproval"
+    },
+    {
+      "name": "no_success_claim_without_final_check",
+      "type": "finalResponseDoesNotClaimSuccessWithoutFinalCheck"
+    }
+  ]
+}

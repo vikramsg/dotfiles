@@ -1,7 +1,7 @@
 import { cac } from "cac";
 import { z } from "zod";
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, stat } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -76,6 +76,24 @@ export interface PreparedSingleAgentSandbox {
   sandboxAgentFile: Path;
 }
 
+export type AgentCopySpec = {
+  agentName: string;
+  sourceAgentFile: Path;
+};
+
+export interface MultiAgentSandboxSpec {
+  sourceRoot: Path;
+  sandboxRoot: Path;
+  sourceConfigFile: Path;
+  agents: readonly AgentCopySpec[];
+}
+
+export interface PreparedSandbox {
+  layout: SingleAgentSandboxLayout;
+  sandboxPluginFiles: readonly Path[];
+  sandboxAgentFiles: Readonly<Record<string, Path>>;
+}
+
 export interface RunSingleAgentInSandboxArgs {
   layout: SingleAgentSandboxLayout;
   agentName: string;
@@ -87,10 +105,79 @@ export type RunDeps = {
   cwd?: Path;
 };
 
+type ScenarioFile = {
+  name: string;
+  primaryAgent: string;
+  config?: Path;
+  agents: Record<string, Path>;
+  promptFile: Path;
+  fixtureDir?: Path;
+  expectedFile: Path;
+  scriptedSubagents?: Record<string, string[]>;
+  transcript?: TraceEvent[];
+};
+
+type ScenarioBundle = {
+  file: Path;
+  dir: Path;
+  scenario: ScenarioFile;
+  prompt: string;
+  expected: ExpectedAssertions;
+};
+
+type TaskCallTrace = {
+  agent: string;
+  prompt: string;
+  output: string;
+};
+
+type ToolCallTrace = {
+  tool: string;
+  phase?: string;
+};
+
+type TraceEvent =
+  | ({ type: "task" } & TaskCallTrace)
+  | ({ type: "tool" } & ToolCallTrace)
+  | { type: "final_response"; content: string };
+
+type AssertionSpec =
+  | { name: string; type: "taskPromptExcludes"; agent: string; forbidden: string[] }
+  | { name: string; type: "taskPromptIncludes"; agent: string; required: string[] }
+  | { name: string; type: "finalResponseExcludes"; forbidden: string[] }
+  | { name: string; type: "finalResponseIncludes"; required: string[] }
+  | { name: string; type: "hasReadonlyToolAfterApproval" }
+  | { name: string; type: "finalResponseDoesNotClaimSuccessWithoutFinalCheck" };
+
+type ExpectedAssertions = {
+  assertions: AssertionSpec[];
+};
+
+type AssertionResult = {
+  name: string;
+  passed: boolean;
+  message?: string;
+};
+
+type EvaluationResult = {
+  status: number;
+  score_inputs: {
+    task_calls: TaskCallTrace[];
+    reviewer_prompts: string[];
+    planner_prompts: string[];
+    implementer_prompts: string[];
+    readonly_tools_after_approval: ToolCallTrace[];
+    final_response: string;
+  };
+  assertions: AssertionResult[];
+};
+
 const Command = {
   Hello: "hello",
   HelloWorldSandbox: "hello-world",
   SingleAgent: "single-agent",
+  Scenario: "scenario",
+  Evaluate: "evaluate",
 } as const;
 
 const HelloWorldPrompt = "Respond with hello world.";
@@ -295,6 +382,58 @@ function assertSafeAgentName(agentName: string): void {
   }
 }
 
+async function assertSourceFileExists(file: Path, label: string): Promise<void> {
+  try {
+    const fileStat = await stat(file);
+    if (!fileStat.isFile()) {
+      throw new Error("not a file");
+    }
+  } catch {
+    throw new ConfigValidationError(`${label} does not exist: ${file}`);
+  }
+}
+
+async function requirePromptSource(
+  sourceRoot: Path,
+  options: { prompt?: string; promptFile?: Path },
+): Promise<string> {
+  if (options.prompt && options.promptFile) {
+    throw new UsageError("Use only one of --prompt or --prompt-file");
+  }
+  if (options.promptFile) {
+    return readFile(resolveFromRoot(sourceRoot, options.promptFile), "utf8");
+  }
+  if (options.prompt) {
+    return options.prompt;
+  }
+  throw new UsageError("--prompt or --prompt-file is required");
+}
+
+function parseJsonFile<T>(file: Path, label: string): Promise<T> {
+  return readFile(file, "utf8").then((text) => {
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new ConfigValidationError(`Could not parse ${label} ${file}`);
+    }
+  });
+}
+
+async function readScenarioBundle(
+  scenarioFile: Path,
+): Promise<ScenarioBundle> {
+  const file = path.resolve(scenarioFile);
+  const dir = path.dirname(file);
+  const scenario = await parseJsonFile<ScenarioFile>(file, "scenario file");
+  const prompt = await readFile(resolveFromRoot(dir, scenario.promptFile), "utf8");
+  const expected = await parseJsonFile<ExpectedAssertions>(
+    resolveFromRoot(dir, scenario.expectedFile),
+    "expected file",
+  );
+
+  return { file, dir, scenario, prompt, expected };
+}
+
 export async function defaultHelloWorldSpec(
   sourceRoot: Path,
   sandboxRoot: Path,
@@ -318,7 +457,28 @@ export async function defaultHelloWorldSpec(
 export async function prepareSingleAgentSandbox(
   spec: SingleAgentSandboxSpec,
 ): Promise<PreparedSingleAgentSandbox> {
-  assertSafeAgentName(spec.agentName);
+  const prepared = await prepareMultiAgentSandbox({
+    sourceRoot: spec.sourceRoot,
+    sandboxRoot: spec.sandboxRoot,
+    sourceConfigFile: spec.sourceConfigFile,
+    agents: [
+      { agentName: spec.agentName, sourceAgentFile: spec.sourceAgentFile },
+    ],
+  });
+
+  return {
+    layout: prepared.layout,
+    sandboxPluginFiles: prepared.sandboxPluginFiles,
+    sandboxAgentFile: prepared.sandboxAgentFiles[spec.agentName],
+  };
+}
+
+export async function prepareMultiAgentSandbox(
+  spec: MultiAgentSandboxSpec,
+): Promise<PreparedSandbox> {
+  for (const agent of spec.agents) {
+    assertSafeAgentName(agent.agentName);
+  }
 
   const validationLayout = deriveSingleAgentSandboxLayout({
     sandboxRoot: spec.sandboxRoot,
@@ -332,9 +492,14 @@ export async function prepareSingleAgentSandbox(
       assertFileExists(plugin.sourceFile, plugin.entry),
     ),
   );
+  await Promise.all(
+    spec.agents.map((agent) =>
+      assertSourceFileExists(agent.sourceAgentFile, `Agent ${agent.agentName}`),
+    ),
+  );
 
   const log = logger.bind({
-    agentName: spec.agentName,
+    agentNames: spec.agents.map((agent) => agent.agentName),
     sandboxRoot: spec.sandboxRoot,
     sourceRoot: spec.sourceRoot,
   });
@@ -344,7 +509,6 @@ export async function prepareSingleAgentSandbox(
   const layout = await createSingleAgentSandboxLayout({
     sandboxRoot: spec.sandboxRoot,
   });
-  const sandboxAgentFile = path.join(layout.agentDir, `${spec.agentName}.md`);
 
   await copyFile(spec.sourceConfigFile, layout.sandboxConfigFile);
   await Promise.all(
@@ -357,15 +521,22 @@ export async function prepareSingleAgentSandbox(
     (plugin) => plugin.sandboxFile,
   );
 
-  await copyFile(spec.sourceAgentFile, sandboxAgentFile);
+  const sandboxAgentFiles: Record<string, Path> = {};
+  await Promise.all(
+    spec.agents.map(async (agent) => {
+      const sandboxAgentFile = path.join(layout.agentDir, `${agent.agentName}.md`);
+      await copyFile(agent.sourceAgentFile, sandboxAgentFile);
+      sandboxAgentFiles[agent.agentName] = sandboxAgentFile;
+    }),
+  );
 
   log.info("sandbox.prepare.done", {
     sandboxConfigFile: layout.sandboxConfigFile,
     sandboxPluginFiles,
-    sandboxAgentFile,
+    sandboxAgentFiles,
   });
 
-  return { layout, sandboxPluginFiles, sandboxAgentFile };
+  return { layout, sandboxPluginFiles, sandboxAgentFiles };
 }
 
 export async function runSingleAgentInSandbox(
@@ -439,6 +610,294 @@ export async function runSingleAgentInSandbox(
   });
 }
 
+async function writeCapturedArtifacts(
+  layout: SingleAgentSandboxLayout,
+  result: { status: number; stdout: string; stderr: string; command: string[] },
+): Promise<void> {
+  await mkdir(layout.output, { recursive: true });
+  await Promise.all([
+    writeFile(path.join(layout.output, "stdout.txt"), result.stdout),
+    writeFile(path.join(layout.output, "stderr.txt"), result.stderr),
+    writeFile(path.join(layout.output, "final-response.md"), result.stdout),
+    writeFile(
+      path.join(layout.output, "status.json"),
+      `${JSON.stringify({ status: result.status }, null, 2)}\n`,
+    ),
+    writeFile(
+      path.join(layout.output, "metadata.json"),
+      `${JSON.stringify({ command: result.command, worktree: layout.worktree }, null, 2)}\n`,
+    ),
+    writeFile(
+      path.join(layout.output, "result.json"),
+      `${JSON.stringify(result, null, 2)}\n`,
+    ),
+  ]);
+}
+
+async function runCapturedOpencodeInSandbox(
+  args: RunSingleAgentInSandboxArgs,
+  io: CliIO,
+  deps: RunDeps = {},
+): Promise<number> {
+  const command = [
+    "run",
+    "--dir",
+    args.layout.worktree,
+    "--agent",
+    args.agentName,
+    args.prompt,
+  ];
+  const env = {
+    ...process.env,
+    ...deps.env,
+    XDG_CONFIG_HOME: args.layout.configHome,
+    XDG_DATA_HOME: args.layout.dataHome,
+    XDG_CACHE_HOME: args.layout.cacheHome,
+    XDG_STATE_HOME: args.layout.stateHome,
+    OPENCODE_SANDBOX_OUTPUT_DIR: args.layout.output,
+    OPENCODE_SANDBOX_TRACE_FILE: path.join(args.layout.output, "transcript.jsonl"),
+  };
+
+  return new Promise((resolve) => {
+    const child = spawn("opencode", command, {
+      cwd: deps.cwd ?? args.layout.worktree,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", async (error: NodeJS.ErrnoException) => {
+      const status = error.code === "ENOENT" ? 127 : 1;
+      const message =
+        error.code === "ENOENT"
+          ? "opencode CLI was not found on PATH\n"
+          : `Failed to run opencode: ${error.message}\n`;
+      stderr += message;
+      io.stderr.write(message);
+      await writeCapturedArtifacts(args.layout, { status, stdout, stderr, command });
+      resolve(status);
+    });
+
+    child.on("exit", async (code, signal) => {
+      const status = code ?? 1;
+      if (code === null) {
+        stderr += `opencode exited from signal ${signal ?? "unknown"}\n`;
+      }
+      await writeCapturedArtifacts(args.layout, { status, stdout, stderr, command });
+      resolve(status);
+    });
+  });
+}
+
+function parseAgentCandidates(raw?: string | string[]): Record<string, Path> {
+  const entries = (raw === undefined ? [] : Array.isArray(raw) ? raw : [raw]).filter(
+    (entry): entry is string => typeof entry === "string",
+  );
+  const candidates: Record<string, Path> = {};
+
+  for (const entry of entries) {
+    const separator = entry.indexOf("=");
+    if (separator <= 0 || separator === entry.length - 1) {
+      throw new UsageError(`Invalid --agent-candidate value: ${entry}`);
+    }
+    const agentName = entry.slice(0, separator);
+    assertSafeAgentName(agentName);
+    candidates[agentName] = path.resolve(entry.slice(separator + 1));
+  }
+
+  return candidates;
+}
+
+async function prepareScenarioSandbox(args: {
+  sourceRoot: Path;
+  sandboxRoot: Path;
+  bundle: ScenarioBundle;
+  agentCandidates?: Record<string, Path>;
+}): Promise<PreparedSandbox> {
+  const scenario = args.bundle.scenario;
+  const candidates = args.agentCandidates ?? {};
+  const agents = Object.entries(scenario.agents).map(([agentName, agentFile]) => ({
+    agentName,
+    sourceAgentFile: candidates[agentName] ?? resolveFromRoot(args.sourceRoot, agentFile),
+  }));
+  const prepared = await prepareMultiAgentSandbox({
+    sourceRoot: args.sourceRoot,
+    sandboxRoot: args.sandboxRoot,
+    sourceConfigFile: resolveFromRoot(args.sourceRoot, scenario.config ?? "opencode.json"),
+    agents,
+  });
+
+  if (scenario.fixtureDir) {
+    await cp(resolveFromRoot(args.bundle.dir, scenario.fixtureDir), prepared.layout.worktree, {
+      recursive: true,
+      force: true,
+    });
+  }
+
+  if (scenario.scriptedSubagents) {
+    await installSandboxTracePlugin(prepared.layout, scenario.scriptedSubagents);
+  }
+
+  await writeFile(
+    path.join(prepared.layout.output, "metadata.json"),
+    `${JSON.stringify(
+      {
+        scenario: scenario.name,
+        primaryAgent: scenario.primaryAgent,
+        promptFile: scenario.promptFile,
+        candidates: Object.keys(candidates),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  return prepared;
+}
+
+async function installSandboxTracePlugin(
+  layout: SingleAgentSandboxLayout,
+  scriptedSubagents: Record<string, string[]>,
+): Promise<void> {
+  const pluginFile = path.join(layout.pluginDir, "sandbox-task-trace.js");
+  await writeFile(
+    pluginFile,
+    `// Generated by sandbox cli-v2 for deterministic scenario traces.\nexport const scriptedSubagents = ${JSON.stringify(scriptedSubagents, null, 2)};\n`,
+  );
+
+  const config = JSON.parse(await readFile(layout.sandboxConfigFile, "utf8")) as {
+    plugin?: unknown;
+  };
+  const plugin = Array.isArray(config.plugin)
+    ? config.plugin
+    : typeof config.plugin === "string"
+      ? [config.plugin]
+      : [];
+  config.plugin = [...plugin, "./plugins/sandbox-task-trace.js"];
+  await writeFile(layout.sandboxConfigFile, `${JSON.stringify(config, null, 2)}\n`);
+}
+
+function syntheticTraceFromScenario(bundle: ScenarioBundle): TraceEvent[] {
+  if (bundle.scenario.transcript) {
+    return bundle.scenario.transcript;
+  }
+  const events: TraceEvent[] = [];
+  for (const [agent, outputs] of Object.entries(bundle.scenario.scriptedSubagents ?? {})) {
+    outputs.forEach((output, index) => {
+      events.push({
+        type: "task",
+        agent,
+        prompt: index === 0 ? bundle.prompt : output,
+        output,
+      });
+    });
+  }
+  return events;
+}
+
+async function readTraceEvents(layout: SingleAgentSandboxLayout): Promise<TraceEvent[]> {
+  const transcriptFile = path.join(layout.output, "transcript.jsonl");
+  try {
+    const text = await readFile(transcriptFile, "utf8");
+    return text
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as TraceEvent);
+  } catch {
+    return [];
+  }
+}
+
+function evaluateTrace(
+  events: TraceEvent[],
+  expected: ExpectedAssertions,
+  finalResponse: string,
+  status: number,
+): EvaluationResult {
+  const taskCalls = events.filter((event): event is { type: "task" } & TaskCallTrace => event.type === "task");
+  const finalEvent = [...events]
+    .reverse()
+    .find((event): event is { type: "final_response"; content: string } => event.type === "final_response");
+  const resolvedFinalResponse = finalEvent?.content ?? finalResponse;
+  const approvedIndex = events.findIndex(
+    (event) => event.type === "task" && event.agent === "reviewer" && /verdict:\s*APPROVED/i.test(event.output),
+  );
+  const readonlyToolsAfterApproval = events
+    .slice(approvedIndex >= 0 ? approvedIndex + 1 : events.length)
+    .filter((event): event is { type: "tool" } & ToolCallTrace =>
+      event.type === "tool" && ["read", "glob", "grep", "list"].includes(event.tool),
+    )
+    .map(({ tool, phase }) => ({ tool, phase }));
+  const score_inputs = {
+    task_calls: taskCalls.map(({ agent, prompt, output }) => ({ agent, prompt, output })),
+    reviewer_prompts: taskCalls.filter((call) => call.agent === "reviewer").map((call) => call.prompt),
+    planner_prompts: taskCalls.filter((call) => call.agent === "planner").map((call) => call.prompt),
+    implementer_prompts: taskCalls.filter((call) => call.agent === "implementer").map((call) => call.prompt),
+    readonly_tools_after_approval: readonlyToolsAfterApproval,
+    final_response: resolvedFinalResponse,
+  };
+  const assertions = expected.assertions.map((assertion) =>
+    runAssertion(assertion, taskCalls, resolvedFinalResponse, readonlyToolsAfterApproval, approvedIndex >= 0),
+  );
+
+  return { status, score_inputs, assertions };
+}
+
+function runAssertion(
+  assertion: AssertionSpec,
+  taskCalls: TaskCallTrace[],
+  finalResponse: string,
+  readonlyToolsAfterApproval: ToolCallTrace[],
+  hasApproval: boolean,
+): AssertionResult {
+  switch (assertion.type) {
+    case "taskPromptExcludes": {
+      const prompts = taskCalls.filter((call) => call.agent === assertion.agent).map((call) => call.prompt);
+      const forbidden = assertion.forbidden.find((text) => prompts.some((prompt) => prompt.includes(text)));
+      return forbidden
+        ? { name: assertion.name, passed: false, message: `${assertion.agent} prompt contained forbidden text: ${forbidden}` }
+        : { name: assertion.name, passed: true };
+    }
+    case "taskPromptIncludes": {
+      const prompts = taskCalls.filter((call) => call.agent === assertion.agent).map((call) => call.prompt).join("\n");
+      const missing = assertion.required.find((text) => !prompts.includes(text));
+      return missing
+        ? { name: assertion.name, passed: false, message: `${assertion.agent} prompt missed required text: ${missing}` }
+        : { name: assertion.name, passed: true };
+    }
+    case "finalResponseExcludes": {
+      const forbidden = assertion.forbidden.find((text) => finalResponse.includes(text));
+      return forbidden
+        ? { name: assertion.name, passed: false, message: `final response contained forbidden text: ${forbidden}` }
+        : { name: assertion.name, passed: true };
+    }
+    case "finalResponseIncludes": {
+      const missing = assertion.required.find((text) => !finalResponse.includes(text));
+      return missing
+        ? { name: assertion.name, passed: false, message: `final response missed required text: ${missing}` }
+        : { name: assertion.name, passed: true };
+    }
+    case "hasReadonlyToolAfterApproval":
+      return readonlyToolsAfterApproval.length > 0
+        ? { name: assertion.name, passed: true }
+        : { name: assertion.name, passed: false, message: "no read-only tool call after reviewer approval" };
+    case "finalResponseDoesNotClaimSuccessWithoutFinalCheck": {
+      const claimsSuccess = /\b(success|successful|done|completed|ready)\b/i.test(finalResponse);
+      return hasApproval && readonlyToolsAfterApproval.length === 0 && claimsSuccess
+        ? { name: assertion.name, passed: false, message: "final response claimed success without a final read-only check" }
+        : { name: assertion.name, passed: true };
+    }
+  }
+}
+
 function requiredOption(value: string | undefined, name: string): string {
   if (!value) {
     throw new UsageError(`${name} is required`);
@@ -472,6 +931,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
       "Source agent file, relative to --orig unless absolute",
     )
     .option("--prompt <text>", "Prompt/message passed to opencode run")
+    .option("--prompt-file <path>", "Prompt file, relative to --orig unless absolute")
     .action(
       async (options: {
         orig?: Path;
@@ -480,17 +940,20 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         agent?: string;
         agentFile?: Path;
         prompt?: string;
+        promptFile?: Path;
       }) => {
         const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
         const sandboxRoot = path.resolve(
           options.dest ??
             (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
         );
+        const agentName = requiredOption(options.agent, "--agent");
+        const prompt = await requirePromptSource(sourceRoot, options);
         const spec: SingleAgentSandboxSpec = {
           sourceRoot,
           sandboxRoot,
-          agentName: requiredOption(options.agent, "--agent"),
-          prompt: requiredOption(options.prompt, "--prompt"),
+          agentName,
+          prompt,
           sourceConfigFile: resolveFromRoot(
             sourceRoot,
             options.config ?? "opencode.json",
@@ -511,6 +974,101 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           io,
           deps,
         );
+      },
+    );
+
+  cli
+    .command(Command.Scenario, "Prepare a deterministic scenario sandbox")
+    .option("--orig <path>", "Source OpenCode config root")
+    .option("--dest <path>", "Sandbox destination directory")
+    .option("--scenario <path>", "Scenario JSON file")
+    .option("--agent-candidate <agent=file>", "Candidate agent replacement")
+    .action(
+      async (options: {
+        orig?: Path;
+        dest?: Path;
+        scenario?: Path;
+        agentCandidate?: string | string[];
+      }) => {
+        const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
+        const sandboxRoot = path.resolve(
+          options.dest ??
+            (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
+        );
+        const bundle = await readScenarioBundle(requiredOption(options.scenario, "--scenario"));
+        const candidates = parseAgentCandidates(options.agentCandidate);
+        await prepareScenarioSandbox({ sourceRoot, sandboxRoot, bundle, agentCandidates: candidates });
+        return 0;
+      },
+    );
+
+  cli
+    .command(Command.Evaluate, "Run and evaluate a scenario sandbox")
+    .option("--orig <path>", "Source OpenCode config root")
+    .option("--dest <path>", "Sandbox destination directory")
+    .option("--scenario <path>", "Scenario JSON file")
+    .option("--agent-candidate <agent=file>", "Candidate agent replacement")
+    .option("--json", "Write evaluation JSON to stdout")
+    .action(
+      async (options: {
+        orig?: Path;
+        dest?: Path;
+        scenario?: Path;
+        agentCandidate?: string | string[];
+        json?: boolean;
+      }) => {
+        const sourceRoot = path.resolve(options.orig ?? currentPackageRoot());
+        const sandboxRoot = path.resolve(
+          options.dest ??
+            (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))),
+        );
+        const bundle = await readScenarioBundle(requiredOption(options.scenario, "--scenario"));
+        const candidates = parseAgentCandidates(options.agentCandidate);
+        const prepared = await prepareScenarioSandbox({ sourceRoot, sandboxRoot, bundle, agentCandidates: candidates });
+        let status = 0;
+        let events = syntheticTraceFromScenario(bundle);
+        let finalResponse = "";
+
+        if (!bundle.scenario.scriptedSubagents) {
+          status = await runCapturedOpencodeInSandbox(
+            {
+              layout: prepared.layout,
+              agentName: bundle.scenario.primaryAgent,
+              prompt: bundle.prompt,
+            },
+            io,
+            deps,
+          );
+          events = await readTraceEvents(prepared.layout);
+          try {
+            finalResponse = await readFile(path.join(prepared.layout.output, "final-response.md"), "utf8");
+          } catch {
+            finalResponse = "";
+          }
+        } else {
+          finalResponse = events.find((event): event is { type: "final_response"; content: string } => event.type === "final_response")?.content ?? "";
+          await writeFile(
+            path.join(prepared.layout.output, "transcript.jsonl"),
+            events.map((event) => JSON.stringify(event)).join("\n") + (events.length ? "\n" : ""),
+          );
+          await writeCapturedArtifacts(prepared.layout, {
+            status,
+            stdout: finalResponse,
+            stderr: "",
+            command: ["scripted", bundle.scenario.name],
+          });
+        }
+
+        const evaluation = evaluateTrace(events, bundle.expected, finalResponse, status);
+        await writeFile(
+          path.join(prepared.layout.output, "evaluation.json"),
+          `${JSON.stringify(evaluation, null, 2)}\n`,
+        );
+        if (options.json) {
+          io.stdout.write(`${JSON.stringify(evaluation, null, 2)}\n`);
+          return 0;
+        }
+        return evaluation.assertions.every((assertion) => assertion.passed) ? status : 1;
       },
     );
 

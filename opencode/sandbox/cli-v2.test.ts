@@ -566,6 +566,201 @@ describe("cli-v2", () => {
     await expect(readFile(path.join(sandboxRoot, "config", "opencode", "agents", "hello-world.md"), "utf8")).rejects.toThrow()
   })
 
+  it("runs single-agent with prompt text loaded from a file", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const files = await writeSourceFiles(orig)
+    const promptFile = path.join(orig, "prompt.md")
+    const prompt = "Line one\nLine two"
+    const recordPath = path.join(dest, "opencode-record.json")
+    const fakeOpencode = path.join(bin, "opencode")
+
+    await writeFile(promptFile, prompt)
+    await writeFile(
+      fakeOpencode,
+      `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs"\nwriteFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ args: process.argv.slice(2) }, null, 2))\nprocess.exit(0)\n`,
+    )
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "single-agent",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--agent",
+        "custom-agent",
+        "--agent-file",
+        files.sourceAgentFile,
+        "--prompt-file",
+        "prompt.md",
+      ],
+      { stdout: { write() {} }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const record = JSON.parse(await readFile(recordPath, "utf8"))
+    expect(status).toBe(0)
+    expect(record.args.at(-1)).toBe(prompt)
+  })
+
+  it("rejects using both inline prompt and prompt file", async () => {
+    let stderr = ""
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "single-agent",
+        "--agent",
+        "custom-agent",
+        "--agent-file",
+        "agents/test.md",
+        "--prompt",
+        "hello",
+        "--prompt-file",
+        "prompt.md",
+      ],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toBe("Use only one of --prompt or --prompt-file\n")
+  })
+
+  it("prepares scenario agents, fixtures, and candidate replacements", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const config = path.join(orig, "opencode.json")
+    const orchestrator = path.join(orig, "agents", "orchestrator.md")
+    const planner = path.join(orig, "agents", "planner.md")
+    const candidate = path.join(scenarioRoot, "candidate-orchestrator.md")
+
+    await mkdir(path.dirname(orchestrator), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(config, JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(orchestrator, "repo orchestrator\n")
+    await writeFile(planner, "repo planner\n")
+    await writeFile(candidate, "candidate orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "worktree", "fixture.txt"), "fixture\n")
+    await writeFile(
+      path.join(scenarioRoot, "scenario.json"),
+      JSON.stringify(
+        {
+          name: "candidate-test",
+          primaryAgent: "orchestrator",
+          agents: { orchestrator: "agents/orchestrator.md", planner: "agents/planner.md" },
+          promptFile: "request.md",
+          fixtureDir: "worktree",
+          expectedFile: "expected.json",
+        },
+        null,
+        2,
+      ),
+    )
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "scenario",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--scenario",
+        path.join(scenarioRoot, "scenario.json"),
+        "--agent-candidate",
+        `orchestrator=${candidate}`,
+      ],
+      { stdout: { write() {} }, stderr: { write() {} } },
+    )
+
+    const sandboxRoot = path.resolve(dest)
+    expect(status).toBe(0)
+    expect(await readFile(path.join(sandboxRoot, "config", "opencode", "agents", "orchestrator.md"), "utf8")).toBe("candidate orchestrator\n")
+    expect(await readFile(path.join(sandboxRoot, "config", "opencode", "agents", "planner.md"), "utf8")).toBe("repo planner\n")
+    expect(await readFile(path.join(sandboxRoot, "worktree", "fixture.txt"), "utf8")).toBe("fixture\n")
+    expect(await readFile(orchestrator, "utf8")).toBe("repo orchestrator\n")
+  })
+
+  it("evaluates a captured scenario transcript and writes artifacts", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+    let stderr = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Review the code.\n")
+    await writeFile(
+      path.join(scenarioRoot, "expected.json"),
+      JSON.stringify({ assertions: [{ name: "final", type: "finalResponseIncludes", required: ["done from transcript"] }] }, null, 2),
+    )
+    await writeFile(
+      path.join(scenarioRoot, "scenario.json"),
+      JSON.stringify(
+        {
+          name: "captured-test",
+          primaryAgent: "orchestrator",
+          agents: { orchestrator: "agents/orchestrator.md" },
+          promptFile: "request.md",
+          fixtureDir: "worktree",
+          expectedFile: "expected.json",
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      fakeOpencode,
+      `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs"\nconst events = [\n  { type: "task", agent: "planner", prompt: "make a plan", output: "plan" },\n  { type: "task", agent: "reviewer", prompt: "review", output: "verdict: APPROVED" },\n  { type: "tool", tool: "read", phase: "final-check" },\n  { type: "final_response", content: "done from transcript" }\n]\nwriteFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, events.map((event) => JSON.stringify(event)).join("\\n") + "\\n")\nconsole.log("done from stdout")\nconsole.error("stderr text")\nprocess.exit(7)\n`,
+    )
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "evaluate",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--scenario",
+        path.join(scenarioRoot, "scenario.json"),
+        "--json",
+      ],
+      { stdout: { write(text) { stdout += text } }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    expect(stderr).toBe("")
+    expect(status).toBe(0)
+    const evaluation = JSON.parse(stdout)
+    const outputDir = path.join(path.resolve(dest), "output")
+    expect(evaluation.status).toBe(7)
+    expect(evaluation.assertions).toEqual([{ name: "final", passed: true }])
+    expect(evaluation.score_inputs.planner_prompts).toEqual(["make a plan"])
+    expect(evaluation.score_inputs.readonly_tools_after_approval).toEqual([{ tool: "read", phase: "final-check" }])
+    expect(await readFile(path.join(outputDir, "stdout.txt"), "utf8")).toBe("done from stdout\n")
+    expect(await readFile(path.join(outputDir, "stderr.txt"), "utf8")).toBe("stderr text\n")
+    expect(JSON.parse(await readFile(path.join(outputDir, "status.json"), "utf8"))).toEqual({ status: 7 })
+    expect(JSON.parse(await readFile(path.join(outputDir, "evaluation.json"), "utf8"))).toEqual(evaluation)
+  })
+
   it("returns a clean failure when opencode is missing", async () => {
     const orig = await tempDir()
     const dest = await tempDir("cli-v2-sandbox-")

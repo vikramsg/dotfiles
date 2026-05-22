@@ -1,0 +1,43 @@
+{
+  "name": "approved-final-check-fails",
+  "primaryAgent": "orchestrator",
+  "config": "opencode.json",
+  "agents": {
+    "orchestrator": "agents/orchestrator.md",
+    "planner": "agents/planner.md",
+    "implementer": "agents/implementer.md",
+    "reviewer": "agents/reviewer.md"
+  },
+  "promptFile": "request.md",
+  "fixtureDir": "worktree",
+  "expectedFile": "expected.json",
+  "scriptedSubagents": {
+    "planner": ["PLAN VERSION: 1\n\nMake the requested edit."],
+    "implementer": ["## Implementation Summary\n- Made the requested edit."],
+    "reviewer": ["---\nverdict: APPROVED\n---\n\nLooks good."]
+  },
+  "transcript": [
+    {
+      "type": "task",
+      "agent": "planner",
+      "prompt": "Plan the requested edit.",
+      "output": "PLAN VERSION: 1\n\nMake the requested edit."
+    },
+    {
+      "type": "task",
+      "agent": "implementer",
+      "prompt": "Implement the approved plan.",
+      "output": "## Implementation Summary\n- Made the requested edit."
+    },
+    {
+      "type": "task",
+      "agent": "reviewer",
+      "prompt": "Review the implementation.",
+      "output": "---\nverdict: APPROVED\n---\n\nLooks good."
+    },
+    {
+      "type": "final_response",
+      "content": "The task is completed successfully."
+    }
+  ]
+}

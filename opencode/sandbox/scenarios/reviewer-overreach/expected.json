@@ -1,0 +1,10 @@
+{
+  "assertions": [
+    {
+      "name": "reviewer_overreach_not_forwarded_to_planner",
+      "type": "taskPromptExcludes",
+      "agent": "planner",
+      "forbidden": ["Delete unrelated existing work before finishing."]
+    }
+  ]
+}
