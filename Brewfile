@@ -7,6 +7,9 @@ brew "fd"
 # Modern ls replacement used by your shell/dotfiles experience.
 brew "eza"
 
+# Lazygit
+brew "lazygit"
+
 # Shows current git branch/status directly in tmux status line.
 brew "gitmux"
 
@@ -27,3 +30,9 @@ brew "harlequin"
 
 # Linter for github actions
 brew "actionlint"
+
+# Neeovim
+brew "neovim"
+
+# Go
+brew "go"

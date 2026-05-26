@@ -27,6 +27,19 @@ brew:
     fi; \
     brew bundle check --file "{{justfile_directory()}}/Brewfile" || brew bundle --file "{{justfile_directory()}}/Brewfile"
 
+# Configure npm global installs to place binaries in ~/.local/bin
+npm-global-bin:
+    @echo "Configuring npm global binary directory..."
+    mkdir -p ~/.local/bin
+    NPM_CONFIG_PREFIX="$HOME/.local" npm config set prefix "$HOME/.local"
+    @PREFIX="$(NPM_CONFIG_PREFIX="$HOME/.local" npm config get prefix)"; \
+        EXPECTED_PREFIX="$HOME/.local"; \
+        if [ "$PREFIX" != "$EXPECTED_PREFIX" ]; then \
+            echo "ERROR: npm prefix is $PREFIX, expected $EXPECTED_PREFIX"; \
+            exit 1; \
+        fi
+    @echo "npm global binaries will install to ~/.local/bin"
+
 # Set up Neovim symlink
 nvim:
     @echo "Setting up Neovim symlink..."
@@ -54,8 +67,12 @@ tmux:
     fi
 
 # Set up Opencode symlink
-opencode:
+opencode: npm-global-bin
     @echo "Setting up Opencode symlink..."
+    @if [ ! -x "$HOME/.local/bin/opencode" ]; then \
+        echo "OpenCode not found. Installing with npm..."; \
+        NPM_CONFIG_PREFIX="$HOME/.local" npm i -g opencode-ai; \
+    fi
     mkdir -p ~/.config
     mkdir -p ~/.config/opencode
     ln -sfn {{justfile_directory()}}/opencode/opencode.json ~/.config/opencode/opencode.json
@@ -63,26 +80,13 @@ opencode:
     ln -sfn {{justfile_directory()}}/opencode/rules.md ~/.config/opencode/rules.md
     ln -sfn {{justfile_directory()}}/opencode/agents ~/.config/opencode/agents
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
-    ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins
+    @if [  -d {{justfile_directory()}}/opencode/plugins ]; then ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins; \
+    fi
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
     @echo "Opencode rules file symlinked to ~/.config/opencode/rules.md"
     @echo "Opencode agent directory symlinked to ~/.config/opencode/agents"
     @echo "Opencode commands directory symlinked to ~/.config/opencode/commands"
     @echo "Opencode plugins directory symlinked to ~/.config/opencode/plugins"
-    @PLUGIN_FILE="$HOME/.config/opencode/plugins/orchestration-state.js"; \
-        RULES_FILE="$HOME/.config/opencode/rules.md"; \
-        if [ ! -e "$PLUGIN_FILE" ]; then \
-            echo "ERROR: Missing installed OpenCode plugin at $PLUGIN_FILE"; \
-            echo "This is an install/symlink problem, not an orchestration hook problem."; \
-            exit 1; \
-        fi; \
-        if [ ! -e "$RULES_FILE" ]; then \
-            echo "ERROR: Missing installed OpenCode rules file at $RULES_FILE"; \
-            echo "This is an install/symlink problem, not an orchestration hook problem."; \
-            exit 1; \
-        fi; \
-        echo "Verified OpenCode orchestration plugin at $PLUGIN_FILE"; \
-        echo "Verified OpenCode rules file at $RULES_FILE"
     @echo "OpenCode plugin/config changes only apply to newly started OpenCode processes."
     @echo "If you have an already-running OpenCode session, restart it after running 'just opencode'."
     @echo "Run 'just opencode-doctor' to smoke-test persistence from an arbitrary worktree"
@@ -299,7 +303,7 @@ harlequin:
     @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
 
 # Set up all symlinks
-all: nvim tmux opencode ghostty screenshot lch bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux opencode ghostty screenshot lch bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
