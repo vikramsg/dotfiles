@@ -56,6 +56,10 @@ tmux:
 # Set up Opencode symlink
 opencode:
     @echo "Setting up Opencode symlink..."
+    @if ! command -v opencode > /dev/null; then \
+        echo "Homebrew not found. Installing..."; \
+        npm i -g opencode-ai; \
+    fi
     mkdir -p ~/.config
     mkdir -p ~/.config/opencode
     ln -sfn {{justfile_directory()}}/opencode/opencode.json ~/.config/opencode/opencode.json
@@ -63,26 +67,13 @@ opencode:
     ln -sfn {{justfile_directory()}}/opencode/rules.md ~/.config/opencode/rules.md
     ln -sfn {{justfile_directory()}}/opencode/agents ~/.config/opencode/agents
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
-    ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins
+    @if [  -d {{justfile_directory()}}/opencode/plugins ]; then ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins; \
+    fi
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
     @echo "Opencode rules file symlinked to ~/.config/opencode/rules.md"
     @echo "Opencode agent directory symlinked to ~/.config/opencode/agents"
     @echo "Opencode commands directory symlinked to ~/.config/opencode/commands"
     @echo "Opencode plugins directory symlinked to ~/.config/opencode/plugins"
-    @PLUGIN_FILE="$HOME/.config/opencode/plugins/orchestration-state.js"; \
-        RULES_FILE="$HOME/.config/opencode/rules.md"; \
-        if [ ! -e "$PLUGIN_FILE" ]; then \
-            echo "ERROR: Missing installed OpenCode plugin at $PLUGIN_FILE"; \
-            echo "This is an install/symlink problem, not an orchestration hook problem."; \
-            exit 1; \
-        fi; \
-        if [ ! -e "$RULES_FILE" ]; then \
-            echo "ERROR: Missing installed OpenCode rules file at $RULES_FILE"; \
-            echo "This is an install/symlink problem, not an orchestration hook problem."; \
-            exit 1; \
-        fi; \
-        echo "Verified OpenCode orchestration plugin at $PLUGIN_FILE"; \
-        echo "Verified OpenCode rules file at $RULES_FILE"
     @echo "OpenCode plugin/config changes only apply to newly started OpenCode processes."
     @echo "If you have an already-running OpenCode session, restart it after running 'just opencode'."
     @echo "Run 'just opencode-doctor' to smoke-test persistence from an arbitrary worktree"

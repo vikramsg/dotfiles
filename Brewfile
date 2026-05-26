@@ -27,3 +27,9 @@ brew "harlequin"
 
 # Linter for github actions
 brew "actionlint"
+
+# Neeovim
+brew "neovim"
+
+# Go
+brew "go"
