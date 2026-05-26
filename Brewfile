@@ -34,5 +34,8 @@ brew "actionlint"
 # Neeovim
 brew "neovim"
 
+# nvim-treesitter `main` shells out to this CLI when building parsers.
+brew "tree-sitter-cli"
+
 # Go
 brew "go"
