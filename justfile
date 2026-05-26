@@ -27,6 +27,19 @@ brew:
     fi; \
     brew bundle check --file "{{justfile_directory()}}/Brewfile" || brew bundle --file "{{justfile_directory()}}/Brewfile"
 
+# Configure npm global installs to place binaries in ~/.local/bin
+npm-global-bin:
+    @echo "Configuring npm global binary directory..."
+    mkdir -p ~/.local/bin
+    NPM_CONFIG_PREFIX="$HOME/.local" npm config set prefix "$HOME/.local"
+    @PREFIX="$(NPM_CONFIG_PREFIX="$HOME/.local" npm config get prefix)"; \
+        EXPECTED_PREFIX="$HOME/.local"; \
+        if [ "$PREFIX" != "$EXPECTED_PREFIX" ]; then \
+            echo "ERROR: npm prefix is $PREFIX, expected $EXPECTED_PREFIX"; \
+            exit 1; \
+        fi
+    @echo "npm global binaries will install to ~/.local/bin"
+
 # Set up Neovim symlink
 nvim:
     @echo "Setting up Neovim symlink..."
@@ -54,11 +67,11 @@ tmux:
     fi
 
 # Set up Opencode symlink
-opencode:
+opencode: npm-global-bin
     @echo "Setting up Opencode symlink..."
-    @if ! command -v opencode > /dev/null; then \
-        echo "Homebrew not found. Installing..."; \
-        npm i -g opencode-ai; \
+    @if [ ! -x "$HOME/.local/bin/opencode" ]; then \
+        echo "OpenCode not found. Installing with npm..."; \
+        NPM_CONFIG_PREFIX="$HOME/.local" npm i -g opencode-ai; \
     fi
     mkdir -p ~/.config
     mkdir -p ~/.config/opencode
@@ -290,7 +303,7 @@ harlequin:
     @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
 
 # Set up all symlinks
-all: nvim tmux opencode ghostty screenshot lch bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux opencode ghostty screenshot lch bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
