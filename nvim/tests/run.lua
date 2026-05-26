@@ -3,6 +3,7 @@ local M = {}
 local specs = {
 	"tests.diffview_picker_spec",
 	"tests.snacks_explorer_reveal_spec",
+	"tests.treesitter_main_spec",
 	"tests.typescript_indent_spec",
 }
 

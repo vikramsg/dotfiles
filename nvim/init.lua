@@ -660,10 +660,9 @@ require("lazy").setup({
 
 	{ -- Highlight, edit, and navigate code
 		"nvim-treesitter/nvim-treesitter",
-		branch = "master",
+		branch = "main",
+		lazy = false,
 		build = ":TSUpdate",
-		main = "nvim-treesitter.configs", -- Sets main module to use for opts
-		-- [[ Configure Treesitter ]] See `:help nvim-treesitter`
 		opts = {
 			ensure_installed = {
 				"bash",
@@ -683,20 +682,52 @@ require("lazy").setup({
 				"vim",
 				"vimdoc",
 			},
-			-- Autoinstall languages that are not installed
-			auto_install = true,
-			highlight = {
-				enable = true,
-				-- Some languages depend on vim's regex highlighting system (such as Ruby) for indent rules.
-				--  If you are experiencing weird indenting issues, add the language to
-				--  the list of additional_vim_regex_highlighting and disabled languages for indent.
-				additional_vim_regex_highlighting = { "ruby" },
-			},
-			indent = {
-				enable = true,
-				disable = { "ruby" },
-			},
 		},
+		config = function(_, opts)
+			-- nvim-treesitter `main` removed the old `nvim-treesitter.configs` module.
+			-- LazyVim wraps this with helper functions; with plain lazy.nvim we keep the
+			-- equivalent parser install and FileType feature-gating here instead.
+			-- Reference: https://github.com/LazyVim/LazyVim/blob/ef272ff7cc9b53d48baf6544618b5923d65c0282/lua/lazyvim/plugins/treesitter.lua
+			local treesitter = require("nvim-treesitter")
+			treesitter.setup({
+				-- Keep generated parsers out of the plugin checkout so stale parser .so
+				-- files cannot shadow Neovim's runtime or freshly installed parsers.
+				install_dir = vim.fn.stdpath("data") .. "/site",
+			})
+
+			local ensure_installed = opts.ensure_installed or {}
+			local installed = treesitter.get_installed("parsers")
+			local missing = vim.tbl_filter(function(lang)
+				return not vim.tbl_contains(installed, lang)
+			end, ensure_installed)
+
+			if #missing > 0 then
+				treesitter.install(missing, { summary = true })
+			end
+
+			local function has_query(lang, query)
+				local ok, parsed_query = pcall(vim.treesitter.query.get, lang, query)
+				return ok and parsed_query ~= nil
+			end
+
+			vim.api.nvim_create_autocmd("FileType", {
+				group = vim.api.nvim_create_augroup("dotfiles-treesitter", { clear = true }),
+				callback = function(event)
+					local lang = vim.treesitter.language.get_lang(event.match) or event.match
+					if not vim.tbl_contains(ensure_installed, lang) then
+						return
+					end
+
+					if has_query(lang, "highlights") then
+						pcall(vim.treesitter.start, event.buf)
+					end
+
+					if has_query(lang, "indents") then
+						vim.bo[event.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+					end
+				end,
+			})
+		end,
 	},
 
 	------------------------------------------------------------------------------
