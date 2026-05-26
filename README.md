@@ -22,3 +22,10 @@ Then do the following to setup dotfiles.
 just all
 ```
 
+## Troubleshooting
+
+1. When initially installing on a machine, prefer first installing
+    - `just brew`
+    - `tmux`
+    - `opencode`
+    - `nvim`
