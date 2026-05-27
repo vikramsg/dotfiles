@@ -49,3 +49,40 @@ Host vm.kunda
 Host vm.btop
     # -d detaches ghost clients left behind by stale SSH sessions.
     RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t btop
+
+Host vm-us vm-us.*
+    RequestTTY yes
+    # Remove stale local UNIX sockets during reconnects.
+    StreamLocalBindUnlink yes
+
+    # Autossh resilience: force SSH to fail fast after sleep/wake so autossh can retry.
+    # Client sends keepalive probes every 15 seconds.
+    ServerAliveInterval 15
+    # After 3 missed probes (45s), SSH exits instead of hanging forever.
+    ServerAliveCountMax 3
+    # If any port forward cannot bind on reconnect, fail hard and let autossh restart.
+    ExitOnForwardFailure yes
+
+Host vm-us.mx
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx
+
+Host vm-us.mx-worktree
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx-worktree
+
+Host vm-us.mx-wt2
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t mx-wt2
+
+Host vm-us.dotfiles
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t dotfiles
+
+Host vm-us.kunda
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t knda
+
+Host vm-us.btop
+    # -d detaches ghost clients left behind by stale SSH sessions.
+    RemoteCommand /home/linuxbrew/.linuxbrew/bin/tmux a -d -t btop
