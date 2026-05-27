@@ -41,3 +41,6 @@ brew "tree-sitter-cli"
 
 # Go
 brew "go"
+
+# Duckdb for analytics 
+brew "duckdb"
