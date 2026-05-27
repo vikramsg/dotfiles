@@ -3,6 +3,8 @@ brew "autossh"
 brew "fzf"
 # Fast file finder used by snacks explorer search.
 brew "fd"
+# ripgrep used in grep search inside neovim
+brew "rg"
 
 # Modern ls replacement used by your shell/dotfiles experience.
 brew "eza"
@@ -39,3 +41,6 @@ brew "tree-sitter-cli"
 
 # Go
 brew "go"
+
+# Duckdb for analytics 
+brew "duckdb"

@@ -28,7 +28,7 @@ command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0
 
 [[tabs]]
 name = "knda"
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm-us.kunda"
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm-us.knda"
 
 [[tabs]]
 name = "infra"

@@ -10,7 +10,7 @@
 1. Do not remove pre-existing changes from the PR
 2. Do not remove plan.md or ticket.md
 3. Make sure to add code comments as stated in patterns and docstrings
-4. Make sure to run full pipeline for comed. First exmpty out the relevant rows in the localhost DB. Then run hosting capacity and then substation. Make sure pipelines run, and geometry is populated in the table.
-5. Every decision you make that is not directly in the plan, record in implementation_notes.md for me to review at the end
-6. Make sure all checks and tests are green.
+4. Every decision you make that is not directly in the plan, record in implementation_notes.md for me to review at the end
+5. Make sure all checks and tests are green.
+6. Do not add tests asserting logs, code comments, docstrings, descriptions. All tests should be for actual functionality. Code comments/docstrings/logs are not functionality.
 
