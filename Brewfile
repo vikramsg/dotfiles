@@ -44,3 +44,5 @@ brew "go"
 
 # Duckdb for analytics 
 brew "duckdb"
+# Raster analytics
+brew "gdal"
