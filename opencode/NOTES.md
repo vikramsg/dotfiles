@@ -3,6 +3,7 @@
 2. Add a teaching agent. That does not read files and only answers based on idiomatic usage
 3. Create a plugin that auto approves any read/glob access to .local, .config... etc
     * And auto denies everything else
+4. The implementer, since it creates tests first, always then creates backward compatiblity shims after
 
 
 ## Prompt
