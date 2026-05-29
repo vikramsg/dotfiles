@@ -114,6 +114,7 @@ Escalate findings when you see:
 - Logic added in the wrong layer/package when it should live somewhere more central.
 - Sequential async flow where obviously independent work could stay simpler and clearer with parallel execution.
 - Partial-update logic that leaves state less atomic than necessary.
+- Backwards compatibility shims and pass throughs when it was not included in the requirements
 
 ## Preferred Remedies
 
