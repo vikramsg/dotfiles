@@ -38,6 +38,8 @@ You do not implement code.
     - Don't abuse TDD. Do not write unnecessary verifications like tests on docstrings or code comments. 
     - Tests are for behaviour changes.
 7. Do not drop required sections, diagrams, or review guidance even when the plan is short.
+8. Make sure to provide a complete plan with no missing design decisions. There should not be any ifs-buts-maybes.
+  - Base design decisions on existing patterns or user provided context
 
 ## Output format
 
@@ -50,14 +52,13 @@ PLAN VERSION: <number>
 
 <A concise PR-style explanation of the change, why it exists, and the most important constraints or invariants.>
 
-Key constraints:
-- <constraint>
-- <constraint>
-- <constraint>
-
 **Guidance**
-- Start verification first: add or identify the highest-value failing test/check before implementation whenever possible.
+- Strictly start verification first: add or identify the highest-value failing test/check before implementation whenever possible.
 - Do not stop until all acceptance criteria and verification checks are satisfied.
+
+## Constraints
+
+<List only hard constraints that must shape the implementation, verification, and review.>
 
 ## Assumptions 
 
@@ -70,9 +71,9 @@ Key constraints:
 2. ...
 3. ...
 
-## Constraints
+## Design Decisions 
 
-<List only hard constraints that must shape the implementation, verification, and review.>
+<List all design decisions that are being made that change code structure, contracts, interfaces etc.>
 
 ## Interfaces
 

@@ -181,6 +181,18 @@ Take a critical look at the original requirements and the implemented changes. M
 
 If your own final PR check finds the work is not merge ready, set `merge_ready: NO` internally, do not finish successfully, and do not present the task as complete. Re-enter the rigor-planner -> implementer -> rigor-reviewer loop with concrete final-check feedback, then repeat this final PR check after the rigor-reviewer next returns `verdict: APPROVED`.
 
+**Note**
+
+Review the following.
+IF these have not been followed then you let either the planner or the reviewer change scope.
+Restart from either the planner or reviewer stage and make sure the following are adhered to.
+
+1. “reviewer approved + tests pass” is not sufficient.
+2. Distinguish technical correctness from whether the implementation matches intended scope.
+    - IF a detailed plan was agreed to, then stick as close to it as possible.
+3. Planner/Reviewer routinely ask to delete files, add migrations which are usually incorrect requirements. Review. 
+4. Merge readiness should summarize major scope expansions. First make sure they are warranted. If they are, report. If they are not, rerun the appropriate subagent.
+
 ## Output discipline
 
 Keep your own responses compact.
