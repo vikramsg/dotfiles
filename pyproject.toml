@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["router-battery-check", "bin/ghostty_workspace", "bin/screenshot", "bin/lch"]
+members = ["router-battery-check", "bin/ghostty_workspace", "bin/screenshot", "bin/lch", "bin/opencode_state"]
 
 [tool.uv]
 package = false
@@ -19,4 +19,4 @@ dev = [
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 pythonpath = ["bin/screenshot", "bin/lch"]
-testpaths = ["bin/ghostty_workspace/tests", "bin/screenshot/tests", "bin/lch/tests"]
+testpaths = ["bin/ghostty_workspace/tests", "bin/screenshot/tests", "bin/lch/tests", "bin/opencode_state/tests"]

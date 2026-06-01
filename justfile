@@ -127,6 +127,10 @@ opencode-doctor:
 opencode-sandbox +args:
     @npm --prefix "{{justfile_directory()}}/opencode" run --silent sandbox -- "$@"
 
+# Install the read-only OpenCode SQLite analytics tool
+opencode-state:
+    uv tool install ./bin/opencode_state --force --no-cache
+
 
 # Set up Ghostty symlink
 ghostty:
