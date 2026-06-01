@@ -10,7 +10,7 @@ from click.testing import CliRunner
 import opencode_state.config as config_module
 from opencode_state.cli import main
 from opencode_state.config import resolve_paths
-from opencode_state.db import open_readonly_connection, safe_select_query
+from opencode_state.db import open_readonly_connection, run_select_query, safe_select_query
 from opencode_state.stats import daily_usage, make_window, session_usage
 
 
@@ -167,6 +167,42 @@ def test_explicit_empty_env_uses_cwd_without_reading_process_home(tmp_path, monk
         assert paths.db_path == tmp_path / ".local" / "share" / "opencode" / "opencode.db"
 
 
+def test_explicit_env_tilde_paths_use_explicit_home_not_process_home(tmp_path, monkeypatch):
+    process_home = tmp_path / "process-home"
+    explicit_home = tmp_path / "explicit-home"
+    monkeypatch.setenv("HOME", str(process_home))
+
+    paths = resolve_paths(
+        env={
+            "HOME": str(explicit_home),
+            "OPENCODE_CONFIG": "~/opencode.json",
+            "OPENCODE_DB": "~/state.db",
+            "XDG_CONFIG_HOME": "~/xdg-config",
+            "XDG_DATA_HOME": "~/xdg-data",
+        },
+        cwd=tmp_path,
+    )
+
+    assert paths.config_path == explicit_home / "opencode.json"
+    assert paths.db_path == explicit_home / "state.db"
+    assert not str(paths.config_path).startswith(str(process_home))
+    assert not str(paths.db_path).startswith(str(process_home))
+
+    xdg_paths = resolve_paths(
+        env={
+            "HOME": str(explicit_home),
+            "XDG_CONFIG_HOME": "~/xdg-config",
+            "XDG_DATA_HOME": "~/xdg-data",
+        },
+        cwd=tmp_path,
+    )
+
+    assert xdg_paths.config_path == explicit_home / "xdg-config" / "opencode" / "opencode.json"
+    assert xdg_paths.db_path == explicit_home / "xdg-data" / "opencode" / "opencode.db"
+    assert not str(xdg_paths.config_path).startswith(str(process_home))
+    assert not str(xdg_paths.db_path).startswith(str(process_home))
+
+
 def test_summary_fails_clearly_for_missing_db(tmp_path):
     missing = tmp_path / "missing.db"
 
@@ -287,6 +323,16 @@ def test_stats_return_typed_domain_output_models(tmp_path):
     assert sessions_payload[0]["last_seen"] == "2024-01-01T00:00:00Z"
 
 
+def test_make_window_days_anchor_to_until_and_rejects_inverted_ranges():
+    window = make_window(days=7, until="2024-01-31")
+
+    assert window.since == date(2024, 1, 25)
+    assert window.until == date(2024, 1, 31)
+
+    with pytest.raises(ValueError, match="--since must be on or before --until"):
+        make_window(since="2024-02-01", until="2024-01-31")
+
+
 def test_models_use_message_provider_and_model_metadata(tmp_path):
     db_file = create_usage_db(tmp_path / "usage.db")
 
@@ -352,3 +398,42 @@ def test_query_returns_rows_and_rejects_destructive_sql(tmp_path):
     ]:
         with pytest.raises(ValueError):
             safe_select_query(sql)
+
+
+def test_query_allows_readonly_keywords_in_literals_and_functions(tmp_path):
+    db_file = create_usage_db(tmp_path / "usage.db")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "query",
+            "select replace('drop value', 'drop', 'keep') as value",
+            "--db",
+            str(db_file),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == [{"value": "keep value"}]
+
+
+def test_run_select_query_rejects_mutating_with_statement_without_mutation(tmp_path):
+    db_file = create_usage_db(tmp_path / "usage.db")
+    con = sqlite3.connect(db_file)
+    con.row_factory = sqlite3.Row
+
+    try:
+        before = con.execute("SELECT count(*) FROM part").fetchone()[0]
+        with pytest.raises((ValueError, sqlite3.DatabaseError)):
+            run_select_query(
+                con,
+                "WITH target AS (SELECT id FROM part LIMIT 1) "
+                "DELETE FROM part WHERE id IN (SELECT id FROM target)",
+            )
+        after = con.execute("SELECT count(*) FROM part").fetchone()[0]
+    finally:
+        con.close()
+
+    assert after == before

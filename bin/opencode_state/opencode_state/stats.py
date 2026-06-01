@@ -58,7 +58,11 @@ def make_window(*, since: str | None = None, until: str | None = None, days: int
         if days <= 0:
             raise ValueError("--days must be greater than zero")
         if since_date is None:
-            since_date = datetime.now(UTC).date() - timedelta(days=days - 1)
+            anchor_date = until_date or datetime.now(UTC).date()
+            since_date = anchor_date - timedelta(days=days - 1)
+
+    if since_date is not None and until_date is not None and since_date > until_date:
+        raise ValueError("--since must be on or before --until")
 
     start_ms = _start_of_day_ms(since_date) if since_date else None
     end_ms = _start_of_day_ms(until_date + timedelta(days=1)) if until_date else None
