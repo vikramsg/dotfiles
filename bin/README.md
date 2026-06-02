@@ -10,6 +10,7 @@ Install tools from this repo with `uv`:
 uv tool install ./bin/ghostty_workspace --force
 uv tool install ./bin/screenshot --force
 uv tool install ./bin/lch --force
+uv tool install ./bin/opencode_state --force
 ```
 
 Upgrade an installed local tool after changes:
@@ -18,6 +19,7 @@ Upgrade an installed local tool after changes:
 uv tool install ./bin/ghostty_workspace --force --no-cache
 uv tool install ./bin/screenshot --force --no-cache
 uv tool install ./bin/lch --force --no-cache
+uv tool install ./bin/opencode_state --force --no-cache
 ```
 
 Each tool keeps its own package-local tests under `bin/<tool>/tests`.
@@ -25,7 +27,7 @@ Each tool keeps its own package-local tests under `bin/<tool>/tests`.
 Run all Python tests from repo root:
 
 ```bash
-uv run pytest
+uv run --all-packages --group dev pytest
 ```
 
 ## screenshot
@@ -53,6 +55,15 @@ Requires `window-new-tab-position = end` in `ghostty/config` for deterministic t
 - Install: `uv tool install ./bin/ghostty_workspace --force`
 - Test: from `bin/ghostty_workspace`, run `uv run pytest`
 - Docs: `bin/ghostty_workspace/README.md`
+
+## opencode-state
+
+Read-only local OpenCode SQLite usage, session, model, daily, schema, and query inspection.
+
+- Install: `uv tool install ./bin/opencode_state --force --no-cache`
+- Test: from `bin/opencode_state`, run `uv run pytest`
+- Docs: `bin/opencode_state/README.md`
+- Safety: analytics commands open the SQLite database with `mode=ro`; use `OPENCODE_DB` or `--db` to point at a temporary DB for verification.
 
 ## marxual
 
