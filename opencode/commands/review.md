@@ -46,6 +46,5 @@ Approve only when `review.md` is a thorough and complete GitHub-style PR review 
 
 ## Final Output
 
-When complete, the final chat response must be exactly:
+When complete, the final chat response should summarize the changes. 
 
-`review.md`
