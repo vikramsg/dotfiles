@@ -2,13 +2,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run build:orchestration-state && npm run build:sandbox",
+    "build": "npm run build:orchestration-state && npm run build:sandbox && npm run check:sandbox:v2",
     "build:orchestration-state": "node --check plugins2/orchestration-state.js",
     "build:sandbox": "tsc -p sandbox/tsconfig.json",
+    "check:sandbox:v2": "tsc -p sandbox/cli-v2/tsconfig.json",
     "sandbox": "npm run build:sandbox --silent && node sandbox/dist/sandbox-cli.js",
-    "sandbox:v2": "npm run build:sandbox --silent && node --enable-source-maps sandbox/dist/cli-v2.js",
+    "sandbox:v2": "node sandbox/cli-v2/index.ts",
     "test:sandbox": "npm run build:sandbox --silent && node --test sandbox/sandbox-cli.test.mjs",
-    "test:sandbox:v2": "npm run build:sandbox --silent && vitest run sandbox/cli-v2.test.ts"
+    "test:sandbox:v2": "vitest run sandbox/cli-v2/index.test.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.4.2",
