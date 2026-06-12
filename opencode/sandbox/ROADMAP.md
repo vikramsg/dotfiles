@@ -2,7 +2,10 @@
 
 ## Direction
 
-1. `cli-v2.ts` should be a well architected CLI that allows tesing `opencode` without touching global `opencode` config.
+1. `cli-v2` has a `scenario` command with which we can run all kinds of scenarios.
+   - Given a prompt, what do we get as output.
+   - Given a multi-agent prompt, what is the task call?
+   - Given a subagent return, what next steps does the main agent do
 2. `DSPy` integration so that any agent can be optimized.
     * Eventually also multi-agent optimization
 3. Both `cli-v2.ts` and `DSPy` should be packagable into a single artifact for eventual release as a separate repo.
