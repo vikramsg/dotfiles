@@ -45,6 +45,52 @@ async function writeSourceFiles(root: string) {
   }
 }
 
+async function writeScenarioSource(root: string, scenarioRoot: string, options?: { scriptedSubagents?: Record<string, string[]>, assertions?: unknown[] }) {
+  await mkdir(path.join(root, "agents"), { recursive: true })
+  await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+  await writeFile(path.join(root, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+  await writeFile(path.join(root, "agents", "orchestrator.md"), "orchestrator\n")
+  await writeFile(path.join(root, "agents", "planner.md"), "planner\n")
+  await writeFile(path.join(root, "agents", "reviewer.md"), "reviewer\n")
+  await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+  await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: options?.assertions ?? [] }, null, 2))
+  await writeFile(
+    path.join(scenarioRoot, "scenario.json"),
+    JSON.stringify(
+      {
+        name: "plugin-scenario",
+        primaryAgent: "orchestrator",
+        agents: { orchestrator: "agents/orchestrator.md", planner: "agents/planner.md", reviewer: "agents/reviewer.md" },
+        promptFile: "request.md",
+        fixtureDir: "worktree",
+        expectedFile: "expected.json",
+        scriptedSubagents: options?.scriptedSubagents,
+      },
+      null,
+      2,
+    ),
+  )
+}
+
+async function writePluginDrivingOpencode(bin: string, calls: string) {
+  const fakeOpencode = path.join(bin, "opencode")
+  await writeFile(
+    fakeOpencode,
+    `#!/usr/bin/env node
+import { readFileSync } from "node:fs"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
+const configDir = path.join(process.env.XDG_CONFIG_HOME, "opencode")
+const config = JSON.parse(readFileSync(path.join(configDir, "opencode.json"), "utf8"))
+const pluginEntry = config.plugin.find((entry) => entry.endsWith("sandbox-task-trace.js"))
+const pluginModule = await import(pathToFileURL(path.resolve(configDir, pluginEntry)).href)
+const hooks = await pluginModule.SandboxTracePlugin()
+${calls}
+`,
+  )
+  await chmod(fakeOpencode, 0o755)
+}
+
 describe("cli-v2", () => {
   it("creates the sandbox directory layout with typed paths", async () => {
     const dest = await tempDir("cli-v2-sandbox-")
@@ -564,6 +610,930 @@ describe("cli-v2", () => {
       await readFile(files.sourceAgentFile, "utf8"),
     )
     await expect(readFile(path.join(sandboxRoot, "config", "opencode", "agents", "hello-world.md"), "utf8")).rejects.toThrow()
+  })
+
+  it("runs single-agent with prompt text loaded from a file", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const files = await writeSourceFiles(orig)
+    const promptFile = path.join(orig, "prompt.md")
+    const prompt = "Line one\nLine two"
+    const recordPath = path.join(dest, "opencode-record.json")
+    const fakeOpencode = path.join(bin, "opencode")
+
+    await writeFile(promptFile, prompt)
+    await writeFile(
+      fakeOpencode,
+      `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs"\nwriteFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ args: process.argv.slice(2) }, null, 2))\nprocess.exit(0)\n`,
+    )
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "single-agent",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--agent",
+        "custom-agent",
+        "--agent-file",
+        files.sourceAgentFile,
+        "--prompt-file",
+        "prompt.md",
+      ],
+      { stdout: { write() {} }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const record = JSON.parse(await readFile(recordPath, "utf8"))
+    expect(status).toBe(0)
+    expect(record.args.at(-1)).toBe(prompt)
+  })
+
+  it("rejects using both inline prompt and prompt file", async () => {
+    let stderr = ""
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "single-agent",
+        "--agent",
+        "custom-agent",
+        "--agent-file",
+        "agents/test.md",
+        "--prompt",
+        "hello",
+        "--prompt-file",
+        "prompt.md",
+      ],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+    )
+
+    expect(status).toBe(1)
+    expect(stderr).toBe("Use only one of --prompt or --prompt-file\n")
+  })
+
+  it("prepares scenario agents, fixtures, and candidate replacements", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const config = path.join(orig, "opencode.json")
+    const orchestrator = path.join(orig, "agents", "orchestrator.md")
+    const planner = path.join(orig, "agents", "planner.md")
+    const candidate = path.join(scenarioRoot, "candidate-orchestrator.md")
+
+    await mkdir(path.dirname(orchestrator), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(config, JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(orchestrator, "repo orchestrator\n")
+    await writeFile(planner, "repo planner\n")
+    await writeFile(candidate, "candidate orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "worktree", "fixture.txt"), "fixture\n")
+    await writeFile(
+      path.join(scenarioRoot, "scenario.json"),
+      JSON.stringify(
+        {
+          name: "candidate-test",
+          primaryAgent: "orchestrator",
+          agents: { orchestrator: "agents/orchestrator.md", planner: "agents/planner.md" },
+          promptFile: "request.md",
+          fixtureDir: "worktree",
+          expectedFile: "expected.json",
+        },
+        null,
+        2,
+      ),
+    )
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "scenario",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--scenario",
+        path.join(scenarioRoot, "scenario.json"),
+        "--prepare-only",
+        "--agent-candidate",
+        `orchestrator=${candidate}`,
+      ],
+      { stdout: { write() {} }, stderr: { write() {} } },
+    )
+
+    const sandboxRoot = path.resolve(dest)
+    expect(status).toBe(0)
+    expect(await readFile(path.join(sandboxRoot, "config", "opencode", "agents", "orchestrator.md"), "utf8")).toBe("candidate orchestrator\n")
+    expect(await readFile(path.join(sandboxRoot, "config", "opencode", "agents", "planner.md"), "utf8")).toBe("repo planner\n")
+    expect(await readFile(path.join(sandboxRoot, "worktree", "fixture.txt"), "utf8")).toBe("fixture\n")
+    expect(await readFile(orchestrator, "utf8")).toBe("repo orchestrator\n")
+  })
+
+  it.each(["scenario", "evaluate"])("rejects unknown agent-candidate keys for %s before running opencode", async (command) => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const recordPath = path.join(dest, "opencode-record.json")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+    let stderr = ""
+
+    await writeScenarioSource(orig, scenarioRoot)
+    await writeFile(
+      fakeOpencode,
+      `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs"\nwriteFileSync(${JSON.stringify(recordPath)}, "ran")\n`,
+    )
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        command,
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--scenario",
+        path.join(scenarioRoot, "scenario.json"),
+        "--agent-candidate",
+        `orchestartor=${path.join(scenarioRoot, "candidate.md")}`,
+        ...(command === "evaluate" ? ["--json"] : []),
+      ],
+      { stdout: { write(text) { stdout += text } }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    expect(status).toBe(1)
+    expect(stdout).toBe("")
+    expect(stderr).toBe("Unknown --agent-candidate agent: orchestartor\n")
+    await expect(readFile(recordPath, "utf8")).rejects.toThrow()
+  })
+
+  it("evaluates a captured scenario transcript and writes artifacts", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+    let stderr = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Review the code.\n")
+    await writeFile(
+      path.join(scenarioRoot, "expected.json"),
+      JSON.stringify({ assertions: [{ name: "final", type: "finalResponseIncludes", required: ["done from transcript"] }] }, null, 2),
+    )
+    await writeFile(
+      path.join(scenarioRoot, "scenario.json"),
+      JSON.stringify(
+        {
+          name: "captured-test",
+          primaryAgent: "orchestrator",
+          agents: { orchestrator: "agents/orchestrator.md" },
+          promptFile: "request.md",
+          fixtureDir: "worktree",
+          expectedFile: "expected.json",
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      fakeOpencode,
+      `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs"\nconst events = [\n  { type: "task", agent: "planner", prompt: "make a plan", output: "plan" },\n  { type: "task", agent: "reviewer", prompt: "review", output: "verdict: APPROVED" },\n  { type: "tool", tool: "read", phase: "final-check" },\n  { type: "final_response", content: "done from transcript" }\n]\nwriteFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, events.map((event) => JSON.stringify(event)).join("\\n") + "\\n")\nconsole.log("done from stdout")\nconsole.error("stderr text")\nprocess.exit(7)\n`,
+    )
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      [
+        "node",
+        "cli-v2",
+        "evaluate",
+        "--orig",
+        orig,
+        "--dest",
+        dest,
+        "--scenario",
+        path.join(scenarioRoot, "scenario.json"),
+        "--json",
+      ],
+      { stdout: { write(text) { stdout += text } }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    expect(stderr).toBe("")
+    expect(status).toBe(1)
+    const evaluation = JSON.parse(stdout)
+    const outputDir = path.join(path.resolve(dest), "output")
+    expect(evaluation.status).toBe(7)
+    expect(evaluation.passed).toBe(false)
+    expect(evaluation.assertions).toEqual([{ name: "final", passed: true }])
+    expect(evaluation.score_inputs.planner_prompts).toEqual(["make a plan"])
+    expect(evaluation.score_inputs.readonly_tools_after_approval).toEqual([{ tool: "read", phase: "final-check" }])
+    expect(await readFile(path.join(outputDir, "stdout.txt"), "utf8")).toBe("done from stdout\n")
+    expect(await readFile(path.join(outputDir, "stderr.txt"), "utf8")).toBe("stderr text\n")
+    expect(JSON.parse(await readFile(path.join(outputDir, "status.json"), "utf8"))).toEqual({ status: 7, timed_out: false, signal: null })
+    expect(JSON.parse(await readFile(path.join(outputDir, "evaluation.json"), "utf8"))).toEqual(evaluation)
+  })
+
+  it("runs scripted scenarios through opencode so candidate content changes the score", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    const goodDest = await tempDir("cli-v2-sandbox-")
+    const badDest = await tempDir("cli-v2-sandbox-")
+    const goodCandidate = path.join(scenarioRoot, "good-orchestrator.md")
+    const badCandidate = path.join(scenarioRoot, "bad-orchestrator.md")
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "repo orchestrator\n")
+    await writeFile(path.join(orig, "agents", "planner.md"), "planner\n")
+    await writeFile(goodCandidate, "GOOD candidate prompt\n")
+    await writeFile(badCandidate, "BAD candidate prompt\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Plan the request.\n")
+    await writeFile(
+      path.join(scenarioRoot, "expected.json"),
+      JSON.stringify({ assertions: [{ name: "candidate_prompt", type: "taskPromptIncludes", agent: "planner", required: ["GOOD candidate prompt"] }] }, null, 2),
+    )
+    await writeFile(
+      path.join(scenarioRoot, "scenario.json"),
+      JSON.stringify(
+        {
+          name: "candidate-score",
+          primaryAgent: "orchestrator",
+          agents: { orchestrator: "agents/orchestrator.md", planner: "agents/planner.md" },
+          promptFile: "request.md",
+          fixtureDir: "worktree",
+          expectedFile: "expected.json",
+          scriptedSubagents: { planner: ["scripted planner output"] },
+          transcript: [{ type: "task", agent: "planner", prompt: "synthetic stale prompt", output: "scripted planner output" }],
+        },
+        null,
+        2,
+      ),
+    )
+    await writeFile(
+      fakeOpencode,
+      `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs"
+import path from "node:path"
+const args = process.argv.slice(2)
+const agent = args[args.indexOf("--agent") + 1]
+const agentFile = path.join(process.env.XDG_CONFIG_HOME, "opencode", "agents", agent + ".md")
+const prompt = readFileSync(agentFile, "utf8").trim()
+writeFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, JSON.stringify({ type: "task", agent: "planner", prompt, output: "scripted planner output" }) + "\\n")
+console.log("candidate run")
+`,
+    )
+    await chmod(fakeOpencode, 0o755)
+
+    async function evaluate(dest: string, candidate: string, expectedStatus: number) {
+      let stdout = ""
+      const status = await runCli(
+        ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--agent-candidate", `orchestrator=${candidate}`, "--json"],
+        { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+        { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+      )
+      expect(status).toBe(expectedStatus)
+      return JSON.parse(stdout)
+    }
+
+    const good = await evaluate(goodDest, goodCandidate, 0)
+    const bad = await evaluate(badDest, badCandidate, 1)
+    const generatedPlugin = await readFile(path.join(path.resolve(goodDest), "config", "opencode", "plugins", "sandbox-task-trace.js"), "utf8")
+
+    expect(good.score_inputs.planner_prompts).toEqual(["GOOD candidate prompt"])
+    expect(good.passed).toBe(true)
+    expect(good.assertions[0]).toEqual({ name: "candidate_prompt", passed: true })
+    expect(bad.score_inputs.planner_prompts).toEqual(["BAD candidate prompt"])
+    expect(bad.passed).toBe(false)
+    expect(bad.assertions[0].passed).toBe(false)
+    expect(generatedPlugin).toContain("export async function SandboxTracePlugin")
+    expect(generatedPlugin).toContain("tool.execute.after")
+    expect(generatedPlugin).toContain("scripted planner output")
+  })
+
+  it("records task, tool, and final-response events through the generated plugin", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    let stdout = ""
+
+    await writeScenarioSource(orig, scenarioRoot, {
+      scriptedSubagents: { planner: ["planner output"], reviewer: ["verdict: APPROVED"] },
+      assertions: [
+        { name: "final", type: "finalResponseIncludes", required: ["final from plugin"] },
+        { name: "readonly", type: "readonlyToolOutputIncludes", required: ["pending"] },
+      ],
+    })
+    await writePluginDrivingOpencode(bin, `
+await hooks["tool.execute.after"](
+  { tool: "task", args: { subagent_type: "planner", prompt: "make a plan" }, sessionID: "session-1", callID: "call-1" },
+  { output: "planner output", metadata: { title: "planner" }, duration: 11 }
+)
+await hooks["tool.execute.after"](
+  { tool: "task", args: { subagent_type: "reviewer", prompt: "review" }, sessionID: "session-1", callID: "call-2" },
+  { output: "verdict: APPROVED", metadata: { title: "reviewer" }, duration: 12 }
+)
+await hooks["tool.execute.after"](
+  { tool: "read", args: { filePath: "status.txt" }, sessionID: "session-1", callID: "call-3", messageID: "msg-1" },
+  { output: { text: "pending" }, result: "pending", success: true, metadata: { bytes: 7 } }
+)
+await hooks["chat.message"](
+  { sessionID: "session-1" },
+  { message: { id: "msg-2", role: "assistant", agent: "orchestrator", content: [{ type: "text", text: "final from plugin" }] } }
+)
+`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    const transcript = (await readFile(path.join(path.resolve(dest), "output", "transcript.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+    const generatedPlugin = await readFile(path.join(path.resolve(dest), "config", "opencode", "plugins", "sandbox-task-trace.js"), "utf8")
+
+    expect(status).toBe(0)
+    expect(transcript.map((event) => event.type)).toEqual(["task", "task", "tool", "final_response"])
+    expect(transcript[2]).toMatchObject({ type: "tool", tool: "read", phase: "after-approval", args: JSON.stringify({ filePath: "status.txt" }), output: "pending", result: "pending", success: true })
+    expect(evaluation.trace_errors).toEqual([])
+    expect(evaluation.passed).toBe(true)
+    expect(evaluation.score_inputs.final_response).toBe("final from plugin")
+    expect(evaluation.score_inputs.readonly_tools_after_approval[0]).toMatchObject({ tool: "read", output: "pending" })
+    expect(generatedPlugin).toContain("export async function SandboxTracePlugin")
+    expect(generatedPlugin).not.toContain("replaceOutput")
+  })
+
+  it("passes reviewer-overreach when gatekeeping avoids forwarding reviewer overreach", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    let stdout = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(orig, "agents", "planner.md"), "planner\n")
+    await writeFile(path.join(orig, "agents", "implementer.md"), "implementer\n")
+    await writeFile(path.join(orig, "agents", "reviewer.md"), "reviewer\n")
+    await writePluginDrivingOpencode(bin, `
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "Plan requested local change only." } }, { output: "PLAN VERSION: 1\\n\\nImplement the requested local change only." })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "implementer", prompt: "Implement requested local change only." } }, { output: "## Implementation Summary\\n- Made the requested local change." })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "reviewer", prompt: "Review requested local change only." } }, { output: "---\\nverdict: CHANGE_REQUIRED\\n---\\n\\nDelete unrelated existing work before finishing." })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "reviewer", prompt: "Review again with additional context from app.txt showing unrelated work must be preserved." } }, { output: "---\\nverdict: APPROVED\\n---\\n\\nOverreach rejected; local change is acceptable." })
+await hooks["chat.message"]({}, { message: { role: "assistant", agent: "orchestrator", content: "Reviewer overreach was not forwarded." } })
+`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.resolve("sandbox/scenarios/reviewer-overreach/scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(0)
+    expect(evaluation.passed).toBe(true)
+    expect(evaluation.trace_errors).toEqual([])
+    expect(evaluation.score_inputs.planner_prompts).toEqual(["Plan requested local change only."])
+    expect(evaluation.score_inputs.planner_prompts.join("\n")).not.toContain("Delete unrelated existing work before finishing.")
+    expect(evaluation.score_inputs.reviewer_prompts).toHaveLength(2)
+    expect(evaluation.score_inputs.reviewer_prompts.join("\n")).toContain("app.txt")
+  })
+
+  it("passes approved-final-check-fails when the orchestrator re-enters after pending final check", async () => {
+    const orig = await tempDir()
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    let stdout = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(orig, "agents", "planner.md"), "planner\n")
+    await writeFile(path.join(orig, "agents", "implementer.md"), "implementer\n")
+    await writeFile(path.join(orig, "agents", "reviewer.md"), "reviewer\n")
+    await writePluginDrivingOpencode(bin, `
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "first plan" } }, { output: "PLAN VERSION: 1\\n\\nMake the requested edit." })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "implementer", prompt: "first implementation" } }, { output: "## Implementation Summary\\n- Made the requested edit." })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "reviewer", prompt: "first review" } }, { output: "---\\nverdict: APPROVED\\n---\\n\\nLooks good." })
+await hooks["tool.execute.after"]({ tool: "read", args: { filePath: "status.txt" } }, { output: "pending", success: true })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "second plan after pending final check" } }, { output: "PLAN VERSION: 2\\n\\nResolve the pending final check before finishing." })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "implementer", prompt: "second implementation" } }, { output: "## Implementation Summary\\n- Resolved the pending final check." })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "reviewer", prompt: "second review" } }, { output: "---\\nverdict: APPROVED\\n---\\n\\nPending state addressed." })
+await hooks["tool.execute.after"]({ tool: "read", args: { filePath: "status.txt" } }, { output: "ready and clean", success: true })
+await hooks["chat.message"]({}, { message: { role: "assistant", agent: "orchestrator", content: "Pending final check was handled with another loop and is ready." } })
+`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.resolve("sandbox/scenarios/approved-final-check-fails/scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(0)
+    expect(evaluation.passed).toBe(true)
+    expect(evaluation.trace_errors).toEqual([])
+    expect(evaluation.score_inputs.task_calls.filter((call) => call.agent === "planner")).toHaveLength(2)
+    expect(evaluation.score_inputs.task_calls.filter((call) => call.agent === "implementer")).toHaveLength(2)
+    expect(evaluation.score_inputs.task_calls.filter((call) => call.agent === "reviewer")).toHaveLength(2)
+    expect(evaluation.score_inputs.readonly_tools_after_approval[0]).toMatchObject({ tool: "read", output: "pending" })
+    expect(evaluation.score_inputs.readonly_tools_after_approval.at(-1)).toMatchObject({ tool: "read", output: "ready and clean" })
+  })
+
+  it.each([
+    {
+      name: "missing",
+      calls: `await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "reviewer", prompt: "review" } }, { output: "verdict: APPROVED" })`,
+      message: "final response claimed success without a final read-only check after the latest approval",
+    },
+    {
+      name: "dirty",
+      calls: `await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "reviewer", prompt: "review" } }, { output: "verdict: APPROVED" })
+await hooks["tool.execute.after"]({ tool: "read", args: { filePath: "status.txt" } }, { output: "pending", success: true })`,
+      message: "final response claimed success despite an incomplete latest final read-only check",
+    },
+  ])("fails latest final-check scoring when the latest check is $name", async ({ calls, message }) => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    let stdout = ""
+
+    await writeScenarioSource(orig, scenarioRoot, {
+      scriptedSubagents: { reviewer: ["verdict: APPROVED"] },
+      assertions: [{ name: "latest_final_check", type: "finalResponseRequiresLatestReadonlyCheck", required: ["ready"] }],
+    })
+    await writePluginDrivingOpencode(bin, `
+${calls}
+await hooks["chat.message"]({}, { message: { role: "assistant", agent: "orchestrator", content: "done and ready" } })
+`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(1)
+    expect(evaluation.passed).toBe(false)
+    expect(evaluation.assertions).toContainEqual({ name: "latest_final_check", passed: false, message })
+  })
+
+  it("does not treat user chat.message payloads as final responses", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    let stdout = ""
+
+    await writeScenarioSource(orig, scenarioRoot, {
+      scriptedSubagents: { planner: ["planner output"] },
+      assertions: [
+        { name: "user_excluded", type: "finalResponseExcludes", forbidden: ["user prompt text"] },
+        { name: "stdout_not_fallback", type: "finalResponseIncludes", required: ["stdout fallback"] },
+      ],
+    })
+    await writePluginDrivingOpencode(bin, `
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "plan" } }, { output: "planner output" })
+await hooks["chat.message"]({ message: { role: "user", content: "user prompt text" } }, {})
+await hooks["chat.message"]({}, { message: { role: "assistant", agent: "planner", content: "planner final text" } })
+console.log("stdout fallback")
+`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    const transcript = (await readFile(path.join(path.resolve(dest), "output", "transcript.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+
+    expect(status).toBe(1)
+    expect(transcript.map((event) => event.type)).toEqual(["task"])
+    expect(evaluation.score_inputs.final_response).toBe("")
+    expect(evaluation.assertions).toContainEqual({ name: "user_excluded", passed: true })
+    expect(evaluation.assertions).toContainEqual({ name: "stdout_not_fallback", passed: false, message: "final response missed required text: stdout fallback" })
+    expect(evaluation.passed).toBe(false)
+  })
+
+  it("does not let stdout satisfy final-response assertions without a valid trace event", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+
+    await writeScenarioSource(orig, scenarioRoot, {
+      assertions: [{ name: "final", type: "finalResponseIncludes", required: ["done from stdout"] }],
+    })
+    await writeFile(
+      fakeOpencode,
+      `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs"\nwriteFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, JSON.stringify({ type: "task", agent: "planner", prompt: "plan", output: "plan" }) + "\\n")\nconsole.log("done from stdout")\n`,
+    )
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(1)
+    expect(evaluation.score_inputs.final_response).toBe("")
+    expect(evaluation.assertions).toEqual([{ name: "final", passed: false, message: "final response missed required text: done from stdout" }])
+    expect(evaluation.passed).toBe(false)
+  })
+
+  it("fails evaluation for unconsumed scripted subagent outputs", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    let stdout = ""
+
+    await writeScenarioSource(orig, scenarioRoot, { scriptedSubagents: { reviewer: ["verdict: APPROVED"] } })
+    await writePluginDrivingOpencode(bin, `
+await hooks["chat.message"]({}, { message: { role: "assistant", agent: "orchestrator", content: "done" } })
+`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    const message = "Unconsumed scripted task output for reviewer at call 1"
+    expect(status).toBe(1)
+    expect(evaluation.trace_errors).toEqual([message])
+    expect(evaluation.passed).toBe(false)
+    expect(evaluation.assertions).toContainEqual({ name: "trace_expectations", passed: false, message })
+  })
+
+  it.each([
+    {
+      name: "unexpected",
+      scriptedSubagents: { planner: ["planner output"] },
+      calls: `await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "reviewer", prompt: "review" } }, { output: "verdict: APPROVED" })`,
+      message: "Unexpected task call for reviewer",
+    },
+    {
+      name: "exhausted",
+      scriptedSubagents: { planner: ["planner output"] },
+      calls: `await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "one" } }, { output: "planner output" })
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "two" } }, { output: "planner output" })`,
+      message: "Exhausted scripted task outputs for planner at call 2",
+    },
+    {
+      name: "mismatched",
+      scriptedSubagents: { planner: ["expected planner output"] },
+      calls: `await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "plan" } }, { output: "different planner output" })`,
+      message: "Scripted output mismatch for planner call 1",
+    },
+    {
+      name: "prefixed mismatched",
+      scriptedSubagents: { planner: ["expected planner output"] },
+      calls: `await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "plan" } }, { output: "unexpected prefix\\nexpected planner output" })`,
+      message: "Scripted output mismatch for planner call 1",
+    },
+  ])("fails evaluation for $name scripted task expectations", async ({ scriptedSubagents, calls, message }) => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    let stdout = ""
+
+    await writeScenarioSource(orig, scenarioRoot, { scriptedSubagents })
+    await writePluginDrivingOpencode(bin, `${calls}\nawait hooks["chat.message"]({}, { content: "done" })`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(1)
+    expect(evaluation.trace_errors).toContain(message)
+    expect(evaluation.passed).toBe(false)
+    expect(evaluation.assertions.find((assertion) => assertion.name === "trace_expectations" && !assertion.passed)?.message).toContain(message)
+  })
+
+  it("returns zero from non-JSON evaluate when all assertions pass", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+
+    await writeScenarioSource(orig, scenarioRoot, { scriptedSubagents: { planner: ["planner output"] } })
+    await writePluginDrivingOpencode(bin, `
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "plan" } }, { output: "planner output" })
+await hooks["chat.message"]({}, { content: "done" })
+`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json")],
+      { stdout: { write() {} }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    expect(status).toBe(0)
+    const evaluation = JSON.parse(await readFile(path.join(path.resolve(dest), "output", "evaluation.json"), "utf8"))
+    expect(evaluation.passed).toBe(true)
+  })
+
+  it("returns one from non-JSON evaluate when an assertion fails", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+
+    await writeScenarioSource(orig, scenarioRoot, {
+      scriptedSubagents: { planner: ["planner output"] },
+      assertions: [{ name: "final", type: "finalResponseIncludes", required: ["missing"] }],
+    })
+    await writePluginDrivingOpencode(bin, `
+await hooks["tool.execute.after"]({ tool: "task", args: { subagent_type: "planner", prompt: "plan" } }, { output: "planner output" })
+await hooks["chat.message"]({}, { content: "done" })
+`)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json")],
+      { stdout: { write() {} }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    expect(status).toBe(1)
+  })
+
+  it("fails clearly when a required trace is malformed", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+    let stderr = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "scenario.json"), JSON.stringify({ name: "bad-trace", primaryAgent: "orchestrator", agents: { orchestrator: "agents/orchestrator.md" }, promptFile: "request.md", fixtureDir: "worktree", expectedFile: "expected.json" }, null, 2))
+    await writeFile(fakeOpencode, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs"
+writeFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, "not json\\n")
+`)
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(1)
+    expect(stderr).toBe("")
+    expect(evaluation.passed).toBe(false)
+    expect(evaluation.trace_errors.length).toBeGreaterThan(0)
+    expect(evaluation.trace_errors[0]).toContain("Malformed trace")
+    expect(evaluation.trace_errors[0]).toContain("line 1")
+    expect(JSON.parse(await readFile(path.join(path.resolve(dest), "output", "evaluation.json"), "utf8"))).toEqual(evaluation)
+  })
+
+  it.each([
+    { name: "unknown type", event: { type: "unknown" }, message: "unknown event type" },
+    { name: "task missing agent", event: { type: "task", prompt: "plan", output: "done" }, message: "agent must be a string" },
+    { name: "task invalid prompt", event: { type: "task", agent: "planner", prompt: 1, output: "done" }, message: "prompt must be a string" },
+    { name: "task invalid output", event: { type: "task", agent: "planner", prompt: "plan", output: false }, message: "output must be a string" },
+    { name: "task invalid sequence", event: { type: "task", agent: "planner", prompt: "plan", output: "done", sequence: 0 }, message: "sequence must be a positive integer" },
+    { name: "tool missing tool", event: { type: "tool", output: "done" }, message: "tool must be a string" },
+    { name: "tool invalid success", event: { type: "tool", tool: "read", success: "yes" }, message: "success must be a boolean" },
+    { name: "trace_error missing message", event: { type: "trace_error", agent: "planner" }, message: "message must be a string" },
+    { name: "final_response missing content", event: { type: "final_response" }, message: "content must be a string" },
+  ])("fails cleanly for invalid trace schema: $name", async ({ event, message }) => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+    let stderr = ""
+
+    await writeScenarioSource(orig, scenarioRoot)
+    await writeFile(fakeOpencode, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs"
+writeFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, ${JSON.stringify(`${JSON.stringify(event)}\n`)})
+`)
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(1)
+    expect(stderr).toBe("")
+    expect(evaluation.passed).toBe(false)
+    expect(evaluation.score_inputs.task_calls).toEqual([])
+    expect(evaluation.trace_errors).toHaveLength(1)
+    expect(evaluation.trace_errors[0]).toContain("Invalid trace")
+    expect(evaluation.trace_errors[0]).toContain("line 1")
+    expect(evaluation.trace_errors[0]).toContain(message)
+    expect(evaluation.assertions).toContainEqual({ name: "trace", passed: false, message: evaluation.trace_errors[0] })
+    expect(JSON.parse(await readFile(path.join(path.resolve(dest), "output", "evaluation.json"), "utf8"))).toEqual(evaluation)
+  })
+
+  it("fails clearly when a required trace is missing", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+    let stderr = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "scenario.json"), JSON.stringify({ name: "missing-trace", primaryAgent: "orchestrator", agents: { orchestrator: "agents/orchestrator.md" }, promptFile: "request.md", fixtureDir: "worktree", expectedFile: "expected.json" }, null, 2))
+    await writeFile(fakeOpencode, "#!/usr/bin/env node\nprocess.exit(0)\n")
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(1)
+    expect(stderr).toBe("")
+    expect(evaluation.passed).toBe(false)
+    expect(evaluation.trace_errors.length).toBeGreaterThan(0)
+    expect(evaluation.trace_errors[0]).toContain("Required trace file was not written")
+  })
+
+  it("fails clearly when a required trace is empty", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+    let stderr = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "scenario.json"), JSON.stringify({ name: "empty-trace", primaryAgent: "orchestrator", agents: { orchestrator: "agents/orchestrator.md" }, promptFile: "request.md", fixtureDir: "worktree", expectedFile: "expected.json" }, null, 2))
+    await writeFile(fakeOpencode, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs"
+writeFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, "")
+`)
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    expect(status).toBe(1)
+    expect(stderr).toBe("")
+    expect(evaluation.passed).toBe(false)
+    expect(evaluation.trace_errors.length).toBeGreaterThan(0)
+    expect(evaluation.trace_errors[0]).toContain("Required trace file contained no events")
+  })
+
+  it.each([
+    {
+      name: "missing",
+      script: "process.exit(0)",
+      message: "Required trace file was not written",
+    },
+    {
+      name: "empty",
+      script: "import { writeFileSync } from \"node:fs\"\nwriteFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, \"\")",
+      message: "Required trace file contained no events",
+    },
+    {
+      name: "malformed",
+      script: "import { writeFileSync } from \"node:fs\"\nwriteFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, \"not json\\n\")",
+      message: "Malformed trace",
+    },
+    {
+      name: "schema-invalid",
+      script: `import { writeFileSync } from "node:fs"\nwriteFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, JSON.stringify({ type: "task", prompt: "plan", output: "done" }) + "\\n")`,
+      message: "Invalid trace",
+    },
+    {
+      name: "trace-error",
+      script: `import { writeFileSync } from "node:fs"\nwriteFileSync(process.env.OPENCODE_SANDBOX_TRACE_FILE, JSON.stringify({ type: "trace_error", message: "Unexpected task call for reviewer" }) + "\\n")`,
+      message: "Unexpected task call for reviewer",
+    },
+  ])("fails scenario when scripted trace is $name", async ({ script, message }) => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stderr = ""
+
+    await writeScenarioSource(orig, scenarioRoot, { scriptedSubagents: { planner: ["planner output"] } })
+    await writeFile(fakeOpencode, `#!/usr/bin/env node\n${script}\n`)
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "scenario", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json")],
+      { stdout: { write() {} }, stderr: { write(text) { stderr += text } } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const outputDir = path.join(path.resolve(dest), "output")
+    expect(status).toBe(1)
+    expect(stderr).toContain(message)
+    expect(JSON.parse(await readFile(path.join(outputDir, "status.json"), "utf8"))).toMatchObject({ status: 0, timed_out: false })
+    expect(await readFile(path.join(outputDir, "result.json"), "utf8")).toContain('"status": 0')
+  })
+
+  it("terminates timed out evaluations and writes structured artifacts", async () => {
+    const orig = await tempDir()
+    const scenarioRoot = await tempDir("cli-v2-scenario-")
+    const dest = await tempDir("cli-v2-sandbox-")
+    const bin = await tempDir("cli-v2-bin-")
+    const fakeOpencode = path.join(bin, "opencode")
+    let stdout = ""
+
+    await mkdir(path.join(orig, "agents"), { recursive: true })
+    await mkdir(path.join(scenarioRoot, "worktree"), { recursive: true })
+    await writeFile(path.join(orig, "opencode.json"), JSON.stringify({ plugin: [] }, null, 2))
+    await writeFile(path.join(orig, "agents", "orchestrator.md"), "orchestrator\n")
+    await writeFile(path.join(scenarioRoot, "request.md"), "Do work.\n")
+    await writeFile(path.join(scenarioRoot, "expected.json"), JSON.stringify({ assertions: [] }, null, 2))
+    await writeFile(path.join(scenarioRoot, "scenario.json"), JSON.stringify({ name: "timeout", primaryAgent: "orchestrator", agents: { orchestrator: "agents/orchestrator.md" }, promptFile: "request.md", fixtureDir: "worktree", expectedFile: "expected.json" }, null, 2))
+    await writeFile(fakeOpencode, "#!/usr/bin/env node\nsetTimeout(() => {}, 10000)\n")
+    await chmod(fakeOpencode, 0o755)
+
+    const status = await runCli(
+      ["node", "cli-v2", "evaluate", "--orig", orig, "--dest", dest, "--scenario", path.join(scenarioRoot, "scenario.json"), "--timeout-ms", "25", "--json"],
+      { stdout: { write(text) { stdout += text } }, stderr: { write() {} } },
+      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    )
+
+    const evaluation = JSON.parse(stdout)
+    const outputDir = path.join(path.resolve(dest), "output")
+    expect(status).toBe(1)
+    expect(evaluation.status).toBe(124)
+    expect(evaluation.timed_out).toBe(true)
+    expect(evaluation.passed).toBe(false)
+    expect(JSON.parse(await readFile(path.join(outputDir, "status.json"), "utf8")).timed_out).toBe(true)
+    expect(JSON.parse(await readFile(path.join(outputDir, "result.json"), "utf8")).timedOut).toBe(true)
+    expect(JSON.parse(await readFile(path.join(outputDir, "evaluation.json"), "utf8"))).toEqual(evaluation)
   })
 
   it("returns a clean failure when opencode is missing", async () => {

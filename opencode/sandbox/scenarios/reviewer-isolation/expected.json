@@ -1,0 +1,16 @@
+{
+  "assertions": [
+    {
+      "name": "reviewer_gets_original_request",
+      "type": "taskPromptIncludes",
+      "agent": "reviewer",
+      "required": ["Keep reviewer context limited to the user request"]
+    },
+    {
+      "name": "reviewer_prompt_excludes_planner_context",
+      "type": "taskPromptExcludes",
+      "agent": "reviewer",
+      "forbidden": ["PLAN VERSION", "Implementation Summary"]
+    }
+  ]
+}

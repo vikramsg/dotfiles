@@ -1,0 +1,1 @@
+Keep this fixture deterministic.

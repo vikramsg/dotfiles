@@ -1,0 +1,9 @@
+[project]
+name = "opencode-sandbox-dspy"
+version = "0.1.0"
+description = "DSPy-compatible optimizer harness for OpenCode sandbox agents"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dspy = ["dspy-ai>=2.5"]

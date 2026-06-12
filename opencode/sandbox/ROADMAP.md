@@ -1,5 +1,12 @@
 # OpenCode Sandbox CLI v2 Roadmap
 
+## ToDo
+
+1. Split off DSPY into a stacked branch on top of current branch.
+2. Start with a simple commit that adds one scenario and details how we are using it.
+3. Then add the other scenarios as a separate stacked branch.
+
+
 ## Direction
 
 1. `cli-v2.ts` should be a well architected CLI that allows tesing `opencode` without touching global `opencode` config.

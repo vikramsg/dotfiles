@@ -1,0 +1,20 @@
+{
+  "assertions": [
+    {
+      "name": "planner_called_once",
+      "type": "taskCallCount",
+      "agent": "planner",
+      "atLeast": 1
+    },
+    {
+      "name": "reviewer_called_once",
+      "type": "taskCallCount",
+      "agent": "reviewer",
+      "atLeast": 1
+    },
+    {
+      "name": "final_readonly_check_after_approval",
+      "type": "hasReadonlyToolAfterApproval"
+    }
+  ]
+}

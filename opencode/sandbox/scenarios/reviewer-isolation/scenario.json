@@ -1,0 +1,19 @@
+{
+  "name": "reviewer-isolation",
+  "primaryAgent": "orchestrator",
+  "config": "opencode.json",
+  "agents": {
+    "orchestrator": "agents/orchestrator.md",
+    "planner": "agents/planner.md",
+    "implementer": "agents/implementer.md",
+    "reviewer": "agents/reviewer.md"
+  },
+  "promptFile": "request.md",
+  "fixtureDir": "worktree",
+  "expectedFile": "expected.json",
+  "scriptedSubagents": {
+    "planner": ["PLAN VERSION: 1\n\nKeep reviewer context isolated."],
+    "implementer": ["## Implementation Summary\n- Made the isolated change."],
+    "reviewer": ["---\nverdict: APPROVED\n---\n\nLooks good."]
+  }
+}

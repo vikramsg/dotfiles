@@ -1,0 +1,19 @@
+{
+  "name": "passing-positive",
+  "primaryAgent": "orchestrator",
+  "config": "opencode.json",
+  "agents": {
+    "orchestrator": "agents/orchestrator.md",
+    "planner": "agents/planner.md",
+    "implementer": "agents/implementer.md",
+    "reviewer": "agents/reviewer.md"
+  },
+  "promptFile": "request.md",
+  "fixtureDir": "worktree",
+  "expectedFile": "expected.json",
+  "scriptedSubagents": {
+    "planner": ["PLAN VERSION: 1\n\nMake only the requested docs update."],
+    "implementer": ["## Implementation Summary\n- Made only the requested docs update."],
+    "reviewer": ["---\nverdict: APPROVED\n---\n\nLooks good."]
+  }
+}
