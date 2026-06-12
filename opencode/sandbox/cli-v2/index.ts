@@ -1,11 +1,14 @@
 import { spawn } from "node:child_process";
-import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { cac } from "cac";
 import { z } from "zod";
+import { isInsideDirectory, readJsonFile, resolveFromRoot } from "./file-system.ts";
 import { createLogger, silentLogger, type Logger } from "./logger.ts";
+import { copyScenarioFixture, loadScenario, ScenarioValidationError } from "./scenario.ts";
+import type { Path } from "./types.ts";
 
 let logger: Logger = silentLogger;
 
@@ -22,14 +25,12 @@ class ConfigValidationError extends CleanCliError {
 }
 
 function isCleanCliError(error: unknown): boolean {
-  return error instanceof CleanCliError || isCacUsageError(error);
+  return error instanceof CleanCliError || error instanceof ScenarioValidationError || isCacUsageError(error);
 }
 
 function isCacUsageError(error: unknown): boolean {
   return error instanceof Error && error.name === "CACError";
 }
-
-export type Path = string;
 
 type Writer = {
   write(text: string): unknown;
@@ -202,10 +203,6 @@ function deriveSingleAgentSandboxLayout(
   };
 }
 
-function resolveFromRoot(sourceRoot: Path, filePath: Path): Path {
-  return path.isAbsolute(filePath) ? filePath : path.join(sourceRoot, filePath);
-}
-
 type ConfiguredLocalPlugin = {
   entry: string;
   sourceFile: Path;
@@ -219,19 +216,14 @@ function isRelativeLocalPluginEntry(entry: unknown): entry is string {
   );
 }
 
-function isInsideDirectory(parent: Path, child: Path): boolean {
-  const relative = path.relative(parent, child);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-async function ensureFileExists(file: Path, configuredEntry: string): Promise<void> {
+async function ensureCopyableSourceFile(file: Path, failureMessage: string): Promise<void> {
   try {
     const fileStat = await stat(file);
     if (!fileStat.isFile()) {
       throw new Error("not a file");
     }
   } catch {
-    throw new ConfigValidationError(`Configured local plugin does not exist: ${configuredEntry} -> ${file}`);
+    throw new ConfigValidationError(failureMessage);
   }
 }
 
@@ -250,19 +242,12 @@ async function resolveConfiguredLocalPlugins(
   sourceConfigFile: Path,
   layout: SingleAgentSandboxLayout,
 ): Promise<ConfiguredLocalPlugin[]> {
-  let configText: string;
-  try {
-    configText = await readFile(sourceConfigFile, "utf8");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new ConfigValidationError(`Could not read config file ${sourceConfigFile}: ${message}`);
-  }
-
   let parsedConfig: unknown;
   try {
-    parsedConfig = JSON.parse(configText);
-  } catch {
-    throw new ConfigValidationError(`Could not parse config file ${sourceConfigFile}`);
+    parsedConfig = await readJsonFile(sourceConfigFile, "config file");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new ConfigValidationError(message);
   }
 
   const parseResult = OpenCodeConfigSchema.safeParse(parsedConfig);
@@ -330,7 +315,18 @@ export async function prepareSingleAgentSandbox(
     sandboxRoot: spec.sandboxRoot,
   });
   const configuredPlugins = await resolveConfiguredLocalPlugins(spec.sourceConfigFile, validationLayout);
-  await Promise.all(configuredPlugins.map((plugin) => ensureFileExists(plugin.sourceFile, plugin.entry)));
+  await Promise.all(
+    configuredPlugins.map((plugin) =>
+      ensureCopyableSourceFile(
+        plugin.sourceFile,
+        `Configured local plugin does not exist: ${plugin.entry} -> ${plugin.sourceFile}`,
+      ),
+    ),
+  );
+  await ensureCopyableSourceFile(
+    spec.sourceAgentFile,
+    `Source agent file does not exist: ${spec.sourceAgentFile}`,
+  );
 
   const log = logger.bind({
     agentName: spec.agentName,
@@ -557,58 +553,6 @@ async function makeSandboxRoot(dest?: Path): Promise<Path> {
   return path.resolve(dest ?? (await mkdtemp(path.join(os.tmpdir(), "opencode-cli-v2-"))));
 }
 
-const ScenarioSchema = z.object({
-  name: z.string().min(1),
-  agent: z.string().min(1),
-  agentFile: z.string().min(1),
-  promptFile: z.string().min(1),
-  fixtureDir: z.string().min(1).optional(),
-  config: z.string().min(1).optional(),
-});
-
-type ScenarioRecipe = z.infer<typeof ScenarioSchema>;
-
-/**
- * A scenario is intentionally only a saved run recipe. It does not contain
- * assertions, expected output, scoring, or any evaluation contract.
- */
-async function readScenarioRecipe(scenarioDir: Path): Promise<ScenarioRecipe> {
-  const scenarioFile = path.join(scenarioDir, "scenario.json");
-  let scenarioText: string;
-  try {
-    scenarioText = await readFile(scenarioFile, "utf8");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new ConfigValidationError(`Could not read scenario file ${scenarioFile}: ${message}`);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(scenarioText);
-  } catch {
-    throw new ConfigValidationError(`Could not parse scenario file ${scenarioFile}`);
-  }
-
-  const result = ScenarioSchema.safeParse(parsed);
-  if (!result.success) {
-    throw new ConfigValidationError(`Could not parse scenario file ${scenarioFile}`);
-  }
-  return result.data;
-}
-
-/**
- * Copy fixture contents into the sandbox worktree rather than nesting the
- * fixture directory itself. This mirrors how a user-provided worktree starts.
- */
-async function copyDirectoryContents(sourceDir: Path, targetDir: Path): Promise<void> {
-  for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
-    await cp(path.join(sourceDir, entry.name), path.join(targetDir, entry.name), {
-      recursive: entry.isDirectory(),
-      force: true,
-    });
-  }
-}
-
 export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
   const cli = cac("cli-v2");
 
@@ -638,6 +582,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         promptFile?: Path;
         timeoutMs?: string;
       }) => {
+        const timeoutMs = parseTimeoutMs(options.timeoutMs);
         const prompt = await readPrompt({ prompt: options.prompt, promptFile: options.promptFile });
         const sourceRoot = path.resolve(options.orig ?? currentOpencodeRoot());
         const sandboxRoot = await makeSandboxRoot(options.dest);
@@ -658,7 +603,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
             layout: prepared.layout,
             agentName: spec.agentName,
             prompt: spec.prompt,
-            timeoutMs: parseTimeoutMs(options.timeoutMs),
+            timeoutMs,
             metadata: {
               command: "single-agent",
               sourceRoot,
@@ -680,6 +625,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
     .option("--dest <path>", "Sandbox destination directory")
     .option("--timeout-ms <number>", "Maximum opencode runtime in milliseconds")
     .action(async (options: { orig?: Path; dest?: Path; timeoutMs?: string }) => {
+      const timeoutMs = parseTimeoutMs(options.timeoutMs);
       const sourceRoot = path.resolve(options.orig ?? currentOpencodeRoot());
       const sandboxRoot = await makeSandboxRoot(options.dest);
       const spec = await defaultHelloWorldSpec(sandboxRoot, sourceRoot);
@@ -690,7 +636,7 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           layout: prepared.layout,
           agentName: spec.agentName,
           prompt: spec.prompt,
-          timeoutMs: parseTimeoutMs(options.timeoutMs),
+          timeoutMs,
           metadata: {
             command: "hello-world",
             sourceRoot,
@@ -710,43 +656,40 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
     .option("--timeout-ms <number>", "Maximum opencode runtime in milliseconds")
     .action(async (scenarioDirArg: Path | undefined, options: { dest?: Path; timeoutMs?: string }) => {
       const scenarioDir = path.resolve(requiredOption(scenarioDirArg, "<scenario-dir>"));
-      const scenario = await readScenarioRecipe(scenarioDir);
+      const timeoutMs = parseTimeoutMs(options.timeoutMs);
       const cliRoot = currentCliV2Root();
       const sourceRoot = currentOpencodeRoot();
-      const sourceConfigFile = scenario.config
-        ? resolveFromRoot(cliRoot, scenario.config)
-        : path.resolve(cliRoot, "../../opencode.json");
-      const sourceAgentFile = resolveFromRoot(cliRoot, scenario.agentFile);
-      const promptFile = path.resolve(scenarioDir, scenario.promptFile);
-      const prompt = await readFile(promptFile, "utf8");
+      const scenario = await loadScenario({
+        scenarioDir,
+        cliRoot,
+        defaultConfigFile: path.resolve(cliRoot, "../../opencode.json"),
+      });
       const sandboxRoot = await makeSandboxRoot(options.dest);
       const spec: SingleAgentSandboxSpec = {
         sourceRoot,
         sandboxRoot,
         agentName: scenario.agent,
-        prompt,
-        sourceConfigFile,
-        sourceAgentFile,
+        prompt: scenario.prompt,
+        sourceConfigFile: scenario.sourceConfigFile,
+        sourceAgentFile: scenario.sourceAgentFile,
       };
       const prepared = await prepareSingleAgentSandbox(spec);
 
-      if (scenario.fixtureDir) {
-        await copyDirectoryContents(path.resolve(scenarioDir, scenario.fixtureDir), prepared.layout.worktree);
-      }
+      await copyScenarioFixture(scenario, prepared.layout.worktree);
 
       return runSingleAgentInSandbox(
         {
           layout: prepared.layout,
           agentName: spec.agentName,
           prompt: spec.prompt,
-          timeoutMs: parseTimeoutMs(options.timeoutMs),
+          timeoutMs,
           metadata: {
             command: "scenario",
             sourceRoot,
-            sourceConfigFile,
-            sourceAgentFile,
+            sourceConfigFile: scenario.sourceConfigFile,
+            sourceAgentFile: scenario.sourceAgentFile,
             promptSource: "file",
-            promptFile,
+            promptFile: scenario.promptFile,
             scenarioName: scenario.name,
             scenarioDir,
           },

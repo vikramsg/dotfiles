@@ -9,7 +9,7 @@
     "sandbox": "npm run build:sandbox --silent && node sandbox/dist/sandbox-cli.js",
     "sandbox:v2": "node sandbox/cli-v2/index.ts",
     "test:sandbox": "npm run build:sandbox --silent && node --test sandbox/sandbox-cli.test.mjs",
-    "test:sandbox:v2": "vitest run sandbox/cli-v2/index.test.ts"
+    "test:sandbox:v2": "vitest run sandbox/cli-v2"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.4.2",

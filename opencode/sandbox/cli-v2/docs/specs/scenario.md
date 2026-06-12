@@ -26,6 +26,7 @@ output artifacts
 - A scenario is a repeatable run recipe.
 - A scenario runs one primary agent.
 - `promptFile` and `fixtureDir` are resolved relative to the scenario folder.
+- Scenario-owned prompt and fixture paths must remain inside the real scenario folder after filesystem resolution; prompt, fixture-directory, and fixture-tree symlinks are rejected.
 - `agentFile` and optional `config` are resolved relative to the CLI v2 folder unless absolute.
 - The command uses the same artifact shape as `single-agent`.
 
@@ -93,5 +94,6 @@ Artifacts are written under `<sandbox-root>/output`:
 ## Implementation Notes
 
 - The checked-in `hello-world` scenario is the initial recipe.
-- The command delegates to the single-agent preparation and run path after loading the recipe.
+- `scenario.ts` owns scenario recipe loading, scenario-relative path resolution, and fixture copy helpers.
+- `index.ts` owns CLI command orchestration, sandbox preparation, OpenCode execution, and run artifacts.
 - CLI v2 runs directly from `sandbox/cli-v2/index.ts`; scenario-relative files are resolved from the scenario directory and CLI v2 source directory, not from a build output directory.

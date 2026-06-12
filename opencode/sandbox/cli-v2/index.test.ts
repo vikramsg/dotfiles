@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,6 +77,29 @@ async function writeSourceFiles(root: string) {
     sourceAgentFile: agent,
     configText,
   };
+}
+
+async function writeScenarioRecipe(root: string, recipe: Record<string, unknown> = {}) {
+  const scenarioDir = path.join(root, "scenario");
+
+  await mkdir(scenarioDir, { recursive: true });
+  await writeFile(path.join(scenarioDir, "prompt.md"), "Scenario prompt\n");
+  await writeFile(
+    path.join(scenarioDir, "scenario.json"),
+    JSON.stringify(
+      {
+        name: "custom-scenario",
+        agent: "hello-world",
+        agentFile: "fixtures/agents/hello-world.md",
+        promptFile: "prompt.md",
+        ...recipe,
+      },
+      null,
+      2,
+    ),
+  );
+
+  return scenarioDir;
 }
 
 async function makeFakeOpencode(bin: string, recordPath: string, exitCode = 0) {
@@ -481,6 +504,92 @@ describe("cli-v2", () => {
     expect(artifacts.metadata.scenarioName).toBe("hello-world");
   });
 
+  it("rejects invalid scenario timeout before creating the destination sandbox", async () => {
+    const root = await tempDir();
+    const scenarioDir = path.join(opencodeRoot, "sandbox", "cli-v2", "scenarios", "hello-world");
+    const dest = path.join(root, "dest-that-should-not-be-created");
+    const captured = captureIO();
+
+    const status = await runCli(
+      ["node", "cli-v2", "scenario", scenarioDir, "--dest", dest, "--timeout-ms", "not-a-number"],
+      captured.io,
+    );
+
+    expect(status).toBe(1);
+    expect(captured.stderr).toBe("--timeout-ms must be a positive integer\n");
+    await expect(stat(dest)).rejects.toThrow();
+  });
+
+  it("fails cleanly before sandbox creation when a scenario agent file is missing", async () => {
+    const root = await tempDir();
+    const missingAgentPath = path.join(opencodeRoot, "sandbox", "cli-v2", "fixtures", "agents", "missing-agent-for-preflight.md");
+    const scenarioDir = await writeScenarioRecipe(root, {
+      agentFile: "fixtures/agents/missing-agent-for-preflight.md",
+    });
+    const dest = path.join(root, "dest-that-should-not-be-created");
+    const child = spawn(process.execPath, ["sandbox/cli-v2/index.ts", "scenario", scenarioDir, "--dest", dest], {
+      cwd: opencodeRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    const status = await new Promise<number | null>((resolve) => {
+      child.on("close", (code) => resolve(code));
+    });
+
+    expect(status).toBe(1);
+    expect(stdout).toBe("");
+    expect(stderr).toBe(`Source agent file does not exist: ${missingAgentPath}\n`);
+    await expect(stat(dest)).rejects.toThrow();
+  });
+
+  it.each([
+    ["absolute fixtureDir", (root: string) => path.join(root, "outside-worktree"), "Scenario fixtureDir must be relative"],
+    ["traversal fixtureDir", () => "../outside-worktree", "Scenario fixtureDir escapes scenario directory"],
+  ])("fails cleanly before sandbox preparation for %s", async (_name, fixtureDir, message) => {
+    const root = await tempDir();
+    const scenarioDir = await writeScenarioRecipe(root, { fixtureDir: fixtureDir(root) });
+    const dest = path.join(root, "dest-that-should-not-be-created");
+    const captured = captureIO();
+
+    await mkdir(path.join(root, "outside-worktree"), { recursive: true });
+
+    const status = await runCli(["node", "cli-v2", "scenario", scenarioDir, "--dest", dest], captured.io);
+
+    expect(status).toBe(1);
+    expect(captured.stderr).toContain("Scenario");
+    expect(captured.stderr).toContain(message);
+    await expect(stat(dest)).rejects.toThrow();
+  });
+
+  it("fails cleanly before explicit destination creation when a scenario fixture contains a symlink", async () => {
+    const root = await tempDir();
+    const scenarioDir = await writeScenarioRecipe(root, { fixtureDir: "worktree" });
+    const fixtureDir = path.join(scenarioDir, "worktree");
+    const outsideFixtureFile = path.join(root, "outside-fixture.txt");
+    const fixtureLink = path.join(fixtureDir, "outside-fixture-link.txt");
+    const dest = path.join(root, "dest-that-should-not-be-created");
+    const captured = captureIO();
+
+    await mkdir(fixtureDir, { recursive: true });
+    await writeFile(outsideFixtureFile, "outside fixture\n");
+    await symlink(outsideFixtureFile, fixtureLink);
+
+    const status = await runCli(["node", "cli-v2", "scenario", scenarioDir, "--dest", dest], captured.io);
+
+    expect(status).toBe(1);
+    expect(captured.stderr).toBe(`Scenario fixture contains symlink: ${fixtureLink}\n`);
+    await expect(stat(dest)).rejects.toThrow();
+  });
+
   it("returns timeout status when opencode exceeds the CLI timeout", async () => {
     const orig = await tempDir();
     const dest = await tempDir("cli-v2-sandbox-");
@@ -584,7 +693,7 @@ describe("cli-v2", () => {
 
     expect(scripts["check:sandbox:v2"]).toBe("tsc -p sandbox/cli-v2/tsconfig.json");
     expect(scripts["sandbox:v2"]).toBe("node sandbox/cli-v2/index.ts");
-    expect(scripts["test:sandbox:v2"]).toBe("vitest run sandbox/cli-v2/index.test.ts");
+    expect(scripts["test:sandbox:v2"]).toBe("vitest run sandbox/cli-v2");
     expect(scripts.build).toContain("npm run check:sandbox:v2");
     expect(scripts).not.toHaveProperty("build:sandbox:v2");
     expect(scripts).not.toHaveProperty("typecheck:sandbox:v2");
@@ -634,5 +743,6 @@ describe("cli-v2", () => {
 
     expect(notes).toContain("### PLAN VERSION: 1");
     expect(notes).toContain("### PLAN VERSION: 2");
+    expect(notes).toContain("### PLAN VERSION: 4");
   });
 });
