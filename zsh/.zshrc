@@ -99,9 +99,6 @@ fi
 #########################################
 # Opencode pinned version 
 alias oc-ping="OPENCODE_DISABLE_AUTOUPDATE=1 npx -y opencode-ai@1.14.30"
-alias opencode="OPENCODE_DISABLE_AUTOUPDATE=1 npx -y opencode-ai@1.14.40"
-alias oc-gem="OPENCODE_DISABLE_AUTOUPDATE=1 npx -y opencode-ai@1.14.40 --model google/gemini-3.5-flash"
-
 
 #########################################
 # gcloud commands
