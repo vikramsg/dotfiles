@@ -4,10 +4,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
-    "outDir": "dist",
-    "rootDir": ".",
-    "sourceMap": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["sandbox-cli.ts", "logger.ts"]
+  "include": ["*.ts"]
 }

@@ -1,0 +1,7 @@
+{
+  "name": "hello-world",
+  "agent": "hello-world",
+  "agentFile": "fixtures/agents/hello-world.md",
+  "promptFile": "prompt.md",
+  "fixtureDir": "worktree"
+}

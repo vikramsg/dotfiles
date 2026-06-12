@@ -37,7 +37,9 @@ just opencode-sandbox single-agent reviewer "Review this change"
 
 ## CLI v2
 
-`cli-v2.ts` is the in-progress rewrite of the sandbox CLI. It currently supports only `hello`, `hello-world`, and explicit `single-agent` runs. Run it through the package script:
+`cli-v2/` is the self-contained rewrite of the sandbox CLI. It currently supports only `hello`, `hello-world`, explicit `single-agent` runs, and saved `scenario` recipes. The package script runs `sandbox/cli-v2/index.ts` directly with Node; CLI v2 uses `check:sandbox:v2` for TypeScript diagnostics and does not build a CLI v2 `dist/` artifact.
+
+Run it through the package script:
 
 ```sh
 npm --prefix opencode run sandbox:v2 -- <command> <args...>
@@ -48,7 +50,8 @@ Examples:
 ```sh
 npm --prefix opencode run sandbox:v2 -- hello
 npm --prefix opencode run sandbox:v2 -- hello-world
-npm --prefix opencode run sandbox:v2 -- single-agent --agent custom-agent --agent-file ./sandbox/fixtures/agents/hello-world.md --prompt "Run this agent."
+npm --prefix opencode run sandbox:v2 -- single-agent --agent custom-agent --agent-file ./sandbox/cli-v2/fixtures/agents/hello-world.md --prompt "Run this agent."
+npm --prefix opencode run sandbox:v2 -- scenario ./sandbox/cli-v2/scenarios/hello-world
 ```
 
 Current capabilities:
@@ -61,12 +64,13 @@ Current capabilities:
 - Leaves package plugin entries for OpenCode to resolve; missing configured local plugin files fail sandbox preparation.
 - Copies one selected agent file into the sandbox agent directory under the requested agent name.
 - Runs `opencode run --agent <agent>` inside the sandbox worktree.
-- Provides fixture commands for `hello` and `hello-world`, plus explicit `single-agent` runs.
+- Writes `command.txt`, `metadata.json`, `stdout.txt`, `stderr.txt`, `opencode-exit-status.txt`, and `exit-status.txt` under `<sandbox-root>/output`.
+- Provides fixture commands for `hello` and `hello-world`, explicit `single-agent` runs, and saved `scenario` recipes.
 
 Current limitations:
 
 - Does not yet support orchestrator commands such as `orchestrator-until` or `orchestrator-final-check`.
-- Does not yet write output artifacts such as `events.jsonl`, `opencode.log`, `metadata.json`, or status files.
+- Does not yet write legacy-only output artifacts such as `events.jsonl`, `opencode.log`, or marker files.
 - Does not yet generate observer or stop plugins.
 - Does not yet generate a harness for subagent-mode agents.
 
@@ -95,12 +99,13 @@ Run these from the repo root after changing sandbox code:
 ```sh
 npm --prefix opencode run build:sandbox
 npm --prefix opencode run build
+npm --prefix opencode run check:sandbox:v2
 npm --prefix opencode run test:sandbox:v2
 ```
 
-`npm --prefix opencode run build` runs the OpenCode package build. It checks the orchestration-state plugin and compiles the sandbox TypeScript CLI.
+`npm --prefix opencode run build` runs the OpenCode package build. It checks the orchestration-state plugin, compiles the legacy sandbox TypeScript CLI, and typechecks CLI v2 without emitting CLI v2 build output.
 
-`npm --prefix opencode run test:sandbox:v2` builds the sandbox CLI and runs the CLI v2 sandbox tests. The tests use a fake `opencode` executable, so they do not make real model calls.
+`npm --prefix opencode run test:sandbox:v2` runs the CLI v2 sandbox tests without a CLI v2 build step. The tests use a fake `opencode` executable, so they do not make real model calls.
 CLI v2 tests assert the clean user-facing stderr contract and intentionally do not mock or assert logger internals; real `pino` diagnostics may appear on terminal stderr during test runs.
 
 ## Notes
