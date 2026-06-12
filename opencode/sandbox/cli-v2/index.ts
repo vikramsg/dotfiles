@@ -123,6 +123,11 @@ const defaultIO: CliIO = {
   stderr: process.stderr,
 };
 
+/**
+ * CLI v2 runs from TypeScript source, not from emitted JavaScript. Keep root
+ * resolution tied to this source file so fixture and scenario paths do not
+ * silently depend on a build output directory.
+ */
 function currentCliV2Root(): Path {
   const modulePath = fileURLToPath(import.meta.url);
   return path.dirname(modulePath);
@@ -235,6 +240,12 @@ const OpenCodeConfigSchema = z.object({
   plugin: z.union([z.string().transform((entry) => [entry]), z.array(z.string())]).optional().default([]),
 });
 
+/**
+ * OpenCode config entries are copied as-is into the sandbox. For local plugin
+ * entries, copy only files whose normalized destination remains inside the
+ * sandbox plugin directory; otherwise the copied config could point outside
+ * the isolated XDG tree.
+ */
 async function resolveConfiguredLocalPlugins(
   sourceConfigFile: Path,
   layout: SingleAgentSandboxLayout,
@@ -305,6 +316,11 @@ export async function defaultHelloWorldSpec(sandboxRoot: Path, sourceRoot = curr
   };
 }
 
+/**
+ * Validate source files and local plugin destinations before creating the
+ * sandbox layout. Setup failures should be clean and should not leave a
+ * partially populated sandbox behind.
+ */
 export async function prepareSingleAgentSandbox(
   spec: SingleAgentSandboxSpec,
 ): Promise<PreparedSingleAgentSandbox> {
@@ -360,6 +376,10 @@ function artifactPaths(layout: SingleAgentSandboxLayout): RunArtifacts {
   };
 }
 
+/**
+ * The command artifact is for human reproduction only. The real OpenCode run
+ * uses spawn argv directly and never executes this string through a shell.
+ */
 function shellQuote(value: string): string {
   if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(value)) return value;
   return `'${value.replaceAll("'", `'"'"'`)}'`;
@@ -384,6 +404,10 @@ async function writeRunArtifacts(
   ]);
 }
 
+/**
+ * Run OpenCode with isolated XDG homes, mirror stdout/stderr to the caller,
+ * and persist the same streams plus status files for later inspection.
+ */
 export async function runSingleAgentInSandbox(
   args: RunSingleAgentInSandboxArgs,
   io: CliIO,
@@ -419,6 +443,10 @@ export async function runSingleAgentInSandbox(
     let stderrText = "";
     let timeout: NodeJS.Timeout | undefined;
 
+    /**
+     * Spawn errors, process close, and timeout can race. Exactly one path may
+     * write artifacts and resolve the command status.
+     */
     const finish = (rawStatus: number, finalStatus = rawStatus) => {
       if (settled) return;
       settled = true;
@@ -540,6 +568,10 @@ const ScenarioSchema = z.object({
 
 type ScenarioRecipe = z.infer<typeof ScenarioSchema>;
 
+/**
+ * A scenario is intentionally only a saved run recipe. It does not contain
+ * assertions, expected output, scoring, or any evaluation contract.
+ */
 async function readScenarioRecipe(scenarioDir: Path): Promise<ScenarioRecipe> {
   const scenarioFile = path.join(scenarioDir, "scenario.json");
   let scenarioText: string;
@@ -564,6 +596,10 @@ async function readScenarioRecipe(scenarioDir: Path): Promise<ScenarioRecipe> {
   return result.data;
 }
 
+/**
+ * Copy fixture contents into the sandbox worktree rather than nesting the
+ * fixture directory itself. This mirrors how a user-provided worktree starts.
+ */
 async function copyDirectoryContents(sourceDir: Path, targetDir: Path): Promise<void> {
   for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
     await cp(path.join(sourceDir, entry.name), path.join(targetDir, entry.name), {
@@ -724,6 +760,11 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
   return cli;
 }
 
+/**
+ * Tests inject IO writers instead of mutating process stdout/stderr. CAC help
+ * writes through console methods, so temporarily route those through the same
+ * injected IO contract and restore them after every run.
+ */
 export async function runCli(argv = process.argv, io: CliIO = defaultIO, deps: RunDeps = {}): Promise<number> {
   const originalConsoleInfo = console.info;
   const originalConsoleLog = console.log;

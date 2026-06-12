@@ -1,6 +1,11 @@
 import pino, { type Logger as PinoLogger } from "pino";
 import pretty from "pino-pretty";
 
+/**
+ * CLI v2 keeps its logger local to this folder so the sandbox can be moved or
+ * packaged without depending on the legacy sandbox implementation.
+ */
+
 export type LogFields = Record<string, unknown>;
 
 export type Logger = {
@@ -41,6 +46,10 @@ function fromPino(base: PinoLogger): Logger {
   };
 }
 
+/**
+ * Diagnostic logs go to stderr so command stdout remains available for the
+ * wrapped OpenCode process and for machine-readable command output later.
+ */
 export function createLogger(): Logger {
   const stream = pretty({
     destination: 2,
