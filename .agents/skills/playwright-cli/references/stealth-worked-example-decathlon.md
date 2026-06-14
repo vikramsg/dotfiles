@@ -53,7 +53,7 @@ const context = await chromium.launchPersistentContext(profileDir, {
 Use a fresh profile directory for a clean run:
 
 ```bash
-PROFILE_DIR="/home/vikram_orbio_earth/personal/dotfiles-worktree/tmp/decathlon-profile-fresh-$(date +%Y%m%d-%H%M%S)"
+PROFILE_DIR="/path/to/local/tmp/decathlon-profile-fresh-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$PROFILE_DIR"
 ```
 
@@ -69,10 +69,10 @@ The reliable path in this environment was raw Playwright under `xvfb-run`, not a
 Exact invocation shape:
 
 ```bash
-PROFILE_DIR="/home/vikram_orbio_earth/personal/dotfiles-worktree/tmp/decathlon-profile-fresh-$(date +%Y%m%d-%H%M%S)"
+PROFILE_DIR="/path/to/local/tmp/decathlon-profile-fresh-$(date +%Y%m%d-%H%M%S)"
 export PROFILE_DIR
 xvfb-run -a node - <<'EOF'
-const { chromium } = require('/home/vikram_orbio_earth/.local/lib/node_modules/@playwright/cli/node_modules/playwright')
+const { chromium } = require('/<HOME>/.local/lib/node_modules/@playwright/cli/node_modules/playwright')
 
 const profileDir = process.env.PROFILE_DIR
 const categoryUrl = 'https://www.decathlon.de/alle-sportarten-a-z/wandern-trekking/rucksacke'
@@ -240,7 +240,7 @@ From a successful fresh-profile run:
 This is the known-good control flow that worked in this environment:
 
 ```js
-const { chromium } = require('/home/vikram_orbio_earth/.local/lib/node_modules/@playwright/cli/node_modules/playwright')
+const { chromium } = require('/<HOME>/.local/lib/node_modules/@playwright/cli/node_modules/playwright')
 
 const profileDir = process.env.PROFILE_DIR
 const categoryUrl = 'https://www.decathlon.de/alle-sportarten-a-z/wandern-trekking/rucksacke'
