@@ -1,7 +1,7 @@
 ---
 description: Personal shopper coordinator that delegates planning, product finding, and verification through task-based subagents until items are verified.
 mode: primary
-hidden: false
+hidden: true 
 steps: 40
 permission:
   bash: deny
