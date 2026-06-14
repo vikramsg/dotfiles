@@ -57,3 +57,7 @@ Your output must be compact markdown with this exact structure:
 - Blocks encountered: <"None" or description of the block, e.g. "Cloudflare challenge on Decathlon.de">
 - Screenshots saved: <list of saved screenshot paths in tmp, e.g. "tmp/decathlon-fresh-00-initial.png", or "None">
 ```
+
+### URL validity
+
+- A URL is only valid if it is verified using `curl` or `playwright`. A web search `url` is only for initial search but not for final reporting.
