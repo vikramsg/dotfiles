@@ -251,6 +251,8 @@ playwright-cli --% goto "https://example.com/?a=1&b=2"
 
 After each command, playwright-cli provides a snapshot of the current browser state.
 
+For Cloudflare, CAPTCHA-like pages, bot checks, Turnstile widgets, or visual-only controls that do not appear in snapshots, use the stealth workflow in [references/stealth.md](references/stealth.md).
+
 ```bash
 > playwright-cli goto https://example.com
 ### Page
@@ -396,6 +398,7 @@ playwright-cli show --annotate
 * **Request mocking** [references/request-mocking.md](references/request-mocking.md)
 * **Running Playwright code** [references/running-code.md](references/running-code.md)
 * **Browser session management** [references/session-management.md](references/session-management.md)
+* **Stealth and challenge handling** [references/stealth.md](references/stealth.md)
 * **Spec-driven testing (plan / generate / heal)** [references/spec-driven-testing.md](references/spec-driven-testing.md)
 * **Storage state (cookies, localStorage)** [references/storage-state.md](references/storage-state.md)
 * **Test generation** [references/test-generation.md](references/test-generation.md)
