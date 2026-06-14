@@ -154,3 +154,7 @@ const context = await chromium.launchPersistentContext('tmp/site-profile', {
 - If the challenge loops, save the final screenshot and stop escalating blindly.
 - If the widget falls back after `Verifying...`, treat that as a failed attempt and try the next escalation.
 - If a browser fails to launch because of host dependencies, record that and fall back to Chromium.
+
+## Known Working Site Recipe
+
+- [Decathlon.de worked example](stealth-worked-example-decathlon.md)
