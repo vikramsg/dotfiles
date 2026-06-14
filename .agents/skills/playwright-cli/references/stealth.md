@@ -81,6 +81,11 @@ playwright-cli snapshot --boxes --filename=tmp/site-00-initial.yml
 playwright-cli open --headed --browser=chromium --profile=tmp/site-profile "https://example.com"
 ```
 
+### xvfb-run
+
+**Note**: Headed usage may require running a display server.
+Use `xvfb-run`. If its not available, stop and report to the user that headed runs cannot work without a display running.
+
 ## Coordinate Interaction
 
 Use this only after reading the screenshot and confirming the control is visually present.
