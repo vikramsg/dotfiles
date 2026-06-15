@@ -383,6 +383,52 @@ local function reveal_current_file_in_explorer()
 	})
 end
 
+---Refresh Snacks explorer Git status after external Git tools update the index.
+---Refs:
+---  https://github.com/folke/snacks.nvim/pull/2175
+---  https://git-scm.com/docs/git-status#_background_refresh
+---  https://github.com/folke/snacks.nvim/issues/2773
+---Snacks already runs background status with --no-optional-locks; this handles
+---real Git writers like lazygit/gitui/CLI/Neogit that briefly hold .git/index.lock.
+local function refresh_snacks_explorer_git_status_after_index_write()
+	local pickers = Snacks.picker.get({ source = "explorer", tab = false })
+	if #pickers == 0 then
+		return
+	end
+
+	local git = require("snacks.explorer.git")
+	local actions = require("snacks.explorer.actions")
+	local uv = vim.uv or vim.loop
+
+	local function refresh_picker_when_unlocked(picker, attempt)
+		if not picker or picker.closed then
+			return
+		end
+
+		local root = Snacks.git.get_root(picker:cwd())
+		local lock = root and (root .. "/.git/index.lock") or nil
+
+		-- External Git commands own the index lock while staging/committing/checking out.
+		-- Ref: https://github.com/folke/snacks.nvim/issues/2773
+		-- Defer instead of racing Snacks' status query against an active writer.
+		if lock and uv.fs_stat(lock) then
+			if attempt < 20 then
+				vim.defer_fn(function()
+					refresh_picker_when_unlocked(picker, attempt + 1)
+				end, 100)
+			end
+			return
+		end
+
+		git.refresh(picker:cwd())
+		actions.update(picker, { refresh = true, target = false })
+	end
+
+	for _, picker in ipairs(pickers) do
+		refresh_picker_when_unlocked(picker, 0)
+	end
+end
+
 require("lazy").setup({
 	{
 		"folke/snacks.nvim",
@@ -395,6 +441,25 @@ require("lazy").setup({
 			require("snacks.picker.actions").toggle_explorer_width = toggle_snacks_explorer_width
 			require("snacks.picker.actions").toggle_explorer_hidden = toggle_snacks_explorer_hidden
 			require("snacks").setup(opts)
+
+			local group = vim.api.nvim_create_augroup("dotfiles-snacks-explorer-git-refresh", { clear = true })
+
+			vim.api.nvim_create_autocmd({ "FocusGained", "TermClose" }, {
+				group = group,
+				callback = function()
+					-- Delay matches the Snacks explorer workaround for external Git writers:
+					-- https://github.com/folke/snacks.nvim/issues/2773
+					vim.defer_fn(refresh_snacks_explorer_git_status_after_index_write, 200)
+				end,
+			})
+
+			vim.api.nvim_create_autocmd("User", {
+				group = group,
+				pattern = { "NeogitStatusRefresh", "NeogitStatus" },
+				callback = function()
+					vim.defer_fn(refresh_snacks_explorer_git_status_after_index_write, 200)
+				end,
+			})
 		end,
 		opts = {
 			picker = {
