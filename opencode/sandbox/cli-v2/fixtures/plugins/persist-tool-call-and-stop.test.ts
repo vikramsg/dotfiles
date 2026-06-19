@@ -22,11 +22,7 @@ function pluginContext(worktree: string) {
 
 async function readRecords(worktree: string): Promise<unknown[]> {
   const text = await readFile(
-    path.join(
-      worktree,
-      DefaultRecordToolCallPlugin.metadata.output_dir,
-      DefaultRecordToolCallPlugin.metadata.output_file,
-    ),
+    path.join(worktree, ".agents", "outputs", "tool_calls.jsonl"),
     "utf8",
   );
 
