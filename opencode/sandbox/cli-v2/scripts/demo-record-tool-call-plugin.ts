@@ -8,7 +8,10 @@ import {
   type SingleAgentSandboxSpec,
 } from "../index.ts";
 
-const cliRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const cliRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const sourceRoot = path.resolve(cliRoot, "../..");
 const prompt = "Use the bash tool to run: printf plugin-demo";
 

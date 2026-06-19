@@ -12,8 +12,7 @@
 
 ## Next Steps
 
-1. Make sure auth works so that we can run the agent by copying `auth.json`
-   - Then run the agent and check that we get back the output, and see how we got the output
+1. We have created a record tool call
 2. Then create a scenario spec that allows multi-agent runs 
    - But all it should do is simulate starting a run, getting back a tool call, then see what the agent decides.
    - We probably have to intercept tool calls

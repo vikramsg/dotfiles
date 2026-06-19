@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildRecordToolCallPlugin } from "./persist-tool-call-and-stop.ts";
+import { buildRecordToolCallPlugin } from "./record-tool-call.ts";
 import { PluginInput } from "@opencode-ai/plugin";
 
 describe("RecordToolCallPlugin", () => {
@@ -32,7 +32,6 @@ describe("RecordToolCallPlugin", () => {
       project: {} as never,
       directory: worktree,
       worktree,
-      experimental_workspace: {} as never,
       serverUrl: new URL("http://localhost"),
       $: {} as never,
     };
