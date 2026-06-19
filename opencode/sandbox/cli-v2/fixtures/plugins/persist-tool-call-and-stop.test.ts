@@ -2,7 +2,9 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { PersistToolCallAndStop } from "./persist-tool-call-and-stop.ts";
+import DefaultRecordToolCallPlugin, {
+  DefaultRecordToolCallMetadata,
+} from "./persist-tool-call-and-stop.ts";
 
 async function tempWorktree(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "persist-tool-call-test-"));
@@ -22,7 +24,11 @@ function pluginContext(worktree: string) {
 
 async function readRecords(worktree: string): Promise<unknown[]> {
   const text = await readFile(
-    path.join(worktree, ".agents", "tool-call-blocks", "tool-calls.jsonl"),
+    path.join(
+      worktree,
+      DefaultRecordToolCallMetadata.output_dir,
+      DefaultRecordToolCallMetadata.output_file,
+    ),
     "utf8",
   );
 
@@ -36,7 +42,7 @@ async function readRecords(worktree: string): Promise<unknown[]> {
 describe("PersistToolCallAndStop", () => {
   it("persists tool call args before blocking execution", async () => {
     const worktree = await tempWorktree();
-    const hooks = await PersistToolCallAndStop(pluginContext(worktree));
+    const hooks = await DefaultRecordToolCallPlugin(pluginContext(worktree));
 
     await expect(
       hooks["tool.execute.before"]?.(
@@ -65,7 +71,7 @@ describe("PersistToolCallAndStop", () => {
 
   it("appends records for repeated blocked tool calls", async () => {
     const worktree = await tempWorktree();
-    const hooks = await PersistToolCallAndStop(pluginContext(worktree));
+    const hooks = await DefaultRecordToolCallPlugin(pluginContext(worktree));
     const beforeTool = hooks["tool.execute.before"];
 
     if (!beforeTool) throw new Error("tool.execute.before hook missing");
@@ -98,7 +104,7 @@ describe("PersistToolCallAndStop", () => {
 
   it("uses directory before worktree for sandbox-local persistence", async () => {
     const directory = await tempWorktree();
-    const hooks = await PersistToolCallAndStop({
+    const hooks = await DefaultRecordToolCallPlugin({
       ...pluginContext("/"),
       directory,
     });
