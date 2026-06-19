@@ -52,6 +52,7 @@ async function writeSourceFiles(root: string) {
   const pluginB = path.join(root, "plugins", "stop-marker.js");
   const ignoredPlugin = path.join(root, "plugins", "ignored.ts");
   const agent = path.join(root, "agents", "hello-world.md");
+  const auth = path.join(root, "auth.json");
   const configText = JSON.stringify(
     {
       plugin: ["opencode-websearch-cited@1.2.0", "./plugins/orchestration-state.js"],
@@ -68,6 +69,7 @@ async function writeSourceFiles(root: string) {
   await writeFile(pluginB, "export const pluginB = true\n");
   await writeFile(ignoredPlugin, "export const ignored = true\n");
   await writeFile(agent, "---\ndescription: hello world\n---\n\nSay hello world.\n");
+  await writeFile(auth, '{"auth":true}\n');
 
   return {
     sourceConfigFile: config,
@@ -75,8 +77,29 @@ async function writeSourceFiles(root: string) {
     pluginB,
     ignoredPlugin,
     sourceAgentFile: agent,
+    sourceAuthFile: auth,
     configText,
   };
+}
+
+async function withHomeAuth<T>(fn: (home: string, authFile: string) => Promise<T>): Promise<T> {
+  const originalHome = process.env.HOME;
+  const home = await tempDir("cli-v2-home-");
+  const authFile = path.join(home, ".local", "share", "opencode", "auth.json");
+
+  await mkdir(path.dirname(authFile), { recursive: true });
+  await writeFile(authFile, '{"auth":true}\n');
+
+  process.env.HOME = home;
+  try {
+    return await fn(home, authFile);
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+  }
 }
 
 async function writeScenarioRecipe(root: string, recipe: Record<string, unknown> = {}) {
@@ -154,6 +177,7 @@ describe("cli-v2", () => {
     expect(layout.agentDir).toBe(path.join(layout.opencodeConfigDir, "agents"));
     expect(layout.worktree).toBe(path.join(layout.sandboxRoot, "worktree"));
     expect(layout.output).toBe(path.join(layout.sandboxRoot, "output"));
+    expect(layout.sandboxAuthFile).toBe(path.join(layout.dataHome, "opencode", "auth.json"));
 
     await writeFile(path.join(layout.pluginDir, ".keep"), "");
     await writeFile(path.join(layout.agentDir, ".keep"), "");
@@ -176,6 +200,7 @@ describe("cli-v2", () => {
       prompt: "Use the custom agent.",
       sourceConfigFile: files.sourceConfigFile,
       sourceAgentFile: files.sourceAgentFile,
+      sourceAuthFile: files.sourceAuthFile,
     });
 
     const pluginFile = path.join(prepared.layout.pluginDir, "orchestration-state.js");
@@ -184,6 +209,7 @@ describe("cli-v2", () => {
     expect(prepared.sandboxPluginFiles).toEqual([pluginFile]);
     expect(prepared.sandboxAgentFile).toBe(agentFile);
     expect(await readFile(prepared.layout.sandboxConfigFile, "utf8")).toBe(files.configText);
+    expect(await readFile(prepared.layout.sandboxAuthFile, "utf8")).toBe(await readFile(files.sourceAuthFile, "utf8"));
     expect(await readFile(pluginFile, "utf8")).toBe(await readFile(files.pluginA, "utf8"));
     await expect(readFile(path.join(prepared.layout.pluginDir, "stop-marker.js"), "utf8")).rejects.toThrow();
     await expect(readFile(path.join(prepared.layout.pluginDir, "ignored.ts"), "utf8")).rejects.toThrow();
@@ -205,6 +231,7 @@ describe("cli-v2", () => {
           prompt: "Use the custom agent.",
           sourceConfigFile: files.sourceConfigFile,
           sourceAgentFile: files.sourceAgentFile,
+          sourceAuthFile: files.sourceAuthFile,
         }),
       ).rejects.toThrow(`Invalid agent name: ${agentName}`);
 
@@ -233,6 +260,7 @@ describe("cli-v2", () => {
         prompt: "Use the custom agent.",
         sourceConfigFile: config,
         sourceAgentFile: agent,
+        sourceAuthFile: path.join(orig, "auth.json"),
       }),
     ).rejects.toThrow(`Absolute local plugin paths are not supported in sandbox config: ${plugin}`);
 
@@ -266,6 +294,7 @@ describe("cli-v2", () => {
         prompt: "Use the custom agent.",
         sourceConfigFile: config,
         sourceAgentFile: agent,
+        sourceAuthFile: path.join(orig, "auth.json"),
       }),
     ).rejects.toThrow("Configured local plugin escapes sandbox plugin directory: ../evil.js ->");
 
@@ -319,24 +348,26 @@ describe("cli-v2", () => {
 
     await makeFakeOpencode(bin, recordPath);
 
-    const status = await runCli(
-      [
-        "node",
-        "cli-v2",
-        "single-agent",
-        "--orig",
-        orig,
-        "--dest",
-        dest,
-        "--agent",
-        "custom-agent",
-        "--agent-file",
-        files.sourceAgentFile,
-        "--prompt",
-        prompt,
-      ],
-      captured.io,
-      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    const status = await withHomeAuth(() =>
+      runCli(
+        [
+          "node",
+          "cli-v2",
+          "single-agent",
+          "--orig",
+          orig,
+          "--dest",
+          dest,
+          "--agent",
+          "custom-agent",
+          "--agent-file",
+          files.sourceAgentFile,
+          "--prompt",
+          prompt,
+        ],
+        captured.io,
+        { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+      ),
     );
 
     const record = JSON.parse(await readFile(recordPath, "utf8"));
@@ -378,24 +409,26 @@ describe("cli-v2", () => {
     await writeFile(promptFile, prompt);
     await makeFakeOpencode(bin, recordPath);
 
-    const status = await runCli(
-      [
-        "node",
-        "cli-v2",
-        "single-agent",
-        "--orig",
-        orig,
-        "--dest",
-        dest,
-        "--agent",
-        "custom-agent",
-        "--agent-file",
-        files.sourceAgentFile,
-        "--prompt-file",
-        promptFile,
-      ],
-      captured.io,
-      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    const status = await withHomeAuth(() =>
+      runCli(
+        [
+          "node",
+          "cli-v2",
+          "single-agent",
+          "--orig",
+          orig,
+          "--dest",
+          dest,
+          "--agent",
+          "custom-agent",
+          "--agent-file",
+          files.sourceAgentFile,
+          "--prompt-file",
+          promptFile,
+        ],
+        captured.io,
+        { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+      ),
     );
 
     const record = JSON.parse(await readFile(recordPath, "utf8"));
@@ -450,10 +483,12 @@ describe("cli-v2", () => {
 
     await makeFakeOpencode(bin, recordPath);
 
-    const status = await runCli(
-      ["node", "cli-v2", "hello-world", "--dest", dest],
-      captured.io,
-      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    const status = await withHomeAuth(() =>
+      runCli(
+        ["node", "cli-v2", "hello-world", "--dest", dest],
+        captured.io,
+        { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+      ),
     );
 
     const record = JSON.parse(await readFile(recordPath, "utf8"));
@@ -475,10 +510,12 @@ describe("cli-v2", () => {
 
     await makeFakeOpencode(bin, recordPath);
 
-    const status = await runCli(
-      ["node", "cli-v2", "scenario", scenarioDir, "--dest", dest],
-      captured.io,
-      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    const status = await withHomeAuth(() =>
+      runCli(
+        ["node", "cli-v2", "scenario", scenarioDir, "--dest", dest],
+        captured.io,
+        { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+      ),
     );
 
     const record = JSON.parse(await readFile(recordPath, "utf8"));
@@ -602,26 +639,28 @@ describe("cli-v2", () => {
     await writeFile(fakeOpencode, "#!/usr/bin/env node\nsetTimeout(() => {}, 10000);\n");
     await chmod(fakeOpencode, 0o755);
 
-    const status = await runCli(
-      [
-        "node",
-        "cli-v2",
-        "single-agent",
-        "--orig",
-        orig,
-        "--dest",
-        dest,
-        "--agent",
-        "custom-agent",
-        "--agent-file",
-        files.sourceAgentFile,
-        "--prompt",
-        "hello",
-        "--timeout-ms",
-        "50",
-      ],
-      captured.io,
-      { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+    const status = await withHomeAuth(() =>
+      runCli(
+        [
+          "node",
+          "cli-v2",
+          "single-agent",
+          "--orig",
+          orig,
+          "--dest",
+          dest,
+          "--agent",
+          "custom-agent",
+          "--agent-file",
+          files.sourceAgentFile,
+          "--prompt",
+          "hello",
+          "--timeout-ms",
+          "50",
+        ],
+        captured.io,
+        { env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` } },
+      ),
     );
 
     const artifacts = await readArtifactFiles(dest);
@@ -638,24 +677,26 @@ describe("cli-v2", () => {
     const files = await writeSourceFiles(orig);
     const captured = captureIO();
 
-    const status = await runCli(
-      [
-        "node",
-        "cli-v2",
-        "single-agent",
-        "--orig",
-        orig,
-        "--dest",
-        dest,
-        "--agent",
-        "custom-agent",
-        "--agent-file",
-        files.sourceAgentFile,
-        "--prompt",
-        "Hello from missing CLI test.",
-      ],
-      captured.io,
-      { env: { PATH: "" } },
+    const status = await withHomeAuth(() =>
+      runCli(
+        [
+          "node",
+          "cli-v2",
+          "single-agent",
+          "--orig",
+          orig,
+          "--dest",
+          dest,
+          "--agent",
+          "custom-agent",
+          "--agent-file",
+          files.sourceAgentFile,
+          "--prompt",
+          "Hello from missing CLI test.",
+        ],
+        captured.io,
+        { env: { PATH: "" } },
+      ),
     );
 
     expect(status).toBe(127);

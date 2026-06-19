@@ -24,7 +24,6 @@ import {
   ScenarioValidationError,
 } from "./scenario.ts";
 import type { Path } from "./types.ts";
-import { log } from "node:console";
 
 let logger: Logger = silentLogger;
 
@@ -141,8 +140,6 @@ const Command = {
   Scenario: "scenario",
 } as const;
 
-const HelloWorldPrompt = "Respond with hello world.";
-
 const defaultIO: CliIO = {
   stdout: process.stdout,
   stderr: process.stderr,
@@ -180,6 +177,7 @@ export async function createSingleAgentSandboxLayout(
     mkdir(layout.pluginDir, { recursive: true }),
     mkdir(layout.agentDir, { recursive: true }),
     mkdir(layout.dataHome, { recursive: true }),
+    mkdir(path.dirname(layout.sandboxAuthFile), { recursive: true }),
     mkdir(layout.cacheHome, { recursive: true }),
     mkdir(layout.stateHome, { recursive: true }),
     mkdir(layout.shareHome, { recursive: true }),
@@ -229,7 +227,7 @@ function deriveSingleAgentSandboxLayout(
     worktree,
     output,
     sandboxConfigFile: path.join(opencodeConfigDir, "opencode.json"),
-    sandboxAuthFile: path.join(shareHome, "auth.json"),
+    sandboxAuthFile: path.join(dataHome, "opencode", "auth.json"),
   };
 }
 
@@ -332,25 +330,6 @@ function ensureSafeAgentName(agentName: string): void {
   }
 }
 
-export async function defaultHelloWorldSpec(
-  sandboxRoot: Path,
-  sourceRoot = currentOpencodeRoot(),
-): Promise<SingleAgentSandboxSpec> {
-  return {
-    sourceRoot,
-    sandboxRoot,
-    agentName: "hello-world",
-    prompt: HelloWorldPrompt,
-    sourceConfigFile: path.join(sourceRoot, "opencode.json"),
-    sourceAgentFile: path.join(
-      currentCliV2Root(),
-      "fixtures",
-      "agents",
-      "hello-world.md",
-    ),
-  };
-}
-
 /**
  * Validate source files and local plugin destinations before creating the
  * sandbox layout. Setup failures should be clean and should not leave a
@@ -380,6 +359,10 @@ export async function prepareSingleAgentSandbox(
     spec.sourceAgentFile,
     `Source agent file does not exist: ${spec.sourceAgentFile}`,
   );
+  await ensureCopyableSourceFile(
+    spec.sourceAuthFile,
+    `auth.json file does not exist: ${spec.sourceAuthFile}`,
+  );
 
   const log = logger.bind({
     agentName: spec.agentName,
@@ -388,14 +371,11 @@ export async function prepareSingleAgentSandbox(
   });
 
   log.info("sandbox.prepare.start");
+  log.info("sourceAuthFile", { sourceAuthFile: spec.sourceAuthFile });
 
   const layout = await createSingleAgentSandboxLayout({
     sandboxRoot: spec.sandboxRoot,
   });
-  await ensureCopyableSourceFile(
-    spec.sourceAuthFile,
-    `auth.json file does not exist: ${spec.sourceAuthFile}`,
-  );
   await copyFile(spec.sourceAuthFile, layout.sandboxAuthFile);
 
   const sandboxAgentFile = path.join(layout.agentDir, `${spec.agentName}.md`);
@@ -706,10 +686,6 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           sourceRoot,
           requiredOption(options.agentFile, "--agent-file"),
         );
-        const sourceAuthFile = resolveFromRoot(
-          os.homedir(),
-          ".local/share/opencode/auth.json",
-        );
         const spec: SingleAgentSandboxSpec = {
           sourceRoot,
           sandboxRoot,
@@ -717,9 +693,14 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           prompt: prompt.prompt,
           sourceConfigFile,
           sourceAgentFile,
-          sourceAuthFile,
+          sourceAuthFile: path.join(
+            os.homedir(),
+            ".local",
+            "share",
+            "opencode",
+            "auth.json",
+          ),
         };
-        log.info("sourceAuthFile", { sourceAuthFile });
         const prepared = await prepareSingleAgentSandbox(spec);
 
         return runSingleAgentInSandbox(
@@ -756,7 +737,26 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
         const timeoutMs = parseTimeoutMs(options.timeoutMs);
         const sourceRoot = path.resolve(options.orig ?? currentOpencodeRoot());
         const sandboxRoot = await makeSandboxRoot(options.dest);
-        const spec = await defaultHelloWorldSpec(sandboxRoot, sourceRoot);
+        const spec: SingleAgentSandboxSpec = {
+          sourceRoot,
+          sandboxRoot,
+          agentName: "hello-world",
+          prompt: "Respond with hello world.",
+          sourceConfigFile: path.join(sourceRoot, "opencode.json"),
+          sourceAgentFile: path.join(
+            currentCliV2Root(),
+            "fixtures",
+            "agents",
+            "hello-world.md",
+          ),
+          sourceAuthFile: path.join(
+            os.homedir(),
+            ".local",
+            "share",
+            "opencode",
+            "auth.json",
+          ),
+        };
         const prepared = await prepareSingleAgentSandbox(spec);
 
         return runSingleAgentInSandbox(
@@ -807,6 +807,13 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
           prompt: scenario.prompt,
           sourceConfigFile: scenario.sourceConfigFile,
           sourceAgentFile: scenario.sourceAgentFile,
+          sourceAuthFile: path.join(
+            os.homedir(),
+            ".local",
+            "share",
+            "opencode",
+            "auth.json",
+          ),
         };
         const prepared = await prepareSingleAgentSandbox(spec);
 
