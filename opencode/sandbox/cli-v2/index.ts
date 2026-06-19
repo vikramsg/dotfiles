@@ -484,6 +484,9 @@ export async function runSingleAgentInSandbox(
     args.agentName,
     args.prompt,
   ];
+  const opencodeDataDir = path.join(args.layout.dataHome, "opencode");
+  const opencodeDbFile = path.join(opencodeDataDir, "opencode.db");
+  const opencodeLogFile = path.join(opencodeDataDir, "log", "opencode.log");
   const files = artifactPaths(args.layout);
   const metadata = {
     command: args.metadata?.command ?? "single-agent",
@@ -541,6 +544,11 @@ export async function runSingleAgentInSandbox(
         });
     };
 
+    log.info("sandbox.opencode.storage", {
+      opencodeDataDir,
+      opencodeDbFile,
+      opencodeLogFile,
+    });
     log.info("sandbox.opencode.spawn", {
       argv: opencodeArgs,
       prompt: args.prompt,
