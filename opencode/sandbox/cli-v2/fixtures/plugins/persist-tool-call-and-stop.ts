@@ -12,7 +12,7 @@ const OpenCodePluginEvents = {
   ToolExecuteAfter: "tool.execute.after",
 } as const satisfies Record<string, keyof Hooks>;
 
-const buildRecordToolCallPlugin =
+export const buildRecordToolCallPlugin =
   (options: ToolCallMetadata): Plugin =>
   async (input: PluginInput): Promise<Hooks> => {
     const { directory, worktree } = input;
