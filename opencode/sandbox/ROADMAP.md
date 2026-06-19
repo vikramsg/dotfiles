@@ -10,6 +10,15 @@
     * Eventually also multi-agent optimization
 3. Both `cli-v2.ts` and `DSPy` should be packagable into a single artifact for eventual release as a separate repo.
 
+## Next Steps
+
+1. Make sure auth works so that we can run the agent by copying `auth.json`
+   - Then run the agent and check that we get back the output, and see how we got the output
+2. Then create a scenario spec that allows multi-agent runs 
+   - But all it should do is simulate starting a run, getting back a tool call, then see what the agent decides.
+   - We probably have to intercept tool calls
+   - We probably have to create an artificial session
+
 ## CLI Architecture Improvements
 
 ### High-Prio
