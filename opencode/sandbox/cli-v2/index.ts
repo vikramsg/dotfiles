@@ -118,6 +118,10 @@ type RunMetadataInput = {
   sourceRoot?: Path;
   sourceConfigFile?: Path;
   sourceAgentFile?: Path;
+  sourceAuthFile?: Path;
+  sandboxConfigFile?: Path;
+  sandboxAgentFile?: Path;
+  sandboxAuthFile?: Path;
   promptSource: "text" | "file";
   promptFile?: Path;
   scenarioName?: string;
@@ -370,8 +374,12 @@ export async function prepareSingleAgentSandbox(
     sourceRoot: spec.sourceRoot,
   });
 
-  log.info("sandbox.prepare.start");
-  log.info("sourceAuthFile", { sourceAuthFile: spec.sourceAuthFile });
+  log.info("sandbox.prepare.sources", {
+    sourceConfigFile: spec.sourceConfigFile,
+    sourceAgentFile: spec.sourceAgentFile,
+    sourceAuthFile: spec.sourceAuthFile,
+    prompt: spec.prompt,
+  });
 
   const layout = await createSingleAgentSandboxLayout({
     sandboxRoot: spec.sandboxRoot,
@@ -393,10 +401,11 @@ export async function prepareSingleAgentSandbox(
 
   await copyFile(spec.sourceAgentFile, sandboxAgentFile);
 
-  log.info("sandbox.prepare.done", {
+  log.info("sandbox.prepare.destinations", {
     sandboxConfigFile: layout.sandboxConfigFile,
     sandboxPluginFiles,
     sandboxAgentFile,
+    sandboxAuthFile: layout.sandboxAuthFile,
   });
 
   return { layout, sandboxPluginFiles, sandboxAgentFile };
@@ -482,6 +491,7 @@ export async function runSingleAgentInSandbox(
     sandboxRoot: args.layout.sandboxRoot,
     worktree: args.layout.worktree,
     timeoutMs: args.timeoutMs ?? null,
+    argv: opencodeArgs,
     ...args.metadata,
   };
 
@@ -490,6 +500,19 @@ export async function runSingleAgentInSandbox(
     let stdoutText = "";
     let stderrText = "";
     let timeout: NodeJS.Timeout | undefined;
+    let stdoutFrameOpen = false;
+    let stderrFrameOpen = false;
+
+    const closeOutputFrames = () => {
+      if (stdoutFrameOpen) {
+        io.stdout.write(`${stdoutText.endsWith("\n") ? "" : "\n"}[opencode stdout end]\n`);
+        stdoutFrameOpen = false;
+      }
+      if (stderrFrameOpen) {
+        io.stderr.write(`${stderrText.endsWith("\n") ? "" : "\n"}[opencode stderr end]\n`);
+        stderrFrameOpen = false;
+      }
+    };
 
     /**
      * Spawn errors, process close, and timeout can race. Exactly one path may
@@ -499,6 +522,7 @@ export async function runSingleAgentInSandbox(
       if (settled) return;
       settled = true;
       if (timeout) clearTimeout(timeout);
+      closeOutputFrames();
       writeRunArtifacts(
         files,
         opencodeArgs,
@@ -517,7 +541,16 @@ export async function runSingleAgentInSandbox(
         });
     };
 
-    log.info("opencode.run.start", { promptLength: args.prompt.length });
+    log.info("sandbox.opencode.spawn", {
+      argv: opencodeArgs,
+      prompt: args.prompt,
+      promptLength: args.prompt.length,
+      xdgConfigHome: env.XDG_CONFIG_HOME,
+      xdgDataHome: env.XDG_DATA_HOME,
+      xdgCacheHome: env.XDG_CACHE_HOME,
+      xdgStateHome: env.XDG_STATE_HOME,
+      xdgShareHome: env.XDG_SHARE_HOME,
+    });
     const child = spawn("opencode", opencodeArgs, {
       cwd: deps.cwd ?? args.layout.worktree,
       env,
@@ -537,12 +570,20 @@ export async function runSingleAgentInSandbox(
     child.stdout?.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
       stdoutText += text;
+      if (!stdoutFrameOpen) {
+        io.stdout.write("[opencode stdout begin]\n");
+        stdoutFrameOpen = true;
+      }
       io.stdout.write(text);
     });
 
     child.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
       stderrText += text;
+      if (!stderrFrameOpen) {
+        io.stderr.write("[opencode stderr begin]\n");
+        stderrFrameOpen = true;
+      }
       io.stderr.write(text);
     });
 
@@ -714,6 +755,10 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
               sourceRoot,
               sourceConfigFile,
               sourceAgentFile,
+              sourceAuthFile: spec.sourceAuthFile,
+              sandboxConfigFile: prepared.layout.sandboxConfigFile,
+              sandboxAgentFile: prepared.sandboxAgentFile,
+              sandboxAuthFile: prepared.layout.sandboxAuthFile,
               promptSource: prompt.source,
               promptFile: prompt.file,
             },
@@ -770,6 +815,10 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
               sourceRoot,
               sourceConfigFile: spec.sourceConfigFile,
               sourceAgentFile: spec.sourceAgentFile,
+              sourceAuthFile: spec.sourceAuthFile,
+              sandboxConfigFile: prepared.layout.sandboxConfigFile,
+              sandboxAgentFile: prepared.sandboxAgentFile,
+              sandboxAuthFile: prepared.layout.sandboxAuthFile,
               promptSource: "text",
             },
           },
@@ -830,6 +879,10 @@ export function createCli(io: CliIO = defaultIO, deps: RunDeps = {}) {
               sourceRoot,
               sourceConfigFile: scenario.sourceConfigFile,
               sourceAgentFile: scenario.sourceAgentFile,
+              sourceAuthFile: spec.sourceAuthFile,
+              sandboxConfigFile: prepared.layout.sandboxConfigFile,
+              sandboxAgentFile: prepared.sandboxAgentFile,
+              sandboxAuthFile: prepared.layout.sandboxAuthFile,
               promptSource: "file",
               promptFile: scenario.promptFile,
               scenarioName: scenario.name,

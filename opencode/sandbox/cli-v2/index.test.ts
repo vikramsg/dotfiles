@@ -385,14 +385,17 @@ describe("cli-v2", () => {
     expect(await readFile(path.join(sandboxRoot, "config", "opencode", "agents", "custom-agent.md"), "utf8")).toBe(
       await readFile(files.sourceAgentFile, "utf8"),
     );
-    expect(captured.stdout).toBe("fake stdout\n");
-    expect(captured.stderr).toBe("fake stderr\n");
+    expect(captured.stdout).toBe("[opencode stdout begin]\nfake stdout\n[opencode stdout end]\n");
+    expect(captured.stderr).toBe("[opencode stderr begin]\nfake stderr\n[opencode stderr end]\n");
     expect(artifacts.stdout).toBe("fake stdout\n");
     expect(artifacts.stderr).toBe("fake stderr\n");
     expect(artifacts.rawStatus).toBe("0\n");
     expect(artifacts.status).toBe("0\n");
     expect(artifacts.command).toContain("opencode run --dir");
     expect(artifacts.metadata.agentName).toBe("custom-agent");
+    expect(artifacts.metadata.sourceAuthFile).toContain(path.join(".local", "share", "opencode", "auth.json"));
+    expect(artifacts.metadata.sandboxAuthFile).toBe(path.join(sandboxRoot, "data", "opencode", "auth.json"));
+    expect(artifacts.metadata.argv).toEqual(record.args);
     expect(artifacts.metadata.promptSource).toBe("text");
   });
 
