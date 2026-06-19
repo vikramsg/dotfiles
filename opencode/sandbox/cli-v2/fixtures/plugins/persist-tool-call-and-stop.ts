@@ -1,21 +1,26 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { Plugin, PluginInput } from "@opencode-ai/plugin";
+import type { Plugin, PluginInput, Hooks } from "@opencode-ai/plugin";
 
 const OUTPUT_DIR = path.join(".agents", "tool-call-blocks");
 const OUTPUT_FILE = "tool-calls.jsonl";
+
+const OpenCodePluginEvents = {
+  ToolExecuteBefore: "tool.execute.before",
+  ToolExecuteAfter: "tool.execute.after",
+} as const satisfies Record<string, keyof Hooks>;
 
 export const PersistToolCallAndStop: Plugin = async (input: PluginInput) => {
   const { directory, worktree } = input;
   const root = directory || worktree;
 
   return {
-    "tool.execute.before": async (input, output) => {
+    [OpenCodePluginEvents.ToolExecuteBefore]: async (input, output) => {
       const outputDir = path.join(root, OUTPUT_DIR);
       const outputFile = path.join(outputDir, OUTPUT_FILE);
       const record = {
         at: new Date().toISOString(),
-        hook: "tool.execute.before",
+        hook: OpenCodePluginEvents.ToolExecuteBefore,
         sessionID: input.sessionID,
         callID: input.callID,
         tool: input.tool,
