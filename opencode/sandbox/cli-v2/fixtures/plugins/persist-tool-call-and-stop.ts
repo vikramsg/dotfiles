@@ -1,11 +1,12 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { Plugin } from "@opencode-ai/plugin";
+import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 
 const OUTPUT_DIR = path.join(".agents", "tool-call-blocks");
 const OUTPUT_FILE = "tool-calls.jsonl";
 
-export const PersistToolCallAndStop: Plugin = async ({ directory, worktree }) => {
+export const PersistToolCallAndStop: Plugin = async (input: PluginInput) => {
+  const { directory, worktree } = input;
   const root = directory || worktree;
 
   return {

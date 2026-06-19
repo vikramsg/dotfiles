@@ -5,10 +5,10 @@ SCENARIO ?= cli-v2/scenarios/hello-world
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-35s\033[0m %s\n", $$1, $$2}'
 
-check:
+check: ## Run checks
 	npm --prefix .. run check:sandbox:v2
 
-test:
+test: ## Run tests
 	npm --prefix .. run test:sandbox:v2
 
 hello: ## Run hello world bypassing agent
