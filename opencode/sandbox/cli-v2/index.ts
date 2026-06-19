@@ -560,6 +560,7 @@ export async function runSingleAgentInSandbox(
     if (args.timeoutMs !== undefined) {
       timeout = setTimeout(() => {
         const message = `opencode timed out after ${args.timeoutMs}ms\n`;
+        closeOutputFrames();
         stderrText += message;
         io.stderr.write(message);
         child.kill();
@@ -612,6 +613,7 @@ export async function runSingleAgentInSandbox(
 
     child.on("close", (code, signal) => {
       if (settled) return;
+      closeOutputFrames();
       if (code !== null) {
         log.info("opencode.run.exit", { status: code });
         finish(code);
