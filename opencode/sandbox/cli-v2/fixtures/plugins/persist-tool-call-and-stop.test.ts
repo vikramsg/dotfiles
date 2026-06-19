@@ -2,9 +2,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import DefaultRecordToolCallPlugin, {
-  DefaultRecordToolCallMetadata,
-} from "./persist-tool-call-and-stop.ts";
+import DefaultRecordToolCallPlugin from "./persist-tool-call-and-stop.ts";
 
 async function tempWorktree(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "persist-tool-call-test-"));
@@ -26,8 +24,8 @@ async function readRecords(worktree: string): Promise<unknown[]> {
   const text = await readFile(
     path.join(
       worktree,
-      DefaultRecordToolCallMetadata.output_dir,
-      DefaultRecordToolCallMetadata.output_file,
+      DefaultRecordToolCallPlugin.metadata.output_dir,
+      DefaultRecordToolCallPlugin.metadata.output_file,
     ),
     "utf8",
   );

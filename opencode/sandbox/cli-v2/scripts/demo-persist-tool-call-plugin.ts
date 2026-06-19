@@ -7,7 +7,7 @@ import {
   runSingleAgentInSandbox,
   type SingleAgentSandboxSpec,
 } from "../index.ts";
-import { DefaultRecordToolCallMetadata } from "../fixtures/plugins/persist-tool-call-and-stop.ts";
+import DefaultRecordToolCallPlugin from "../fixtures/plugins/persist-tool-call-and-stop.ts";
 
 const cliRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRoot = path.resolve(cliRoot, "../..");
@@ -80,8 +80,8 @@ const status = await runSingleAgentInSandbox(
 
 const persistedFile = path.join(
   prepared.layout.worktree,
-  DefaultRecordToolCallMetadata.output_dir,
-  DefaultRecordToolCallMetadata.output_file,
+  DefaultRecordToolCallPlugin.metadata.output_dir,
+  DefaultRecordToolCallPlugin.metadata.output_file,
 );
 
 process.stdout.write(`\nPersisted blocked tool calls:\n${persistedFile}\n`);

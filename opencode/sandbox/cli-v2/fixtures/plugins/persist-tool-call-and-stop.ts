@@ -7,11 +7,6 @@ interface ToolCallMetadata {
   output_file: string;
 }
 
-export const DefaultRecordToolCallMetadata = {
-  output_file: "tool_calls.jsonl",
-  output_dir: ".agents/outputs/",
-} as const satisfies ToolCallMetadata;
-
 const OpenCodePluginEvents = {
   ToolExecuteBefore: "tool.execute.before",
   ToolExecuteAfter: "tool.execute.after",
@@ -44,8 +39,9 @@ const buildRecordToolCallPlugin =
     };
   };
 
-const DefaultRecordToolCallPlugin = buildRecordToolCallPlugin(
-  DefaultRecordToolCallMetadata,
-);
+const DefaultRecordToolCallPlugin = buildRecordToolCallPlugin({
+  output_file: "tool_calls.jsonl",
+  output_dir: ".agents/outputs/",
+});
 
 export default DefaultRecordToolCallPlugin;
