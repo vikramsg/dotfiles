@@ -17,6 +17,8 @@ def test_systemd_install_writes_units_and_enables_path(tmp_path, monkeypatch):
 
     import lch.systemd as systemd_module
 
+    monkeypatch.setattr(systemd_module.sys, "platform", "linux")
+
     calls: list[list[str]] = []
 
     def fake_watch_path(job):
@@ -85,3 +87,117 @@ def test_cli_status_uses_systemd_on_linux(monkeypatch):
 
     assert result.exit_code == 0
     assert result.output.splitlines() == ["loaded"]
+
+
+def test_cli_logs_runs_journalctl_on_linux(monkeypatch):
+    import lch.cli as cli_module
+
+    monkeypatch.setattr(cli_module.sys, "platform", "linux")
+    monkeypatch.setattr(
+        cli_module,
+        "logs_job_systemd",
+        lambda _job_id: (
+            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.service",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.path",
+        ),
+    )
+
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], *, check: bool, text: bool) -> object:
+        calls.append(command)
+        assert check is True
+        assert text is True
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--lines", "50"])
+
+    assert result.exit_code == 0
+    assert calls == [
+        [
+            "journalctl",
+            "--user",
+            "-n",
+            "50",
+            "-u",
+            "com.vikramsg.dotfiles.lch-screenshot-sync.service",
+            "-u",
+            "com.vikramsg.dotfiles.lch-screenshot-sync.path",
+        ]
+    ]
+
+
+def test_cli_logs_can_follow_journalctl_on_linux(monkeypatch):
+    import lch.cli as cli_module
+
+    monkeypatch.setattr(cli_module.sys, "platform", "linux")
+    monkeypatch.setattr(
+        cli_module,
+        "logs_job_systemd",
+        lambda _job_id: (
+            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.service",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.path",
+        ),
+    )
+
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], *, check: bool, text: bool) -> object:
+        calls.append(command)
+        assert check is True
+        assert text is True
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--follow"])
+
+    assert result.exit_code == 0
+    assert calls == [
+        [
+            "journalctl",
+            "--user",
+            "-n",
+            "200",
+            "-f",
+            "-u",
+            "com.vikramsg.dotfiles.lch-screenshot-sync.service",
+            "-u",
+            "com.vikramsg.dotfiles.lch-screenshot-sync.path",
+        ]
+    ]
+
+
+def test_cli_logs_can_print_journalctl_commands_on_linux(monkeypatch):
+    import lch.cli as cli_module
+
+    monkeypatch.setattr(cli_module.sys, "platform", "linux")
+    monkeypatch.setattr(
+        cli_module,
+        "logs_job_systemd",
+        lambda _job_id: (
+            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.service",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.path",
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--paths"])
+
+    assert result.exit_code == 0
+    assert result.output.splitlines() == [
+        "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.service",
+        "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.path",
+    ]

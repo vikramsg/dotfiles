@@ -100,7 +100,7 @@ def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path,
 
     install_result = runner.invoke(cli_module.main, ["install", "lch-screenshot-clipboard"])
     status_result = runner.invoke(cli_module.main, ["status", "lch-screenshot-clipboard"])
-    logs_result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-clipboard"])
+    logs_result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-clipboard", "--paths"])
     uninstall_result = runner.invoke(cli_module.main, ["uninstall", "lch-screenshot-clipboard"])
 
     assert install_result.exit_code == 0
@@ -113,3 +113,90 @@ def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path,
         ["logs", "lch-screenshot-clipboard"],
         ["uninstall", "lch-screenshot-clipboard"],
     ]
+
+
+def test_logs_command_shows_launchd_log_contents_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    import lch.cli as cli_module
+
+    monkeypatch.setattr(cli_module.sys, "platform", "darwin")
+    stdout_log_path = tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-sync.out.log"
+    stderr_log_path = tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-sync.err.log"
+    stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
+    stdout_log_path.write_text("stdout full log\n")
+    stderr_log_path.write_text("stderr full log\n")
+    monkeypatch.setattr(cli_module, "logs_job_launchd", lambda _job_id: (stdout_log_path, stderr_log_path))
+
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], *, capture_output: bool, text: bool, check: bool) -> object:
+        calls.append(command)
+        assert capture_output is True
+        assert text is True
+        assert check is False
+
+        class Result:
+            returncode = 0
+            stdout = f"tail for {command[-1]}\n"
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--lines", "50"])
+
+    assert result.exit_code == 0
+    assert "== stdout: ~/Library/Logs/com.vikramsg.dotfiles.lch-screenshot-sync.out.log ==\n\n" in result.output
+    assert "== stderr: ~/Library/Logs/com.vikramsg.dotfiles.lch-screenshot-sync.err.log ==\n\n" in result.output
+    assert "tail for" in result.output
+    assert calls == [
+        ["tail", "-n", "50", str(stdout_log_path)],
+        ["tail", "-n", "50", str(stderr_log_path)],
+    ]
+
+
+def test_logs_command_can_follow_one_launchd_stream(tmp_path, monkeypatch):
+    import lch.cli as cli_module
+
+    monkeypatch.setattr(cli_module.sys, "platform", "darwin")
+    stdout_log_path = tmp_path / "out.log"
+    stderr_log_path = tmp_path / "err.log"
+    monkeypatch.setattr(cli_module, "logs_job_launchd", lambda _job_id: (stdout_log_path, stderr_log_path))
+
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], *, check: bool, text: bool) -> object:
+        calls.append(command)
+        assert check is True
+        assert text is True
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--follow", "--lines", "10", "--stream", "stderr"])
+
+    assert result.exit_code == 0
+    assert calls == [["tail", "-n", "10", "-F", str(stderr_log_path)]]
+
+
+def test_logs_command_can_print_one_launchd_log_path(tmp_path, monkeypatch):
+    import lch.cli as cli_module
+
+    monkeypatch.setattr(cli_module.sys, "platform", "darwin")
+    stdout_log_path = tmp_path / "out.log"
+    stderr_log_path = tmp_path / "err.log"
+    monkeypatch.setattr(cli_module, "logs_job_launchd", lambda _job_id: (stdout_log_path, stderr_log_path))
+
+    runner = CliRunner()
+    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--paths", "--stream", "stderr"])
+
+    assert result.exit_code == 0
+    assert result.output.splitlines() == [str(stderr_log_path)]

@@ -2,7 +2,7 @@
   "screenshot_dir": "~/Desktop/Screenshots",
   "clipboard_history_limit": 5,
   "sync": {
-    "vm_host": "dev-vm-vikram.europe-west3-b.orbio-development",
+    "vm_host": "vm-us",
     "remote_dir": "~/Desktop/Screenshots/"
   }
 }
