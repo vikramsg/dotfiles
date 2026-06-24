@@ -36,6 +36,8 @@ lch status lch-screenshot-clipboard
 lch status lch-screenshot-sync
 lch logs lch-screenshot-clipboard
 lch logs lch-screenshot-sync
+lch logs lch-screenshot-sync --follow
+lch logs lch-screenshot-sync --paths
 lch run lch-screenshot-clipboard
 lch run lch-screenshot-sync
 lch uninstall lch-screenshot-clipboard
@@ -54,3 +56,5 @@ The repo-managed config source of truth lives at `lch/config.json`. Use `just lc
 On Linux sink machines, `just lch` installs the `lch-screenshot-clipboard` watcher job only.
 
 `lch launchd list` uses an interactive pager when stdout is a TTY and renders the full discovered launchd dataset. Use `lch launchd page` for deterministic, non-interactive pagination in tests and scripts.
+
+`lch logs <job>` shows recent logs by default. Use `--follow` to stream new entries, `--lines <count>` to change the number of recent lines, `--stream stdout|stderr` on macOS to select a launchd stream, and `--paths` to print the underlying log files or journal commands.
