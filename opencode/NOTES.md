@@ -5,6 +5,15 @@
     * And auto denies everything else
 4. The implementer, since it creates tests first, always then creates backward compatiblity shims after
 
+## Agent requirements
+
+1. For each project, the reviewer has to be much stronger.
+2. Maybe the structure should be
+    a. What is business logic
+    b. What are the layers
+    c. What existing patterns and interfaces are we using
+    d. What new interfaces are we creating
+
 
 ## Prompt
 
