@@ -64,6 +64,9 @@
     "light": "Light Icon Theme",
     "dark": "Colored Zed Icons Theme Dark",
   },
+  "file_finder": {
+    "include_ignored": true,
+  },
   "terminal": {
     "working_directory": "current_project_directory",
   },
