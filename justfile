@@ -142,6 +142,16 @@ ghostty:
     @echo "Ghostty workspaces symlink created at ~/.config/ghostty/workspaces -> {{justfile_directory()}}/ghostty/workspaces"
 
 
+# Set up Zed symlink
+zed:
+    @echo "Setting up Zed symlink..."
+    mkdir -p ~/.config/zed
+    ln -sfn {{justfile_directory()}}/zed/settings.json ~/.config/zed/settings.json
+    ln -sfn {{justfile_directory()}}/zed/keymap.json ~/.config/zed/keymap.json
+    @echo "Zed settings symlink created at ~/.config/zed/settings.json -> {{justfile_directory()}}/zed/settings.json"
+    @echo "Zed keymap symlink created at ~/.config/zed/keymap.json -> {{justfile_directory()}}/zed/keymap.json"
+
+
 # Set up screenshot config symlink, install tool, and apply macOS location
 screenshot:
     @echo "Setting up screenshot config symlink and tool..."
@@ -307,7 +317,7 @@ harlequin:
     @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux opencode ghostty screenshot lch bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux opencode ghostty zed screenshot lch bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
