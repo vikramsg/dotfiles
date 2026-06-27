@@ -5,8 +5,19 @@
       "ctrl-cmd-left": "workspace::ActivatePaneLeft",
       "ctrl-cmd-right": "workspace::ActivatePaneRight",
       "ctrl-cmd-up": "workspace::ActivatePaneUp",
-      "ctrl-cmd-down": "workspace::ActivatePaneDown"
-    }
+      "ctrl-cmd-down": "workspace::ActivatePaneDown",
+      "cmd-shift-g": "git_panel::ToggleFocus",
+    },
+  },
+  {
+    "context": "Editor",
+    "bindings": {
+      "ctrl-cmd-left": "workspace::ActivatePaneLeft",
+      "ctrl-cmd-right": "workspace::ActivatePaneRight",
+      "ctrl-cmd-up": "workspace::ActivatePaneUp",
+      "ctrl-cmd-down": "workspace::ActivatePaneDown",
+      "cmd-shift-g": "git_panel::ToggleFocus",
+    },
   },
   {
     "context": "Terminal",
@@ -14,8 +25,9 @@
       "ctrl-cmd-left": "workspace::ActivatePaneLeft",
       "ctrl-cmd-right": "workspace::ActivatePaneRight",
       "ctrl-cmd-up": "workspace::ActivatePaneUp",
-      "ctrl-cmd-down": "workspace::ActivatePaneDown"
-    }
+      "ctrl-cmd-down": "workspace::ActivatePaneDown",
+      "cmd-shift-g": "git_panel::ToggleFocus",
+    },
   },
   {
     "context": "AgentPanel",
@@ -23,8 +35,9 @@
       "ctrl-cmd-left": "workspace::ActivatePaneLeft",
       "ctrl-cmd-right": "workspace::ActivatePaneRight",
       "ctrl-cmd-up": "workspace::ActivatePaneUp",
-      "ctrl-cmd-down": "workspace::ActivatePaneDown"
-    }
+      "ctrl-cmd-down": "workspace::ActivatePaneDown",
+      "cmd-shift-g": "git_panel::ToggleFocus",
+    },
   },
   {
     "context": "AgentPanel > Terminal",
@@ -32,7 +45,14 @@
       "ctrl-cmd-left": "workspace::ActivatePaneLeft",
       "ctrl-cmd-right": "workspace::ActivatePaneRight",
       "ctrl-cmd-up": "workspace::ActivatePaneUp",
-      "ctrl-cmd-down": "workspace::ActivatePaneDown"
-    }
-  }
+      "ctrl-cmd-down": "workspace::ActivatePaneDown",
+      "cmd-shift-g": "git_panel::ToggleFocus",
+    },
+  },
+  {
+    "context": "GitPanel",
+    "bindings": {
+      "cmd-shift-g": "workspace::CloseActiveDock",
+    },
+  },
 ]
