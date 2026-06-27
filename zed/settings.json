@@ -68,7 +68,7 @@
         "program": "/bin/zsh",
         "args": [
           "-lc",
-          "exec tmux new-session -A -s \"$(basename \"$PWD\")\" -c \"$PWD\"",
+          "exec tmux new-session -A -s \"zed-$(basename \"$PWD\")\" -c \"$PWD\"",
         ],
       },
     },

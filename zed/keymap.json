@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "context": "Workspace",
+    "bindings": {
+      "ctrl-cmd-left": "workspace::ActivatePaneLeft",
+      "ctrl-cmd-right": "workspace::ActivatePaneRight",
+      "ctrl-cmd-up": "workspace::ActivatePaneUp",
+      "ctrl-cmd-down": "workspace::ActivatePaneDown"
+    }
+  },
+  {
+    "context": "Terminal",
+    "bindings": {
+      "ctrl-cmd-left": "workspace::ActivatePaneLeft",
+      "ctrl-cmd-right": "workspace::ActivatePaneRight",
+      "ctrl-cmd-up": "workspace::ActivatePaneUp",
+      "ctrl-cmd-down": "workspace::ActivatePaneDown"
+    }
+  },
+  {
+    "context": "AgentPanel",
+    "bindings": {
+      "ctrl-cmd-left": "workspace::ActivatePaneLeft",
+      "ctrl-cmd-right": "workspace::ActivatePaneRight",
+      "ctrl-cmd-up": "workspace::ActivatePaneUp",
+      "ctrl-cmd-down": "workspace::ActivatePaneDown"
+    }
+  },
+  {
+    "context": "AgentPanel > Terminal",
+    "bindings": {
+      "ctrl-cmd-left": "workspace::ActivatePaneLeft",
+      "ctrl-cmd-right": "workspace::ActivatePaneRight",
+      "ctrl-cmd-up": "workspace::ActivatePaneUp",
+      "ctrl-cmd-down": "workspace::ActivatePaneDown"
+    }
+  }
+]
