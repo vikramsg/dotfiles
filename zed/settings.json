@@ -16,6 +16,9 @@
       "type": "registry",
     },
   },
+  "agent": {
+    "terminal_init_command": "tmux new-session -A -s \"zed-${PWD##*/}\" -c \"$PWD\"",
+  },
   "ssh_connections": [
     {
       "host": "localhost",
@@ -63,15 +66,6 @@
   },
   "terminal": {
     "working_directory": "current_project_directory",
-    "shell": {
-      "with_arguments": {
-        "program": "/bin/zsh",
-        "args": [
-          "-lc",
-          "exec tmux new-session -A -s \"zed-$(basename \"$PWD\")\" -c \"$PWD\"",
-        ],
-      },
-    },
   },
   "title_bar": {
     "show_sign_in": false,
