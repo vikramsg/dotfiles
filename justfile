@@ -147,7 +147,9 @@ zed:
     @echo "Setting up Zed symlink..."
     mkdir -p ~/.config/zed
     ln -sfn {{justfile_directory()}}/zed/settings.json ~/.config/zed/settings.json
+    ln -sfn {{justfile_directory()}}/zed/keymap.json ~/.config/zed/keymap.json
     @echo "Zed settings symlink created at ~/.config/zed/settings.json -> {{justfile_directory()}}/zed/settings.json"
+    @echo "Zed keymap symlink created at ~/.config/zed/keymap.json -> {{justfile_directory()}}/zed/keymap.json"
 
 
 # Set up screenshot config symlink, install tool, and apply macOS location
