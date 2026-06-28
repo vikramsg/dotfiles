@@ -69,6 +69,8 @@
   },
   "terminal": {
     "working_directory": "current_project_directory",
+    "font_family": "Hack Nerd Font Mono",
+    "font_fallbacks": ["Hack Nerd Font Mono", "Hack Nerd Font", "Apple Color Emoji"],
   },
   "title_bar": {
     "show_sign_in": false,
