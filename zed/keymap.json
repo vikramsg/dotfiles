@@ -102,8 +102,6 @@
   },
   {
     "context": "GitDiff > Editor && VimControl",
-    // Zed defaults: cmd-shift-y unstages the selected hunk here.
-    // Override g x in Git diffs to restore the current hunk and continue review.
     "bindings": {
       "g s": "git::StageAndNext",
       "g u": "git::UnstageAndNext",
