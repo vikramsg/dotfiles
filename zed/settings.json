@@ -27,25 +27,38 @@
       "args": [],
       "projects": [
         {
-          "paths": ["/workspaces/Experiments/conf"],
-        },
-      ],
+          "paths": [
+            "/workspaces/Experiments/conf"
+          ]
+        }
+      ]
     },
     {
       "host": "vm-us",
       "args": [],
       "projects": [
         {
-          "paths": ["/home/vikram_orbio_earth"],
+          "paths": [
+            "/home/vikram_orbio_earth"
+          ]
         },
         {
-          "paths": ["/home/vikram_orbio_earth/personal/dotfiles"],
+          "paths": [
+            "/home/vikram_orbio_earth/personal/dotfiles"
+          ]
         },
         {
-          "paths": ["/home/vikram_orbio_earth/projects/orbio/orbio-github"],
+          "paths": [
+            "/home/vikram_orbio_earth/projects/orbio/orbio-github"
+          ]
         },
-      ],
-    },
+        {
+          "paths": [
+            "/home/vikram_orbio_earth/projects/temp/meanderx-task-main"
+          ]
+        }
+      ]
+    }
   ],
   "telemetry": {
     "metrics": false,
