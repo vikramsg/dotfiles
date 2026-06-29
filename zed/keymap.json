@@ -73,11 +73,12 @@
   {
     "context": "AgentPanel > Terminal",
     "bindings": {
-      // NOTE: To make navigation inside tmux be like zed navigation
-      "ctrl-cmd-left": ["terminal::SendKeystroke", "ctrl-h"],
+      // NOTE: Vertical navigation goes to tmux; horizontal navigation stays in Zed.
+      // This only works if we only split in tmux in one direction
+      "ctrl-cmd-left": "workspace::ActivatePaneLeft",
       "ctrl-cmd-down": ["terminal::SendKeystroke", "ctrl-j"],
       "ctrl-cmd-up": ["terminal::SendKeystroke", "ctrl-k"],
-      "ctrl-cmd-right": ["terminal::SendKeystroke", "ctrl-l"],
+      "ctrl-cmd-right": "workspace::ActivatePaneRight",
       "cmd-shift-e": "editor::ToggleFocus",
       "cmd-shift-g": "git_panel::ToggleFocus",
       "cmd-shift-j": "agent::Toggle",
