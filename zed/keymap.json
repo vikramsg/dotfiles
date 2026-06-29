@@ -81,7 +81,10 @@
   {
     "context": "GitPanel",
     "bindings": {
-      "cmd-shift-g": "workspace::CloseActiveDock",
+      "cmd-shift-g": [
+        "action::Sequence",
+        ["workspace::CloseActiveDock", "workspace::FocusCenterPane"],
+      ],
       "cmd-g up": "git::Push",
     },
   },
