@@ -71,7 +71,10 @@
   {
     "context": "ProjectPanel",
     "bindings": {
-      "cmd-shift-x": "workspace::CloseActiveDock",
+      "cmd-shift-x": [
+        "action::Sequence",
+        ["workspace::CloseActiveDock", "workspace::FocusCenterPane"],
+      ],
     },
   },
   {
