@@ -71,6 +71,7 @@
   {
     "context": "ProjectPanel",
     "bindings": {
+      // Note: Without the sequence we would completely lose focus and had to use the mouse
       "cmd-shift-x": [
         "action::Sequence",
         ["workspace::CloseActiveDock", "workspace::FocusCenterPane"],
