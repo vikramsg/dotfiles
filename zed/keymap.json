@@ -81,11 +81,14 @@
   {
     "context": "GitPanel",
     "bindings": {
-      "cmd-shift-g": [
-        "action::Sequence",
-        ["workspace::CloseActiveDock", "workspace::FocusCenterPane"],
-      ],
+      "cmd-shift-g": "git_panel::ToggleFocus",
       "cmd-g up": "git::Push",
+    },
+  },
+  {
+    "context": "GitDiff > Editor",
+    "bindings": {
+      "ctrl-cmd-right": "git_panel::ToggleFocus",
     },
   },
 ]
