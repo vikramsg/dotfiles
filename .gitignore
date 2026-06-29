@@ -19,3 +19,5 @@ harlequin/config.toml
 
 # Vite
 .vite
+
+.playwright-cli

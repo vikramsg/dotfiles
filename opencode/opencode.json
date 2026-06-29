@@ -73,6 +73,10 @@
         "gpt-5.4": {
           "id": "gpt-5.4",
           "name": "gpt-5.4",
+          "options": {
+            "reasoningEffort": "high",
+            "reasoningSummary": "auto"
+          },
           "modalities": {
             "input": ["text", "image", "pdf"],
             "output": ["text"]
