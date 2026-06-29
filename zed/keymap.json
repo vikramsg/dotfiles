@@ -105,7 +105,9 @@
     // Zed defaults: cmd-shift-y unstages the selected hunk here.
     // Override g x in Git diffs to restore the current hunk and continue review.
     "bindings": {
-      "g x": "git::RestoreAndNext",
+      "g s": "git::StageAndNext",
+      "g u": "git::UnstageAndNext",
+      "g r": "git::RestoreAndNext",
       "ctrl-cmd-right": "git_panel::ToggleFocus",
     },
   },
