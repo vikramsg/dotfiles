@@ -11,6 +11,8 @@
       "cmd-shift-g": "git_panel::ToggleFocus",
       "cmd-shift-j": "agent::Toggle",
       "cmd-shift-x": "project_panel::ToggleFocus",
+      "cmd-g b": "git::Switch",
+      "cmd-g p": "git::CreatePullRequest",
       "cmd-g up": "git::Push",
     },
   },
@@ -24,6 +26,8 @@
       "cmd-shift-g": "git_panel::ToggleFocus",
       "cmd-shift-j": "agent::Toggle",
       "cmd-shift-x": "pane::RevealInProjectPanel",
+      "cmd-g b": "git::Switch",
+      "cmd-g p": "git::CreatePullRequest",
       "cmd-g up": "git::Push",
     },
   },
@@ -37,6 +41,8 @@
       "cmd-shift-e": "editor::ToggleFocus",
       "cmd-shift-g": "git_panel::ToggleFocus",
       "cmd-shift-x": "project_panel::ToggleFocus",
+      "cmd-g b": "git::Switch",
+      "cmd-g p": "git::CreatePullRequest",
       "cmd-g up": "git::Push",
     },
   },
@@ -51,6 +57,8 @@
       "cmd-shift-g": "git_panel::ToggleFocus",
       "cmd-shift-j": "agent::Toggle",
       "cmd-shift-x": "project_panel::ToggleFocus",
+      "cmd-g b": "git::Switch",
+      "cmd-g p": "git::CreatePullRequest",
       "cmd-g up": "git::Push",
     },
   },
@@ -65,6 +73,8 @@
       "cmd-shift-g": "git_panel::ToggleFocus",
       "cmd-shift-j": "agent::Toggle",
       "cmd-shift-x": "project_panel::ToggleFocus",
+      "cmd-g b": "git::Switch",
+      "cmd-g p": "git::CreatePullRequest",
       "cmd-g up": "git::Push",
     },
   },
@@ -81,12 +91,17 @@
   {
     "context": "GitPanel",
     "bindings": {
+      // Zed defaults: cmd-y stages the selected file here, and stages the current hunk + moves next in diff editors.
+      // Zed defaults: cmd-shift-y unstages the selected file here, and unstages the current hunk + moves next in diff editors.
       "cmd-shift-g": "git_panel::ToggleFocus",
+      "cmd-g b": "git::Switch",
+      "cmd-g p": "git::CreatePullRequest",
       "cmd-g up": "git::Push",
     },
   },
   {
     "context": "GitDiff > Editor",
+    // Zed defaults: cmd-shift-y unstages the selected hunk here
     "bindings": {
       "ctrl-cmd-right": "git_panel::ToggleFocus",
     },
