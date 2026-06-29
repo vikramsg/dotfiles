@@ -70,7 +70,7 @@
     "dark": "Colored Zed Icons Theme Dark",
   },
   "file_finder": {
-    "include_ignored": true,
+    "include_ignored": "all",
   },
   "terminal": {
     "working_directory": "current_project_directory",
@@ -82,8 +82,8 @@
     ],
   },
   "title_bar": {
+    "show_branch_status_icon": true,
     "show_sign_in": false,
-    "show_branch_icon": true,
   },
   "show_completions_on_input": true,
   "languages": {
