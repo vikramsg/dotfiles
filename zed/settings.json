@@ -27,38 +27,30 @@
       "args": [],
       "projects": [
         {
-          "paths": [
-            "/workspaces/Experiments/conf"
-          ]
-        }
-      ]
+          "paths": ["/workspaces/Experiments/conf"],
+        },
+      ],
     },
     {
       "host": "vm-us",
       "args": [],
       "projects": [
         {
-          "paths": [
-            "/home/vikram_orbio_earth"
-          ]
+          "paths": ["/home/vikram_orbio_earth"],
+        },
+        {
+          "paths": ["/home/vikram_orbio_earth/personal/dotfiles"],
+        },
+        {
+          "paths": ["/home/vikram_orbio_earth/projects/orbio/orbio-github"],
         },
         {
           "paths": [
-            "/home/vikram_orbio_earth/personal/dotfiles"
-          ]
+            "/home/vikram_orbio_earth/projects/temp/meanderx-task-main",
+          ],
         },
-        {
-          "paths": [
-            "/home/vikram_orbio_earth/projects/orbio/orbio-github"
-          ]
-        },
-        {
-          "paths": [
-            "/home/vikram_orbio_earth/projects/temp/meanderx-task-main"
-          ]
-        }
-      ]
-    }
+      ],
+    },
   ],
   "telemetry": {
     "metrics": false,
@@ -83,7 +75,11 @@
   "terminal": {
     "working_directory": "current_project_directory",
     "font_family": "Hack Nerd Font Mono",
-    "font_fallbacks": ["Hack Nerd Font Mono", "Hack Nerd Font", "Apple Color Emoji"],
+    "font_fallbacks": [
+      "Hack Nerd Font Mono",
+      "Hack Nerd Font",
+      "Apple Color Emoji",
+    ],
   },
   "title_bar": {
     "show_sign_in": false,
@@ -92,24 +88,19 @@
   "show_completions_on_input": true,
   "languages": {
     "Python": {
-      "language_servers": ["basedpyright", "ruff"],
+      "language_servers": ["ty", "ruff", "!basedpyright"],
       "format_on_save": "on",
-      "formatter": [
-        {
-          "code_actions": {
-            "source.organizeImports.ruff": true,
-            "source.fixAll.ruff": false,
-          },
+      "code_actions_on_format": {
+        "source.organizeImports.ruff": true,
+      },
+      // NOTE: formatting through ruff doesn't work on remote machine
+      // The only way to make it work currently is to copy the settings file to the remote machine.
+      // So change aliases to first copy and then open zed.
+      "formatter": {
+        "language_server": {
+          "name": "ruff",
         },
-        // NOTE: formatting through ruff doesn't work on remote machine
-        // The only way to make it work currently is to copy the settings file to the remote machine.
-        // So change aliases to first copy and then open zed.
-        {
-          "language_server": {
-            "name": "ruff",
-          },
-        },
-      ],
+      },
     },
     "JSON": {
       "formatter": "prettier",
