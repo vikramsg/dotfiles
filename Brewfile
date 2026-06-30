@@ -42,7 +42,10 @@ brew "tree-sitter-cli"
 # Go
 brew "go"
 
-# Duckdb for analytics 
+# Duckdb for analytics
 brew "duckdb"
 # Raster analytics
 brew "gdal"
+
+# For runnin Terraform format
+brew "terraform"
