@@ -57,6 +57,52 @@ But it is restricted by any denies etc settings in your workspace.
     "/private/tmp/**": "allow"
 ```
 
+## Configuring Plan mode
+
+OpenCode has two separate plan-mode prompt layers that are easy to confuse:
+
+- `agent.plan.prompt` configures the plan agent's base system prompt.
+- The plan-mode reminder is injected separately by OpenCode when the active agent is `plan`.
+
+This repo configures the plan agent to use a copied GPT base prompt:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "prompt": "{file:./prompts/plan-gpt.txt}",
+      "options": {
+        "serviceTier": "priority"
+      }
+    }
+  }
+}
+```
+
+The prompt file is plain text and does not need YAML frontmatter. Frontmatter is only needed when defining an agent as a Markdown file under `agents/` or `.opencode/agents/`.
+
+Setting `agent.plan.prompt` replaces the provider-selected base prompt for the plan agent. It does not configure or remove OpenCode's synthetic plan reminders.
+
+### Plan reminder
+
+In legacy plan mode, OpenCode injects a synthetic read-only reminder from upstream `packages/opencode/src/session/prompt/plan.txt` into the latest user message. This reminder is not controlled by `agent.plan.prompt`.
+
+Do not copy the built-in plan reminder into `agent.plan.prompt`. That duplicates plan-mode instructions and removes the normal provider base prompt for the plan agent.
+
+### Build-switch reminder
+
+When switching from `plan` to `build`, OpenCode injects a separate synthetic reminder from upstream `packages/opencode/src/session/prompt/build-switch.txt`:
+
+```txt
+<system-reminder>
+Your operational mode has changed from plan to build.
+You are no longer in read-only mode.
+You are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.
+</system-reminder>
+```
+
+This handoff reminder is also separate from `agent.plan.prompt`.
+
 ## State
 
 Opencode stores files under

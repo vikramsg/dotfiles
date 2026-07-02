@@ -37,6 +37,7 @@
       }
     },
     "plan": {
+      "prompt": "{file:./prompts/plan-gpt.txt}",
       "options": {
         "serviceTier": "priority"
       }
