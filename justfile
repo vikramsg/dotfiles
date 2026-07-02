@@ -80,6 +80,7 @@ opencode: npm-global-bin
     ln -sfn {{justfile_directory()}}/opencode/rules.md ~/.config/opencode/rules.md
     ln -sfn {{justfile_directory()}}/opencode/agents ~/.config/opencode/agents
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
+    ln -sfn {{justfile_directory()}}/opencode/prompts ~/.config/opencode/prompts
     @if [  -d {{justfile_directory()}}/opencode/plugins ]; then ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins; \
     fi
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
