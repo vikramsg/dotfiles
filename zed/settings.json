@@ -50,12 +50,22 @@
         },
         {
           "paths": [
+            "/home/vikram_orbio_earth/projects/orbio/meanderx/infrastructure"
+          ]
+        },
+        {
+          "paths": [
             "/home/vikram_orbio_earth/projects/orbio/meanderx/kunda/./"
           ]
         },
         {
           "paths": [
             "/home/vikram_orbio_earth/projects/orbio/orbio-github"
+          ]
+        },
+        {
+          "paths": [
+            "/home/vikram_orbio_earth/projects/orbio/orbio-github-wt"
           ]
         },
         {
