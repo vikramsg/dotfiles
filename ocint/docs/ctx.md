@@ -313,6 +313,11 @@ discovered native provider sources and enabled custom history plugins, then can
 serve the existing index if refresh fails and an index already exists. [W2] [W4]
 [S3]
 
+For SQLite-backed providers such as OpenCode, refresh runs in the foreground
+during the `ctx search` process and can still reread provider rows before
+deduped writes skip existing indexed events, so `--refresh off` is the
+predictable low-latency path when freshness is not required.
+
 ### Refresh Off
 
 `--refresh off` skips provider imports and plugin execution and searches the
