@@ -132,7 +132,6 @@ opencode-sandbox +args:
 opencode-state:
     uv tool install ./bin/opencode_state --force --no-cache
 
-
 # Set up Ghostty symlink
 ghostty:
     @echo "Setting up Ghostty symlink..."

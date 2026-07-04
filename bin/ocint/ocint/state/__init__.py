@@ -1,0 +1,1 @@
+"""State analytics command group."""

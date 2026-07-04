@@ -1,0 +1,27 @@
+[project]
+name = "ocint"
+version = "0.1.0"
+description = "OpenCode local SQLite intelligence tools"
+requires-python = ">=3.14"
+dependencies = [
+    "click",
+    "pydantic",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+ocint = "ocint.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "."
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
