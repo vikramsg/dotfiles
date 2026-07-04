@@ -1,6 +1,14 @@
 from ocint._render import render_table
 from ocint._timeutil import format_ms
-from ocint.ctx.models import CtxEventContext, CtxEventDetail, CtxLocateResult, CtxSearchResult, CtxSource, CtxStatus, CtxTranscript
+from ocint.ctx.models import (
+    CtxEventContext,
+    CtxEventDetail,
+    CtxLocateResult,
+    CtxSearchResult,
+    CtxSource,
+    CtxStatus,
+    CtxTranscript,
+)
 
 
 def render_status(status: CtxStatus) -> str:

@@ -3,7 +3,12 @@ import re
 from ocint._timeutil import parse_since_ms
 from ocint.ctx.models import CtxSearchRequest, CtxSearchResult
 from ocint.ctx.transcript import snippet_text
-from ocint.opencode.models import OpenCodeSessionRow, OpenCodeUnifiedEventRow, payload_paths, payload_to_text
+from ocint.opencode.models import (
+    OpenCodeSessionRow,
+    OpenCodeUnifiedEventRow,
+    payload_paths,
+    payload_to_text,
+)
 from ocint.opencode.repository import OpenCodeRepository
 
 
@@ -53,9 +58,20 @@ def _tokens(query: str) -> list[str]:
 
 
 def _candidate_text(event: OpenCodeUnifiedEventRow, session: OpenCodeSessionRow) -> str:
+    items = [
+        session.id,
+        session.title,
+        session.cwd,
+        session.data.directory,
+        session.data.workspace,
+        event.id,
+        event.event_type,
+        event.source_path,
+        payload_to_text(event.data),
+    ]
     return " ".join(
         item
-        for item in [session.id, session.title, session.cwd, session.data.directory, session.data.workspace, event.id, event.event_type, event.source_path, payload_to_text(event.data)]
+        for item in items
         if item
     )
 

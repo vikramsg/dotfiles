@@ -7,7 +7,7 @@ members = [
     "dotfiles-tools",
     "ghostty-workspace",
     "lch",
-    "opencode-state",
+    "ocint",
     "router-battery-check",
     "screenshot",
 ]
@@ -178,9 +178,9 @@ wheels = [
 ]
 
 [[package]]
-name = "opencode-state"
+name = "ocint"
 version = "0.1.0"
-source = { editable = "bin/opencode_state" }
+source = { editable = "bin/ocint" }
 dependencies = [
     { name = "click" },
     { name = "pydantic" },

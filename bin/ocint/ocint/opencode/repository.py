@@ -1,13 +1,14 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 from typing import Any, TypeVar
 
 from pydantic import ValidationError
 
 from ocint._db import inspect_schema, open_readonly_connection
 from ocint._sqlsafe import execute_readonly_query
+from ocint.opencode import schema as opencode_schema
 from ocint.opencode.models import (
     OpenCodeEventData,
     OpenCodeEventRow,
@@ -21,7 +22,6 @@ from ocint.opencode.models import (
     OpenCodeUnifiedEventRow,
     payload_paths,
 )
-from ocint.opencode import schema as opencode_schema
 
 
 JsonModelT = TypeVar("JsonModelT", bound=OpenCodeJsonModel)
@@ -401,18 +401,18 @@ def _unified_events_query(connection: sqlite3.Connection, *, session_ids: set[st
         if where is not None:
             params.extend(where_params)
             branches.append(
-            f"""
-            SELECT 'message' AS source_table,
-                   {_column_select(columns, ['id'], 'id')},
-                   {_column_select(columns, ['session_id', 'sessionID'], 'session_id')},
-                   CAST(NULL AS TEXT) AS message_id,
-                   {opencode_schema.coalesce([opencode_schema.json_extract(data, '$.role'), "'message'"])} AS {_quote('event_type')},
-                   {_column_select(columns, ['time_created', 'timeCreated', 'created_at', 'createdAt'], 'time_created')},
-                   {_column_select(columns, ['time_updated', 'timeUpdated', 'updated_at', 'updatedAt'], 'time_updated')},
-                   {data} AS {_quote('data')}
-            FROM {_quote('message')}
-            {where}
-            """
+                f"""
+                SELECT 'message' AS source_table,
+                       {_column_select(columns, ['id'], 'id')},
+                       {_column_select(columns, ['session_id', 'sessionID'], 'session_id')},
+                       CAST(NULL AS TEXT) AS message_id,
+                       {opencode_schema.coalesce([opencode_schema.json_extract(data, '$.role'), "'message'"])} AS {_quote('event_type')},
+                       {_column_select(columns, ['time_created', 'timeCreated', 'created_at', 'createdAt'], 'time_created')},
+                       {_column_select(columns, ['time_updated', 'timeUpdated', 'updated_at', 'updatedAt'], 'time_updated')},
+                       {data} AS {_quote('data')}
+                FROM {_quote('message')}
+                {where}
+                """
             )
     if _table_exists(connection, "part"):
         columns = _columns(connection, "part")
@@ -421,45 +421,55 @@ def _unified_events_query(connection: sqlite3.Connection, *, session_ids: set[st
         if where is not None:
             params.extend(where_params)
             branches.append(
-            f"""
-            SELECT 'part' AS source_table,
-                   {_column_select(columns, ['id'], 'id')},
-                   {_column_select(columns, ['session_id', 'sessionID'], 'session_id')},
-                   {_column_select(columns, ['message_id', 'messageID'], 'message_id')},
-                   {opencode_schema.coalesce([opencode_schema.json_extract(data, '$.type'), "'part'"])} AS {_quote('event_type')},
-                   {_column_select(columns, ['time_created', 'timeCreated', 'created_at', 'createdAt'], 'time_created')},
-                   {_column_select(columns, ['time_updated', 'timeUpdated', 'updated_at', 'updatedAt'], 'time_updated')},
-                   {data} AS {_quote('data')}
-            FROM {_quote('part')}
-            {where}
-            """
+                f"""
+                SELECT 'part' AS source_table,
+                       {_column_select(columns, ['id'], 'id')},
+                       {_column_select(columns, ['session_id', 'sessionID'], 'session_id')},
+                       {_column_select(columns, ['message_id', 'messageID'], 'message_id')},
+                       {opencode_schema.coalesce([opencode_schema.json_extract(data, '$.type'), "'part'"])} AS {_quote('event_type')},
+                       {_column_select(columns, ['time_created', 'timeCreated', 'created_at', 'createdAt'], 'time_created')},
+                       {_column_select(columns, ['time_updated', 'timeUpdated', 'updated_at', 'updatedAt'], 'time_updated')},
+                       {data} AS {_quote('data')}
+                FROM {_quote('part')}
+                {where}
+                """
             )
     if _table_exists(connection, "event"):
         columns = _columns(connection, "event")
         data = opencode_schema.data_expr(columns)
-        where, where_params = _session_filter(columns, session_ids, session_expr=opencode_schema.event_session_id_expr(columns, data))
+        where, where_params = _session_filter(
+            columns,
+            session_ids,
+            session_expr=opencode_schema.event_session_id_expr(columns, data),
+        )
         if where is not None:
             params.extend(where_params)
             branches.append(
-            f"""
-            SELECT 'event' AS source_table,
-                   {_column_select(columns, ['id'], 'id')},
-                   {opencode_schema.event_session_id_expr(columns, data)} AS {_quote('session_id')},
-                   CAST(NULL AS TEXT) AS message_id,
-                   {opencode_schema.event_type_expr(columns, data)} AS {_quote('event_type')},
-                   {opencode_schema.event_time_created_expr(columns, data)} AS {_quote('time_created')},
-                   {_column_select(columns, ['time_updated', 'timeUpdated', 'updated_at', 'updatedAt'], 'time_updated')},
-                   {data} AS {_quote('data')}
-            FROM {_quote('event')}
-            {where}
-            """
+                f"""
+                SELECT 'event' AS source_table,
+                       {_column_select(columns, ['id'], 'id')},
+                       {opencode_schema.event_session_id_expr(columns, data)} AS {_quote('session_id')},
+                       CAST(NULL AS TEXT) AS message_id,
+                       {opencode_schema.event_type_expr(columns, data)} AS {_quote('event_type')},
+                       {opencode_schema.event_time_created_expr(columns, data)} AS {_quote('time_created')},
+                       {_column_select(columns, ['time_updated', 'timeUpdated', 'updated_at', 'updatedAt'], 'time_updated')},
+                       {data} AS {_quote('data')}
+                FROM {_quote('event')}
+                {where}
+                """
             )
     if not branches:
         return None
-    return "SELECT * FROM (" + "\nUNION ALL\n".join(branches) + ") ORDER BY time_created DESC, source_table DESC, id DESC", params
+    query = "SELECT * FROM (" + "\nUNION ALL\n".join(branches) + ") ORDER BY time_created DESC, source_table DESC, id DESC"
+    return query, params
 
 
-def _session_filter(columns: list[str], session_ids: set[str] | None, *, session_expr: str | None = None) -> tuple[str | None, list[str]]:
+def _session_filter(
+    columns: list[str],
+    session_ids: set[str] | None,
+    *,
+    session_expr: str | None = None,
+) -> tuple[str | None, list[str]]:
     if session_ids is None:
         return "", []
     if session_expr is None:

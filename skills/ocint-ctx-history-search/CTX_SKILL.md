@@ -188,3 +188,7 @@ Long report shape:
   short excerpts needed to support a claim.
 - Treat `~/.ctx`, provider transcript paths, and JSON output as private local
   history unless the user explicitly asks to share reviewed excerpts.
+
+## Reference
+
+https://github.com/ctxrs/ctx

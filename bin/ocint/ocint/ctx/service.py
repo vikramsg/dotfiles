@@ -2,7 +2,17 @@ from pathlib import Path
 
 from ocint._errors import OcintError
 from ocint.ctx.locate import locate_event, locate_session
-from ocint.ctx.models import CtxEventContext, CtxEventDetail, CtxLocateResult, CtxSearchRequest, CtxSearchResult, CtxSession, CtxSource, CtxStatus, CtxTranscript
+from ocint.ctx.models import (
+    CtxEventContext,
+    CtxEventDetail,
+    CtxLocateResult,
+    CtxSearchRequest,
+    CtxSearchResult,
+    CtxSession,
+    CtxSource,
+    CtxStatus,
+    CtxTranscript,
+)
 from ocint.ctx.search import CtxSearch
 from ocint.ctx.transcript import event_text, snippet_text
 from ocint.opencode.models import OpenCodeSessionRow, OpenCodeUnifiedEventRow
@@ -48,7 +58,7 @@ class CtxService:
             session_id=session.id,
             parent_id=session.parent_id,
             title=session.title,
-            workspace=session.cwd or session.data.directory or session.data.workspace or session.data.cwd or session.data.path,
+            workspace=_session_workspace(session),
             time_created=session.time_created,
             time_updated=session.time_updated,
             event_count=len(events),
@@ -91,10 +101,14 @@ def _event_result(event: OpenCodeUnifiedEventRow, session: OpenCodeSessionRow) -
         event_type=event.event_type,
         time_created=event.time_created,
         title=session.title,
-        workspace=session.cwd or session.data.directory or session.data.workspace or session.data.cwd or session.data.path,
+        workspace=_session_workspace(session),
         source_path=event.source_path,
         snippet=snippet_text(text),
         text=text,
         citation=citation,
         follow_up=f"ocint ctx show event {event.id} --window 5",
     )
+
+
+def _session_workspace(session: OpenCodeSessionRow) -> str | None:
+    return session.cwd or session.data.directory or session.data.workspace or session.data.cwd or session.data.path

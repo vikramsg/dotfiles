@@ -18,7 +18,16 @@ def _ctx_sessions_sql(connection: sqlite3.Connection) -> str:
     if not _table_exists(connection, "session"):
         return _empty_view(
             "ctx_sessions",
-            ["provider", "provider_session_id", "session_id", "parent_id", "title", "workspace", "time_created", "time_updated"],
+            [
+                "provider",
+                "provider_session_id",
+                "session_id",
+                "parent_id",
+                "title",
+                "workspace",
+                "time_created",
+                "time_updated",
+            ],
         )
     columns = _columns(connection, "session")
     base = "session_base"
@@ -90,7 +99,10 @@ def _ctx_events_sql(connection: sqlite3.Connection) -> str:
             """
         )
     if not branches:
-        return _empty_view("ctx_events", ["provider", "provider_session_id", "event_id", "source_table", "event_type", "time_created", "text"])
+        return _empty_view(
+            "ctx_events",
+            ["provider", "provider_session_id", "event_id", "source_table", "event_type", "time_created", "text"],
+        )
     return "CREATE TEMP VIEW ctx_events AS\n" + "\nUNION ALL\n".join(branches)
 
 
@@ -122,7 +134,10 @@ def _ctx_files_touched_sql(connection: sqlite3.Connection) -> str:
             """
         )
     if not branches:
-        return _empty_view("ctx_files_touched", ["provider", "path", "provider_session_id", "event_id", "source_table"])
+        return _empty_view(
+            "ctx_files_touched",
+            ["provider", "path", "provider_session_id", "event_id", "source_table"],
+        )
     return "CREATE TEMP VIEW ctx_files_touched AS\n" + "\nUNION ALL\n".join(branches)
 
 
@@ -151,7 +166,13 @@ def _columns(connection: sqlite3.Connection, table: str) -> list[str]:
     return opencode_schema.columns(connection, table)
 
 
-def _column_expr(columns: list[str], candidates: list[str], default: str = "NULL", *, table_alias: str | None = None) -> str:
+def _column_expr(
+    columns: list[str],
+    candidates: list[str],
+    default: str = "NULL",
+    *,
+    table_alias: str | None = None,
+) -> str:
     return opencode_schema.column_expr(columns, candidates, default, table_alias=table_alias)
 
 

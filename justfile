@@ -128,9 +128,9 @@ opencode-doctor:
 opencode-sandbox +args:
     @npm --prefix "{{justfile_directory()}}/opencode" run --silent sandbox -- "$@"
 
-# Install the read-only OpenCode SQLite analytics tool
-opencode-state:
-    uv tool install ./bin/opencode_state --force --no-cache
+# Install the read-only OpenCode SQLite intelligence tool
+ocint:
+    uv tool install "{{justfile_directory()}}/bin/ocint" --force --no-cache
 
 # Set up Ghostty symlink
 ghostty:
@@ -317,7 +317,7 @@ harlequin:
     @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux opencode ghostty zed screenshot lch bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux opencode ghostty zed screenshot lch ocint bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
