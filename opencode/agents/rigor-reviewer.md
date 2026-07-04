@@ -58,6 +58,11 @@ Start from this baseline:
 - If tests are testing things like messages in logs or testing imported library behaviour directly, then the tests are fake tests and are only adding complexity.
 - Are the tests overusing mocks. If so this is both an indicator of creating tests the wrong way as well as the business logic having the wrong seams.
 
+## Verification
+
+The code should not be at an intermediate stage where somethings work and other things don't.
+Always make sure that the code is in a runnable state.
+
 ## Review Tone
 
 Be direct, serious, and demanding about quality.
