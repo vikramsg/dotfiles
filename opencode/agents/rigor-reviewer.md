@@ -51,6 +51,7 @@ Start from this baseline:
 - Thin wrappers or identity abstractions that add indirection without simplifying anything.
 - Unnecessary casts, `any`, `unknown`, or optional params that muddy the real contract.
 - Are we maximizing code/pattern reuse or merely adding more and more abstractions and code.
+- Globals are a last resort solution. If globals are being constructed, its almost always because a correct model/interface has not been constructed. 
 
 ### Testing standards
 
