@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "OpenCode local SQLite intelligence tools"
 requires-python = ">=3.14"
 dependencies = [
+    "alembic",
     "click",
     "pydantic",
+    "sqlalchemy",
 ]
 
 [dependency-groups]

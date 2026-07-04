@@ -3,6 +3,7 @@ from ocint._timeutil import format_ms
 from ocint.ctx.models import (
     CtxEventContext,
     CtxEventDetail,
+    CtxImportResult,
     CtxLocateResult,
     CtxSearchResult,
     CtxSource,
@@ -11,15 +12,36 @@ from ocint.ctx.models import (
 )
 
 
+def render_import_result(result: CtxImportResult) -> str:
+    return "\n".join(
+        [
+            f"PROVIDER: {result.provider}",
+            f"CTX_DB: {result.ctx_db_path}",
+            f"SOURCE_DB: {result.source_db_path}",
+            f"SESSIONS_SEEN: {result.sessions_seen}",
+            f"SESSIONS_WRITTEN: {result.sessions_written}",
+            f"EVENTS_SEEN: {result.events_seen}",
+            f"EVENTS_WRITTEN: {result.events_written}",
+            f"FILES_WRITTEN: {result.files_written}",
+            f"CHECKPOINT_UPDATED: {result.checkpoint_updated}",
+            "",
+        ]
+    )
+
+
 def render_status(status: CtxStatus) -> str:
     return "\n".join(
         [
             f"PROVIDER: {status.provider}",
             f"DB: {status.db_path}",
             f"DB_EXISTS: {status.db_exists}",
+            f"INDEX_READY: {status.index_ready}",
             f"SESSIONS: {status.sessions}",
             f"PRIMARY_SESSIONS: {status.primary_sessions}",
             f"EVENTS: {status.events}",
+            f"SOURCES: {status.sources}",
+            f"SOURCE_DB: {status.source_db_path or ''}",
+            f"SOURCE_DB_EXISTS: {status.source_db_exists}",
             "",
         ]
     )

@@ -5,8 +5,11 @@
 # - $$ expands to shell PID and can corrupt paths.
 # - Use {{...}} only for just-level interpolation.
 
-repo_root := justfile_directory() + "/../.."
-uv_ocint := "uv --project '" + repo_root + "' run --package ocint"
+package_root := justfile_directory()
+requirements_lock := package_root + "/requirements-dev.lock"
+# Use a package-local environment so ocint ctx dependencies are not coupled to
+# the root workspace lockfile while this package is developed from the monorepo.
+uv_ocint := "uv run --no-project --with-requirements '" + requirements_lock + "' --with-editable '" + package_root + "'"
 
 # List available ocint commands
 default:
@@ -56,6 +59,7 @@ smoke-ctx:
     @set -e; \
         DB_EXISTS="$({{uv_ocint}} ocint state config --format json | python3 -c 'import json, sys; print(json.load(sys.stdin)["db_exists"])')"; \
         if [ "$DB_EXISTS" = "True" ]; then \
+            {{uv_ocint}} ocint ctx import; \
             SESSION_ID="$({{uv_ocint}} ocint ctx sql "SELECT session_id FROM ctx_sessions WHERE parent_id IS NULL AND session_id IS NOT NULL ORDER BY time_updated DESC LIMIT 1" --format raw)"; \
             if [ -z "$SESSION_ID" ]; then SESSION_ID="$({{uv_ocint}} ocint ctx sql "SELECT session_id FROM ctx_sessions WHERE session_id IS NOT NULL LIMIT 1" --format raw)"; fi; \
             EVENT_ID="$({{uv_ocint}} ocint ctx sql "SELECT e.event_id FROM ctx_events AS e JOIN ctx_sessions AS s ON e.provider_session_id = s.session_id WHERE s.parent_id IS NULL AND e.event_id IS NOT NULL LIMIT 1" --format raw)"; \

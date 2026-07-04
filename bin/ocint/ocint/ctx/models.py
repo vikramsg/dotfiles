@@ -11,9 +11,13 @@ class CtxStatus(CtxModel):
     provider: str = "opencode"
     db_path: Path
     db_exists: bool
+    index_ready: bool = False
     sessions: int = 0
     primary_sessions: int = 0
     events: int = 0
+    sources: int = 0
+    source_db_path: Path | None = None
+    source_db_exists: bool = False
 
 
 class CtxSource(CtxModel):
@@ -22,6 +26,26 @@ class CtxSource(CtxModel):
     name: str
     path: str | None = None
     count: int = 0
+    sessions: int = 0
+    events: int = 0
+    imported_at: int | None = None
+
+
+class CtxImportRequest(CtxModel):
+    source_db_path: Path
+    full: bool = False
+
+
+class CtxImportResult(CtxModel):
+    provider: str = "opencode"
+    ctx_db_path: Path
+    source_db_path: Path
+    sessions_seen: int = 0
+    sessions_written: int = 0
+    events_seen: int = 0
+    events_written: int = 0
+    files_written: int = 0
+    checkpoint_updated: bool = False
 
 
 class CtxSession(CtxModel):
@@ -59,6 +83,27 @@ class CtxSearchResult(CtxModel):
     snippet: str
     citation: str
     follow_up: str
+
+
+class CtxSearchCandidate(CtxModel):
+    event_pk: int
+    source_id: int
+    provider: str = "opencode"
+    session_id: str
+    parent_id: str | None = None
+    event_id: str
+    source_table: str
+    message_id: str | None = None
+    event_type: str
+    time_created: int | None = None
+    time_updated: int | None = None
+    title: str | None = None
+    workspace: str | None = None
+    source_path: str | None = None
+    full_text: str
+    search_text: str
+    citation: str
+    source_db_path: Path | None = None
 
 
 class CtxEventDetail(CtxModel):
