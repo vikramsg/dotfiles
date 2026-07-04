@@ -14,13 +14,13 @@
     c. What existing patterns and interfaces are we using
     d. What new interfaces are we creating
 
+## Abstractions
 
-## Prompt
+1. The reason to follow current developments is to be able to replicate them without needing to rethink all abstractions and interfaces
+    - For eg. by just replicating `ctx` I don't need to think about what the abstractions are and what I need to do about performance.
+    - The CLI structure is actually why keeping things open source is an issue. It is easily replicated.
 
-1. Do not remove pre-existing changes from the PR
-2. Do not remove plan.md or ticket.md
-3. Make sure to add code comments as stated in patterns and docstrings
-4. Every decision you make that is not directly in the plan, record in implementation_notes.md for me to review at the end
-5. Make sure all checks and tests are green.
-6. Do not add tests asserting logs, code comments, docstrings, descriptions. All tests should be for actual functionality. Code comments/docstrings/logs are not functionality.
+## Docs
 
+1. Docs actually require the same kind of domain slicing that code does.
+  - Otherwise it just sprawls up

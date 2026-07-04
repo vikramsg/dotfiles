@@ -1,0 +1,1 @@
+"""OpenCode SQLite storage boundary."""
