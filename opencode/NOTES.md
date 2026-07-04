@@ -19,3 +19,8 @@
 1. The reason to follow current developments is to be able to replicate them without needing to rethink all abstractions and interfaces
     - For eg. by just replicating `ctx` I don't need to think about what the abstractions are and what I need to do about performance.
     - The CLI structure is actually why keeping things open source is an issue. It is easily replicated.
+
+## Docs
+
+1. Docs actually require the same kind of domain slicing that code does.
+  - Otherwise it just sprawls up
