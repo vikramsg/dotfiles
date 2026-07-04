@@ -86,6 +86,31 @@ Sessions are durable conversation units. They support default search clustering,
 provider session ID, parent/root session IDs, agent type, primary-session flags,
 timestamps, and source metadata. [W1] [S1]
 
+### OpenCode Forks
+
+OpenCode has a session fork API and a `session.parent_id` column, but the
+inspected fork implementation creates a new session by copying messages from the
+source session and does not pass `parentID` to the new session. The copied
+message IDs and message-level parent links are rewritten inside the new session,
+so manual forks appear as independent root sessions in the OpenCode session
+table. See OpenCode `ForkInput`, `Session.fork`, `Session.children`, and
+`SessionTable.parent_id` in
+[`session.ts`](https://github.com/anomalyco/opencode/blob/f52424e05fab0edddb4462112ceb02044085f903/packages/opencode/src/session/session.ts#L273-L276),
+[`session.ts`](https://github.com/anomalyco/opencode/blob/f52424e05fab0edddb4462112ceb02044085f903/packages/opencode/src/session/session.ts#L693-L733),
+[`session.ts`](https://github.com/anomalyco/opencode/blob/f52424e05fab0edddb4462112ceb02044085f903/packages/opencode/src/session/session.ts#L598-L605),
+and [`sql.ts`](https://github.com/anomalyco/opencode/blob/f52424e05fab0edddb4462112ceb02044085f903/packages/core/src/session/sql.ts#L22-L65).
+
+Upstream `ctx` models OpenCode `session.parent_id` as parent-child lineage. When
+`parent_id` is present, the imported session gets parent/root metadata and is
+treated as a child/subagent-style session. When `parent_id` is absent, the
+session imports as a primary/root session. Therefore, OpenCode manual forks are
+not distinguishable as forks by upstream `ctx` unless OpenCode stores fork
+lineage in a field the importer reads. The relevant ctx OpenCode importer logic
+is in [`ctx-history-capture`](https://github.com/ctxrs/ctx/blob/eb4df7da5825245c9ca53a02382585445f64c4b4/crates/ctx-history-capture/src/lib.rs#L9348-L9417)
+and the OpenCode session row reader is in
+[`ctx-history-capture`](https://github.com/ctxrs/ctx/blob/eb4df7da5825245c9ca53a02382585445f64c4b4/crates/ctx-history-capture/src/lib.rs#L9452-L9505).
+
+
 ### Events
 
 Events are searchable timeline items such as messages, tool calls, tool output,
@@ -270,6 +295,16 @@ filesystem, so it is stable even when the repository has changed since the old
 session. [W2]
 
 ## Refresh Behavior
+
+`ctx` refresh is search-time index catch-up, not live transcript querying. 
+The CLI refresh flag exists on `ctx search` only: `--refresh auto|off|strict`.
+`auto` attempts a best-effort pre-search import of discovered refreshable
+sources, then searches the local index; `off` skips imports and searches the
+existing index only; `strict` fails if refresh cannot complete. `ctx setup` and
+`ctx import` update the index directly but do not use a refresh flag. `ctx show`,
+`ctx locate`, `ctx sql`, and MCP search/query paths read the existing index only.
+[W2] [W4] [S3]
+
 
 ### Refresh Auto
 
