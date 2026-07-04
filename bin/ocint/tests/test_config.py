@@ -1,12 +1,14 @@
 from pathlib import Path
 
-import pytest
-
 import ocint._config as config_module
+import pytest
 from ocint._config import resolve_paths
 
 
-def test_env_path_resolution_uses_overrides_and_data_dir_for_relative_db(tmp_path, monkeypatch) -> None:
+def test_env_path_resolution_uses_overrides_and_data_dir_for_relative_db(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config_file = tmp_path / "config.json"
     data_home = tmp_path / "data"
     monkeypatch.setenv("OPENCODE_CONFIG", str(config_file))
@@ -20,10 +22,10 @@ def test_env_path_resolution_uses_overrides_and_data_dir_for_relative_db(tmp_pat
     assert paths.db_path == data_home / "opencode" / "relative.db"
 
 
-def test_explicit_empty_env_uses_cwd_without_process_home(tmp_path, monkeypatch) -> None:
+def test_explicit_empty_env_uses_cwd_without_process_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "process-home"))
 
-    def fail_home(cls):
+    def fail_home(cls: type[Path]) -> None:
         raise AssertionError("Path.home() should not be called for explicit env")
 
     monkeypatch.setattr(config_module.Path, "home", classmethod(fail_home))
@@ -37,7 +39,7 @@ def test_explicit_empty_env_uses_cwd_without_process_home(tmp_path, monkeypatch)
         assert paths.db_path == tmp_path / ".local" / "share" / "opencode" / "opencode.db"
 
 
-def test_memory_db_is_rejected_before_absolutizing(tmp_path) -> None:
+def test_memory_db_is_rejected_before_absolutizing(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match=":memory:"):
         resolve_paths(db_path=":memory:", cwd=tmp_path)
 

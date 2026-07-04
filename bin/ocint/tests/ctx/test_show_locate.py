@@ -1,13 +1,13 @@
 import json
+from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
-
 from ocint.cli import main
-
 from tests.fixtures.opencode_db import create_opencode_db
 
 
-def test_ctx_show_event_uses_native_event_ids(tmp_path, monkeypatch) -> None:
+def test_ctx_show_event_uses_native_event_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(db_path))
 
@@ -21,7 +21,10 @@ def test_ctx_show_event_uses_native_event_ids(tmp_path, monkeypatch) -> None:
     assert [event["event_id"] for event in payload["events"]]
 
 
-def test_ctx_show_session_full_renders_untruncated_event_text(tmp_path, monkeypatch) -> None:
+def test_ctx_show_session_full_renders_untruncated_event_text(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(db_path))
 
@@ -31,7 +34,10 @@ def test_ctx_show_session_full_renders_untruncated_event_text(tmp_path, monkeypa
     assert "IMPORTANT_LATE_MARKER" in result.output
 
 
-def test_ctx_show_event_renders_selected_event_untruncated(tmp_path, monkeypatch) -> None:
+def test_ctx_show_event_renders_selected_event_untruncated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(db_path))
 
@@ -41,7 +47,10 @@ def test_ctx_show_event_renders_selected_event_untruncated(tmp_path, monkeypatch
     assert "IMPORTANT_LATE_MARKER" in result.output
 
 
-def test_ctx_show_event_json_includes_full_text_and_snippet(tmp_path, monkeypatch) -> None:
+def test_ctx_show_event_json_includes_full_text_and_snippet(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(db_path))
 
@@ -53,7 +62,7 @@ def test_ctx_show_event_json_includes_full_text_and_snippet(tmp_path, monkeypatc
     assert "IMPORTANT_LATE_MARKER" not in payload["selected"]["snippet"]
 
 
-def test_ctx_locate_event_uses_native_event_ids(tmp_path, monkeypatch) -> None:
+def test_ctx_locate_event_uses_native_event_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(db_path))
 

@@ -69,15 +69,22 @@ def _candidate_text(event: OpenCodeUnifiedEventRow, session: OpenCodeSessionRow)
         event.source_path,
         payload_to_text(event.data),
     ]
-    return " ".join(
-        item
-        for item in items
-        if item
-    )
+    return " ".join(item for item in items if item)
 
 
 def _workspace_text(session: OpenCodeSessionRow) -> str:
-    return " ".join(item for item in [session.cwd, session.data.directory, session.data.workspace, session.data.cwd, session.data.path, session.title] if item)
+    return " ".join(
+        item
+        for item in [
+            session.cwd,
+            session.data.directory,
+            session.data.workspace,
+            session.data.cwd,
+            session.data.path,
+            session.title,
+        ]
+        if item
+    )
 
 
 def _matches_file_filter(event: OpenCodeUnifiedEventRow, candidate: str, file_filter: str) -> bool:
@@ -100,7 +107,11 @@ def build_search_result(event: OpenCodeUnifiedEventRow, session: OpenCodeSession
         event_type=event.event_type,
         time_created=event.time_created,
         title=session.title,
-        workspace=session.cwd or session.data.directory or session.data.workspace or session.data.cwd or session.data.path,
+        workspace=session.cwd
+        or session.data.directory
+        or session.data.workspace
+        or session.data.cwd
+        or session.data.path,
         source_path=event.source_path,
         snippet=snippet,
         citation=citation,

@@ -13,6 +13,12 @@ default:
 test:
     uv --project "{{justfile_directory()}}/../.." run --package ocint pytest "{{justfile_directory()}}/tests"
 
+# Run ocint static checks
+check:
+    uv --project "{{justfile_directory()}}/../.." run --package ocint ruff check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
+    uv --project "{{justfile_directory()}}/../.." run --package ocint ruff format --check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
+    uv --project "{{justfile_directory()}}/../.." run --package ocint ty check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
+
 # Install the OpenCode intelligence CLI
 install:
     uv tool install "{{justfile_directory()}}" --force --no-cache

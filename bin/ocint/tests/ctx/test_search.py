@@ -1,14 +1,14 @@
 import inspect
+from pathlib import Path
 
 from ocint.ctx.models import CtxSearchRequest
 from ocint.ctx.search import CtxSearch
 from ocint.ctx.service import CtxService
 from ocint.opencode.repository import OpenCodeRepository
-
 from tests.fixtures.opencode_db import create_opencode_db
 
 
-def test_search_defaults_to_primary_sessions(tmp_path) -> None:
+def test_search_defaults_to_primary_sessions(tmp_path: Path) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     search = CtxSearch(OpenCodeRepository(db_path))
 
@@ -20,11 +20,19 @@ def test_search_defaults_to_primary_sessions(tmp_path) -> None:
     assert {result.session_id for result in subagent_results} == {"s-sub"}
 
 
-def test_search_filters_by_file_workspace_session_and_terms(tmp_path) -> None:
+def test_search_filters_by_file_workspace_session_and_terms(tmp_path: Path) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     search = CtxSearch(OpenCodeRepository(db_path))
 
-    results = search.search(CtxSearchRequest(query="native event marker", workspace="repo-directory-only", file="AGENTS.md", session_id="s-primary", terms=["stable"]))
+    results = search.search(
+        CtxSearchRequest(
+            query="native event marker",
+            workspace="repo-directory-only",
+            file="AGENTS.md",
+            session_id="s-primary",
+            terms=["stable"],
+        )
+    )
 
     assert results
     assert all(result.session_id == "s-primary" for result in results)
@@ -32,7 +40,7 @@ def test_search_filters_by_file_workspace_session_and_terms(tmp_path) -> None:
     assert all("AGENTS.md" in result.source_path for result in results if result.source_path)
 
 
-def test_search_file_filter_matches_all_payload_paths(tmp_path) -> None:
+def test_search_file_filter_matches_all_payload_paths(tmp_path: Path) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     search = CtxSearch(OpenCodeRepository(db_path))
 

@@ -1,11 +1,12 @@
+from pathlib import Path
+
 from ocint._timeutil import make_window
 from ocint.opencode.repository import OpenCodeRepository
 from ocint.state.service import StateService
-
 from tests.fixtures.opencode_db import create_opencode_db
 
 
-def test_state_summary_counts_only_step_finish_parts(tmp_path) -> None:
+def test_state_summary_counts_only_step_finish_parts(tmp_path: Path) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     service = StateService(OpenCodeRepository(db_path))
 
@@ -19,7 +20,7 @@ def test_state_summary_counts_only_step_finish_parts(tmp_path) -> None:
     assert summary.tokens.total == 51
 
 
-def test_state_model_usage_uses_message_metadata(tmp_path) -> None:
+def test_state_model_usage_uses_message_metadata(tmp_path: Path) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     service = StateService(OpenCodeRepository(db_path))
 

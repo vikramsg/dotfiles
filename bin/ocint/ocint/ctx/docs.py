@@ -1,6 +1,3 @@
-from ocint.ctx.models import CtxSearchResult
-
-
 SQL_DOC = """# ocint ctx SQL
 
 `ocint ctx sql` runs one read-only SELECT or WITH query against temporary stable views installed on the current read-only OpenCode SQLite connection.

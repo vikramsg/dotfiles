@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from ocint._errors import OcintError
 from ocint.ctx.locate import locate_event, locate_session
 from ocint.ctx.models import (
@@ -32,7 +30,9 @@ class CtxService:
             db_exists=True,
             sessions=len(sessions),
             primary_sessions=len([session for session in sessions if session.parent_id is None]),
-            events=self._repository.table_count("message") + self._repository.table_count("part") + self._repository.table_count("event"),
+            events=self._repository.table_count("message")
+            + self._repository.table_count("part")
+            + self._repository.table_count("event"),
         )
 
     def sources(self) -> list[CtxSource]:
@@ -76,7 +76,10 @@ class CtxService:
         index = next((i for i, event in enumerate(events) if event.id == event_id), 0)
         start = max(0, index - window)
         end = min(len(events), index + window + 1)
-        return CtxEventContext(selected=_event_result(selected, session), events=[_event_result(event, session) for event in events[start:end]])
+        return CtxEventContext(
+            selected=_event_result(selected, session),
+            events=[_event_result(event, session) for event in events[start:end]],
+        )
 
     def locate_session(self, session_id: str) -> CtxLocateResult:
         result = locate_session(self._repository, session_id)

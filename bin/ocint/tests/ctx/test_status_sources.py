@@ -1,13 +1,13 @@
 import json
+from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
-
 from ocint.cli import main
-
 from tests.fixtures.opencode_db import create_opencode_db
 
 
-def test_ctx_status_and_sources_are_opencode_only_json(tmp_path, monkeypatch) -> None:
+def test_ctx_status_and_sources_are_opencode_only_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(db_path))
 
@@ -23,7 +23,7 @@ def test_ctx_status_and_sources_are_opencode_only_json(tmp_path, monkeypatch) ->
     assert {row["provider"] for row in json.loads(sources.output)} == {"opencode"}
 
 
-def test_ctx_rejects_provider_option(tmp_path, monkeypatch) -> None:
+def test_ctx_rejects_provider_option(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(db_path))
     provider_option = "".join(["--", "provider"])

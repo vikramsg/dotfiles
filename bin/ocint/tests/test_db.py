@@ -1,13 +1,13 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
-
 from ocint._db import open_readonly_connection
 
 from tests.fixtures.opencode_db import create_opencode_db
 
 
-def test_open_readonly_connection_allows_reads_and_rejects_writes(tmp_path) -> None:
+def test_open_readonly_connection_allows_reads_and_rejects_writes(tmp_path: Path) -> None:
     db_path = create_opencode_db(tmp_path / "opencode.db")
 
     con = open_readonly_connection(db_path)
@@ -19,7 +19,7 @@ def test_open_readonly_connection_allows_reads_and_rejects_writes(tmp_path) -> N
         con.close()
 
 
-def test_open_readonly_connection_rejects_missing_and_memory_db(tmp_path) -> None:
+def test_open_readonly_connection_rejects_missing_and_memory_db(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match=":memory:"):
         open_readonly_connection(":memory:")
     with pytest.raises(FileNotFoundError, match="OpenCode DB does not exist"):

@@ -141,7 +141,9 @@ def _string_values(value: Any) -> list[str]:
     return [str(value)]
 
 
-def _collect_paths(value: Any, paths: list[str], seen: set[str], *, key: str | None = None, in_path_array: bool = False) -> None:
+def _collect_paths(
+    value: Any, paths: list[str], seen: set[str], *, key: str | None = None, in_path_array: bool = False
+) -> None:
     if isinstance(value, dict):
         for nested_key, item in value.items():
             _collect_paths(item, paths, seen, key=nested_key)

@@ -6,7 +6,9 @@ def locate_session(repository: OpenCodeRepository, session_id: str) -> CtxLocate
     session = repository.find_session(session_id)
     if session is None:
         return None
-    return CtxLocateResult(kind="session", id=session.id, db_path=repository.db_path, source_table="session", session_id=session.id)
+    return CtxLocateResult(
+        kind="session", id=session.id, db_path=repository.db_path, source_table="session", session_id=session.id
+    )
 
 
 def locate_event(repository: OpenCodeRepository, event_id: str) -> CtxLocateResult | None:

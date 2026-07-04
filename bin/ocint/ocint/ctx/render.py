@@ -64,7 +64,9 @@ def render_transcript(transcript: CtxTranscript, *, mode: str = "lite", output_f
     ]
     for event in transcript.events:
         if mode == "log":
-            lines.append(f"{format_ms(event.time_created)}\t{event.source_table}\t{event.event_id}\t{event.event_type}\t{event.snippet}")
+            lines.append(
+                f"{format_ms(event.time_created)}\t{event.source_table}\t{event.event_id}\t{event.event_type}\t{event.snippet}"
+            )
         else:
             lines.append(f"[{event.source_table}:{event.event_id}] {event.event_type} {format_ms(event.time_created)}")
             lines.append(_transcript_event_content(event, mode=mode))
@@ -76,7 +78,9 @@ def render_event_context(context: CtxEventContext) -> str:
     lines = [f"SELECTED: {context.selected.citation}", ""]
     for event in context.events:
         marker = "*" if event.event_id == context.selected.event_id else " "
-        lines.append(f"{marker} [{event.source_table}:{event.event_id}] {event.event_type} {format_ms(event.time_created)}")
+        lines.append(
+            f"{marker} [{event.source_table}:{event.event_id}] {event.event_type} {format_ms(event.time_created)}"
+        )
         content = event.text if event.event_id == context.selected.event_id else event.snippet
         lines.append(f"  {content}")
     return "\n".join(lines) + "\n"
