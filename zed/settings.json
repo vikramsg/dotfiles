@@ -18,7 +18,7 @@
     },
   },
   "agent": {
-    "terminal_init_command": "tmux new-session -A -s \"zed-${PWD##*/}\" -c \"$PWD\"",
+    "terminal_init_command": "title=\"$(basename \"$(dirname \"$PWD\")\")/$(basename \"$PWD\")\"; printf '\\033]2;%s\\007' \"$title\"; exec tmux new-session -A -s \"zed-$(basename \"$(dirname \"$PWD\")\")-$(basename \"$PWD\")\" -c \"$PWD\"",
   },
   "ssh_connections": [
     {
