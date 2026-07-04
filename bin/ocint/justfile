@@ -5,19 +5,22 @@
 # - $$ expands to shell PID and can corrupt paths.
 # - Use {{...}} only for just-level interpolation.
 
+repo_root := justfile_directory() + "/../.."
+uv_ocint := "uv --project '" + repo_root + "' run --package ocint"
+
 # List available ocint commands
 default:
     @just --justfile "{{justfile()}}" --list
 
 # Run ocint package tests
 test:
-    uv --project "{{justfile_directory()}}/../.." run --package ocint pytest "{{justfile_directory()}}/tests"
+    {{uv_ocint}} pytest "{{justfile_directory()}}/tests"
 
 # Run ocint static checks
 check:
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ruff check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ruff format --check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ty check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
+    {{uv_ocint}} ruff check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
+    {{uv_ocint}} ruff format --check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
+    {{uv_ocint}} ty check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
 
 # Install the OpenCode intelligence CLI
 install:
@@ -25,66 +28,66 @@ install:
 
 # Smoke-test ocint state commands against the configured OpenCode DB when present
 smoke-state:
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state config
-    @DB_EXISTS="$(uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state config --format json | python3 -c 'import json, sys; print(json.load(sys.stdin)["db_exists"])')"; \
+    {{uv_ocint}} ocint state config
+    @DB_EXISTS="$({{uv_ocint}} ocint state config --format json | python3 -c 'import json, sys; print(json.load(sys.stdin)["db_exists"])')"; \
         if [ "$DB_EXISTS" = "True" ]; then \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state schema; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state summary --days 30; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state daily --days 30; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state models --days 30; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state sessions --days 30; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state summary --days 30 --format json; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state daily --days 30 --format json; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state models --days 30 --format json; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state sessions --days 30 --format json; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state query "SELECT COUNT(*) AS sessions FROM session"; \
+            {{uv_ocint}} ocint state schema; \
+            {{uv_ocint}} ocint state summary --days 30; \
+            {{uv_ocint}} ocint state daily --days 30; \
+            {{uv_ocint}} ocint state models --days 30; \
+            {{uv_ocint}} ocint state sessions --days 30; \
+            {{uv_ocint}} ocint state summary --days 30 --format json; \
+            {{uv_ocint}} ocint state daily --days 30 --format json; \
+            {{uv_ocint}} ocint state models --days 30 --format json; \
+            {{uv_ocint}} ocint state sessions --days 30 --format json; \
+            {{uv_ocint}} ocint state query "SELECT COUNT(*) AS sessions FROM session"; \
         else \
             echo "Skipping DB-backed ocint state smoke commands because the resolved OpenCode DB does not exist."; \
         fi
 
 # Smoke-test ocint ctx commands against the configured OpenCode DB when present
 smoke-ctx:
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx status
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx status --json
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sources
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sources --json
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx docs show sql
-    uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx docs search "stable views"
+    {{uv_ocint}} ocint ctx status
+    {{uv_ocint}} ocint ctx status --json
+    {{uv_ocint}} ocint ctx sources
+    {{uv_ocint}} ocint ctx sources --json
+    {{uv_ocint}} ocint ctx docs show sql
+    {{uv_ocint}} ocint ctx docs search "stable views"
     @set -e; \
-        DB_EXISTS="$(uv --project "{{justfile_directory()}}/../.." run --package ocint ocint state config --format json | python3 -c 'import json, sys; print(json.load(sys.stdin)["db_exists"])')"; \
+        DB_EXISTS="$({{uv_ocint}} ocint state config --format json | python3 -c 'import json, sys; print(json.load(sys.stdin)["db_exists"])')"; \
         if [ "$DB_EXISTS" = "True" ]; then \
-            SESSION_ID="$(uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT session_id FROM ctx_sessions WHERE parent_id IS NULL AND session_id IS NOT NULL ORDER BY time_updated DESC LIMIT 1" --format raw)"; \
-            if [ -z "$SESSION_ID" ]; then SESSION_ID="$(uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT session_id FROM ctx_sessions WHERE session_id IS NOT NULL LIMIT 1" --format raw)"; fi; \
-            EVENT_ID="$(uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT e.event_id FROM ctx_events AS e JOIN ctx_sessions AS s ON e.provider_session_id = s.session_id WHERE s.parent_id IS NULL AND e.event_id IS NOT NULL LIMIT 1" --format raw)"; \
-            if [ -z "$EVENT_ID" ]; then EVENT_ID="$(uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT event_id FROM ctx_events WHERE event_id IS NOT NULL LIMIT 1" --format raw)"; fi; \
-            WORKSPACE="$(uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT workspace FROM ctx_sessions WHERE parent_id IS NULL AND workspace IS NOT NULL AND workspace != '' ORDER BY time_updated DESC LIMIT 1" --format raw)"; \
+            SESSION_ID="$({{uv_ocint}} ocint ctx sql "SELECT session_id FROM ctx_sessions WHERE parent_id IS NULL AND session_id IS NOT NULL ORDER BY time_updated DESC LIMIT 1" --format raw)"; \
+            if [ -z "$SESSION_ID" ]; then SESSION_ID="$({{uv_ocint}} ocint ctx sql "SELECT session_id FROM ctx_sessions WHERE session_id IS NOT NULL LIMIT 1" --format raw)"; fi; \
+            EVENT_ID="$({{uv_ocint}} ocint ctx sql "SELECT e.event_id FROM ctx_events AS e JOIN ctx_sessions AS s ON e.provider_session_id = s.session_id WHERE s.parent_id IS NULL AND e.event_id IS NOT NULL LIMIT 1" --format raw)"; \
+            if [ -z "$EVENT_ID" ]; then EVENT_ID="$({{uv_ocint}} ocint ctx sql "SELECT event_id FROM ctx_events WHERE event_id IS NOT NULL LIMIT 1" --format raw)"; fi; \
+            WORKSPACE="$({{uv_ocint}} ocint ctx sql "SELECT workspace FROM ctx_sessions WHERE parent_id IS NULL AND workspace IS NOT NULL AND workspace != '' ORDER BY time_updated DESC LIMIT 1" --format raw)"; \
             SEARCH_QUERY="$SESSION_ID"; \
             SOURCE_PATH="$WORKSPACE"; \
             if [ -z "$SEARCH_QUERY" ]; then SEARCH_QUERY="opencode"; fi; \
             if [ -z "$WORKSPACE" ]; then WORKSPACE="."; fi; \
             if [ -z "$SOURCE_PATH" ]; then SOURCE_PATH="AGENTS.md"; fi; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --limit 1; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --refresh off --limit 1; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --workspace "$WORKSPACE" --limit 1; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --file "$SOURCE_PATH" --limit 1; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --since 30d --limit 1; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --term "$SEARCH_QUERY" --term "$SEARCH_QUERY" --limit 1; \
-            if [ -n "$SESSION_ID" ]; then uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --session "$SESSION_ID" --limit 1; else echo "Skipping session-scoped ctx search smoke because no session ID was found."; fi; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --verbose --limit 1; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx search "$SEARCH_QUERY" --include-subagents --limit 1; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT provider, COUNT(*) AS sessions FROM ctx_sessions GROUP BY provider"; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT event_type, COUNT(*) AS events FROM ctx_events GROUP BY event_type ORDER BY events DESC"; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT path, provider, provider_session_id FROM ctx_files_touched LIMIT 20"; \
-            uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx sql "SELECT provider, source_type, name, sessions, events FROM ctx_sources"; \
-            if [ -n "$SESSION_ID" ]; then OUT_PATH="$(mktemp /tmp/ocint-session-lite.XXXXXX.txt)"; uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx show session "$SESSION_ID" --mode lite --out "$OUT_PATH"; else echo "Skipping ctx show session --mode lite smoke because no session ID was found."; fi; \
-            if [ -n "$SESSION_ID" ]; then OUT_PATH="$(mktemp /tmp/ocint-session-full.XXXXXX.txt)"; uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx show session "$SESSION_ID" --mode full --out "$OUT_PATH"; else echo "Skipping ctx show session --mode full smoke because no session ID was found."; fi; \
-            if [ -n "$SESSION_ID" ]; then OUT_PATH="$(mktemp /tmp/ocint-session.XXXXXX.md)"; uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx show session "$SESSION_ID" --format markdown --out "$OUT_PATH"; else echo "Skipping ctx show session markdown smoke because no session ID was found."; fi; \
-            if [ -n "$EVENT_ID" ]; then uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx show event "$EVENT_ID" --window 5; else echo "Skipping ctx show event smoke because no event ID was found."; fi; \
-            if [ -n "$EVENT_ID" ]; then uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx show event "$EVENT_ID" --window 0 --json; else echo "Skipping ctx show event --json smoke because no event ID was found."; fi; \
-            if [ -n "$SESSION_ID" ]; then uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx locate session "$SESSION_ID"; else echo "Skipping ctx locate session smoke because no session ID was found."; fi; \
-            if [ -n "$SESSION_ID" ]; then uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx locate session "$SESSION_ID" --json; else echo "Skipping ctx locate session --json smoke because no session ID was found."; fi; \
-            if [ -n "$EVENT_ID" ]; then uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx locate event "$EVENT_ID"; else echo "Skipping ctx locate event smoke because no event ID was found."; fi; \
-            if [ -n "$EVENT_ID" ]; then uv --project "{{justfile_directory()}}/../.." run --package ocint ocint ctx locate event "$EVENT_ID" --json; else echo "Skipping ctx locate event --json smoke because no event ID was found."; fi; \
+            {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --limit 1; \
+            {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --refresh off --limit 1; \
+            {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --workspace "$WORKSPACE" --limit 1; \
+            {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --file "$SOURCE_PATH" --limit 1; \
+            {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --since 30d --limit 1; \
+            {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --term "$SEARCH_QUERY" --term "$SEARCH_QUERY" --limit 1; \
+            if [ -n "$SESSION_ID" ]; then {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --session "$SESSION_ID" --limit 1; else echo "Skipping session-scoped ctx search smoke because no session ID was found."; fi; \
+            {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --verbose --limit 1; \
+            {{uv_ocint}} ocint ctx search "$SEARCH_QUERY" --include-subagents --limit 1; \
+            {{uv_ocint}} ocint ctx sql "SELECT provider, COUNT(*) AS sessions FROM ctx_sessions GROUP BY provider"; \
+            {{uv_ocint}} ocint ctx sql "SELECT event_type, COUNT(*) AS events FROM ctx_events GROUP BY event_type ORDER BY events DESC"; \
+            {{uv_ocint}} ocint ctx sql "SELECT path, provider, provider_session_id FROM ctx_files_touched LIMIT 20"; \
+            {{uv_ocint}} ocint ctx sql "SELECT provider, source_type, name, sessions, events FROM ctx_sources"; \
+            if [ -n "$SESSION_ID" ]; then OUT_PATH="$(mktemp /tmp/ocint-session-lite.XXXXXX.txt)"; {{uv_ocint}} ocint ctx show session "$SESSION_ID" --mode lite --out "$OUT_PATH"; else echo "Skipping ctx show session --mode lite smoke because no session ID was found."; fi; \
+            if [ -n "$SESSION_ID" ]; then OUT_PATH="$(mktemp /tmp/ocint-session-full.XXXXXX.txt)"; {{uv_ocint}} ocint ctx show session "$SESSION_ID" --mode full --out "$OUT_PATH"; else echo "Skipping ctx show session --mode full smoke because no session ID was found."; fi; \
+            if [ -n "$SESSION_ID" ]; then OUT_PATH="$(mktemp /tmp/ocint-session.XXXXXX.md)"; {{uv_ocint}} ocint ctx show session "$SESSION_ID" --format markdown --out "$OUT_PATH"; else echo "Skipping ctx show session markdown smoke because no session ID was found."; fi; \
+            if [ -n "$EVENT_ID" ]; then {{uv_ocint}} ocint ctx show event "$EVENT_ID" --window 5; else echo "Skipping ctx show event smoke because no event ID was found."; fi; \
+            if [ -n "$EVENT_ID" ]; then {{uv_ocint}} ocint ctx show event "$EVENT_ID" --window 0 --json; else echo "Skipping ctx show event --json smoke because no event ID was found."; fi; \
+            if [ -n "$SESSION_ID" ]; then {{uv_ocint}} ocint ctx locate session "$SESSION_ID"; else echo "Skipping ctx locate session smoke because no session ID was found."; fi; \
+            if [ -n "$SESSION_ID" ]; then {{uv_ocint}} ocint ctx locate session "$SESSION_ID" --json; else echo "Skipping ctx locate session --json smoke because no session ID was found."; fi; \
+            if [ -n "$EVENT_ID" ]; then {{uv_ocint}} ocint ctx locate event "$EVENT_ID"; else echo "Skipping ctx locate event smoke because no event ID was found."; fi; \
+            if [ -n "$EVENT_ID" ]; then {{uv_ocint}} ocint ctx locate event "$EVENT_ID" --json; else echo "Skipping ctx locate event --json smoke because no event ID was found."; fi; \
         else \
             echo "Skipping DB-backed ocint ctx smoke commands because the resolved OpenCode DB does not exist."; \
         fi
