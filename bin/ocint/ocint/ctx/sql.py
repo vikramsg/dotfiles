@@ -1,12 +1,13 @@
 import sqlite3
+from collections.abc import Callable
 from typing import Any
 
 from ocint._sqlsafe import normalize_select_sql
 from ocint.ctx.views import install_ctx_views
 from ocint.opencode.repository import OpenCodeRepository
 
-
 ALLOWED_CTX_VIEWS = frozenset({"ctx_sessions", "ctx_events", "ctx_files_touched", "ctx_sources"})
+Authorizer = Callable[[int, str | None, str | None, str | None, str | None], int]
 
 _ALLOWED_CTX_ACTIONS = {
     sqlite3.SQLITE_SELECT,
@@ -34,7 +35,7 @@ def execute_ctx_view_query(connection: sqlite3.Connection, sql: str) -> list[dic
     return [dict(row) for row in rows]
 
 
-def _ctx_view_authorizer() -> sqlite3.AuthorizerCallback:
+def _ctx_view_authorizer() -> Authorizer:
     view_expanded_tables: set[str] = set()
 
     def authorize(action: int, arg1: str | None, arg2: str | None, _db: str | None, source: str | None) -> int:
@@ -109,7 +110,9 @@ def _with_clause_start(query: str) -> int | None:
         return None
     index = _skip_whitespace(query, 4)
     recursive_end = index + 9
-    if lowered[index:recursive_end] == "recursive" and (recursive_end == len(query) or not _identifier_char(query[recursive_end])):
+    if lowered[index:recursive_end] == "recursive" and (
+        recursive_end == len(query) or not _identifier_char(query[recursive_end])
+    ):
         index = _skip_whitespace(query, index + 9)
     return index
 

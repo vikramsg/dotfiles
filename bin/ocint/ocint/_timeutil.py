@@ -1,6 +1,6 @@
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-import re
 
 
 @dataclass(frozen=True)

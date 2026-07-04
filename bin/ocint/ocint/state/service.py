@@ -1,6 +1,6 @@
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import UTC, date, datetime
-from typing import Iterable
 
 from ocint._timeutil import UsageWindow
 from ocint.opencode.models import OpenCodePartRow, OpenCodeTokenPayload

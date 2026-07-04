@@ -162,7 +162,7 @@ def test_cli_logs_can_follow_journalctl_on_linux(monkeypatch):
     monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
 
     runner = CliRunner()
-    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--follow"])
+    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--follow", "--lines", "50"])
 
     assert result.exit_code == 0
     assert calls == [
@@ -170,7 +170,7 @@ def test_cli_logs_can_follow_journalctl_on_linux(monkeypatch):
             "journalctl",
             "--user",
             "-n",
-            "200",
+            "50",
             "-f",
             "-u",
             "com.vikramsg.dotfiles.lch-screenshot-sync.service",

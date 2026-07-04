@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-ZSH_HELPER = REPO_ROOT / "zsh/.zsh_screenshot"
+ZSH_HELPER = REPO_ROOT / "zsh/.zsh_script"
 
 
 def write_fake_screenshot(bin_dir: Path, source_file: Path, log_file: Path, *, home_dir: Path | None = None) -> Path:

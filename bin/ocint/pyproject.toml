@@ -11,6 +11,8 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest",
+    "ruff",
+    "ty",
 ]
 
 [project.scripts]
@@ -25,3 +27,41 @@ module-root = "."
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+src = ["ocint", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "ANN",
+    "ARG",
+    "B",
+    "C4",
+    "E",
+    "F",
+    "I",
+    "PT",
+    "RUF",
+    "SIM",
+    "UP",
+]
+ignore = [
+    "ANN401",
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "ARG001",
+]
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+include = ["ocint", "tests"]
+
+[tool.ty.rules]
+all = "error"

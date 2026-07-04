@@ -1,6 +1,7 @@
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import click
 
@@ -9,7 +10,14 @@ from ocint._errors import OcintError
 from ocint._render import render_csv, render_json, render_raw, render_table
 from ocint.ctx.docs import search_docs, show_doc
 from ocint.ctx.models import CtxSearchRequest
-from ocint.ctx.render import render_event_context, render_locate, render_search_results, render_sources, render_status, render_transcript
+from ocint.ctx.render import (
+    render_event_context,
+    render_locate,
+    render_search_results,
+    render_sources,
+    render_status,
+    render_transcript,
+)
 from ocint.ctx.service import CtxService
 from ocint.ctx.sql import run_ctx_sql
 from ocint.opencode.repository import OpenCodeRepository
@@ -44,8 +52,14 @@ def sources(as_json: bool) -> None:
 @click.option("--since", help="Only include events since YYYY-MM-DD or a duration like 30d.")
 @click.option("--term", "terms", multiple=True, help="Additional required case-insensitive term.")
 @click.option("--include-subagents", is_flag=True, help="Include sessions with parent_id set.")
-@click.option("--include-current-session", is_flag=True, help="Accepted compatibility no-op; OpenCode exposes no active session env contract here.")
-@click.option("--refresh", type=click.Choice(["off"]), help="Accepted compatibility no-op; ocint has no persistent ctx index.")
+@click.option(
+    "--include-current-session",
+    is_flag=True,
+    help="Accepted compatibility no-op; OpenCode exposes no active session env contract here.",
+)
+@click.option(
+    "--refresh", type=click.Choice(["off"]), help="Accepted compatibility no-op; ocint has no persistent ctx index."
+)
 @click.option("--limit", type=int, default=50, show_default=True, help="Maximum number of results to print.")
 @click.option("--verbose", is_flag=True, help="Show citations and copyable follow-up commands.")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
@@ -87,12 +101,18 @@ def show() -> None:
 @show.command(name="session")
 @click.argument("session_id")
 @click.option("--mode", type=click.Choice(["lite", "full", "log"]), default="lite", show_default=True)
-@click.option("--format", "output_format", type=click.Choice(["text", "markdown", "json"]), default="text", show_default=True)
+@click.option(
+    "--format", "output_format", type=click.Choice(["text", "markdown", "json"]), default="text", show_default=True
+)
 @click.option("--out", "out_path", type=click.Path(path_type=Path), help="Write rendered transcript to a file.")
 def show_session(session_id: str, mode: str, output_format: str, out_path: Path | None) -> None:
     """Print or write a readable OpenCode session transcript."""
     transcript = _with_service(lambda service: service.show_session(session_id))
-    rendered = render_json(transcript) if output_format == "json" else render_transcript(transcript, mode=mode, output_format=output_format)
+    rendered = (
+        render_json(transcript)
+        if output_format == "json"
+        else render_transcript(transcript, mode=mode, output_format=output_format)
+    )
     if out_path is not None:
         out_path.write_text(rendered)
         click.echo(f"Wrote OpenCode session transcript to {out_path}")
@@ -102,7 +122,9 @@ def show_session(session_id: str, mode: str, output_format: str, out_path: Path 
 
 @show.command(name="event")
 @click.argument("event_id")
-@click.option("--window", type=int, default=5, show_default=True, help="Number of neighboring session events on each side.")
+@click.option(
+    "--window", type=int, default=5, show_default=True, help="Number of neighboring session events on each side."
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 def show_event(event_id: str, window: int, as_json: bool) -> None:
     """Show an OpenCode event with nearby session context."""
@@ -154,7 +176,9 @@ def docs_search(query: str) -> None:
 
 @ctx.command(name="sql")
 @click.argument("sql")
-@click.option("--format", "output_format", type=click.Choice(["table", "json", "csv", "raw"]), default="table", show_default=True)
+@click.option(
+    "--format", "output_format", type=click.Choice(["table", "json", "csv", "raw"]), default="table", show_default=True
+)
 def sql_command(sql: str, output_format: str) -> None:
     """Run a safe read-only query against temporary ctx views."""
     rows = _with_repository(lambda repository: run_ctx_sql(repository, sql))

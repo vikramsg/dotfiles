@@ -6,7 +6,6 @@ from pathlib import Path
 from ocint._db import reject_memory_db_path
 from ocint._models import ResolvedPaths
 
-
 CONFIG_FILE = Path("opencode") / "opencode.json"
 DEFAULT_DB_NAME = "opencode.db"
 
@@ -77,9 +76,17 @@ def opencode_data_dir(env: Mapping[str, str] | None = None, *, cwd: Path | None 
     effective_env = os.environ if use_process_env else env
     cwd = Path.cwd() if cwd is None else cwd
     if xdg_data_home := effective_env.get("XDG_DATA_HOME"):
-        return _absolute(xdg_data_home, base=cwd, env=effective_env, cwd=cwd, allow_process_home=use_process_env) / "opencode"
+        return (
+            _absolute(xdg_data_home, base=cwd, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
+            / "opencode"
+        )
     if sys.platform == "darwin":
-        return _home(effective_env, cwd=cwd, allow_process_home=use_process_env) / "Library" / "Application Support" / "opencode"
+        return (
+            _home(effective_env, cwd=cwd, allow_process_home=use_process_env)
+            / "Library"
+            / "Application Support"
+            / "opencode"
+        )
     return _home(effective_env, cwd=cwd, allow_process_home=use_process_env) / ".local" / "share" / "opencode"
 
 
@@ -95,9 +102,13 @@ def resolve_paths(
     cwd = Path.cwd() if cwd is None else cwd
 
     if config_path is not None:
-        resolved_config = _absolute(config_path, base=cwd, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
+        resolved_config = _absolute(
+            config_path, base=cwd, env=effective_env, cwd=cwd, allow_process_home=use_process_env
+        )
     elif env_config := effective_env.get("OPENCODE_CONFIG"):
-        resolved_config = _absolute(env_config, base=cwd, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
+        resolved_config = _absolute(
+            env_config, base=cwd, env=effective_env, cwd=cwd, allow_process_home=use_process_env
+        )
     else:
         candidates = _config_candidates(effective_env, cwd, allow_process_home=use_process_env)
         resolved_config = next((candidate for candidate in candidates if candidate.exists()), candidates[0])

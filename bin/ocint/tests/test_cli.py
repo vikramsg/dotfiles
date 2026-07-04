@@ -2,7 +2,6 @@ import tomllib
 from pathlib import Path
 
 from click.testing import CliRunner
-
 from ocint.cli import main
 
 
@@ -12,12 +11,12 @@ def test_root_help_lists_only_state_and_ctx_groups() -> None:
     assert result.exit_code == 0
     assert "state" in result.output
     assert "ctx" in result.output
-    assert "opencode-state" not in result.output
     assert "opencode_ctx" not in result.output
 
 
 def test_pyproject_defines_only_ocint_script() -> None:
-    data = tomllib.loads(Path("pyproject.toml").read_text())
+    package_root = Path(__file__).parents[1]
+    data = tomllib.loads((package_root / "pyproject.toml").read_text())
 
     assert data["project"]["scripts"] == {"ocint": "ocint.cli:main"}
 

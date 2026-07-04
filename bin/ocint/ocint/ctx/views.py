@@ -18,7 +18,16 @@ def _ctx_sessions_sql(connection: sqlite3.Connection) -> str:
     if not _table_exists(connection, "session"):
         return _empty_view(
             "ctx_sessions",
-            ["provider", "provider_session_id", "session_id", "parent_id", "title", "workspace", "time_created", "time_updated"],
+            [
+                "provider",
+                "provider_session_id",
+                "session_id",
+                "parent_id",
+                "title",
+                "workspace",
+                "time_created",
+                "time_updated",
+            ],
         )
     columns = _columns(connection, "session")
     base = "session_base"
@@ -28,13 +37,13 @@ def _ctx_sessions_sql(connection: sqlite3.Connection) -> str:
     CREATE TEMP VIEW ctx_sessions AS
     SELECT
       'opencode' AS provider,
-      CAST({_column_expr(columns, ['id'], "NULL", table_alias=base)} AS TEXT) AS provider_session_id,
-      CAST({_column_expr(columns, ['id'], "NULL", table_alias=base)} AS TEXT) AS session_id,
-      CAST({_column_expr(columns, ['parent_id', 'parentID'], "NULL", table_alias=base)} AS TEXT) AS parent_id,
-      CAST({_coalesce([_column_expr(columns, ['title'], table_alias=base), opencode_schema.json_extract(data, '$.title')])} AS TEXT) AS title,
+      CAST({_column_expr(columns, ["id"], "NULL", table_alias=base)} AS TEXT) AS provider_session_id,
+      CAST({_column_expr(columns, ["id"], "NULL", table_alias=base)} AS TEXT) AS session_id,
+      CAST({_column_expr(columns, ["parent_id", "parentID"], "NULL", table_alias=base)} AS TEXT) AS parent_id,
+      CAST({_coalesce([_column_expr(columns, ["title"], table_alias=base), opencode_schema.json_extract(data, "$.title")])} AS TEXT) AS title,
       CAST({workspace} AS TEXT) AS workspace,
-      CAST({_column_expr(columns, ['time_created', 'timeCreated', 'created_at', 'createdAt'], "NULL", table_alias=base)} AS INTEGER) AS time_created,
-      CAST({_column_expr(columns, ['time_updated', 'timeUpdated', 'updated_at', 'updatedAt'], "NULL", table_alias=base)} AS INTEGER) AS time_updated
+      CAST({_column_expr(columns, ["time_created", "timeCreated", "created_at", "createdAt"], "NULL", table_alias=base)} AS INTEGER) AS time_created,
+      CAST({_column_expr(columns, ["time_updated", "timeUpdated", "updated_at", "updatedAt"], "NULL", table_alias=base)} AS INTEGER) AS time_updated
     FROM "session" AS {_quote(base)}
     """
 
@@ -49,11 +58,11 @@ def _ctx_events_sql(connection: sqlite3.Connection) -> str:
             f"""
             SELECT 'opencode' AS provider,
                    CAST({opencode_schema.event_session_id_expr(columns, data, table_alias=base)} AS TEXT) AS provider_session_id,
-                   CAST({_column_expr(columns, ['id'], 'NULL', table_alias=base)} AS TEXT) AS event_id,
+                   CAST({_column_expr(columns, ["id"], "NULL", table_alias=base)} AS TEXT) AS event_id,
                    'event' AS source_table,
                    CAST({opencode_schema.event_type_expr(columns, data, table_alias=base)} AS TEXT) AS event_type,
                    CAST({opencode_schema.event_time_created_expr(columns, data, table_alias=base)} AS INTEGER) AS time_created,
-                   CAST({_coalesce([opencode_schema.json_extract(data, '$.text'), opencode_schema.json_extract(data, '$.message'), opencode_schema.json_extract(data, '$.title'), data])} AS TEXT) AS text
+                   CAST({_coalesce([opencode_schema.json_extract(data, "$.text"), opencode_schema.json_extract(data, "$.message"), opencode_schema.json_extract(data, "$.title"), data])} AS TEXT) AS text
             FROM "event" AS {_quote(base)}
             """
         )
@@ -64,12 +73,12 @@ def _ctx_events_sql(connection: sqlite3.Connection) -> str:
         branches.append(
             f"""
             SELECT 'opencode' AS provider,
-                   CAST({_column_expr(columns, ['session_id', 'sessionID'], 'NULL', table_alias=base)} AS TEXT) AS provider_session_id,
-                   CAST({_column_expr(columns, ['id'], 'NULL', table_alias=base)} AS TEXT) AS event_id,
+                   CAST({_column_expr(columns, ["session_id", "sessionID"], "NULL", table_alias=base)} AS TEXT) AS provider_session_id,
+                   CAST({_column_expr(columns, ["id"], "NULL", table_alias=base)} AS TEXT) AS event_id,
                    'part' AS source_table,
-                   CAST({_coalesce([opencode_schema.json_extract(data, '$.type'), "'part'"])} AS TEXT) AS event_type,
-                   CAST({_column_expr(columns, ['time_created', 'timeCreated', 'created_at', 'createdAt'], 'NULL', table_alias=base)} AS INTEGER) AS time_created,
-                   CAST({_coalesce([opencode_schema.json_extract(data, '$.text'), opencode_schema.json_extract(data, '$.content'), data])} AS TEXT) AS text
+                   CAST({_coalesce([opencode_schema.json_extract(data, "$.type"), "'part'"])} AS TEXT) AS event_type,
+                   CAST({_column_expr(columns, ["time_created", "timeCreated", "created_at", "createdAt"], "NULL", table_alias=base)} AS INTEGER) AS time_created,
+                   CAST({_coalesce([opencode_schema.json_extract(data, "$.text"), opencode_schema.json_extract(data, "$.content"), data])} AS TEXT) AS text
             FROM "part" AS {_quote(base)}
             """
         )
@@ -80,17 +89,20 @@ def _ctx_events_sql(connection: sqlite3.Connection) -> str:
         branches.append(
             f"""
             SELECT 'opencode' AS provider,
-                   CAST({_column_expr(columns, ['session_id', 'sessionID'], 'NULL', table_alias=base)} AS TEXT) AS provider_session_id,
-                   CAST({_column_expr(columns, ['id'], 'NULL', table_alias=base)} AS TEXT) AS event_id,
+                   CAST({_column_expr(columns, ["session_id", "sessionID"], "NULL", table_alias=base)} AS TEXT) AS provider_session_id,
+                   CAST({_column_expr(columns, ["id"], "NULL", table_alias=base)} AS TEXT) AS event_id,
                    'message' AS source_table,
-                   CAST({_coalesce([opencode_schema.json_extract(data, '$.role'), "'message'"])} AS TEXT) AS event_type,
-                   CAST({_column_expr(columns, ['time_created', 'timeCreated', 'created_at', 'createdAt'], 'NULL', table_alias=base)} AS INTEGER) AS time_created,
-                   CAST({_coalesce([opencode_schema.json_extract(data, '$.text'), opencode_schema.json_extract(data, '$.content'), data])} AS TEXT) AS text
+                   CAST({_coalesce([opencode_schema.json_extract(data, "$.role"), "'message'"])} AS TEXT) AS event_type,
+                   CAST({_column_expr(columns, ["time_created", "timeCreated", "created_at", "createdAt"], "NULL", table_alias=base)} AS INTEGER) AS time_created,
+                   CAST({_coalesce([opencode_schema.json_extract(data, "$.text"), opencode_schema.json_extract(data, "$.content"), data])} AS TEXT) AS text
             FROM "message" AS {_quote(base)}
             """
         )
     if not branches:
-        return _empty_view("ctx_events", ["provider", "provider_session_id", "event_id", "source_table", "event_type", "time_created", "text"])
+        return _empty_view(
+            "ctx_events",
+            ["provider", "provider_session_id", "event_id", "source_table", "event_type", "time_created", "text"],
+        )
     return "CREATE TEMP VIEW ctx_events AS\n" + "\nUNION ALL\n".join(branches)
 
 
@@ -113,16 +125,19 @@ def _ctx_files_touched_sql(connection: sqlite3.Connection) -> str:
                    'opencode' AS provider,
                    CAST("tree"."value" AS TEXT) AS path,
                    CAST({session_expr} AS TEXT) AS provider_session_id,
-                   CAST({_column_expr(columns, ['id'], 'NULL', table_alias=base)} AS TEXT) AS event_id,
+                   CAST({_column_expr(columns, ["id"], "NULL", table_alias=base)} AS TEXT) AS event_id,
                    '{table}' AS source_table
             FROM {_quote(table)} AS {_quote(base)}, json_tree({data}) AS "tree"
             WHERE "tree"."type" = 'text'
-              AND {opencode_schema.json_tree_path_predicate('tree')}
+              AND {opencode_schema.json_tree_path_predicate("tree")}
               AND CAST("tree"."value" AS TEXT) != ''
             """
         )
     if not branches:
-        return _empty_view("ctx_files_touched", ["provider", "path", "provider_session_id", "event_id", "source_table"])
+        return _empty_view(
+            "ctx_files_touched",
+            ["provider", "path", "provider_session_id", "event_id", "source_table"],
+        )
     return "CREATE TEMP VIEW ctx_files_touched AS\n" + "\nUNION ALL\n".join(branches)
 
 
@@ -151,7 +166,13 @@ def _columns(connection: sqlite3.Connection, table: str) -> list[str]:
     return opencode_schema.columns(connection, table)
 
 
-def _column_expr(columns: list[str], candidates: list[str], default: str = "NULL", *, table_alias: str | None = None) -> str:
+def _column_expr(
+    columns: list[str],
+    candidates: list[str],
+    default: str = "NULL",
+    *,
+    table_alias: str | None = None,
+) -> str:
     return opencode_schema.column_expr(columns, candidates, default, table_alias=table_alias)
 
 

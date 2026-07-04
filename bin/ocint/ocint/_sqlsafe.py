@@ -2,7 +2,6 @@ import re
 import sqlite3
 from typing import Any
 
-
 READONLY_AUTHORIZE_ACTIONS = {
     sqlite3.SQLITE_SELECT,
     sqlite3.SQLITE_READ,
@@ -25,7 +24,9 @@ def normalize_select_sql(sql: str) -> str:
     return query
 
 
-def _readonly_authorizer(action: int, _arg1: str | None, _arg2: str | None, _db: str | None, _source: str | None) -> int:
+def _readonly_authorizer(
+    action: int, _arg1: str | None, _arg2: str | None, _db: str | None, _source: str | None
+) -> int:
     # SQLite's authorizer is the last line of defense for WITH statements whose
     # leading keyword is read-like but whose body attempts writes or attachment.
     if action in READONLY_AUTHORIZE_ACTIONS:

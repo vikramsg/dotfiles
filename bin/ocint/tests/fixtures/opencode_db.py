@@ -63,15 +63,55 @@ def create_opencode_db(path: Path) -> Path:
     con.executemany(
         "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
-            ("s-primary", None, "Primary ctx skill", "/work/repo-directory-only", now, now + 10, json.dumps({"title": "Primary ctx skill"})),
-            ("s-sub", "s-primary", "Subagent implementation", "/work/repo-directory-only", now + 20, now + 30, json.dumps({"title": "Subagent implementation"})),
+            (
+                "s-primary",
+                None,
+                "Primary ctx skill",
+                "/work/repo-directory-only",
+                now,
+                now + 10,
+                json.dumps({"title": "Primary ctx skill"}),
+            ),
+            (
+                "s-sub",
+                "s-primary",
+                "Subagent implementation",
+                "/work/repo-directory-only",
+                now + 20,
+                now + 30,
+                json.dumps({"title": "Subagent implementation"}),
+            ),
         ],
     )
     con.executemany(
         "INSERT INTO message VALUES (?, ?, ?, ?)",
         [
-            ("m-primary", "s-primary", now + 1, json.dumps({"role": "assistant", "providerID": "anthropic", "modelID": "claude-sonnet-4-5", "text": "ctx skill migration decision"})),
-            ("m-sub", "s-sub", now + 21, json.dumps({"role": "assistant", "providerID": "openai", "modelID": "gpt-5.5", "text": "subagent ctx skill implementation detail"})),
+            (
+                "m-primary",
+                "s-primary",
+                now + 1,
+                json.dumps(
+                    {
+                        "role": "assistant",
+                        "providerID": "anthropic",
+                        "modelID": "claude-sonnet-4-5",
+                        "text": "ctx skill migration decision",
+                    }
+                ),
+            ),
+            (
+                "m-sub",
+                "s-sub",
+                now + 21,
+                json.dumps(
+                    {
+                        "role": "assistant",
+                        "providerID": "openai",
+                        "modelID": "gpt-5.5",
+                        "text": "subagent ctx skill implementation detail",
+                    }
+                ),
+            ),
         ],
     )
     con.executemany("INSERT INTO session_message VALUES (?, ?)", [("s-primary", "m-primary"), ("s-sub", "m-sub")])
@@ -110,7 +150,14 @@ def create_opencode_db(path: Path) -> Path:
                     }
                 ),
             ),
-            ("p-non-usage", "m-primary", "s-primary", now + 3, now + 3, json.dumps({"type": "text", "cost": 100, "tokens": {"input": 999}})),
+            (
+                "p-non-usage",
+                "m-primary",
+                "s-primary",
+                now + 3,
+                now + 3,
+                json.dumps({"type": "text", "cost": 100, "tokens": {"input": 999}}),
+            ),
         ],
     )
     con.executemany(
@@ -121,7 +168,14 @@ def create_opencode_db(path: Path) -> Path:
                 "s-primary",
                 1,
                 "tool.invocation",
-                json.dumps({"sessionID": "s-primary", "timestamp": now + 4, "text": "native event marker read AGENTS.md for stable views", "path": "AGENTS.md"}),
+                json.dumps(
+                    {
+                        "sessionID": "s-primary",
+                        "timestamp": now + 4,
+                        "text": "native event marker read AGENTS.md for stable views",
+                        "path": "AGENTS.md",
+                    }
+                ),
             ),
             (
                 "evt_native_patch",
@@ -134,7 +188,10 @@ def create_opencode_db(path: Path) -> Path:
                         "timestamp": now + 5,
                         "patch": {
                             "files": ["bin/ocint/ocint/ctx/search.py", "implementation_notes.md"],
-                            "metadata": {"filePath": "bin/ocint/tests/ctx/test_sql.py", "relativePath": "bin/ocint/ocint/opencode/schema.py"},
+                            "metadata": {
+                                "filePath": "bin/ocint/tests/ctx/test_sql.py",
+                                "relativePath": "bin/ocint/ocint/opencode/schema.py",
+                            },
                         },
                     }
                 ),
@@ -144,27 +201,51 @@ def create_opencode_db(path: Path) -> Path:
                 None,
                 3,
                 "note.created",
-                json.dumps({"sessionID": "s-primary", "timestamp": now + 6, "message": "json session fallback native event marker", "filePaths": ["README.md", "justfile"]}),
+                json.dumps(
+                    {
+                        "sessionID": "s-primary",
+                        "timestamp": now + 6,
+                        "message": "json session fallback native event marker",
+                        "filePaths": ["README.md", "justfile"],
+                    }
+                ),
             ),
             (
                 "evt_long_payload",
                 "s-primary",
                 4,
                 "note.long",
-                json.dumps({"sessionID": "s-primary", "timestamp": now + 7, "text": long_text, "path": "long-transcript.txt"}),
+                json.dumps(
+                    {"sessionID": "s-primary", "timestamp": now + 7, "text": long_text, "path": "long-transcript.txt"}
+                ),
             ),
             (
                 "evt_sub",
                 "s-sub",
                 5,
                 "note.created",
-                json.dumps({"sessionID": "s-sub", "timestamp": now + 24, "text": "subagent only marker", "path": "subagent.txt"}),
+                json.dumps(
+                    {
+                        "sessionID": "s-sub",
+                        "timestamp": now + 24,
+                        "text": "subagent only marker",
+                        "path": "subagent.txt",
+                    }
+                ),
             ),
         ],
     )
-    con.execute("INSERT INTO project VALUES (?, ?, ?)", ("project-dotfiles", "/work/dotfiles", json.dumps({"name": "dotfiles"})))
-    con.execute("INSERT INTO workspace VALUES (?, ?, ?)", ("workspace-dotfiles", "/work/dotfiles", json.dumps({"name": "dotfiles"})))
-    con.execute("INSERT INTO account VALUES (?, ?, ?)", ("acct-local", "opencode", json.dumps({"token": "redacted-test-fixture"})))
+    con.execute(
+        "INSERT INTO project VALUES (?, ?, ?)", ("project-dotfiles", "/work/dotfiles", json.dumps({"name": "dotfiles"}))
+    )
+    con.execute(
+        "INSERT INTO workspace VALUES (?, ?, ?)",
+        ("workspace-dotfiles", "/work/dotfiles", json.dumps({"name": "dotfiles"})),
+    )
+    con.execute(
+        "INSERT INTO account VALUES (?, ?, ?)",
+        ("acct-local", "opencode", json.dumps({"token": "redacted-test-fixture"})),
+    )
     con.commit()
     con.close()
     return path

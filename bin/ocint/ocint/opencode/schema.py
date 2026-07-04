@@ -1,6 +1,5 @@
 import sqlite3
 
-
 PATH_VALUE_KEYS = ("path", "file", "filePath", "filepath", "relativePath")
 PATH_ARRAY_KEYS = ("files", "filePaths")
 
@@ -19,7 +18,9 @@ def quote(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
-def column_expr(columns_: list[str], candidates: list[str], default: str = "NULL", *, table_alias: str | None = None) -> str:
+def column_expr(
+    columns_: list[str], candidates: list[str], default: str = "NULL", *, table_alias: str | None = None
+) -> str:
     column = first_column(columns_, candidates)
     if column is None:
         return default
@@ -28,7 +29,9 @@ def column_expr(columns_: list[str], candidates: list[str], default: str = "NULL
     return quote(column)
 
 
-def column_select(columns_: list[str], candidates: list[str], alias: str, default: str = "NULL", *, table_alias: str | None = None) -> str:
+def column_select(
+    columns_: list[str], candidates: list[str], alias: str, default: str = "NULL", *, table_alias: str | None = None
+) -> str:
     return f"{column_expr(columns_, candidates, default, table_alias=table_alias)} AS {quote(alias)}"
 
 
@@ -97,7 +100,9 @@ def event_time_created_expr(columns_: list[str], data: str, *, table_alias: str 
 def json_tree_path_predicate(tree_alias: str = "tree") -> str:
     tree = quote(tree_alias)
     value_keys = ", ".join(sql_string_literal(key) for key in PATH_VALUE_KEYS)
-    array_predicates = " OR ".join(f"{tree}.{quote('path')} LIKE {sql_string_literal(f'$%.{key}')}" for key in PATH_ARRAY_KEYS)
+    array_predicates = " OR ".join(
+        f"{tree}.{quote('path')} LIKE {sql_string_literal(f'$%.{key}')}" for key in PATH_ARRAY_KEYS
+    )
     return f"({tree}.{quote('key')} IN ({value_keys}) OR {array_predicates})"
 
 
