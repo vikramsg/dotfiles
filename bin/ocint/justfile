@@ -11,7 +11,7 @@ default:
 
 # Run ocint package tests
 test:
-    uv --project "{{justfile_directory()}}/../.." run --package ocint pytest
+    uv --project "{{justfile_directory()}}/../.." run --package ocint pytest "{{justfile_directory()}}/tests"
 
 # Install the OpenCode intelligence CLI
 install:
