@@ -8,8 +8,7 @@ from tests.fixtures.opencode_db import create_opencode_db
 
 
 def test_ctx_show_event_uses_native_event_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    db_path = create_opencode_db(tmp_path / "opencode.db")
-    monkeypatch.setenv("OPENCODE_DB", str(db_path))
+    _import_fixture(tmp_path, monkeypatch)
 
     result = CliRunner().invoke(main, ["ctx", "show", "event", "evt_native_tool", "--json"])
 
@@ -25,8 +24,7 @@ def test_ctx_show_session_full_renders_untruncated_event_text(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db_path = create_opencode_db(tmp_path / "opencode.db")
-    monkeypatch.setenv("OPENCODE_DB", str(db_path))
+    _import_fixture(tmp_path, monkeypatch)
 
     result = CliRunner().invoke(main, ["ctx", "show", "session", "s-primary", "--mode", "full"])
 
@@ -38,8 +36,7 @@ def test_ctx_show_event_renders_selected_event_untruncated(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db_path = create_opencode_db(tmp_path / "opencode.db")
-    monkeypatch.setenv("OPENCODE_DB", str(db_path))
+    _import_fixture(tmp_path, monkeypatch)
 
     result = CliRunner().invoke(main, ["ctx", "show", "event", "evt_long_payload", "--window", "0"])
 
@@ -51,8 +48,7 @@ def test_ctx_show_event_json_includes_full_text_and_snippet(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db_path = create_opencode_db(tmp_path / "opencode.db")
-    monkeypatch.setenv("OPENCODE_DB", str(db_path))
+    _import_fixture(tmp_path, monkeypatch)
 
     result = CliRunner().invoke(main, ["ctx", "show", "event", "evt_long_payload", "--window", "0", "--json"])
 
@@ -63,8 +59,7 @@ def test_ctx_show_event_json_includes_full_text_and_snippet(
 
 
 def test_ctx_locate_event_uses_native_event_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    db_path = create_opencode_db(tmp_path / "opencode.db")
-    monkeypatch.setenv("OPENCODE_DB", str(db_path))
+    source_db = _import_fixture(tmp_path, monkeypatch)
 
     result = CliRunner().invoke(main, ["ctx", "locate", "event", "evt_native_tool", "--json"])
 
@@ -74,3 +69,27 @@ def test_ctx_locate_event_uses_native_event_ids(tmp_path: Path, monkeypatch: pyt
     assert payload["source_table"] == "event"
     assert payload["session_id"] == "s-primary"
     assert payload["citation"] == "opencode session=s-primary event=evt_native_tool table=event"
+    assert payload["db_path"] == str(source_db)
+
+
+def test_ctx_locate_session_uses_imported_source_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_db = _import_fixture(tmp_path, monkeypatch)
+
+    result = CliRunner().invoke(main, ["ctx", "locate", "session", "s-primary", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["kind"] == "session"
+    assert payload["source_table"] == "session"
+    assert payload["session_id"] == "s-primary"
+    assert payload["db_path"] == str(source_db)
+
+
+def _import_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    imported = CliRunner().invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+    return source_db

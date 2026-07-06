@@ -1,62 +1,393 @@
 import inspect
+import json
+import sqlite3
 from pathlib import Path
 
-from ocint.ctx.models import CtxSearchRequest
-from ocint.ctx.search import CtxSearch
-from ocint.ctx.service import CtxService
-from ocint.opencode.repository import OpenCodeRepository
+import pytest
+from click.testing import CliRunner
+from ocint.cli import main
+from ocint.ctx.search import search_history
 from tests.fixtures.opencode_db import create_opencode_db
 
 
-def test_search_defaults_to_primary_sessions(tmp_path: Path) -> None:
-    db_path = create_opencode_db(tmp_path / "opencode.db")
-    search = CtxSearch(OpenCodeRepository(db_path))
+def test_search_defaults_to_primary_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    runner = CliRunner()
 
-    results = search.search(CtxSearchRequest(query="subagent only marker"))
+    results = runner.invoke(main, ["ctx", "search", "subagent only marker"])
 
-    assert results == []
+    assert results.exit_code == 0, results.output
+    assert results.output == "No results\n"
 
-    subagent_results = search.search(CtxSearchRequest(query="subagent only marker", include_subagents=True))
-    assert {result.session_id for result in subagent_results} == {"s-sub"}
+    subagent_results = runner.invoke(main, ["ctx", "search", "subagent only marker", "--include-subagents"])
+    assert subagent_results.exit_code == 0, subagent_results.output
+    assert "s-sub" in subagent_results.output
 
 
-def test_search_filters_by_file_workspace_session_and_terms(tmp_path: Path) -> None:
-    db_path = create_opencode_db(tmp_path / "opencode.db")
-    search = CtxSearch(OpenCodeRepository(db_path))
+def test_search_filters_by_file_workspace_session_since_and_terms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _import_fixture(tmp_path, monkeypatch)
 
-    results = search.search(
-        CtxSearchRequest(
-            query="native event marker",
-            workspace="repo-directory-only",
-            file="AGENTS.md",
-            session_id="s-primary",
-            terms=["stable"],
-        )
+    result = CliRunner().invoke(
+        main,
+        [
+            "ctx",
+            "search",
+            "native event marker",
+            "--workspace",
+            "repo-directory-only",
+            "--file",
+            "AGENTS.md",
+            "--session",
+            "s-primary",
+            "--since",
+            "30d",
+            "--term",
+            "related term",
+            "--term",
+            "error text",
+        ],
     )
 
-    assert results
-    assert all(result.session_id == "s-primary" for result in results)
-    assert {result.workspace for result in results} == {"/work/repo-directory-only"}
-    assert all("AGENTS.md" in result.source_path for result in results if result.source_path)
+    assert result.exit_code == 0, result.output
+    assert "evt_native_tool" in result.output
+    assert "session=s-primary" in result.output
+    assert "path=AGENTS.md" in result.output
 
 
-def test_search_file_filter_matches_all_payload_paths(tmp_path: Path) -> None:
-    db_path = create_opencode_db(tmp_path / "opencode.db")
-    search = CtxSearch(OpenCodeRepository(db_path))
+def test_search_file_filter_matches_all_payload_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    runner = CliRunner()
 
     for file_filter in [
         "bin/ocint/ocint/ctx/search.py",
         "implementation_notes.md",
         "bin/ocint/tests/ctx/test_sql.py",
     ]:
-        results = search.search(CtxSearchRequest(query="file.patch", file=file_filter))
+        result = runner.invoke(main, ["ctx", "search", "file.patch", "--file", file_filter])
 
-        assert [result.event_id for result in results] == ["evt_native_patch"]
+        assert result.exit_code == 0, result.output
+        assert "evt_native_patch" in result.output
 
 
-def test_ctx_service_search_contract_is_explicit() -> None:
-    signature = inspect.signature(CtxService.search)
+def test_search_preserves_substring_tokens_with_opencode_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    runner = CliRunner()
 
-    assert list(signature.parameters) == ["self", "request"]
+    stable_view = runner.invoke(main, ["ctx", "search", "stable view", "--refresh", "off"])
+    migration = runner.invoke(main, ["ctx", "search", "migrat", "--refresh", "off"])
+
+    assert stable_view.exit_code == 0, stable_view.output
+    assert "stable views" in stable_view.output
+    assert migration.exit_code == 0, migration.output
+    assert "migration" in migration.output
+
+
+def test_search_excludes_current_session_root_by_default_with_refresh_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("OPENCODE_SESSION_ID", "s-primary")
+
+    result = CliRunner().invoke(main, ["ctx", "search", "native event marker", "--refresh", "off"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output == "No results\n"
+    assert "evt_native_tool" not in result.output
+
+
+def test_search_excludes_current_session_child_sessions_by_default_with_refresh_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("OPENCODE_SESSION_ID", "s-primary")
+
+    result = CliRunner().invoke(
+        main,
+        ["ctx", "search", "subagent only marker", "--include-subagents", "--refresh", "off"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output == "No results\n"
+    assert "s-sub" not in result.output
+
+
+def test_search_excludes_current_session_when_root_session_row_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    with sqlite3.connect(tmp_path / "ctx.sqlite") as connection:
+        connection.execute("DELETE FROM ctx_session WHERE provider_session_id = 's-primary'")
+    monkeypatch.setenv("OPENCODE_SESSION_ID", "s-primary")
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["ctx", "search", "native event marker", "--refresh", "off"])
+    included = runner.invoke(
+        main,
+        ["ctx", "search", "native event marker", "--include-current-session", "--refresh", "off"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output == "No results\n"
+    assert "evt_native_tool" not in result.output
+    assert included.exit_code == 0, included.output
+    assert "evt_native_tool" in included.output
+
+
+def test_search_include_current_session_opt_in_includes_active_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("OPENCODE_SESSION_ID", "s-primary")
+    runner = CliRunner()
+
+    root_result = runner.invoke(
+        main,
+        ["ctx", "search", "native event marker", "--include-current-session", "--refresh", "off"],
+    )
+    child_result = runner.invoke(
+        main,
+        [
+            "ctx",
+            "search",
+            "subagent only marker",
+            "--include-subagents",
+            "--include-current-session",
+            "--refresh",
+            "off",
+        ],
+    )
+
+    assert root_result.exit_code == 0, root_result.output
+    assert "evt_native_tool" in root_result.output
+    assert child_result.exit_code == 0, child_result.output
+    assert "s-sub" in child_result.output
+
+
+def test_search_current_session_exclusion_applies_before_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    _add_current_session_limit_fixture_rows(source_db)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+    monkeypatch.setenv("OPENCODE_SESSION_ID", "s-primary")
+
+    result = runner.invoke(
+        main,
+        ["ctx", "search", "current limit marker", "--refresh", "off", "--limit", "1"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "evt_other_current_limit_marker" in result.output
+    assert "evt_active_current_limit_decoy" not in result.output
+
+
+def test_search_applies_terms_before_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    _add_term_limit_fixture_rows(source_db)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+
+    result = runner.invoke(
+        main,
+        ["ctx", "search", "candidate window marker", "--term", "deep required term", "--limit", "1"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "evt_old_required_term" in result.output
+
+
+def test_search_uses_fts_as_non_authoritative_boost(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    _add_fts_boost_fixture_rows(source_db)
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+
+    _delete_ctx_fts_rows(ctx_db, ["evt_fts_newer_without_boost"])
+    boosted = runner.invoke(
+        main,
+        ["ctx", "search", "fts ranking marker", "--refresh", "off", "--limit", "1", "--json"],
+    )
+
+    assert boosted.exit_code == 0, boosted.output
+    assert [row["event_id"] for row in json.loads(boosted.output)] == ["evt_fts_older_with_boost"]
+
+    _delete_ctx_fts_rows(ctx_db, ["evt_fts_older_with_boost", "evt_fts_newer_without_boost"])
+    like_only = runner.invoke(
+        main,
+        ["ctx", "search", "fts ranking marker", "--refresh", "off", "--limit", "2", "--json"],
+    )
+
+    assert like_only.exit_code == 0, like_only.output
+    assert {row["event_id"] for row in json.loads(like_only.output)} == {
+        "evt_fts_older_with_boost",
+        "evt_fts_newer_without_boost",
+    }
+
+
+def test_search_history_contract_is_explicit() -> None:
+    signature = inspect.signature(search_history)
+
+    assert list(signature.parameters) == ["request", "repository"]
     assert all(parameter.kind is not inspect.Parameter.VAR_POSITIONAL for parameter in signature.parameters.values())
     assert all(parameter.kind is not inspect.Parameter.VAR_KEYWORD for parameter in signature.parameters.values())
+
+
+def _import_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    imported = CliRunner().invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+
+
+def _add_current_session_limit_fixture_rows(source_db: Path) -> None:
+    base_time = 2_200_000_000_000
+    sessions = [
+        (
+            "s-other",
+            None,
+            "Other session",
+            "/work/repo-directory-only",
+            base_time - 10_000,
+            base_time - 9_000,
+            json.dumps({"title": "Other session"}),
+        )
+    ]
+    rows = [
+        (
+            "evt_other_current_limit_marker",
+            "s-other",
+            30_000,
+            "note.created",
+            json.dumps(
+                {
+                    "sessionID": "s-other",
+                    "timestamp": base_time,
+                    "text": "current limit marker non-active survivor",
+                    "path": "current-limit-other.txt",
+                }
+            ),
+        )
+    ]
+    rows.extend(
+        (
+            f"evt_active_current_limit_decoy_{index:03d}",
+            "s-primary",
+            30_001 + index,
+            "note.created",
+            json.dumps(
+                {
+                    "sessionID": "s-primary",
+                    "timestamp": base_time + 1_000 + index,
+                    "text": "current limit marker active-session decoy",
+                    "path": f"current-limit-decoy-{index:03d}.txt",
+                }
+            ),
+        )
+        for index in range(5)
+    )
+    with sqlite3.connect(source_db) as connection:
+        connection.executemany("INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?)", sessions)
+        connection.executemany("INSERT INTO event VALUES (?, ?, ?, ?, ?)", rows)
+
+
+def _add_term_limit_fixture_rows(source_db: Path) -> None:
+    base_time = 2_000_000_000_000
+    rows = [
+        (
+            "evt_old_required_term",
+            "s-primary",
+            10_000,
+            "note.created",
+            json.dumps(
+                {
+                    "sessionID": "s-primary",
+                    "timestamp": base_time,
+                    "text": "candidate window marker deep required term",
+                    "path": "term-limit-valid.txt",
+                }
+            ),
+        )
+    ]
+    rows.extend(
+        (
+            f"evt_new_decoy_{index:03d}",
+            "s-primary",
+            10_001 + index,
+            "note.created",
+            json.dumps(
+                {
+                    "sessionID": "s-primary",
+                    "timestamp": base_time + 1_000 + index,
+                    "text": "candidate window marker decoy text",
+                    "path": f"term-limit-decoy-{index:03d}.txt",
+                }
+            ),
+        )
+        for index in range(105)
+    )
+    with sqlite3.connect(source_db) as connection:
+        connection.executemany("INSERT INTO event VALUES (?, ?, ?, ?, ?)", rows)
+
+
+def _add_fts_boost_fixture_rows(source_db: Path) -> None:
+    base_time = 2_100_000_000_000
+    rows = [
+        (
+            "evt_fts_older_with_boost",
+            "s-primary",
+            20_000,
+            "note.created",
+            json.dumps(
+                {
+                    "sessionID": "s-primary",
+                    "timestamp": base_time,
+                    "text": "fts ranking marker older indexed event",
+                    "path": "fts-boost-older.txt",
+                }
+            ),
+        ),
+        (
+            "evt_fts_newer_without_boost",
+            "s-primary",
+            20_001,
+            "note.created",
+            json.dumps(
+                {
+                    "sessionID": "s-primary",
+                    "timestamp": base_time + 1_000,
+                    "text": "fts ranking marker newer like-only event",
+                    "path": "fts-boost-newer.txt",
+                }
+            ),
+        ),
+    ]
+    with sqlite3.connect(source_db) as connection:
+        connection.executemany("INSERT INTO event VALUES (?, ?, ?, ?, ?)", rows)
+
+
+def _delete_ctx_fts_rows(ctx_db: Path, event_ids: list[str]) -> None:
+    placeholders = ", ".join("?" for _ in event_ids)
+    with sqlite3.connect(ctx_db) as connection:
+        connection.execute(f"DELETE FROM ctx_event_fts WHERE event_id IN ({placeholders})", event_ids)

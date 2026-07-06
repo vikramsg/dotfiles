@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import time
 from pathlib import Path
 
 
@@ -58,7 +59,7 @@ def create_opencode_db(path: Path) -> Path:
         );
         """
     )
-    now = 1_704_067_200_000
+    now = int(time.time() * 1000) - 86_400_000
     long_text = " ".join(["long-transcript-prefix"] * 30) + " IMPORTANT_LATE_MARKER full transcript content"
     con.executemany(
         "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -172,7 +173,7 @@ def create_opencode_db(path: Path) -> Path:
                     {
                         "sessionID": "s-primary",
                         "timestamp": now + 4,
-                        "text": "native event marker read AGENTS.md for stable views",
+                        "text": "native event marker read AGENTS.md for stable views related term error text",
                         "path": "AGENTS.md",
                     }
                 ),

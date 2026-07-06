@@ -6,7 +6,7 @@ from typing import Any
 import click
 
 from ocint._config import resolve_paths
-from ocint._models import ResolvedPaths
+from ocint._models import CliContext, ResolvedPaths
 from ocint._render import render_json
 from ocint._timeutil import UsageWindow, make_window
 from ocint.opencode.repository import OpenCodeRepository
@@ -39,10 +39,11 @@ def state() -> None:
 @state.command()
 @path_options
 @click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
-def config(config_path: Path | None, db_path: Path | None, output_format: str) -> None:
+@click.pass_obj
+def config(app: CliContext, config_path: Path | None, db_path: Path | None, output_format: str) -> None:
     """Show resolved OpenCode config and DB paths without opening the DB."""
     paths = _resolve_paths(config_path=config_path, db_path=db_path)
-    click.echo(
+    app.output.write(
         paths.model_dump_json(indent=2) if output_format == "json" else render_paths(paths), nl=output_format == "json"
     )
 
@@ -50,17 +51,20 @@ def config(config_path: Path | None, db_path: Path | None, output_format: str) -
 @state.command()
 @path_options
 @click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
-def schema(config_path: Path | None, db_path: Path | None, output_format: str) -> None:
+@click.pass_obj
+def schema(app: CliContext, config_path: Path | None, db_path: Path | None, output_format: str) -> None:
     """Inspect SQLite table columns read-only."""
     rows = _with_repository(config_path, db_path, lambda repository: repository.schema())
-    click.echo(render_json(rows, sort_keys=True) if output_format == "json" else render_rows(rows), nl=False)
+    app.output.write(render_json(rows, sort_keys=True) if output_format == "json" else render_rows(rows))
 
 
 @state.command()
 @path_options
 @window_options
 @click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
+@click.pass_obj
 def summary(
+    app: CliContext,
     config_path: Path | None,
     db_path: Path | None,
     days: int | None,
@@ -71,7 +75,7 @@ def summary(
     """Summarize token, cost, session, and LLM step usage."""
     window = _window(days=days, since=since, until=until)
     result = _with_service(config_path, db_path, lambda service: service.summary(window))
-    click.echo(
+    app.output.write(
         result.model_dump_json(indent=2) if output_format == "json" else render_summary(result, window),
         nl=output_format == "json",
     )
@@ -81,7 +85,9 @@ def summary(
 @path_options
 @window_options
 @click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
+@click.pass_obj
 def daily_command(
+    app: CliContext,
     config_path: Path | None,
     db_path: Path | None,
     days: int | None,
@@ -92,14 +98,16 @@ def daily_command(
     """Group usage by UTC day."""
     window = _window(days=days, since=since, until=until)
     rows = _with_service(config_path, db_path, lambda service: service.daily(window))
-    click.echo(render_json(rows) if output_format == "json" else render_rows(rows), nl=False)
+    app.output.write(render_json(rows) if output_format == "json" else render_rows(rows))
 
 
 @state.command(name="models")
 @path_options
 @window_options
 @click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
+@click.pass_obj
 def models_command(
+    app: CliContext,
     config_path: Path | None,
     db_path: Path | None,
     days: int | None,
@@ -110,14 +118,16 @@ def models_command(
     """Group usage by model."""
     window = _window(days=days, since=since, until=until)
     rows = _with_service(config_path, db_path, lambda service: service.models(window))
-    click.echo(render_json(rows) if output_format == "json" else render_rows(rows), nl=False)
+    app.output.write(render_json(rows) if output_format == "json" else render_rows(rows))
 
 
 @state.command(name="sessions")
 @path_options
 @window_options
 @click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
+@click.pass_obj
 def sessions_command(
+    app: CliContext,
     config_path: Path | None,
     db_path: Path | None,
     days: int | None,
@@ -128,17 +138,18 @@ def sessions_command(
     """Group usage by session."""
     window = _window(days=days, since=since, until=until)
     rows = _with_service(config_path, db_path, lambda service: service.sessions(window))
-    click.echo(render_json(rows) if output_format == "json" else render_rows(rows), nl=False)
+    app.output.write(render_json(rows) if output_format == "json" else render_rows(rows))
 
 
 @state.command()
 @path_options
 @click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
 @click.argument("sql")
-def query(config_path: Path | None, db_path: Path | None, output_format: str, sql: str) -> None:
+@click.pass_obj
+def query(app: CliContext, config_path: Path | None, db_path: Path | None, output_format: str, sql: str) -> None:
     """Run a single read-only SELECT/WITH query."""
     rows = _with_service(config_path, db_path, lambda service: service.query(sql))
-    click.echo(render_json(rows, sort_keys=True) if output_format == "json" else render_rows(rows), nl=False)
+    app.output.write(render_json(rows, sort_keys=True) if output_format == "json" else render_rows(rows))
 
 
 def _window(*, days: int | None, since: str | None, until: str | None) -> UsageWindow:
