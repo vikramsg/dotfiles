@@ -2,7 +2,7 @@ import re
 
 from ocint._timeutil import parse_since_ms
 from ocint.ctx.models import CtxSearchCandidate, CtxSearchRequest, CtxSearchResult
-from ocint.ctx.repository import CtxSearchRepository
+from ocint.ctx.search.repository import CtxSearchRepository
 from ocint.ctx.transcript import snippet_text
 
 
@@ -11,8 +11,8 @@ def search_history(request: CtxSearchRequest, repository: CtxSearchRepository) -
         raise ValueError("--limit must be greater than zero")
     tokens = _tokens(request.query)
     required_terms = [term.lower() for term in request.terms]
+    exclude_session_tree_root_id = None if request.include_current_session else request.active_session_id
     candidates = repository.search_events(
-        query=request.query,
         query_tokens=tokens,
         required_terms=required_terms,
         since_ms=parse_since_ms(request.since),
@@ -20,6 +20,7 @@ def search_history(request: CtxSearchRequest, repository: CtxSearchRepository) -
         workspace=request.workspace,
         file_filter=request.file,
         include_subagents=request.include_subagents,
+        exclude_session_tree_root_id=exclude_session_tree_root_id,
         limit=request.limit,
     )
     return [build_search_result(candidate) for candidate in candidates]

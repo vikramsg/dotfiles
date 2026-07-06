@@ -1,44 +1,26 @@
-from pathlib import Path
-
 from ocint._errors import OcintError
-from ocint.ctx.models import (
-    CtxEventContext,
-    CtxEventDetail,
-    CtxSearchCandidate,
-    CtxSession,
-    CtxSource,
-    CtxStatus,
-    CtxTranscript,
-)
-from ocint.ctx.repository import CtxShowRepository, CtxStatusRepository
+from ocint.ctx.models import CtxEventContext, CtxEventDetail, CtxSearchCandidate, CtxSession, CtxTranscript
+from ocint.ctx.show.repository import CtxShowRepository
 from ocint.ctx.transcript import snippet_text
-
-
-def get_status(repository: CtxStatusRepository, *, source_db_path: Path | None = None) -> CtxStatus:
-    return repository.status(source_db_path=source_db_path)
-
-
-def list_sources(repository: CtxStatusRepository) -> list[CtxSource]:
-    return repository.sources()
 
 
 def show_session_history(repository: CtxShowRepository, session_id: str) -> CtxTranscript:
     session = repository.find_session(session_id)
     if session is None:
         raise OcintError(f"Imported ctx session not found: {session_id}")
-    events = repository.session_events(source_id=int(session["source_id"]), session_id=session_id)
+    events = repository.session_events(source_id=session.source_id, session_id=session_id)
     ctx_session = CtxSession(
-        provider=str(session["provider"]),
-        session_id=str(session["session_id"]),
-        parent_id=session["parent_id"],
-        title=session["title"],
-        workspace=session["workspace"],
-        time_created=session["time_created"],
-        time_updated=session["time_updated"],
-        event_count=int(session["event_count"] or 0),
+        provider=session.provider,
+        session_id=session.session_id,
+        parent_id=session.parent_id,
+        title=session.title,
+        workspace=session.workspace,
+        time_created=session.time_created,
+        time_updated=session.time_updated,
+        event_count=session.event_count,
     )
     return CtxTranscript(
-        provider=str(session["provider"]), session=ctx_session, events=[_event_detail(event) for event in events]
+        provider=session.provider, session=ctx_session, events=[_event_detail(event) for event in events]
     )
 
 

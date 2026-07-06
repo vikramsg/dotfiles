@@ -1,7 +1,7 @@
 from typing import Any
 
-from ocint.ctx.repository import CtxSqlRepository
 from ocint.ctx.schema import STABLE_CTX_VIEWS
+from ocint.ctx.sql.repository import CtxSqlRepository
 
 ALLOWED_CTX_VIEWS = STABLE_CTX_VIEWS
 

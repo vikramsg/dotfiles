@@ -33,7 +33,6 @@ class CtxSource(CtxModel):
 
 class CtxImportRequest(CtxModel):
     source_db_path: Path
-    full: bool = False
 
 
 class CtxImportResult(CtxModel):
@@ -59,6 +58,22 @@ class CtxSession(CtxModel):
     event_count: int = 0
 
 
+class CtxSessionSummary(CtxModel):
+    """Internal read model for session rows joined with imported source metadata."""
+
+    session_pk: int
+    source_id: int
+    provider: str = "opencode"
+    session_id: str
+    parent_id: str | None = None
+    title: str | None = None
+    workspace: str | None = None
+    time_created: int | None = None
+    time_updated: int | None = None
+    source_db_path: Path
+    event_count: int = 0
+
+
 class CtxSearchRequest(CtxModel):
     query: str
     session_id: str | None = None
@@ -67,6 +82,8 @@ class CtxSearchRequest(CtxModel):
     since: str | None = None
     terms: list[str] = Field(default_factory=list)
     include_subagents: bool = False
+    active_session_id: str | None = None
+    include_current_session: bool = False
     limit: int | None = 50
 
 

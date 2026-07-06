@@ -1,25 +1,33 @@
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
+from ocint.ctx.importing.repository import CtxImportRepository
 from ocint.ctx.models import CtxImportRequest, CtxImportResult
-from ocint.ctx.repository import CtxImportRepository
 from ocint.opencode.models import OpenCodeSessionRow, OpenCodeUnifiedEventRow, payload_paths, payload_to_text
-from ocint.opencode.repository import OpenCodeRepository
 
 PROVIDER = "opencode"
 SOURCE_TYPE = "sqlite"
 SOURCE_NAME = "OpenCode DB"
 
 
-def import_history(request: CtxImportRequest, repository: CtxImportRepository) -> CtxImportResult:
+class OpenCodeHistorySource(Protocol):
+    """Read-only OpenCode history adapter required by ctx import orchestration."""
+
+    def sessions(self) -> list[OpenCodeSessionRow]: ...
+
+    def all_unified_events(self) -> list[OpenCodeUnifiedEventRow]: ...
+
+
+def import_history(
+    request: CtxImportRequest,
+    repository: CtxImportRepository,
+    source: OpenCodeHistorySource,
+) -> CtxImportResult:
     source_path = request.source_db_path.expanduser()
-    source_repository = OpenCodeRepository(source_path)
-    # OpenCodeRepository opens `mode=ro`; import is the only ctx workflow allowed
-    # to inspect native OpenCode storage, and it must never mutate that source DB.
-    sessions = source_repository.sessions()
-    events = source_repository.all_unified_events()
+    sessions = source.sessions()
+    events = source.all_unified_events()
     imported_at = int(time.time() * 1000)
     checkpoint = _checkpoint_payload(source_path)
     source_id = repository.upsert_source(

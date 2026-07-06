@@ -51,6 +51,15 @@ def test_ctx_sql_rejects_alembic_version_read(tmp_path: Path, monkeypatch: pytes
     assert result.exit_code != 0
 
 
+def test_ctx_sql_rejects_fts_table_read_without_leaking_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+
+    result = CliRunner().invoke(main, ["ctx", "sql", "SELECT * FROM ctx_event_fts"])
+
+    assert result.exit_code != 0
+    assert "evt_native_tool" not in result.output
+
+
 def test_ctx_sql_rejects_nested_cte_payload_json_leak(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _import_fixture(tmp_path, monkeypatch)
 
@@ -96,6 +105,66 @@ def test_ctx_sql_rejects_comment_obscured_nested_cte_alembic_version_leak(
 
     assert result.exit_code != 0
     assert "0001_ctx_index" not in result.output
+
+
+def test_ctx_sql_rejects_nested_cte_shadowing_stable_view_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "ctx",
+            "sql",
+            """
+            WITH outer_query AS (
+              WITH ctx_events AS (SELECT * FROM ctx_sessions)
+              SELECT * FROM ctx_events
+            )
+            SELECT * FROM outer_query
+            """,
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "shadow ctx views" in result.output
+
+
+def test_ctx_sql_rejects_comment_obscured_cte_shadowing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "ctx",
+            "sql",
+            """
+            WITH/* leading */ctx_sources/* name */AS/* as */(SELECT * FROM ctx_sessions)
+            SELECT * FROM ctx_sources
+            """,
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "shadow ctx views" in result.output
+
+
+def test_ctx_sql_rejects_quoted_and_recursive_cte_shadowing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    runner = CliRunner()
+
+    quoted = runner.invoke(
+        main,
+        ["ctx", "sql", 'WITH "ctx_files_touched" AS (SELECT * FROM ctx_sessions) SELECT * FROM "ctx_files_touched"'],
+    )
+    recursive = runner.invoke(
+        main,
+        ["ctx", "sql", "WITH RECURSIVE ctx_sessions AS (SELECT * FROM ctx_events) SELECT * FROM ctx_sessions"],
+    )
+
+    assert quoted.exit_code != 0
+    assert "shadow ctx views" in quoted.output
+    assert recursive.exit_code != 0
+    assert "shadow ctx views" in recursive.output
 
 
 def test_ctx_sql_rejects_cte_shadowing_ctx_view_names(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

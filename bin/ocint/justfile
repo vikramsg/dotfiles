@@ -6,10 +6,8 @@
 # - Use {{...}} only for just-level interpolation.
 
 package_root := justfile_directory()
-requirements_lock := package_root + "/requirements-dev.lock"
-# Use a package-local environment so ocint ctx dependencies are not coupled to
-# the root workspace lockfile while this package is developed from the monorepo.
-uv_ocint := "uv run --no-project --with-requirements '" + requirements_lock + "' --with-editable '" + package_root + "'"
+workspace_root := package_root + "/../.."
+uv_ocint := "uv run --directory '" + workspace_root + "' --package ocint --frozen"
 
 # List available ocint commands
 default:
@@ -50,16 +48,16 @@ smoke-state:
 
 # Smoke-test ocint ctx commands against the configured OpenCode DB when present
 smoke-ctx:
-    {{uv_ocint}} ocint ctx status
-    {{uv_ocint}} ocint ctx status --json
-    {{uv_ocint}} ocint ctx sources
-    {{uv_ocint}} ocint ctx sources --json
     {{uv_ocint}} ocint ctx docs show sql
     {{uv_ocint}} ocint ctx docs search "stable views"
     @set -e; \
         DB_EXISTS="$({{uv_ocint}} ocint state config --format json | python3 -c 'import json, sys; print(json.load(sys.stdin)["db_exists"])')"; \
         if [ "$DB_EXISTS" = "True" ]; then \
             {{uv_ocint}} ocint ctx import; \
+            {{uv_ocint}} ocint ctx status; \
+            {{uv_ocint}} ocint ctx status --json; \
+            {{uv_ocint}} ocint ctx sources; \
+            {{uv_ocint}} ocint ctx sources --json; \
             SESSION_ID="$({{uv_ocint}} ocint ctx sql "SELECT session_id FROM ctx_sessions WHERE parent_id IS NULL AND session_id IS NOT NULL ORDER BY time_updated DESC LIMIT 1" --format raw)"; \
             if [ -z "$SESSION_ID" ]; then SESSION_ID="$({{uv_ocint}} ocint ctx sql "SELECT session_id FROM ctx_sessions WHERE session_id IS NOT NULL LIMIT 1" --format raw)"; fi; \
             EVENT_ID="$({{uv_ocint}} ocint ctx sql "SELECT e.event_id FROM ctx_events AS e JOIN ctx_sessions AS s ON e.provider_session_id = s.session_id WHERE s.parent_id IS NULL AND e.event_id IS NOT NULL LIMIT 1" --format raw)"; \
@@ -93,6 +91,10 @@ smoke-ctx:
             if [ -n "$EVENT_ID" ]; then {{uv_ocint}} ocint ctx locate event "$EVENT_ID"; else echo "Skipping ctx locate event smoke because no event ID was found."; fi; \
             if [ -n "$EVENT_ID" ]; then {{uv_ocint}} ocint ctx locate event "$EVENT_ID" --json; else echo "Skipping ctx locate event --json smoke because no event ID was found."; fi; \
         else \
+            {{uv_ocint}} ocint ctx status; \
+            {{uv_ocint}} ocint ctx status --json; \
+            {{uv_ocint}} ocint ctx sources; \
+            {{uv_ocint}} ocint ctx sources --json; \
             echo "Skipping DB-backed ocint ctx smoke commands because the resolved OpenCode DB does not exist."; \
         fi
 

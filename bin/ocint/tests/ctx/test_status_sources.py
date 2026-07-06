@@ -31,6 +31,33 @@ def test_ctx_status_and_sources_are_opencode_only_json(tmp_path: Path, monkeypat
     assert json.loads(sources.output)[0]["name"] == "OpenCode DB"
 
 
+def test_ctx_status_output_does_not_vary_with_current_opencode_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    alternate_db = create_opencode_db(tmp_path / "alternate-opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+
+    payloads = []
+    for current_db in [source_db, alternate_db, tmp_path / "missing-opencode.db"]:
+        monkeypatch.setenv("OPENCODE_DB", str(current_db))
+        status = runner.invoke(main, ["ctx", "status", "--json"])
+        assert status.exit_code == 0, status.output
+        payloads.append(json.loads(status.output))
+
+    assert payloads[0] == payloads[1] == payloads[2]
+    assert payloads[0]["index_ready"] is True
+    assert payloads[0]["sessions"] == 2
+    assert payloads[0]["source_db_path"] is None
+    assert payloads[0]["source_db_exists"] is False
+
+
 def test_ctx_status_and_sources_exit_zero_without_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "missing.sqlite"))
 

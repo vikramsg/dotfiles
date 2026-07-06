@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
+from ocint.ctx.models import CtxImportRequest
 from tests.fixtures.opencode_db import create_opencode_db
 
 
@@ -46,6 +47,38 @@ def test_ctx_import_does_not_mutate_opencode(tmp_path: Path, monkeypatch: pytest
         assert con.execute("SELECT 1 FROM sqlite_master WHERE name = 'alembic_version'").fetchone() is None
     finally:
         con.close()
+
+
+def test_ctx_import_rejects_ctx_db_alias_to_opencode_without_mutating_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    before_hash = hashlib.sha256(source_db.read_bytes()).hexdigest()
+    before_schema = _sqlite_schema(source_db)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(source_db))
+
+    result = CliRunner().invoke(main, ["ctx", "import"])
+
+    assert result.exit_code != 0
+    assert "same file" in result.output
+    assert hashlib.sha256(source_db.read_bytes()).hexdigest() == before_hash
+    assert _sqlite_schema(source_db) == before_schema
+    con = sqlite3.connect(source_db)
+    try:
+        assert con.execute("SELECT 1 FROM sqlite_master WHERE name = 'alembic_version'").fetchone() is None
+    finally:
+        con.close()
+
+
+def test_ctx_import_help_removes_full_rebuild_flag() -> None:
+    result = CliRunner().invoke(main, ["ctx", "import", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--source-db" in result.output
+    assert "--json" in result.output
+    assert "--full" not in result.output
+    assert "full" not in CtxImportRequest.model_fields
 
 
 def test_search_uses_imported_index_when_opencode_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -142,6 +175,22 @@ def _ctx_counts(ctx_db: Path) -> dict[str, int]:
             table: con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             for table in ["alembic_version", "ctx_session", "ctx_event", "ctx_file_touched", "ctx_event_fts"]
         }
+    finally:
+        con.close()
+
+
+def _sqlite_schema(path: Path) -> list[tuple[str, str, str | None]]:
+    con = sqlite3.connect(path)
+    try:
+        return list(
+            con.execute(
+                """
+                SELECT type, name, sql
+                FROM sqlite_master
+                ORDER BY type, name
+                """
+            )
+        )
     finally:
         con.close()
 

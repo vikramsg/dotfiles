@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -12,10 +13,11 @@ from ocint._render import render_csv, render_json, render_raw, render_table
 from ocint.ctx.config import resolve_ctx_db_path
 from ocint.ctx.db import ctx_session, migrate_ctx_db
 from ocint.ctx.docs import search_docs, show_doc
-from ocint.ctx.importer import import_history
+from ocint.ctx.importing import CtxImportRepository, import_history
+from ocint.ctx.locate import CtxLocateRepository
 from ocint.ctx.locate import locate_event as locate_event_result
 from ocint.ctx.locate import locate_session as locate_session_result
-from ocint.ctx.models import CtxImportRequest, CtxSearchRequest, CtxStatus
+from ocint.ctx.models import CtxImportRequest, CtxSearchRequest
 from ocint.ctx.render import (
     render_event_context,
     render_import_result,
@@ -25,17 +27,11 @@ from ocint.ctx.render import (
     render_status,
     render_transcript,
 )
-from ocint.ctx.repository import (
-    CtxImportRepository,
-    CtxLocateRepository,
-    CtxSearchRepository,
-    CtxShowRepository,
-    CtxSqlRepository,
-    CtxStatusRepository,
-)
-from ocint.ctx.search import search_history
-from ocint.ctx.service import show_event_history, show_session_history
-from ocint.ctx.sql import run_ctx_sql
+from ocint.ctx.search import CtxSearchRepository, search_history
+from ocint.ctx.show import CtxShowRepository, show_event_history, show_session_history
+from ocint.ctx.sql import CtxSqlRepository, run_ctx_sql
+from ocint.ctx.status import CtxStatusRepository, get_status, list_sources
+from ocint.opencode.repository import OpenCodeRepository
 
 
 @click.group(name="ctx")
@@ -45,11 +41,10 @@ def ctx() -> None:
 
 @ctx.command(name="import")
 @click.option("--source-db", type=click.Path(path_type=Path), help="OpenCode SQLite DB to import.")
-@click.option("--full", is_flag=True, help="Rebuild rows for this source inside the ocint ctx DB.")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
-def import_command(source_db: Path | None, full: bool, as_json: bool) -> None:
+def import_command(source_db: Path | None, as_json: bool) -> None:
     """Import OpenCode history into the ocint ctx index."""
-    result = _import_ctx(source_db=source_db, full=full)
+    result = _import_ctx(source_db=source_db)
     click.echo(render_json(result) if as_json else render_import_result(result), nl=False)
 
 
@@ -58,17 +53,14 @@ def import_command(source_db: Path | None, full: bool, as_json: bool) -> None:
 def status(as_json: bool) -> None:
     """Show imported ctx index availability and counts."""
     ctx_db = _ctx_db_path()
-    source_db = _source_db_path_or_none()
+    # Status is intentionally index-only; live source metadata is exposed by
+    # `ctx sources` from imported rows instead of probing the current OPENCODE_DB.
     if not ctx_db.exists():
-        result = CtxStatus(
-            db_path=ctx_db,
-            db_exists=False,
-            source_db_path=source_db,
-            source_db_exists=source_db.exists() if source_db is not None else False,
-        )
+        result = get_status(None, ctx_db_path=ctx_db)
     else:
         result = _with_ctx_repository(
-            CtxStatusRepository, lambda repository: repository.status(source_db_path=source_db)
+            CtxStatusRepository,
+            lambda repository: get_status(repository, ctx_db_path=ctx_db),
         )
     click.echo(render_json(result) if as_json else render_status(result), nl=False)
 
@@ -78,9 +70,9 @@ def status(as_json: bool) -> None:
 def sources(as_json: bool) -> None:
     """List imported ctx history sources."""
     if not _ctx_db_path().exists():
-        result = []
+        result = list_sources(None)
     else:
-        result = _with_ctx_repository(CtxStatusRepository, lambda repository: repository.sources())
+        result = _with_ctx_repository(CtxStatusRepository, list_sources)
     click.echo(render_json(result) if as_json else render_sources(result), nl=False)
 
 
@@ -95,7 +87,7 @@ def sources(as_json: bool) -> None:
 @click.option(
     "--include-current-session",
     is_flag=True,
-    help="Accepted compatibility no-op; OpenCode exposes no active session env contract here.",
+    help="Include the active OpenCode session tree when OPENCODE_SESSION_ID is set.",
 )
 @click.option(
     "--refresh",
@@ -120,11 +112,10 @@ def search(
     as_json: bool,
 ) -> None:
     """Search imported ctx history, importing first when OpenCode is available."""
-    _ = include_current_session
     if refresh != "off":
         source_db = _source_db_path_or_none()
         if source_db is not None and source_db.exists():
-            _import_ctx(source_db=source_db, full=False)
+            _import_ctx(source_db=source_db)
     request = CtxSearchRequest(
         query=query,
         session_id=session_id,
@@ -133,6 +124,8 @@ def search(
         since=since,
         terms=list(terms),
         include_subagents=include_subagents,
+        active_session_id=_active_opencode_session_id(),
+        include_current_session=include_current_session,
         limit=limit,
     )
     result = _with_existing_ctx_repository(CtxSearchRepository, lambda repository: search_history(request, repository))
@@ -251,16 +244,31 @@ def sql_command(sql: str, output_format: str) -> None:
     click.echo(rendered, nl=False)
 
 
-def _import_ctx(*, source_db: Path | None, full: bool) -> Any:
+def _import_ctx(*, source_db: Path | None) -> Any:
     source_path = _source_db_path(source_db)
     ctx_db = _ctx_db_path()
     try:
+        _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
         migrate_ctx_db(ctx_db)
         with ctx_session(ctx_db, commit=True) as session:
             repository = CtxImportRepository(session, db_path=ctx_db)
-            return import_history(CtxImportRequest(source_db_path=source_path, full=full), repository)
+            source = OpenCodeRepository(source_path)
+            return import_history(CtxImportRequest(source_db_path=source_path), repository, source)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
         raise click.ClickException(str(error)) from error
+
+
+def _reject_ctx_source_alias(*, ctx_db: Path, source_path: Path) -> None:
+    """Protect the read-only OpenCode source DB before ctx migrations run."""
+    ctx_resolved = ctx_db.expanduser().resolve(strict=False)
+    source_resolved = source_path.expanduser().resolve(strict=False)
+
+    aliases = ctx_resolved == source_resolved
+    if not aliases and ctx_db.exists() and source_path.exists():
+        aliases = ctx_db.samefile(source_path)
+
+    if aliases:
+        raise ValueError("ocint ctx DB must not be the same file as the OpenCode source DB")
 
 
 def _with_existing_ctx_repository[RepoT](repository_type: type[RepoT], callback: Callable[[RepoT], Any]) -> Any:
@@ -284,6 +292,12 @@ def _ctx_db_path() -> Path:
         return resolve_ctx_db_path()
     except ValueError as error:
         raise click.ClickException(str(error)) from error
+
+
+def _active_opencode_session_id() -> str | None:
+    """Return the active OpenCode session ID exposed to ctx CLI commands."""
+    session_id = os.environ.get("OPENCODE_SESSION_ID", "").strip()
+    return session_id or None
 
 
 def _source_db_path(source_db: Path | None = None) -> Path:

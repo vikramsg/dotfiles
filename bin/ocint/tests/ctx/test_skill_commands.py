@@ -8,6 +8,7 @@ from tests.fixtures.opencode_db import create_opencode_db
 
 
 def test_skill_command_suite_reads_imported_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
     source_db = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
@@ -24,6 +25,8 @@ def test_skill_command_suite_reads_imported_index(tmp_path: Path, monkeypatch: p
         (["ctx", "sources", "--json"], '"source_type": "sqlite"'),
         (["ctx", "search", "native event marker"], "evt_native_tool"),
         (["ctx", "search", "native event marker", "--refresh", "off"], "evt_native_tool"),
+        (["ctx", "search", "stable view", "--refresh", "off"], "stable views"),
+        (["ctx", "search", "migrat", "--refresh", "off"], "migration"),
         (["ctx", "search", "native event marker", "--workspace", "/work/repo-directory-only"], "evt_native_tool"),
         (["ctx", "search", "native event marker", "--file", "AGENTS.md"], "evt_native_tool"),
         (["ctx", "search", "native event marker", "--since", "30d"], "evt_native_tool"),
@@ -31,8 +34,10 @@ def test_skill_command_suite_reads_imported_index(tmp_path: Path, monkeypatch: p
         (["ctx", "search", "native event marker", "--session", "s-primary"], "evt_native_tool"),
         (["ctx", "search", "native event marker", "--verbose"], "citation:"),
         (["ctx", "search", "subagent only marker", "--include-subagents"], "s-sub"),
+        (["ctx", "search", "native event marker", "--include-current-session"], "evt_native_tool"),
         (["ctx", "show", "event", "evt_native_tool", "--window", "5"], "evt_native_tool"),
         (["ctx", "show", "event", "evt_native_tool", "--window", "0", "--json"], '"event_id": "evt_native_tool"'),
+        (["ctx", "show", "session", "s-primary"], "SESSION: s-primary"),
         (["ctx", "locate", "event", "evt_native_tool"], "evt_native_tool"),
         (["ctx", "locate", "event", "evt_native_tool", "--json"], '"kind": "event"'),
         (["ctx", "locate", "session", "s-primary"], "s-primary"),
@@ -49,6 +54,14 @@ def test_skill_command_suite_reads_imported_index(tmp_path: Path, monkeypatch: p
             "tool.invocation",
         ),
         (["ctx", "sql", "SELECT path, provider, provider_session_id FROM ctx_files_touched LIMIT 20"], "opencode"),
+        (
+            [
+                "ctx",
+                "sql",
+                "SELECT path, provider, provider_session_id FROM ctx_files_touched WHERE path LIKE '%AGENTS.md%' LIMIT 20",
+            ],
+            "AGENTS.md",
+        ),
         (["ctx", "sql", "SELECT provider, source_type, name, sessions, events FROM ctx_sources"], "OpenCode DB"),
     ]
     for args, expected in checks:

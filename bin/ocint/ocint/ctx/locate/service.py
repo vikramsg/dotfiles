@@ -1,7 +1,5 @@
-from pathlib import Path
-
+from ocint.ctx.locate.repository import CtxLocateRepository
 from ocint.ctx.models import CtxLocateResult
-from ocint.ctx.repository import CtxLocateRepository
 
 
 def locate_session(repository: CtxLocateRepository, session_id: str) -> CtxLocateResult | None:
@@ -9,12 +7,12 @@ def locate_session(repository: CtxLocateRepository, session_id: str) -> CtxLocat
     if session is None:
         return None
     return CtxLocateResult(
-        provider=str(session["provider"]),
+        provider=session.provider,
         kind="session",
-        id=str(session["session_id"]),
-        db_path=Path(str(session["source_db_path"])),
+        id=session.session_id,
+        db_path=session.source_db_path,
         source_table="session",
-        session_id=str(session["session_id"]),
+        session_id=session.session_id,
     )
 
 
