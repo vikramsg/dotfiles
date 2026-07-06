@@ -4,29 +4,38 @@ These instructions apply to `bin/ocint/`.
 
 ## Principles
 
-- Separation of concerns: CLI handles command I/O, services handle use-case behavior, repositories handle persistence.
-- Composition root: `ocint/ctx/cli.py` constructs repositories, sessions, source adapters, reads env, and runs migrations.
-- Single responsibility: do not mix persistence, policy, parsing, rendering, and orchestration in one module.
-- Dependency inversion: services receive typed dependencies and request models; services do not construct repositories or DB sessions.
-- Type safety: avoid stringly typed modes and broad `Any`; prefer `Literal`, enums, protocols, or typed models.
-- Encapsulation: avoid mutable module-level policy globals, especially for security-sensitive behavior.
-- Single source of truth: do not duplicate schema contracts, stable SQL view contracts, or command contracts without tests.
-- Cohesion: persistence-backed ctx features live in focused packages with `service.py`, `repository.py`, and `__init__.py`.
-- Explicitness over cleverness: prefer direct command flow over generic callback helpers when readability suffers.
-- Least privilege: SQL access must expose only stable public ctx surfaces and fail closed.
+- Separation of concerns: keep parsing, behavior, persistence, and rendering apart. Example: CLI parses `--refresh`; service receives a typed refresh mode.
+- Single responsibility: one module should have one reason to change. Example: a repository loads rows; it does not parse SQL or define sandbox policy.
+- Dependency inversion: higher-level behavior receives dependencies explicitly. Example: `search_history(request, repository)`, not `search_history()` reading env.
+- Explicit preconditions / fail fast: required infrastructure must exist before command behavior runs. Example: missing ctx DB fails with `run ocint ctx import first`, not an empty status result.
+- Type safety: command modes and config are typed at the boundary. Example: use `RefreshMode.OFF`, not `refresh != "off"`.
+- Encapsulation: behavior policy is passed explicitly, not hidden in module globals. Example: `run_ctx_sql(repository, sql, config)`, not `_ALLOWED_ACTIONS`.
+- Cohesion: feature-specific behavior stays in the owning feature. Example: SQL query policy belongs under `ctx/sql/`, not global app config.
+- Single source of truth: contracts are declared once and reused. Example: stable SQL view names, columns, and types come from one typed contract.
+- Least privilege: expose only what the command promises. Example: `ctx_events` is queryable; internal tables are denied.
+- Make invalid states unrepresentable: avoid `None` or magic strings as behavior signals. Example: no `repository | None` to mean `DB missing`.
 
-## ctx Boundaries
+## Project Rules
 
-- `ctx/cli.py`: command handlers, dependency construction, env reads, session lifecycle, migrations.
-- `ctx/*/service.py`: use-case behavior only.
-- `ctx/*/repository.py`: SQL/database access only.
-- `ctx/models.py`: typed request/result/read models.
-- `ctx/db.py`: SQLAlchemy/Alembic lifecycle helpers.
-- `ctx/config.py`: ctx configuration/path resolution.
-- `ctx/migrations/`: Alembic migrations.
-- `ctx/render.py`: output formatting only.
-- Do not add root god modules like `ctx/repository.py`, `ctx/service.py`, or `ctx/workflow.py`.
-- Do not add generic `store/` or `persistence/` packages.
+- CLI is the composition root. Example: `ctx/cli.py` creates repositories, sessions, typed config, and request models.
+- Services coordinate use cases only. Example: service calls repository and applies typed command behavior.
+- Repositories only access persistence. Example: repository executes SQLAlchemy queries; it does not decide command policy.
+- Parse at the boundary. Example: convert Click strings/env values into typed objects before calling services.
+- Missing required ctx index is an error. Example: `status` fails if ctx DB is required and absent.
+- Do not use nullable dependencies as control flow. Example: no `get_status(None, ...)`.
+- Do not branch on raw strings or `None`. Example: use typed modes and `match`, not `if refresh != "off"`.
+- Do not store behavior data at module scope. Example: no module-level policy, config, schema contracts, security rules, command modes, or behavioral constants.
+- Feature config stays with the feature. Example: SQL config belongs under `ctx/sql/`; app config stays in `ctx/config.py`.
+- Backend-independent models do not import backend libraries. Example: SQL config models should not import `sqlite3`.
+
+## Repo Conventions
+
+- Persistence-backed ctx features use `service.py`, `repository.py`, and `__init__.py`. Example: `ctx/search/service.py` and `ctx/search/repository.py`.
+- Do not add root god modules. Example: no `ctx/repository.py`, `ctx/service.py`, or `ctx/workflow.py`.
+- Do not add generic persistence buckets. Example: no `store/` or `persistence/` package.
+- Use the package justfile for verification. Example: `just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile check`.
+- Use root workspace `uv` execution. Example: `uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest ...`.
+- Follow justfile shell variable rules. Example: use `$VAR`, use `$(...)`, do not use `$$VAR`.
 
 ## Commands
 
