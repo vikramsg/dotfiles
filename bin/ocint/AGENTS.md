@@ -36,13 +36,8 @@ These instructions apply to `bin/ocint/`.
 
 - Persistence-backed ctx features use `service.py`, `repository.py`, and `__init__.py`. Example: `ctx/search/service.py` and `ctx/search/repository.py`.
 - Ctx DB lifecycle, physical schema, and Alembic files stay under `ctx/db/`. Example: import `ctx_session` from `ocint.ctx.db` in the CLI and physical tables from `ocint.ctx.db.schema` in repositories.
-- The public stable SQL contract stays under `ctx/sql/`. Example: migrations and SQL query execution both use `ctx/sql/models.py` instead of physical-schema globals.
-- Readiness checks derive FTS name, columns, and canonical `CREATE VIRTUAL TABLE` SQL from `ctx/db/schema.py`; do not duplicate FTS definitions in status or feature repositories.
-- Readiness checks derive public stable view columns and canonical `CREATE VIEW` SQL from `ctx/sql/models.py`; do not duplicate stable view name lists or definitions in status or feature repositories.
-- Ctx Alembic version filenames use date+slug identifiers without sequence prefixes. Example: `20260704_create_ctx_index.py`, not `0001_ctx_index.py`.
 - Do not add root god modules. Example: no `ctx/repository.py`, `ctx/service.py`, or `ctx/workflow.py`.
 - Do not re-add root ctx DB ownership modules. Example: no `ctx/db.py`, `ctx/schema.py`, or root `ctx/migrations/` source package.
-- Do not add generic persistence buckets. Example: no `store/` or `persistence/` package.
 - Use the package justfile for verification. Example: `just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile check`.
 - Use root workspace `uv` execution. Example: `uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest ...`.
 - Follow justfile shell variable rules. Example: use `$VAR`, use `$(...)`, do not use `$$VAR`.
