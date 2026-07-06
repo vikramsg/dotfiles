@@ -1,3 +1,4 @@
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -5,6 +6,30 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class CtxModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class RefreshMode(StrEnum):
+    AUTO = "auto"
+    OFF = "off"
+
+
+class CtxShowMode(StrEnum):
+    LITE = "lite"
+    FULL = "full"
+    LOG = "log"
+
+
+class CtxTranscriptFormat(StrEnum):
+    TEXT = "text"
+    MARKDOWN = "markdown"
+    JSON = "json"
+
+
+class CtxSqlOutputFormat(StrEnum):
+    TABLE = "table"
+    JSON = "json"
+    CSV = "csv"
+    RAW = "raw"
 
 
 class CtxStatus(CtxModel):

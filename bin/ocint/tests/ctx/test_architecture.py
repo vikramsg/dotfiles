@@ -51,6 +51,161 @@ def test_persistence_features_have_focused_package_shape() -> None:
     assert missing == []
 
 
+def test_ctx_db_package_owns_lifecycle_schema_and_migrations() -> None:
+    assert (CTX_ROOT / "db" / "__init__.py").is_file()
+    assert (CTX_ROOT / "db" / "connection.py").is_file()
+    assert (CTX_ROOT / "db" / "schema.py").is_file()
+    assert (CTX_ROOT / "db" / "migrations" / "env.py").is_file()
+    assert (CTX_ROOT / "db" / "migrations" / "versions" / "__init__.py").is_file()
+
+    assert not (CTX_ROOT / "db.py").exists()
+    assert not (CTX_ROOT / "schema.py").exists()
+    assert not (CTX_ROOT / "migrations" / "env.py").exists()
+    root_version_files = sorted(
+        path.name for path in (CTX_ROOT / "migrations" / "versions").glob("*.py") if path.name != "__init__.py"
+    )
+    assert root_version_files == []
+
+
+def test_ctx_migration_uses_date_slug_revision_convention() -> None:
+    versions_dir = CTX_ROOT / "db" / "migrations" / "versions"
+    version_files = sorted(path.name for path in versions_dir.glob("*.py") if path.name != "__init__.py")
+
+    assert version_files == ["20260704_create_ctx_index.py"]
+    migration_source = (versions_dir / "20260704_create_ctx_index.py").read_text()
+    assert 'revision = "20260704_create_ctx_index"' in migration_source
+    assert "0001" not in migration_source
+
+
+def test_ctx_alembic_file_template_uses_date_slug_without_revision_prefix() -> None:
+    connection_source = (CTX_ROOT / "db" / "connection.py").read_text()
+
+    assert "file_template" in connection_source
+    assert "year" in connection_source
+    assert "month" in connection_source
+    assert "day" in connection_source
+    assert "slug" in connection_source
+    assert "rev" not in connection_source
+    assert "0001" not in connection_source
+
+
+def test_ctx_db_schema_has_no_public_sql_view_contract_globals() -> None:
+    schema_path = CTX_ROOT / "db" / "schema.py"
+    symbols = _top_level_symbols(schema_path)
+
+    assert "metadata" in symbols
+    assert "ctx_session" in symbols
+    assert "ctx_event" in symbols
+    assert "STABLE_CTX_VIEW_COLUMNS" not in symbols
+    assert "STABLE_CTX_VIEWS" not in symbols
+    assert "CREATE VIEW" not in schema_path.read_text()
+
+
+def test_sql_models_own_stable_view_config_without_sqlite_backend_import() -> None:
+    models_path = CTX_ROOT / "sql" / "models.py"
+
+    assert models_path.is_file()
+    assert "sqlite3" not in _imports(models_path)
+    assert "CtxSqlConfig" in _top_level_symbols(models_path)
+    assert "default_ctx_sql_config" in _top_level_symbols(models_path)
+    assert "stable_view_create_statements" in _top_level_symbols(models_path)
+
+
+def test_status_readiness_uses_sql_contract_without_hard_coded_stable_views() -> None:
+    repository_source = (CTX_ROOT / "status" / "repository.py").read_text()
+
+    assert "CtxSqlConfig" in repository_source
+    assert ".stable_views" in repository_source
+    for view_name in ["ctx_sessions", "ctx_events", "ctx_files_touched", "ctx_sources"]:
+        assert view_name not in repository_source
+
+
+def test_status_repository_row_loaders_do_not_encode_unready_fallbacks() -> None:
+    repository_path = CTX_ROOT / "status" / "repository.py"
+    status_source = _class_method_source(repository_path, "CtxStatusRepository", "status")
+    sources_source = _class_method_source(repository_path, "CtxStatusRepository", "sources")
+
+    assert "self.index_ready" not in status_source
+    assert "self.index_ready" not in sources_source
+    assert "index_ready =" not in status_source
+    assert "index_ready=False" not in status_source
+    assert "db_exists=self.db_path.exists()" not in status_source
+    assert "return []" not in sources_source
+
+
+def test_sql_repository_loads_projection_rows_without_sandbox_policy() -> None:
+    repository_path = CTX_ROOT / "sql" / "repository.py"
+    source = repository_path.read_text()
+    symbols = _top_level_symbols(repository_path)
+
+    assert "sqlite3" not in _imports(repository_path)
+    assert "ocint._sqlsafe" not in _imports(repository_path)
+    assert "Authorizer" not in symbols
+    assert "_ALLOWED_SANDBOX_ACTIONS" not in symbols
+    assert "_SANDBOX_INTEGER_COLUMNS" not in symbols
+    assert "execute_stable_view_query" not in symbols
+    assert "load_stable_projection_rows" in source
+
+
+def test_status_service_requires_non_nullable_repository() -> None:
+    service_source = (CTX_ROOT / "status" / "service.py").read_text()
+
+    assert "CtxStatusRepository | None" not in service_source
+    assert "repository is None" not in service_source
+
+
+def test_cli_and_render_use_typed_command_modes_without_callback_repository_helpers() -> None:
+    cli_source = (CTX_ROOT / "cli.py").read_text()
+    render_source = (CTX_ROOT / "render.py").read_text()
+
+    assert "_with_existing_ctx_repository" not in cli_source
+    assert "_with_ctx_repository" not in cli_source
+    assert 'refresh != "off"' not in cli_source
+    assert 'output_format == "json"' not in cli_source
+    assert 'output_format == "csv"' not in cli_source
+    assert "RefreshMode" in cli_source
+    assert "CtxSqlOutputFormat" in cli_source
+    assert 'output_format == "markdown"' not in render_source
+    assert 'mode == "log"' not in render_source
+    assert 'mode == "full"' not in render_source
+    assert 'mode != "full"' not in render_source
+
+
+def test_only_cli_imports_ctx_db_lifecycle_helpers() -> None:
+    allowed = {"cli.py", "db/__init__.py"}
+    lifecycle_names = {"create_ctx_engine", "ctx_session", "migrate_ctx_db"}
+    offenders: list[str] = []
+    for path in iter_python_files(CTX_ROOT):
+        relative = path.relative_to(CTX_ROOT).as_posix()
+        if relative in allowed:
+            continue
+        for module, name in _from_imports(path):
+            if module in {"ocint.ctx.db", "ocint.ctx.db.connection"} and name in lifecycle_names:
+                offenders.append(f"{relative} imports {module}.{name}")
+
+    assert offenders == []
+
+
+def test_repositories_and_migrations_import_physical_schema_from_db_package() -> None:
+    expected_schema_importers = [
+        CTX_ROOT / "importing" / "repository.py",
+        CTX_ROOT / "status" / "repository.py",
+        CTX_ROOT / "db" / "migrations" / "env.py",
+        CTX_ROOT / "db" / "migrations" / "versions" / "20260704_create_ctx_index.py",
+    ]
+    offenders: list[str] = []
+    for path in expected_schema_importers:
+        imports = _imports(path) if path.exists() else set()
+        if "ocint.ctx.db.schema" not in imports:
+            offenders.append(str(path.relative_to(CTX_ROOT)))
+
+    stale_imports = [
+        str(path.relative_to(CTX_ROOT)) for path in iter_python_files(CTX_ROOT) if "ocint.ctx.schema" in _imports(path)
+    ]
+    assert offenders == []
+    assert stale_imports == []
+
+
 def test_service_modules_do_not_own_db_lifecycle() -> None:
     forbidden = {"sqlalchemy", "alembic", "ocint.ctx.db"}
     offenders = []
@@ -236,6 +391,16 @@ def test_import_repository_prunes_fts_with_set_based_delete() -> None:
     assert "expanding=True" not in source
     assert "DELETE FROM ctx_event_fts" in source
     assert "SELECT id FROM ctx_event WHERE source_id = :source_id" in normalized
+
+
+def _class_method_source(path: Path, class_name: str, method_name: str) -> str:
+    source = path.read_text()
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and item.name == method_name:
+                    return ast.get_source_segment(source, item) or ""
+    raise AssertionError(f"Missing {class_name}.{method_name} in {path}")
 
 
 def _feature_files(filename: str) -> Iterator[Path]:

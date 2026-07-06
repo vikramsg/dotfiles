@@ -6,9 +6,11 @@ from ocint.ctx.models import (
     CtxImportResult,
     CtxLocateResult,
     CtxSearchResult,
+    CtxShowMode,
     CtxSource,
     CtxStatus,
     CtxTranscript,
+    CtxTranscriptFormat,
 )
 
 
@@ -73,9 +75,19 @@ def render_search_results(results: list[CtxSearchResult], *, verbose: bool = Fal
     return "\n\n".join(blocks) + "\n"
 
 
-def render_transcript(transcript: CtxTranscript, *, mode: str = "lite", output_format: str = "text") -> str:
-    if output_format == "markdown":
-        return _render_transcript_markdown(transcript, mode=mode)
+def render_transcript(
+    transcript: CtxTranscript,
+    *,
+    mode: CtxShowMode = CtxShowMode.LITE,
+    output_format: CtxTranscriptFormat = CtxTranscriptFormat.TEXT,
+) -> str:
+    match output_format:
+        case CtxTranscriptFormat.MARKDOWN:
+            return _render_transcript_markdown(transcript, mode=mode)
+        case CtxTranscriptFormat.JSON:
+            raise ValueError("JSON transcripts are rendered by the CLI JSON renderer")
+        case CtxTranscriptFormat.TEXT:
+            pass
     lines = [
         f"PROVIDER: {transcript.provider}",
         f"SESSION: {transcript.session.session_id}",
@@ -85,14 +97,17 @@ def render_transcript(transcript: CtxTranscript, *, mode: str = "lite", output_f
         "",
     ]
     for event in transcript.events:
-        if mode == "log":
-            lines.append(
-                f"{format_ms(event.time_created)}\t{event.source_table}\t{event.event_id}\t{event.event_type}\t{event.snippet}"
-            )
-        else:
-            lines.append(f"[{event.source_table}:{event.event_id}] {event.event_type} {format_ms(event.time_created)}")
-            lines.append(_transcript_event_content(event, mode=mode))
-            lines.append("")
+        match mode:
+            case CtxShowMode.LOG:
+                lines.append(
+                    f"{format_ms(event.time_created)}\t{event.source_table}\t{event.event_id}\t{event.event_type}\t{event.snippet}"
+                )
+            case CtxShowMode.LITE | CtxShowMode.FULL:
+                lines.append(
+                    f"[{event.source_table}:{event.event_id}] {event.event_type} {format_ms(event.time_created)}"
+                )
+                lines.append(_transcript_event_content(event, mode=mode))
+                lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -124,7 +139,7 @@ def render_locate(result: CtxLocateResult) -> str:
     return "\n".join(lines)
 
 
-def _render_transcript_markdown(transcript: CtxTranscript, *, mode: str) -> str:
+def _render_transcript_markdown(transcript: CtxTranscript, *, mode: CtxShowMode) -> str:
     lines = [
         f"# OpenCode session {transcript.session.session_id}",
         "",
@@ -141,12 +156,18 @@ def _render_transcript_markdown(transcript: CtxTranscript, *, mode: str) -> str:
         lines.append(f"- Time: {format_ms(event.time_created)}")
         lines.append(f"- Citation: `{event.citation}`")
         lines.append("")
-        lines.append(event.snippet if mode != "full" else f"{event.text}\n\nFollow-up: `{event.follow_up}`")
+        match mode:
+            case CtxShowMode.FULL:
+                lines.append(f"{event.text}\n\nFollow-up: `{event.follow_up}`")
+            case CtxShowMode.LITE | CtxShowMode.LOG:
+                lines.append(event.snippet)
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _transcript_event_content(event: CtxEventDetail, *, mode: str) -> str:
-    if mode == "full":
-        return f"{event.text}\n{event.citation}"
-    return event.snippet
+def _transcript_event_content(event: CtxEventDetail, *, mode: CtxShowMode) -> str:
+    match mode:
+        case CtxShowMode.FULL:
+            return f"{event.text}\n{event.citation}"
+        case CtxShowMode.LITE | CtxShowMode.LOG:
+            return event.snippet

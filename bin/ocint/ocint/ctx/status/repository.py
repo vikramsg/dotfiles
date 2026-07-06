@@ -3,8 +3,9 @@ from pathlib import Path
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from ocint.ctx.db.schema import ctx_event, ctx_session, ctx_source, metadata
 from ocint.ctx.models import CtxSource, CtxStatus
-from ocint.ctx.schema import ctx_event, ctx_session, ctx_source
+from ocint.ctx.sql.models import CtxSqlConfig
 
 
 class CtxStatusRepository:
@@ -13,12 +14,6 @@ class CtxStatusRepository:
         self.db_path = db_path
 
     def status(self) -> CtxStatus:
-        index_ready = self.index_ready()
-        if not index_ready:
-            return CtxStatus(
-                db_path=self.db_path,
-                db_exists=self.db_path.exists(),
-            )
         sessions = int(self._session.execute(select(func.count()).select_from(ctx_session)).scalar_one() or 0)
         primary_sessions = int(
             self._session.execute(
@@ -39,8 +34,6 @@ class CtxStatusRepository:
         )
 
     def sources(self) -> list[CtxSource]:
-        if not self.index_ready():
-            return []
         statement = select(
             ctx_source.c.provider,
             ctx_source.c.source_type,
@@ -53,21 +46,22 @@ class CtxStatusRepository:
         ).order_by(ctx_source.c.provider, ctx_source.c.name, ctx_source.c.source_path)
         return [CtxSource.model_validate(row) for row in self._session.execute(statement).mappings()]
 
-    def index_ready(self) -> bool:
-        required = {
-            "alembic_version",
-            "ctx_event_fts",
-            "ctx_sessions",
-            "ctx_events",
-            "ctx_files_touched",
-            "ctx_sources",
-        }
-        rows = self._session.execute(
-            text(
-                """
-                SELECT name FROM sqlite_master
-                WHERE name IN ('alembic_version', 'ctx_event_fts', 'ctx_sessions', 'ctx_events', 'ctx_files_touched', 'ctx_sources')
-                """
-            )
-        ).scalars()
-        return set(rows) == required
+    def index_ready(self, config: CtxSqlConfig) -> bool:
+        required_tables = set(metadata.tables) | {"alembic_version", "ctx_event_fts"}
+        required_views = {view.name for view in config.stable_views}
+        tables, views = self._sqlite_objects()
+
+        return required_tables.issubset(tables) and required_views.issubset(views)
+
+    def _sqlite_objects(self) -> tuple[set[str], set[str]]:
+        rows = self._session.execute(text("SELECT name, type FROM sqlite_master")).mappings()
+        tables: set[str] = set()
+        views: set[str] = set()
+        for row in rows:
+            name = str(row["name"])
+            match row["type"]:
+                case "table":
+                    tables.add(name)
+                case "view":
+                    views.add(name)
+        return tables, views

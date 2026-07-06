@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -58,16 +59,60 @@ def test_ctx_status_output_does_not_vary_with_current_opencode_db(
     assert payloads[0]["source_db_exists"] is False
 
 
-def test_ctx_status_and_sources_exit_zero_without_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "missing.sqlite"))
+def test_ctx_status_and_sources_fail_fast_without_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ctx_db = tmp_path / "missing.sqlite"
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
 
     status = CliRunner().invoke(main, ["ctx", "status", "--json"])
     sources = CliRunner().invoke(main, ["ctx", "sources", "--json"])
 
-    assert status.exit_code == 0, status.output
-    assert json.loads(status.output)["db_exists"] is False
-    assert sources.exit_code == 0, sources.output
-    assert json.loads(sources.output) == []
+    assert status.exit_code != 0
+    assert "run `ocint ctx import` first" in status.output
+    assert sources.exit_code != 0
+    assert "run `ocint ctx import` first" in sources.output
+    assert not ctx_db.exists()
+
+
+def test_ctx_read_commands_fail_fast_when_existing_ctx_db_is_unmigrated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ctx_db = tmp_path / "unmigrated.sqlite"
+    sqlite3.connect(ctx_db).close()
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+
+    runner = CliRunner()
+    commands = [
+        ["ctx", "status"],
+        ["ctx", "status", "--json"],
+        ["ctx", "sources"],
+        ["ctx", "sources", "--json"],
+        ["ctx", "search", "native event marker", "--refresh", "off"],
+    ]
+
+    for command in commands:
+        result = runner.invoke(main, command)
+        assert result.exit_code != 0, result.output
+        assert "run `ocint ctx import` first" in result.output
+
+
+@pytest.mark.parametrize("drop_sql", ["DROP VIEW ctx_events", "DROP TABLE ctx_event_fts"])
+def test_ctx_search_fails_when_existing_index_is_missing_required_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drop_sql: str
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    with sqlite3.connect(ctx_db) as connection:
+        connection.execute(drop_sql)
+
+    result = runner.invoke(main, ["ctx", "search", "native event marker", "--refresh", "off"])
+
+    assert result.exit_code != 0
+    assert "run `ocint ctx import` first" in result.output
 
 
 def test_ctx_rejects_provider_option(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

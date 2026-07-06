@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from ocint.ctx.schema import metadata
+from ocint.ctx.db.schema import metadata
 
 config = context.config
 

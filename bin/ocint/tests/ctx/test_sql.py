@@ -104,7 +104,7 @@ def test_ctx_sql_rejects_comment_obscured_nested_cte_alembic_version_leak(
     )
 
     assert result.exit_code != 0
-    assert "0001_ctx_index" not in result.output
+    assert "20260704_create_ctx_index" not in result.output
 
 
 def test_ctx_sql_rejects_nested_cte_shadowing_stable_view_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,6 +204,15 @@ def test_ctx_sql_views_include_files_touched(tmp_path: Path, monkeypatch: pytest
         {"path": "bin/ocint/tests/ctx/test_sql.py"},
         {"path": "implementation_notes.md"},
     ]
+
+
+def test_ctx_sql_raw_output_format_reads_stable_views(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+
+    result = CliRunner().invoke(main, ["ctx", "sql", "SELECT provider FROM ctx_sources", "--format", "raw"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output == "opencode\n"
 
 
 def test_ctx_sql_maps_native_event_columns_and_payload_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

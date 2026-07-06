@@ -26,6 +26,7 @@ def test_ctx_import_creates_index_and_is_idempotent(tmp_path: Path, monkeypatch:
     assert second.exit_code == 0, second.output
     assert _ctx_counts(ctx_db) == counts_after_first
     assert counts_after_first["alembic_version"] == 1
+    assert _ctx_revision(ctx_db) == "20260704_create_ctx_index"
     assert counts_after_first["ctx_event_fts"] > 0
     assert counts_after_first["ctx_session"] == 2
     assert counts_after_first["ctx_event"] > 0
@@ -175,6 +176,14 @@ def _ctx_counts(ctx_db: Path) -> dict[str, int]:
             table: con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             for table in ["alembic_version", "ctx_session", "ctx_event", "ctx_file_touched", "ctx_event_fts"]
         }
+    finally:
+        con.close()
+
+
+def _ctx_revision(ctx_db: Path) -> str:
+    con = sqlite3.connect(ctx_db)
+    try:
+        return str(con.execute("SELECT version_num FROM alembic_version").fetchone()[0])
     finally:
         con.close()
 

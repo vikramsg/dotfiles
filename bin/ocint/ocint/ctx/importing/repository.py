@@ -6,7 +6,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from ocint.ctx.schema import ctx_event, ctx_file_touched, ctx_session, ctx_source
+from ocint.ctx.db.schema import ctx_event, ctx_file_touched, ctx_session, ctx_source
 
 
 class CtxImportRepository:

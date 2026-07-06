@@ -32,6 +32,9 @@ def migrate_ctx_db(db_path: Path) -> None:
     config = Config()
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     config.set_main_option("sqlalchemy.url", str(URL.create("sqlite+pysqlite", database=str(db_path))))
+    # Keep generated ctx migration filenames on the agreed date+slug convention;
+    # the stable identifier is the date-prefixed slug, not an extra sequence token.
+    config.set_main_option("file_template", "%%(year)d%%(month).2d%%(day).2d_%%(slug)s")
     command.upgrade(config, "head")
 
 

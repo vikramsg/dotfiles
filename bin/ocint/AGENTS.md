@@ -22,6 +22,7 @@ These instructions apply to `bin/ocint/`.
 - Repositories only access persistence. Example: repository executes SQLAlchemy queries; it does not decide command policy.
 - Parse at the boundary. Example: convert Click strings/env values into typed objects before calling services.
 - Missing required ctx index is an error. Example: `status` fails if ctx DB is required and absent.
+- Ctx read-command readiness means the index has migrated Alembic metadata, physical schema tables, FTS objects, and stable SQL views; file existence alone is not ready.
 - Do not use nullable dependencies as control flow. Example: no `get_status(None, ...)`.
 - Do not branch on raw strings or `None`. Example: use typed modes and `match`, not `if refresh != "off"`.
 - Do not store behavior data at module scope. Example: no module-level policy, config, schema contracts, security rules, command modes, or behavioral constants.
@@ -31,7 +32,12 @@ These instructions apply to `bin/ocint/`.
 ## Repo Conventions
 
 - Persistence-backed ctx features use `service.py`, `repository.py`, and `__init__.py`. Example: `ctx/search/service.py` and `ctx/search/repository.py`.
+- Ctx DB lifecycle, physical schema, and Alembic files stay under `ctx/db/`. Example: import `ctx_session` from `ocint.ctx.db` in the CLI and physical tables from `ocint.ctx.db.schema` in repositories.
+- The public stable SQL contract stays under `ctx/sql/`. Example: migrations and SQL query execution both use `ctx/sql/models.py` instead of physical-schema globals.
+- Readiness checks derive public stable view names from `ctx/sql/models.py`; do not duplicate stable view name lists in status or feature repositories.
+- Ctx Alembic version filenames use date+slug identifiers without sequence prefixes. Example: `20260704_create_ctx_index.py`, not `0001_ctx_index.py`.
 - Do not add root god modules. Example: no `ctx/repository.py`, `ctx/service.py`, or `ctx/workflow.py`.
+- Do not re-add root ctx DB ownership modules. Example: no `ctx/db.py`, `ctx/schema.py`, or root `ctx/migrations/` source package.
 - Do not add generic persistence buckets. Example: no `store/` or `persistence/` package.
 - Use the package justfile for verification. Example: `just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile check`.
 - Use root workspace `uv` execution. Example: `uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest ...`.
@@ -78,14 +84,16 @@ bin/ocint/
     ├── ctx/
     │   ├── cli.py
     │   ├── config.py
-    │   ├── db.py
     │   ├── docs.py
     │   ├── history.py
     │   ├── models.py
     │   ├── render.py
-    │   ├── schema.py
     │   ├── transcript.py
-    │   ├── migrations/
+    │   ├── db/
+    │   │   ├── __init__.py
+    │   │   ├── connection.py
+    │   │   ├── schema.py
+    │   │   └── migrations/
     │   ├── importing/
     │   │   ├── service.py
     │   │   └── repository.py
@@ -99,6 +107,7 @@ bin/ocint/
     │   │   ├── service.py
     │   │   └── repository.py
     │   ├── sql/
+    │   │   ├── models.py
     │   │   ├── service.py
     │   │   └── repository.py
     │   └── status/

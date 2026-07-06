@@ -86,31 +86,3 @@ Index("ix_ctx_event_provider_session", ctx_event.c.provider_session_id)
 Index("ix_ctx_event_event_id", ctx_event.c.event_id)
 Index("ix_ctx_event_time", ctx_event.c.time_created)
 Index("ix_ctx_file_path", ctx_file_touched.c.path)
-
-STABLE_CTX_VIEW_COLUMNS = {
-    "ctx_sessions": (
-        "provider",
-        "provider_session_id",
-        "session_id",
-        "parent_id",
-        "title",
-        "workspace",
-        "time_created",
-        "time_updated",
-    ),
-    "ctx_events": (
-        "provider",
-        "provider_session_id",
-        "event_id",
-        "source_table",
-        "event_type",
-        "time_created",
-        "text",
-        "source_path",
-        "citation",
-    ),
-    "ctx_files_touched": ("provider", "path", "provider_session_id", "event_id", "source_table"),
-    "ctx_sources": ("provider", "source_type", "name", "path", "sessions", "events", "imported_at"),
-}
-
-STABLE_CTX_VIEWS = frozenset(STABLE_CTX_VIEW_COLUMNS)
