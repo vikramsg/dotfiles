@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ocint._config import resolve_paths
 from ocint._errors import OcintError
-from ocint._models import CliContext, CliProgress
+from ocint._models import CliContext
 from ocint._render import render_csv, render_json, render_raw, render_table
 from ocint.ctx.config import resolve_ctx_db_path
 from ocint.ctx.db import ctx_session, current_ctx_head_revision, migrate_ctx_db
@@ -226,9 +226,7 @@ With SESSION_ID, shows that transcript:
 )
 @click.option("--out", "out_path", type=click.Path(path_type=Path), help="Write rendered transcript to a file.")
 @click.pass_obj
-def show_session(
-    app: CliContext, session_id: str | None, mode: str, output_format: str, out_path: Path | None
-) -> None:
+def show_session(app: CliContext, session_id: str | None, mode: str, output_format: str, out_path: Path | None) -> None:
     """Print or write a readable imported session transcript."""
     show_mode = _show_mode(mode)
     transcript_format = _transcript_format(output_format)

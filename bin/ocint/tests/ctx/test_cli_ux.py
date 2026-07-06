@@ -203,7 +203,7 @@ class RecordedWrite:
 
 
 class RecordingProgress:
-    def __init__(self, output: "RecordingOutput") -> None:
+    def __init__(self, output: RecordingOutput) -> None:
         self._output = output
 
     def update(self, message: str, *, current: int | None = None, total: int | None = None) -> None:

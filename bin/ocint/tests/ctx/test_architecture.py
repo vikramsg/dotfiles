@@ -149,7 +149,7 @@ def test_ctx_import_uses_generator_events_without_legacy_import_history_wrapper(
     assert "def import_history_events(" in service_source
     assert "def import_history(" not in service_source
     assert "import_history_events" in package_source
-    assert "import_history\"" not in package_source
+    assert 'import_history"' not in package_source
 
 
 def test_status_readiness_uses_sql_contract_without_hard_coded_stable_views() -> None:

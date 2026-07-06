@@ -2,7 +2,7 @@ from contextlib import AbstractContextManager, nullcontext
 
 import click
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TaskID, TextColumn
 
 from ocint._models import CliContext, CliProgress
 
@@ -26,7 +26,7 @@ class _RichProgress:
         self._message = message
         self._console = console
         self._progress: Progress | None = None
-        self._task_id: int | None = None
+        self._task_id: TaskID | None = None
 
     def __enter__(self) -> CliProgress:
         self._progress = Progress(
