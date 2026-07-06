@@ -23,6 +23,9 @@ These instructions apply to `bin/ocint/`.
 - Parse at the boundary. Example: convert Click strings/env values into typed objects before calling services.
 - Missing required ctx index is an error. Example: `status` fails if ctx DB is required and absent.
 - Ctx read-command readiness means the index has exactly the current ctx Alembic head, required physical table columns, expected FTS columns and canonical FTS virtual-table definition generated from `ocint.ctx.db.schema`, and stable SQL views generated from `CtxSqlConfig`; file existence alone is not ready.
+- CLI commands must be discoverable without pre-known IDs. Example: `ocint ctx show session` lists recent sessions when no session ID is supplied.
+- CLI terminal output is injected through `CliContext.output`. Example: feature CLIs call `app.output.write(...)` or `app.output.progress(...)`, not `click.echo(...)` directly.
+- Import progress uses generator events. Example: `import_history_events(...)` yields progress and final result; do not re-add callback progress sinks or a return-only `import_history` wrapper.
 - Do not use nullable dependencies as control flow. Example: no `get_status(None, ...)`.
 - Do not branch on raw strings or `None`. Example: use typed modes and `match`, not `if refresh != "off"`.
 - Do not store behavior data at module scope. Example: no module-level policy, config, schema contracts, security rules, command modes, or behavioral constants.
@@ -76,7 +79,9 @@ bin/ocint/
 ├── docs/
 ├── tests/
 └── ocint/
-    ├── cli.py
+    ├── cli/
+    │   ├── __init__.py
+    │   └── _render.py
     ├── _config.py
     ├── _errors.py
     ├── _render.py

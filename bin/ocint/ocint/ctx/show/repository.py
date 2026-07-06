@@ -2,16 +2,17 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.orm import Session
 
+from ocint.ctx.db.schema import ctx_event, ctx_session
 from ocint.ctx.history import (
     CandidateOrder,
     candidate_query_sql,
     candidate_rows,
     session_summary_sql,
 )
-from ocint.ctx.models import CtxSearchCandidate, CtxSessionSummary
+from ocint.ctx.models import CtxSearchCandidate, CtxSession, CtxSessionSummary
 
 
 class CtxShowRepository:
@@ -25,6 +26,33 @@ class CtxShowRepository:
 
     def find_session(self, session_id: str) -> CtxSessionSummary | None:
         return _find_session(self._session, session_id)
+
+    def recent_sessions(self, *, limit: int) -> list[CtxSession]:
+        statement = (
+            select(
+                ctx_session.c.provider,
+                ctx_session.c.provider_session_id.label("session_id"),
+                ctx_session.c.parent_id,
+                ctx_session.c.title,
+                ctx_session.c.workspace,
+                ctx_session.c.time_created,
+                ctx_session.c.time_updated,
+                func.count(ctx_event.c.id).label("event_count"),
+            )
+            .select_from(
+                ctx_session.outerjoin(
+                    ctx_event,
+                    and_(
+                        ctx_event.c.source_id == ctx_session.c.source_id,
+                        ctx_event.c.provider_session_id == ctx_session.c.provider_session_id,
+                    ),
+                )
+            )
+            .group_by(ctx_session.c.id)
+            .order_by(ctx_session.c.time_updated.desc(), ctx_session.c.id.desc())
+            .limit(limit)
+        )
+        return [CtxSession.model_validate(row) for row in self._session.execute(statement).mappings()]
 
     def session_events(self, *, source_id: int, session_id: str) -> list[CtxSearchCandidate]:
         return _candidate_query(

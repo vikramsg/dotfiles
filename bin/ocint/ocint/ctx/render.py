@@ -6,6 +6,7 @@ from ocint.ctx.models import (
     CtxImportResult,
     CtxLocateResult,
     CtxSearchResult,
+    CtxSession,
     CtxShowMode,
     CtxSource,
     CtxStatus,
@@ -51,6 +52,33 @@ def render_status(status: CtxStatus) -> str:
 
 def render_sources(sources: list[CtxSource]) -> str:
     return render_table(sources)
+
+
+def render_recent_sessions(sessions: list[CtxSession]) -> str:
+    if not sessions:
+        return (
+            'No imported sessions found.\n\nStart with:\n  ocint ctx search "what you remember"\n  ocint ctx import\n'
+        )
+    rows = [
+        {
+            "session_id": session.session_id,
+            "updated": format_ms(session.time_updated),
+            "events": session.event_count,
+            "title": session.title or "",
+            "workspace": session.workspace or "",
+        }
+        for session in sessions
+    ]
+    return (
+        "Recent sessions\n\n"
+        f"{render_table(rows)}\n"
+        "\n"
+        "Show a session:\n"
+        f"  ocint ctx show session {sessions[0].session_id}\n"
+        "\n"
+        "Search first if you do not know what you need:\n"
+        '  ocint ctx search "what you remember"\n'
+    )
 
 
 def render_search_results(results: list[CtxSearchResult], *, verbose: bool = False) -> str:

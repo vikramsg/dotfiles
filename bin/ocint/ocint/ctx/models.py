@@ -32,6 +32,23 @@ class CtxSqlOutputFormat(StrEnum):
     RAW = "raw"
 
 
+class CtxShowRecentSessionsRequest(CtxModel):
+    limit: int = 10
+
+
+class CtxShowSessionTranscriptRequest(CtxModel):
+    session_id: str
+
+
+type CtxShowSessionRequest = CtxShowRecentSessionsRequest | CtxShowSessionTranscriptRequest
+
+
+class CtxDocTopic(CtxModel):
+    name: str
+    summary: str
+    body: str
+
+
 class CtxStatus(CtxModel):
     provider: str = "opencode"
     db_path: Path
@@ -70,6 +87,15 @@ class CtxImportResult(CtxModel):
     events_written: int = 0
     files_written: int = 0
     checkpoint_updated: bool = False
+
+
+class CtxImportProgress(CtxModel):
+    message: str
+    current: int | None = None
+    total: int | None = None
+
+
+type CtxImportEvent = CtxImportProgress | CtxImportResult
 
 
 class CtxSession(CtxModel):

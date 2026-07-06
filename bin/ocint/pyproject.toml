@@ -7,6 +7,7 @@ dependencies = [
     "alembic",
     "click",
     "pydantic",
+    "rich",
     "sqlalchemy",
 ]
 

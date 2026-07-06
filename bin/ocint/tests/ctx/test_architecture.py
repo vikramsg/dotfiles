@@ -113,6 +113,45 @@ def test_sql_models_own_stable_view_config_without_sqlite_backend_import() -> No
     assert "stable_view_create_statements" in _top_level_symbols(models_path)
 
 
+def test_root_cli_package_owns_output_context_injection() -> None:
+    assert (PACKAGE_ROOT / "cli" / "__init__.py").is_file()
+    assert (PACKAGE_ROOT / "cli" / "_render.py").is_file()
+    assert not (PACKAGE_ROOT / "cli.py").exists()
+
+    model_symbols = _top_level_symbols(PACKAGE_ROOT / "_models.py")
+    assert "CliContext" in model_symbols
+    assert "CliOutput" in model_symbols
+    assert "CliProgress" in model_symbols
+
+
+def test_feature_clis_use_injected_output_without_direct_echo_or_rich_imports() -> None:
+    offenders: list[str] = []
+    for path in [CTX_ROOT / "cli.py", PACKAGE_ROOT / "state" / "cli.py"]:
+        source = path.read_text()
+        imports = _imports(path)
+        from_imports = _from_imports(path)
+        if "click.echo" in source or "click.secho" in source:
+            offenders.append(f"{path.relative_to(PACKAGE_ROOT)} uses direct click echo")
+        if any(item.startswith("rich") for item in imports):
+            offenders.append(f"{path.relative_to(PACKAGE_ROOT)} imports rich")
+        if ("ocint._models", "CliContext") not in from_imports:
+            offenders.append(f"{path.relative_to(PACKAGE_ROOT)} does not import CliContext")
+
+    assert offenders == []
+
+
+def test_ctx_import_uses_generator_events_without_legacy_import_history_wrapper() -> None:
+    service_path = CTX_ROOT / "importing" / "service.py"
+    package_path = CTX_ROOT / "importing" / "__init__.py"
+
+    service_source = service_path.read_text()
+    package_source = package_path.read_text()
+    assert "def import_history_events(" in service_source
+    assert "def import_history(" not in service_source
+    assert "import_history_events" in package_source
+    assert "import_history\"" not in package_source
+
+
 def test_status_readiness_uses_sql_contract_without_hard_coded_stable_views() -> None:
     repository_source = (CTX_ROOT / "status" / "repository.py").read_text()
 

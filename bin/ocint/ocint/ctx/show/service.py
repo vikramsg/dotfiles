@@ -1,7 +1,26 @@
 from ocint._errors import OcintError
-from ocint.ctx.models import CtxEventContext, CtxEventDetail, CtxSearchCandidate, CtxSession, CtxTranscript
+from ocint.ctx.models import (
+    CtxEventContext,
+    CtxEventDetail,
+    CtxSearchCandidate,
+    CtxSession,
+    CtxShowRecentSessionsRequest,
+    CtxShowSessionRequest,
+    CtxShowSessionTranscriptRequest,
+    CtxTranscript,
+)
 from ocint.ctx.show.repository import CtxShowRepository
 from ocint.ctx.transcript import snippet_text
+
+
+def show_session_request(
+    repository: CtxShowRepository, request: CtxShowSessionRequest
+) -> list[CtxSession] | CtxTranscript:
+    match request:
+        case CtxShowRecentSessionsRequest(limit=limit):
+            return repository.recent_sessions(limit=limit)
+        case CtxShowSessionTranscriptRequest(session_id=session_id):
+            return show_session_history(repository, session_id)
 
 
 def show_session_history(repository: CtxShowRepository, session_id: str) -> CtxTranscript:
