@@ -85,7 +85,8 @@ def test_ctx_alembic_file_template_uses_date_slug_without_revision_prefix() -> N
     assert "month" in connection_source
     assert "day" in connection_source
     assert "slug" in connection_source
-    assert "rev" not in connection_source
+    assert "%%(rev)" not in connection_source
+    assert "%(rev)" not in connection_source
     assert "0001" not in connection_source
 
 
@@ -108,6 +109,7 @@ def test_sql_models_own_stable_view_config_without_sqlite_backend_import() -> No
     assert "sqlite3" not in _imports(models_path)
     assert "CtxSqlConfig" in _top_level_symbols(models_path)
     assert "default_ctx_sql_config" in _top_level_symbols(models_path)
+    assert "stable_view_create_statement" in _top_level_symbols(models_path)
     assert "stable_view_create_statements" in _top_level_symbols(models_path)
 
 
@@ -118,6 +120,26 @@ def test_status_readiness_uses_sql_contract_without_hard_coded_stable_views() ->
     assert ".stable_views" in repository_source
     for view_name in ["ctx_sessions", "ctx_events", "ctx_files_touched", "ctx_sources"]:
         assert view_name not in repository_source
+
+
+def test_status_readiness_receives_expected_revision_without_hard_coding() -> None:
+    service_source = (CTX_ROOT / "status" / "service.py").read_text()
+    repository_source = (CTX_ROOT / "status" / "repository.py").read_text()
+
+    assert "expected_revision" in service_source
+    assert "expected_revision" in repository_source
+    for source in [service_source, repository_source]:
+        assert "20260704_create_ctx_index" not in source
+        assert "0001_ctx_index" not in source
+
+
+def test_ctx_db_package_exposes_current_head_revision_lookup() -> None:
+    connection_source = (CTX_ROOT / "db" / "connection.py").read_text()
+    package_source = (CTX_ROOT / "db" / "__init__.py").read_text()
+
+    assert "current_ctx_head_revision" in connection_source
+    assert "current_ctx_head_revision" in package_source
+    assert "ScriptDirectory" in connection_source
 
 
 def test_status_repository_row_loaders_do_not_encode_unready_fallbacks() -> None:

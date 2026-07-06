@@ -10,7 +10,7 @@ from ocint._config import resolve_paths
 from ocint._errors import OcintError
 from ocint._render import render_csv, render_json, render_raw, render_table
 from ocint.ctx.config import resolve_ctx_db_path
-from ocint.ctx.db import ctx_session, migrate_ctx_db
+from ocint.ctx.db import ctx_session, current_ctx_head_revision, migrate_ctx_db
 from ocint.ctx.docs import search_docs, show_doc
 from ocint.ctx.importing import CtxImportRepository, import_history
 from ocint.ctx.locate import CtxLocateRepository
@@ -61,11 +61,11 @@ def import_command(source_db: Path | None, as_json: bool) -> None:
 def status(as_json: bool) -> None:
     """Show imported ctx index availability and counts."""
     ctx_db = _require_existing_ctx_db_path()
-    sql_config = default_ctx_sql_config()
     try:
+        sql_config, expected_revision = _ctx_readiness_contract()
         with ctx_session(ctx_db, commit=False) as session:
             repository = CtxStatusRepository(session, db_path=ctx_db)
-            result = get_status(repository, sql_config)
+            result = get_status(repository, sql_config, expected_revision)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(render_json(result) if as_json else render_status(result), nl=False)
@@ -76,11 +76,11 @@ def status(as_json: bool) -> None:
 def sources(as_json: bool) -> None:
     """List imported ctx history sources."""
     ctx_db = _require_existing_ctx_db_path()
-    sql_config = default_ctx_sql_config()
     try:
+        sql_config, expected_revision = _ctx_readiness_contract()
         with ctx_session(ctx_db, commit=False) as session:
             repository = CtxStatusRepository(session, db_path=ctx_db)
-            result = list_sources(repository, sql_config)
+            result = list_sources(repository, sql_config, expected_revision)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(render_json(result) if as_json else render_sources(result), nl=False)
@@ -142,10 +142,10 @@ def search(
         limit=limit,
     )
     ctx_db = _require_existing_ctx_db_path()
-    sql_config = default_ctx_sql_config()
     try:
+        sql_config, expected_revision = _ctx_readiness_contract()
         with ctx_session(ctx_db, commit=False) as session:
-            _require_ready_ctx_index(session, ctx_db, sql_config)
+            _require_ready_ctx_index(session, ctx_db, sql_config, expected_revision)
             repository = CtxSearchRepository(session, db_path=ctx_db)
             result = search_history(request, repository)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
@@ -179,10 +179,10 @@ def show_session(session_id: str, mode: str, output_format: str, out_path: Path 
     show_mode = _show_mode(mode)
     transcript_format = _transcript_format(output_format)
     ctx_db = _require_existing_ctx_db_path()
-    sql_config = default_ctx_sql_config()
     try:
+        sql_config, expected_revision = _ctx_readiness_contract()
         with ctx_session(ctx_db, commit=False) as session:
-            _require_ready_ctx_index(session, ctx_db, sql_config)
+            _require_ready_ctx_index(session, ctx_db, sql_config, expected_revision)
             repository = CtxShowRepository(session, db_path=ctx_db)
             transcript = show_session_history(repository, session_id)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
@@ -208,10 +208,10 @@ def show_session(session_id: str, mode: str, output_format: str, out_path: Path 
 def show_event(event_id: str, window: int, as_json: bool) -> None:
     """Show an imported event with nearby session context."""
     ctx_db = _require_existing_ctx_db_path()
-    sql_config = default_ctx_sql_config()
     try:
+        sql_config, expected_revision = _ctx_readiness_contract()
         with ctx_session(ctx_db, commit=False) as session:
-            _require_ready_ctx_index(session, ctx_db, sql_config)
+            _require_ready_ctx_index(session, ctx_db, sql_config, expected_revision)
             repository = CtxShowRepository(session, db_path=ctx_db)
             context = show_event_history(repository, event_id, window=window)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
@@ -229,10 +229,10 @@ def locate() -> None:
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 def locate_session(session_id: str, as_json: bool) -> None:
     ctx_db = _require_existing_ctx_db_path()
-    sql_config = default_ctx_sql_config()
     try:
+        sql_config, expected_revision = _ctx_readiness_contract()
         with ctx_session(ctx_db, commit=False) as session:
-            _require_ready_ctx_index(session, ctx_db, sql_config)
+            _require_ready_ctx_index(session, ctx_db, sql_config, expected_revision)
             repository = CtxLocateRepository(session, db_path=ctx_db)
             result = locate_session_result(repository, session_id)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
@@ -247,10 +247,10 @@ def locate_session(session_id: str, as_json: bool) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 def locate_event(event_id: str, as_json: bool) -> None:
     ctx_db = _require_existing_ctx_db_path()
-    sql_config = default_ctx_sql_config()
     try:
+        sql_config, expected_revision = _ctx_readiness_contract()
         with ctx_session(ctx_db, commit=False) as session:
-            _require_ready_ctx_index(session, ctx_db, sql_config)
+            _require_ready_ctx_index(session, ctx_db, sql_config, expected_revision)
             repository = CtxLocateRepository(session, db_path=ctx_db)
             result = locate_event_result(repository, event_id)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
@@ -293,10 +293,10 @@ def docs_search(query: str) -> None:
 def sql_command(sql: str, output_format: str) -> None:
     """Run a safe read-only query against imported ctx stable views."""
     ctx_db = _require_existing_ctx_db_path()
-    sql_config = default_ctx_sql_config()
     try:
+        sql_config, expected_revision = _ctx_readiness_contract()
         with ctx_session(ctx_db, commit=False) as session:
-            _require_ready_ctx_index(session, ctx_db, sql_config)
+            _require_ready_ctx_index(session, ctx_db, sql_config, expected_revision)
             repository = CtxSqlRepository(session, db_path=ctx_db)
             rows = run_ctx_sql(repository, sql, sql_config)
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
@@ -354,10 +354,14 @@ def _require_existing_ctx_db_path() -> Path:
     return ctx_db
 
 
-def _require_ready_ctx_index(session: Session, ctx_db: Path, config: CtxSqlConfig) -> None:
+def _ctx_readiness_contract() -> tuple[CtxSqlConfig, str]:
+    return default_ctx_sql_config(), current_ctx_head_revision()
+
+
+def _require_ready_ctx_index(session: Session, ctx_db: Path, config: CtxSqlConfig, expected_revision: str) -> None:
     """Enforce migrated ctx objects before feature repositories read persisted rows."""
     repository = CtxStatusRepository(session, db_path=ctx_db)
-    require_ctx_index_ready(repository, config)
+    require_ctx_index_ready(repository, config, expected_revision)
 
 
 def _active_opencode_session_id() -> str | None:

@@ -86,3 +86,18 @@ Index("ix_ctx_event_provider_session", ctx_event.c.provider_session_id)
 Index("ix_ctx_event_event_id", ctx_event.c.event_id)
 Index("ix_ctx_event_time", ctx_event.c.time_created)
 Index("ix_ctx_file_path", ctx_file_touched.c.path)
+
+
+def ctx_event_fts_name() -> str:
+    return "ctx_event_fts"
+
+
+def ctx_event_fts_columns() -> tuple[str, ...]:
+    return ("search_text", "event_pk", "event_id", "source_table")
+
+
+def ctx_event_fts_create_statement() -> str:
+    columns = ", ".join(
+        column if column == "search_text" else f"{column} UNINDEXED" for column in ctx_event_fts_columns()
+    )
+    return f"CREATE VIRTUAL TABLE {ctx_event_fts_name()} USING fts5({columns})"

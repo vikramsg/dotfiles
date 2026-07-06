@@ -96,10 +96,11 @@ def default_ctx_sql_config() -> CtxSqlConfig:
 
 
 def stable_view_create_statements(config: CtxSqlConfig) -> tuple[str, ...]:
-    return tuple(_stable_view_create_statement(view) for view in config.stable_views)
+    return tuple(stable_view_create_statement(view) for view in config.stable_views)
 
 
-def _stable_view_create_statement(view: CtxSqlStableView) -> str:
+def stable_view_create_statement(view: CtxSqlStableView) -> str:
+    """Render the canonical CREATE VIEW statement for one stable ctx projection."""
     column_sql = ",\n       ".join(
         f"{column.source_expression} AS {_quote_identifier(column.name)}" for column in view.columns
     )
