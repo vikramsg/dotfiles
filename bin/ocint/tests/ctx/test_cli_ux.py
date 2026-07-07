@@ -6,6 +6,8 @@ import pytest
 from click.testing import CliRunner
 from ocint._models import CliContext, CliProgress
 from ocint.cli import main
+from ocint.ctx.config import resolve_ctx_refresh_config
+from ocint.ctx.refresh import acquire_refresh_lock
 from tests.fixtures.opencode_db import create_opencode_db
 
 
@@ -177,13 +179,85 @@ def test_ctx_help_has_first_use_flow() -> None:
     assert "ocint ctx show session" in result.output
 
 
-def test_search_help_explains_auto_import() -> None:
+def test_search_help_explains_auto_refresh_without_now() -> None:
     result = CliRunner().invoke(main, ["ctx", "search", "--help"])
 
     assert result.exit_code == 0
-    assert "Default search imports from OPENCODE_DB" in result.output
+    assert "Default search uses auto refresh" in result.output
+    assert "stale" in result.output
     assert "--refresh off" in result.output
-    assert "never imports" in result.output
+    assert "index-only" in result.output
+    assert "now" not in result.output
+
+
+def test_search_rejects_refresh_now(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+
+    result = CliRunner().invoke(main, ["ctx", "search", "native event marker", "--refresh", "now"])
+
+    assert result.exit_code != 0
+    assert "Invalid value for '--refresh'" in result.output
+    assert not (tmp_path / "ctx.sqlite").exists()
+
+
+def test_refresh_off_bypasses_invalid_ttl_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    monkeypatch.setenv("OCINT_CTX_REFRESH_TTL", "invalid")
+
+    result = CliRunner().invoke(main, ["ctx", "search", "native event marker", "--refresh", "off"])
+
+    assert result.exit_code != 0
+    assert "OCINT_CTX_REFRESH_TTL" not in result.output
+    assert not (tmp_path / "ctx.sqlite").exists()
+
+
+def test_stale_ready_search_schedules_background_refresh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    scheduled: list[tuple[Path, Path, Path]] = []
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    monkeypatch.setenv("OCINT_CTX_REFRESH_TTL", "0")
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+
+    def record_schedule(*, ctx_db_path: Path, source_db_path: Path, log_path: Path) -> int:
+        scheduled.append((ctx_db_path, source_db_path, log_path))
+        return 4242
+
+    monkeypatch.setattr("ocint.ctx.cli.schedule_refresh_worker", record_schedule)
+
+    result = runner.invoke(main, ["ctx", "search", "native event marker", "--limit", "1", "--verbose"])
+
+    assert result.exit_code == 0, result.output
+    assert "p-primary-step" in result.output
+    assert "ctx refresh scheduled" in result.output
+    assert scheduled == [(ctx_db, source_db, ctx_db.parent / "ctx.sqlite.refresh.log")]
+
+
+def test_hidden_refresh_worker_exits_successfully_when_lock_is_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    refresh_config = resolve_ctx_refresh_config(ctx_db_path=ctx_db, env={})
+
+    with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as lock:
+        assert lock.acquired
+        result = runner.invoke(main, ["ctx", "refresh-worker"])
+
+    assert result.exit_code == 0, result.output
+    assert "refresh-worker" not in runner.invoke(main, ["ctx", "--help"]).output
 
 
 def test_show_session_help_explains_no_id_behavior() -> None:

@@ -68,13 +68,14 @@ def session_summary_sql(*, predicate_sql: str, include_limit: bool) -> str:
                        s.time_updated AS time_updated,
                        src.source_path AS source_db_path,
                        count(e.id) AS event_count
-                FROM ctx_session AS s
-                JOIN ctx_source AS src ON src.id = s.source_id
-                LEFT JOIN ctx_event AS e
-                  ON e.source_id = s.source_id
-                 AND e.provider_session_id = s.provider_session_id
-                WHERE {predicate_sql}
-                GROUP BY s.id
-                 ORDER BY src.imported_at DESC, s.id DESC
-                 {limit_sql}
-                 """
+                 FROM ctx_session AS s
+                 JOIN ctx_source AS src ON src.id = s.source_id
+                 LEFT JOIN ctx_refresh_state AS refresh ON refresh.source_id = src.id
+                 LEFT JOIN ctx_event AS e
+                   ON e.source_id = s.source_id
+                  AND e.provider_session_id = s.provider_session_id
+                 WHERE {predicate_sql}
+                 GROUP BY s.id
+                  ORDER BY coalesce(refresh.latest_success_completed_at, 0) DESC, s.id DESC
+                  {limit_sql}
+                  """

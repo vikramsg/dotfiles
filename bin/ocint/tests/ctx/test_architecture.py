@@ -4,7 +4,7 @@ from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).parents[2] / "ocint"
 CTX_ROOT = PACKAGE_ROOT / "ctx"
-PERSISTENCE_FEATURES = {"importing", "locate", "search", "show", "sql", "status"}
+PERSISTENCE_FEATURES = {"importing", "locate", "refresh", "search", "show", "sql", "status"}
 ROOT_PERSISTENCE_FILES = {
     "importer.py",
     "locate.py",
@@ -71,9 +71,12 @@ def test_ctx_migration_uses_date_slug_revision_convention() -> None:
     versions_dir = CTX_ROOT / "db" / "migrations" / "versions"
     version_files = sorted(path.name for path in versions_dir.glob("*.py") if path.name != "__init__.py")
 
-    assert version_files == ["20260704_create_ctx_index.py"]
+    assert version_files == ["20260704_create_ctx_index.py", "20260707_ctx_refresh_state.py"]
     migration_source = (versions_dir / "20260704_create_ctx_index.py").read_text()
     assert 'revision = "20260704_create_ctx_index"' in migration_source
+    refresh_migration_source = (versions_dir / "20260707_ctx_refresh_state.py").read_text()
+    assert 'revision = "20260707_ctx_refresh_state"' in refresh_migration_source
+    assert 'down_revision = "20260704_create_ctx_index"' in refresh_migration_source
     assert "0001" not in migration_source
 
 
@@ -160,7 +163,9 @@ def test_ctx_import_source_adapter_is_message_part_only_without_raw_event_fallba
 
     assert "transcript_event_batches" in service_source
     assert "transcript_event_batches" in repository_source
-    assert "transcript_event_count" in service_source
+    assert "transcript_event_keys" in service_source
+    assert "session_message_keys" in service_source
+    assert "source_table_watermarks" in service_source
     assert "transcript_event_count" in repository_source
     assert "all_transcript_events" not in service_source
     assert "all_transcript_events" not in repository_source
@@ -411,6 +416,8 @@ def test_sqlalchemy_statement_access_stays_in_repository() -> None:
     for path in iter_python_files(CTX_ROOT):
         if path.name == "repository.py":
             continue
+        if "db/migrations/versions" in path.relative_to(CTX_ROOT).as_posix():
+            continue
         imported_statement_names = {
             name for module, name in _from_imports(path) if module.startswith("sqlalchemy") and name in statement_names
         }
@@ -491,7 +498,7 @@ def test_history_has_no_session_summary_cast_helper() -> None:
     assert ("typing", "cast") not in imports
 
 
-def test_import_repository_prunes_fts_with_set_based_delete() -> None:
+def test_import_repository_prunes_fts_with_seen_key_temp_table() -> None:
     repository_path = CTX_ROOT / "importing" / "repository.py"
     source = repository_path.read_text()
     normalized = " ".join(source.split())
@@ -499,19 +506,21 @@ def test_import_repository_prunes_fts_with_set_based_delete() -> None:
     assert "bindparam" not in source
     assert "expanding=True" not in source
     assert "DELETE FROM ctx_event_fts" in source
-    assert "SELECT id FROM ctx_event WHERE source_id = :source_id" in normalized
+    assert "temp_ctx_seen_event_keys" in source
+    assert "NOT EXISTS" in normalized
 
 
-def test_import_repository_writes_events_in_batches_without_row_upserts() -> None:
+def test_import_repository_upserts_changed_events_without_source_wide_clear() -> None:
     repository_source = (CTX_ROOT / "importing" / "repository.py").read_text()
     service_source = (CTX_ROOT / "importing" / "service.py").read_text()
 
-    assert "def insert_events_with_files(" in repository_source
-    assert "def upsert_event_with_files(" not in repository_source
+    assert "def upsert_events_with_files(" in repository_source
+    assert "clear_source_rows" not in repository_source
     assert "tuple_(" in repository_source
     assert "ctx_event_fts(search_text, event_pk, event_id, source_table)" in repository_source
     assert "for index, event in enumerate(events" not in service_source
-    assert "repository.insert_events_with_files" in service_source
+    assert "repository.upsert_events_with_files" in service_source
+    assert "transcript_event_batches_for_keys" in service_source
 
 
 def _class_method_source(path: Path, class_name: str, method_name: str) -> str:

@@ -9,6 +9,8 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import URL, Engine, create_engine, event
 from sqlalchemy.orm import Session
 
+from ocint.ctx.config import CTX_DB_BUSY_TIMEOUT_MS
+
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 CTX_ALEMBIC_FILE_TEMPLATE = "%%(year)d%%(month).2d%%(day).2d_%%(slug)s"
 
@@ -18,10 +20,12 @@ def create_ctx_engine(db_path: Path) -> Engine:
     engine = create_engine(url, future=True)
 
     @event.listens_for(engine, "connect")
-    def _enable_foreign_keys(dbapi_connection: Any, _connection_record: object) -> None:
+    def _apply_ctx_sqlite_pragmas(dbapi_connection: Any, _connection_record: object) -> None:
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute(f"PRAGMA busy_timeout={CTX_DB_BUSY_TIMEOUT_MS}")
         finally:
             cursor.close()
 

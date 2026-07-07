@@ -17,6 +17,7 @@ class CtxSqlColumn(CtxModel):
 class CtxSqlStableView(CtxModel):
     name: str
     source_table: str
+    from_expression: str | None = None
     columns: tuple[CtxSqlColumn, ...]
 
 
@@ -77,18 +78,25 @@ def default_ctx_sql_config() -> CtxSqlConfig:
             CtxSqlStableView(
                 name="ctx_sources",
                 source_table="ctx_source",
+                from_expression=(
+                    '"ctx_source" LEFT JOIN "ctx_refresh_state" ON "ctx_refresh_state"."source_id" = "ctx_source"."id"'
+                ),
                 columns=(
-                    _text_column("provider"),
-                    _text_column("source_type"),
-                    _text_column("name"),
+                    _text_column("provider", source_expression='"ctx_source"."provider"'),
+                    _text_column("source_type", source_expression='"ctx_source"."source_type"'),
+                    _text_column("name", source_expression='"ctx_source"."name"'),
                     CtxSqlColumn(
                         name="path",
-                        source_expression="source_path",
+                        source_expression='"ctx_source"."source_path"',
                         storage_type=CtxSqlColumnType.TEXT,
                     ),
-                    _integer_column("sessions"),
-                    _integer_column("events"),
-                    _integer_column("imported_at"),
+                    _integer_column("sessions", source_expression='"ctx_source"."sessions"'),
+                    _integer_column("events", source_expression='"ctx_source"."events"'),
+                    CtxSqlColumn(
+                        name="imported_at",
+                        source_expression='"ctx_refresh_state"."latest_success_completed_at"',
+                        storage_type=CtxSqlColumnType.INTEGER,
+                    ),
                 ),
             ),
         )
@@ -104,15 +112,16 @@ def stable_view_create_statement(view: CtxSqlStableView) -> str:
     column_sql = ",\n       ".join(
         f"{column.source_expression} AS {_quote_identifier(column.name)}" for column in view.columns
     )
-    return f"CREATE VIEW {_quote_identifier(view.name)} AS\nSELECT {column_sql}\nFROM {_quote_identifier(view.source_table)}"
+    from_sql = view.from_expression if view.from_expression is not None else _quote_identifier(view.source_table)
+    return f"CREATE VIEW {_quote_identifier(view.name)} AS\nSELECT {column_sql}\nFROM {from_sql}"
 
 
-def _text_column(name: str) -> CtxSqlColumn:
-    return CtxSqlColumn(name=name, source_expression=name, storage_type=CtxSqlColumnType.TEXT)
+def _text_column(name: str, *, source_expression: str | None = None) -> CtxSqlColumn:
+    return CtxSqlColumn(name=name, source_expression=source_expression or name, storage_type=CtxSqlColumnType.TEXT)
 
 
-def _integer_column(name: str) -> CtxSqlColumn:
-    return CtxSqlColumn(name=name, source_expression=name, storage_type=CtxSqlColumnType.INTEGER)
+def _integer_column(name: str, *, source_expression: str | None = None) -> CtxSqlColumn:
+    return CtxSqlColumn(name=name, source_expression=source_expression or name, storage_type=CtxSqlColumnType.INTEGER)
 
 
 def _quote_identifier(identifier: str) -> str:

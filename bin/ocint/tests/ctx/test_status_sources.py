@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
-from ocint.ctx.db import current_ctx_head_revision
+from ocint.ctx.db import current_ctx_head_revision, migrate_ctx_db
 from ocint.ctx.search import CtxSearchRepository
 from ocint.ctx.sql import CtxSqlRepository
 from ocint.ctx.sql.models import default_ctx_sql_config, stable_view_create_statements
@@ -30,11 +30,17 @@ def test_ctx_status_and_sources_are_opencode_only_json(tmp_path: Path, monkeypat
     assert status_payload["sessions"] == 2
     assert status_payload["primary_sessions"] == 1
     assert status_payload["source_db_exists"] is False
+    assert status_payload["refresh_ttl_ms"] == 3_600_000
+    assert status_payload["refresh_freshness"] == "fresh"
+    assert status_payload["latest_attempt_status"] == "success"
+    assert status_payload["latest_success_completed_at"] is not None
+    assert status_payload["checkpoint_summary"]
 
     sources = CliRunner().invoke(main, ["ctx", "sources", "--json"])
     assert sources.exit_code == 0
     assert {row["provider"] for row in json.loads(sources.output)} == {"opencode"}
     assert json.loads(sources.output)[0]["name"] == "OpenCode DB"
+    assert json.loads(sources.output)[0]["imported_at"] == status_payload["latest_success_completed_at"]
 
 
 def test_ctx_status_output_does_not_vary_with_current_opencode_db(
@@ -174,6 +180,37 @@ def test_ctx_readiness_rejects_name_compatible_malformed_physical_schema(
     assert '"index_ready": true' not in result.output
 
 
+def test_ctx_migration_moves_refresh_metadata_out_of_ctx_source(tmp_path: Path) -> None:
+    ctx_db = tmp_path / "old-head.sqlite"
+    imported_at = 1_783_421_234_000
+    checkpoint = '{"mtime_ns": 10, "size": 20}'
+    _create_old_head_ctx_db(ctx_db, imported_at=imported_at, checkpoint=checkpoint)
+
+    migrate_ctx_db(ctx_db)
+
+    with sqlite3.connect(ctx_db) as connection:
+        assert (
+            connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == current_ctx_head_revision()
+        )
+        source_columns = {row[1] for row in connection.execute("PRAGMA table_info(ctx_source)")}
+        assert "imported_at" not in source_columns
+        assert "checkpoint_payload" not in source_columns
+        row = connection.execute(
+            """
+            SELECT latest_attempt_started_at,
+                   latest_attempt_completed_at,
+                   latest_attempt_status,
+                   latest_success_started_at,
+                   latest_success_completed_at,
+                   latest_success_checkpoint_payload
+            FROM ctx_refresh_state
+            """
+        ).fetchone()
+        assert row == (imported_at, imported_at, "success", imported_at, imported_at, checkpoint)
+        derived = connection.execute("SELECT imported_at FROM ctx_sources").fetchone()[0]
+        assert derived == imported_at
+
+
 def test_ctx_readiness_rejects_malformed_fts_columns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runner, ctx_db = _import_ctx_fixture(tmp_path, monkeypatch)
     with sqlite3.connect(ctx_db) as connection:
@@ -288,6 +325,80 @@ def _assert_read_commands_require_import(runner: CliRunner, commands: list[list[
         assert result.exit_code != 0, result.output
         assert "run `ocint ctx import` first" in result.output
         assert '"index_ready": true' not in result.output
+
+
+def _create_old_head_ctx_db(ctx_db: Path, *, imported_at: int, checkpoint: str) -> None:
+    with sqlite3.connect(ctx_db) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY);
+            INSERT INTO alembic_version(version_num) VALUES ('20260704_create_ctx_index');
+            CREATE TABLE ctx_source (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              provider VARCHAR NOT NULL,
+              source_type VARCHAR NOT NULL,
+              name VARCHAR NOT NULL,
+              source_path TEXT NOT NULL,
+              imported_at BIGINT NOT NULL,
+              sessions INTEGER NOT NULL,
+              events INTEGER NOT NULL,
+              checkpoint_payload TEXT,
+              CONSTRAINT uq_ctx_source_identity UNIQUE (provider, source_type, source_path)
+            );
+            CREATE TABLE ctx_session (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              source_id INTEGER NOT NULL,
+              provider VARCHAR NOT NULL,
+              provider_session_id VARCHAR NOT NULL,
+              session_id VARCHAR NOT NULL,
+              parent_id VARCHAR,
+              title TEXT,
+              workspace TEXT,
+              time_created BIGINT,
+              time_updated BIGINT,
+              source_path TEXT NOT NULL,
+              payload_json TEXT NOT NULL,
+              CONSTRAINT uq_ctx_session_source_native UNIQUE (source_id, provider_session_id)
+            );
+            CREATE TABLE ctx_event (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              source_id INTEGER NOT NULL,
+              provider VARCHAR NOT NULL,
+              provider_session_id VARCHAR,
+              event_id VARCHAR NOT NULL,
+              source_table VARCHAR NOT NULL,
+              message_id VARCHAR,
+              event_type VARCHAR NOT NULL,
+              time_created BIGINT,
+              time_updated BIGINT,
+              source_path TEXT,
+              full_text TEXT NOT NULL,
+              search_text TEXT NOT NULL,
+              payload_json TEXT NOT NULL,
+              citation TEXT NOT NULL,
+              CONSTRAINT uq_ctx_event_source_native UNIQUE (source_id, source_table, event_id)
+            );
+            CREATE TABLE ctx_file_touched (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              source_id INTEGER NOT NULL,
+              provider VARCHAR NOT NULL,
+              path TEXT NOT NULL,
+              provider_session_id VARCHAR,
+              event_id VARCHAR NOT NULL,
+              source_table VARCHAR NOT NULL,
+              CONSTRAINT uq_ctx_file_source_event_path UNIQUE (source_id, source_table, event_id, path)
+            );
+            CREATE VIRTUAL TABLE ctx_event_fts USING fts5(search_text, event_pk UNINDEXED, event_id UNINDEXED, source_table UNINDEXED);
+            CREATE VIEW ctx_sources AS SELECT provider, source_type, name, source_path AS path, sessions, events, imported_at FROM ctx_source;
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO ctx_source(provider, source_type, name, source_path, imported_at, sessions, events, checkpoint_payload)
+            VALUES ('opencode', 'sqlite', 'OpenCode DB', '/tmp/opencode.db', ?, 0, 0, ?)
+            """,
+            (imported_at, checkpoint),
+        )
 
 
 def _create_name_compatible_malformed_ctx_db(ctx_db: Path) -> None:

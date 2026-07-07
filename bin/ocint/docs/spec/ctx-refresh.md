@@ -50,12 +50,6 @@ If the ctx index is ready and fresh, search reads it immediately and does not st
 
 If the ctx index is ready and stale, search reads it immediately and schedules background refresh for a later command to observe.
 
-### now
-
-`now` refreshes synchronously before searching.
-
-This mode is for users who prefer latest available history over fastest search. It MUST acquire the same refresh lock as background refresh so concurrent refreshes do not overlap.
-
 ## TTL
 
 TTL controls how often `auto` refresh attempts are allowed.
@@ -64,7 +58,7 @@ Freshness is based on the most recent successful refresh for the OpenCode source
 
 TTL checks MUST use the refresh state's latest successful refresh completion time. Failed, skipped, and running refresh attempts MUST NOT update freshness.
 
-The default TTL MUST be long enough to make repeated searches fast and short enough that new history appears soon. The default is 10 minutes.
+The default TTL MUST be long enough to make repeated searches fast and short enough that new history appears soon. The default is `1h`.
 
 TTL MUST be configurable without requiring code changes. The first supported configuration surface is an environment variable such as `OCINT_CTX_REFRESH_TTL`, using simple durations like `30s`, `10m`, `1h`, and `0`.
 
@@ -83,8 +77,6 @@ Checkpoints and watermarks MUST remain ctx-owned metadata. They define the sourc
 Failed, skipped, and running refresh attempts MUST NOT advance TTL freshness, checkpoints, or watermarks. Only a successful refresh updates successful-refresh metadata.
 
 `--refresh off` bypasses refresh policy entirely and reads only an existing ready ctx index.
-
-`--refresh now` bypasses TTL freshness and runs refresh synchronously before search. It still uses checkpoints and watermarks for change selection and reconciliation.
 
 ## Refresh State
 
@@ -239,8 +231,6 @@ Default search MUST be fast when a ready index exists.
 `ocint ctx search "query"` MUST use `auto` mode.
 
 `ocint ctx search "query" --refresh off` MUST skip all refresh behavior and read only the existing ready index.
-
-`ocint ctx search "query" --refresh now` MUST refresh synchronously before reading.
 
 `ocint ctx import` remains the explicit foreground refresh command. It MUST continue to show progress for human output and suppress progress for JSON output.
 

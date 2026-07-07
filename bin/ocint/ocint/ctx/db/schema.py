@@ -21,11 +21,24 @@ ctx_source = Table(
     Column("source_type", String, nullable=False),
     Column("name", String, nullable=False),
     Column("source_path", Text, nullable=False),
-    Column("imported_at", BigInteger, nullable=False),
     Column("sessions", Integer, nullable=False, default=0),
     Column("events", Integer, nullable=False, default=0),
-    Column("checkpoint_payload", Text, nullable=True),
     UniqueConstraint("provider", "source_type", "source_path", name="uq_ctx_source_identity"),
+)
+
+ctx_refresh_state = Table(
+    "ctx_refresh_state",
+    metadata,
+    Column("source_id", Integer, ForeignKey("ctx_source.id", ondelete="CASCADE"), primary_key=True),
+    Column("latest_attempt_started_at", BigInteger, nullable=True),
+    Column("latest_attempt_completed_at", BigInteger, nullable=True),
+    Column("latest_attempt_status", String, nullable=True),
+    Column("latest_success_started_at", BigInteger, nullable=True),
+    Column("latest_success_completed_at", BigInteger, nullable=True),
+    Column("latest_success_checkpoint_payload", Text, nullable=True),
+    Column("source_watermark_payload", Text, nullable=True),
+    Column("latest_failed_at", BigInteger, nullable=True),
+    Column("latest_error_message", Text, nullable=True),
 )
 
 ctx_session = Table(
@@ -43,6 +56,7 @@ ctx_session = Table(
     Column("time_updated", BigInteger, nullable=True),
     Column("source_path", Text, nullable=False),
     Column("payload_json", Text, nullable=False),
+    Column("source_fingerprint", Text, nullable=False),
     UniqueConstraint("source_id", "provider_session_id", name="uq_ctx_session_source_native"),
 )
 
@@ -64,6 +78,7 @@ ctx_event = Table(
     Column("search_text", Text, nullable=False),
     Column("payload_json", Text, nullable=False),
     Column("citation", Text, nullable=False),
+    Column("source_fingerprint", Text, nullable=False),
     UniqueConstraint("source_id", "source_table", "event_id", name="uq_ctx_event_source_native"),
 )
 

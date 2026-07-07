@@ -93,6 +93,25 @@ class OpenCodeTranscriptEventRow(StorageModel):
     source_path: str | None = None
 
 
+class OpenCodeSessionKey(StorageModel):
+    id: str
+    fingerprint: str
+
+
+class OpenCodeTranscriptEventKey(StorageModel):
+    id: str
+    source_table: Literal["message", "part"]
+    session_id: str | None = None
+    message_id: str | None = None
+    fingerprint: str
+
+
+class OpenCodeSessionMessageKey(StorageModel):
+    session_id: str
+    message_id: str
+    fingerprint: str
+
+
 def payload_to_text(payload: OpenCodeJsonModel) -> str:
     return " ".join(_string_values(payload.model_dump(mode="json", by_alias=True, exclude_none=True)))
 

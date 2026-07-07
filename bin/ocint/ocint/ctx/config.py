@@ -2,7 +2,11 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from ocint.ctx.models import CtxRefreshConfig
+
 CTX_DB_NAME = "ctx.sqlite"
+DEFAULT_CTX_REFRESH_TTL = "1h"
+CTX_DB_BUSY_TIMEOUT_MS = 5_000
 
 
 def resolve_ctx_db_path(
@@ -31,6 +35,43 @@ def resolve_ctx_db_path(
     return (
         _home(effective_env, cwd=cwd, allow_process_home=use_process_env) / ".local" / "state" / "ocint" / CTX_DB_NAME
     )
+
+
+def resolve_ctx_refresh_config(
+    *,
+    ctx_db_path: Path,
+    env: Mapping[str, str] | None = None,
+) -> CtxRefreshConfig:
+    """Resolve typed ctx refresh policy and artifact paths beside the ctx DB."""
+    effective_env = os.environ if env is None else env
+    ttl = parse_ctx_refresh_ttl(effective_env.get("OCINT_CTX_REFRESH_TTL", DEFAULT_CTX_REFRESH_TTL))
+    return CtxRefreshConfig(
+        ttl_ms=ttl,
+        lock_path=ctx_db_path.parent / f"{ctx_db_path.name}.refresh.lock",
+        log_path=ctx_db_path.parent / f"{ctx_db_path.name}.refresh.log",
+    )
+
+
+def parse_ctx_refresh_ttl(value: str) -> int:
+    """Parse OCINT_CTX_REFRESH_TTL into milliseconds using the supported tiny duration grammar."""
+    raw = value.strip()
+    if raw == "0":
+        return 0
+    if len(raw) < 2:
+        raise ValueError(_ttl_error(value))
+    unit = raw[-1]
+    amount_text = raw[:-1]
+    if unit not in {"s", "m", "h"} or not amount_text.isdecimal():
+        raise ValueError(_ttl_error(value))
+    amount = int(amount_text)
+    if amount <= 0:
+        raise ValueError(_ttl_error(value))
+    multiplier = {"s": 1_000, "m": 60_000, "h": 3_600_000}[unit]
+    return amount * multiplier
+
+
+def _ttl_error(value: str) -> str:
+    return f"invalid OCINT_CTX_REFRESH_TTL {value!r}; use 0, or a duration like 30s, 10m, or 1h"
 
 
 def _reject_memory_db_path(path: str | Path) -> None:

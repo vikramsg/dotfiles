@@ -45,6 +45,17 @@ def render_status(status: CtxStatus) -> str:
             f"SOURCES: {status.sources}",
             f"SOURCE_DB: {status.source_db_path or ''}",
             f"SOURCE_DB_EXISTS: {status.source_db_exists}",
+            f"REFRESH_TTL_MS: {status.refresh_ttl_ms if status.refresh_ttl_ms is not None else ''}",
+            f"REFRESH_FRESHNESS: {status.refresh_freshness}",
+            f"REFRESH_IN_PROGRESS: {status.refresh_in_progress}",
+            f"LATEST_SUCCESS_STARTED_AT: {status.latest_success_started_at or ''}",
+            f"LATEST_SUCCESS_COMPLETED_AT: {status.latest_success_completed_at or ''}",
+            f"LATEST_ATTEMPT_STARTED_AT: {status.latest_attempt_started_at or ''}",
+            f"LATEST_ATTEMPT_COMPLETED_AT: {status.latest_attempt_completed_at or ''}",
+            f"LATEST_ATTEMPT_STATUS: {status.latest_attempt_status or ''}",
+            f"LATEST_FAILED_AT: {status.latest_failed_at or ''}",
+            f"LATEST_ERROR: {status.latest_error_message or ''}",
+            f"CHECKPOINT: {status.checkpoint_summary or ''}",
             "",
         ]
     )

@@ -1,10 +1,12 @@
 import hashlib
+import json
 import sqlite3
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
+from ocint.ctx.db import current_ctx_head_revision
 from ocint.ctx.models import CtxImportRequest
 from tests.fixtures.opencode_db import create_opencode_db
 
@@ -26,7 +28,18 @@ def test_ctx_import_creates_index_and_is_idempotent(tmp_path: Path, monkeypatch:
     assert second.exit_code == 0, second.output
     assert _ctx_counts(ctx_db) == counts_after_first
     assert counts_after_first["alembic_version"] == 1
-    assert _ctx_revision(ctx_db) == "20260704_create_ctx_index"
+    assert _ctx_revision(ctx_db) == current_ctx_head_revision()
+    assert _ctx_columns(ctx_db, "ctx_source") == [
+        "id",
+        "provider",
+        "source_type",
+        "name",
+        "source_path",
+        "sessions",
+        "events",
+    ]
+    assert "source_fingerprint" in _ctx_columns(ctx_db, "ctx_event")
+    assert _ctx_count(ctx_db, "ctx_refresh_state", "latest_attempt_status = 'success'") == 1
     assert counts_after_first["ctx_event_fts"] > 0
     assert counts_after_first["ctx_session"] == 2
     assert counts_after_first["ctx_event"] > 0
@@ -175,16 +188,25 @@ def test_default_search_refresh_prunes_rows_missing_from_source(
     ctx_db = tmp_path / "ctx.sqlite"
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    monkeypatch.setenv("OCINT_CTX_REFRESH_TTL", "0")
+    scheduled: list[tuple[Path, Path, Path]] = []
     runner = CliRunner()
     imported = runner.invoke(main, ["ctx", "import"])
     assert imported.exit_code == 0, imported.output
     _delete_part(source_db, "p-primary-step")
 
+    def record_schedule(*, ctx_db_path: Path, source_db_path: Path, log_path: Path) -> int:
+        scheduled.append((ctx_db_path, source_db_path, log_path))
+        return 101
+
+    monkeypatch.setattr("ocint.ctx.cli.schedule_refresh_worker", record_schedule)
+
     result = runner.invoke(main, ["ctx", "search", "related term error text"])
 
     assert result.exit_code == 0, result.output
-    assert result.output == "No results\n"
-    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-primary-step'") == 0
+    assert "p-primary-step" in result.output
+    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-primary-step'") == 1
+    assert scheduled == [(ctx_db, source_db, ctx_db.parent / "ctx.sqlite.refresh.log")]
 
 
 def test_refresh_off_searches_existing_index_without_pruning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,6 +226,42 @@ def test_refresh_off_searches_existing_index_without_pruning(tmp_path: Path, mon
     assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-primary-step'") == 1
 
 
+def test_incremental_refresh_updates_changed_event_without_replacing_primary_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    event_pk = _ctx_scalar(ctx_db, "SELECT id FROM ctx_event WHERE event_id = 'p-primary-step'")
+    untouched_event_pk = _ctx_scalar(ctx_db, "SELECT id FROM ctx_event WHERE event_id = 'p-primary-patch'")
+
+    _update_part_payload(
+        source_db,
+        "p-primary-step",
+        {
+            "type": "step-finish",
+            "path": "docs/incremental-refresh.md",
+            "text": "replacement incremental marker",
+        },
+    )
+    refreshed = runner.invoke(main, ["ctx", "import"])
+
+    assert refreshed.exit_code == 0, refreshed.output
+    assert _ctx_scalar(ctx_db, "SELECT id FROM ctx_event WHERE event_id = 'p-primary-step'") == event_pk
+    assert _ctx_scalar(ctx_db, "SELECT id FROM ctx_event WHERE event_id = 'p-primary-patch'") == untouched_event_pk
+    new_result = runner.invoke(main, ["ctx", "search", "replacement incremental marker", "--refresh", "off"])
+    old_result = runner.invoke(main, ["ctx", "search", "related term error text", "--refresh", "off"])
+    assert new_result.exit_code == 0, new_result.output
+    assert "p-primary-step" in new_result.output
+    assert old_result.exit_code == 0, old_result.output
+    assert old_result.output == "No results\n"
+    assert _ctx_file_paths(ctx_db, "p-primary-step") == ["docs/incremental-refresh.md"]
+
+
 def _ctx_counts(ctx_db: Path) -> dict[str, int]:
     con = sqlite3.connect(ctx_db)
     try:
@@ -219,6 +277,14 @@ def _ctx_revision(ctx_db: Path) -> str:
     con = sqlite3.connect(ctx_db)
     try:
         return str(con.execute("SELECT version_num FROM alembic_version").fetchone()[0])
+    finally:
+        con.close()
+
+
+def _ctx_columns(ctx_db: Path, table: str) -> list[str]:
+    con = sqlite3.connect(ctx_db)
+    try:
+        return [str(row[1]) for row in con.execute(f"PRAGMA table_info({table})")]
     finally:
         con.close()
 
@@ -247,6 +313,28 @@ def _ctx_count(ctx_db: Path, table: str, where: str) -> int:
         con.close()
 
 
+def _ctx_scalar(ctx_db: Path, sql: str) -> object:
+    con = sqlite3.connect(ctx_db)
+    try:
+        return con.execute(sql).fetchone()[0]
+    finally:
+        con.close()
+
+
+def _ctx_file_paths(ctx_db: Path, event_id: str) -> list[str]:
+    con = sqlite3.connect(ctx_db)
+    try:
+        return [
+            str(row[0])
+            for row in con.execute(
+                "SELECT path FROM ctx_file_touched WHERE event_id = ? ORDER BY path",
+                (event_id,),
+            )
+        ]
+    finally:
+        con.close()
+
+
 def _delete_source_history_rows(source_db: Path) -> None:
     """Mutate a pytest-owned fixture DB to model source history disappearing between imports."""
     with sqlite3.connect(source_db) as connection:
@@ -259,3 +347,11 @@ def _delete_source_history_rows(source_db: Path) -> None:
 def _delete_part(source_db: Path, event_id: str) -> None:
     with sqlite3.connect(source_db) as connection:
         connection.execute("DELETE FROM part WHERE id = ?", (event_id,))
+
+
+def _update_part_payload(source_db: Path, event_id: str, payload: dict[str, object]) -> None:
+    with sqlite3.connect(source_db) as connection:
+        connection.execute(
+            "UPDATE part SET data = ?, timeUpdated = timeUpdated + 1 WHERE id = ?",
+            (json.dumps(payload), event_id),
+        )

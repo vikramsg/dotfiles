@@ -1,12 +1,21 @@
+import hashlib
 import json
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
 from ocint.ctx.importing.repository import CtxImportRepository
-from ocint.ctx.models import CtxImportEvent, CtxImportProgress, CtxImportRequest, CtxImportResult
-from ocint.opencode.models import OpenCodeSessionRow, OpenCodeTranscriptEventRow, payload_paths, payload_to_text
+from ocint.ctx.models import CtxImportEvent, CtxImportProgress, CtxImportRequest, CtxImportResult, CtxRefreshSuccess
+from ocint.opencode.models import (
+    OpenCodeSessionKey,
+    OpenCodeSessionMessageKey,
+    OpenCodeSessionRow,
+    OpenCodeTranscriptEventKey,
+    OpenCodeTranscriptEventRow,
+    payload_paths,
+    payload_to_text,
+)
 
 PROVIDER = "opencode"
 SOURCE_TYPE = "sqlite"
@@ -16,75 +25,185 @@ SOURCE_NAME = "OpenCode DB"
 class OpenCodeHistorySource(Protocol):
     """Read-only OpenCode transcript adapter required by ctx import orchestration."""
 
+    def session_keys(self) -> list[OpenCodeSessionKey]: ...
+
     def sessions(self) -> list[OpenCodeSessionRow]: ...
 
-    def transcript_event_count(self) -> int: ...
+    def sessions_for_ids(self, ids: Sequence[str]) -> list[OpenCodeSessionRow]: ...
+
+    def transcript_event_keys(self) -> list[OpenCodeTranscriptEventKey]: ...
 
     def transcript_event_batches(self, batch_size: int) -> Iterator[list[OpenCodeTranscriptEventRow]]: ...
+
+    def transcript_event_batches_for_keys(
+        self,
+        keys: Sequence[tuple[str, str]],
+        batch_size: int,
+    ) -> Iterator[list[OpenCodeTranscriptEventRow]]: ...
+
+    def session_message_keys(self) -> list[OpenCodeSessionMessageKey]: ...
+
+    def source_table_watermarks(self) -> dict[str, dict[str, int | None]]: ...
+
+
+class CtxRefreshStateWriter(Protocol):
+    """Refresh-state persistence used by the shared foreground/background import workflow."""
+
+    def mark_attempt_started(self, source_id: int, *, started_at: int) -> None: ...
+
+    def mark_attempt_success(self, source_id: int, success: CtxRefreshSuccess) -> None: ...
 
 
 def import_history_events(
     request: CtxImportRequest,
     repository: CtxImportRepository,
+    refresh_repository: CtxRefreshStateWriter,
     source: OpenCodeHistorySource,
 ) -> Iterator[CtxImportEvent]:
     source_path = request.source_db_path.expanduser()
-    yield CtxImportProgress(message="Loading sessions")
-    sessions = source.sessions()
-    yield CtxImportProgress(message="Loading events")
-    total_events = source.transcript_event_count()
-    imported_at = int(time.time() * 1000)
-    checkpoint = _checkpoint_payload(source_path)
+    started_at = _now_ms()
     yield CtxImportProgress(message="Preparing ctx index")
     source_id = repository.upsert_source(
         provider=PROVIDER,
         source_type=SOURCE_TYPE,
         name=SOURCE_NAME,
         source_path=str(source_path),
-        imported_at=imported_at,
-        sessions=len(sessions),
-        events=total_events,
-        checkpoint_payload=checkpoint,
     )
-    # Rebuild only this source's projection so default imports prune source-deleted
-    # history without touching rows imported from other providers or databases.
-    repository.clear_source_rows(source_id)
+    refresh_repository.mark_attempt_started(source_id, started_at=started_at)
+
+    yield CtxImportProgress(message="Loading sessions")
+    session_keys = source.session_keys()
+    session_message_keys = source.session_message_keys()
+    yield CtxImportProgress(message="Loading events")
+    event_keys = source.transcript_event_keys()
+
+    existing_sessions = repository.session_reconciliation_state(source_id)
+    first_session_import = not existing_sessions
+    changed_session_ids = [key.id for key in session_keys if existing_sessions.get(key.id) != key.fingerprint]
+    changed_session_id_set = set(changed_session_ids)
+    session_fingerprint_by_id = {key.id: key.fingerprint for key in session_keys}
+    sessions = (
+        source.sessions()
+        if len(changed_session_ids) == len(session_keys)
+        else source.sessions_for_ids(changed_session_ids)
+    )
     session_rows = [
-        _session_values(source_id=source_id, source_path=source_path, session=session) for session in sessions
+        _session_values(
+            source_id=source_id,
+            source_path=source_path,
+            session=session,
+            source_fingerprint=session_fingerprint_by_id[session.id],
+        )
+        for session in sessions
     ]
-    yield CtxImportProgress(message="Writing sessions", current=0, total=len(sessions))
-    sessions_written = repository.insert_sessions(session_rows)
-    yield CtxImportProgress(message="Writing sessions", current=sessions_written, total=len(sessions))
-    sessions_by_id = {session.id: session for session in sessions}
+    yield CtxImportProgress(message="Writing sessions", current=0, total=len(changed_session_ids))
+    sessions_written = (
+        repository.insert_sessions(session_rows) if first_session_import else repository.upsert_sessions(session_rows)
+    )
+    yield CtxImportProgress(message="Writing sessions", current=sessions_written, total=len(changed_session_ids))
+
+    existing_events = repository.event_reconciliation_state(source_id)
+    first_event_import = not existing_events
+    changed_event_key_models = [
+        key for key in event_keys if _event_requires_projection(key, existing_events, changed_session_id_set)
+    ]
+    changed_event_keys = [(key.source_table, key.id) for key in changed_event_key_models]
+    event_session_ids = sorted({key.session_id for key in changed_event_key_models if key.session_id})
+    sessions_by_id = {session.id: session for session in source.sessions_for_ids(event_session_ids)}
+
     events_written = 0
     files_written = 0
-    batch_size = 1_000
-    for batch in source.transcript_event_batches(batch_size):
-        rows = [
-            _event_values(
-                source_id=source_id,
-                event=event,
-                session=sessions_by_id.get(event.session_id or ""),
+    batch_size = 5_000
+    event_fingerprints = {(key.source_table, key.id): key.fingerprint for key in event_keys}
+    next_event_pk = repository.next_event_pk() if first_event_import else None
+    event_batches = (
+        source.transcript_event_batches(batch_size)
+        if len(changed_event_keys) == len(event_keys)
+        else source.transcript_event_batches_for_keys(changed_event_keys, batch_size)
+    )
+    for batch in event_batches:
+        rows = []
+        for event in batch:
+            source_fingerprint = event_fingerprints.get((event.source_table, event.id))
+            if source_fingerprint is None:
+                continue
+            rows.append(
+                _event_values(
+                    source_id=source_id,
+                    event=event,
+                    session=sessions_by_id.get(event.session_id or ""),
+                    source_fingerprint=source_fingerprint,
+                )
             )
-            for event in batch
-        ]
-        batch_events_written, batch_files_written = repository.insert_events_with_files(rows)
+        if next_event_pk is not None:
+            for values, _paths in rows:
+                values["id"] = next_event_pk
+                next_event_pk += 1
+        batch_events_written, batch_files_written = (
+            repository.insert_events_with_files(rows)
+            if first_event_import
+            else repository.upsert_events_with_files(rows)
+        )
         events_written += batch_events_written
         files_written += batch_files_written
-        yield CtxImportProgress(message="Writing events", current=events_written, total=total_events)
+        yield CtxImportProgress(message="Writing events", current=events_written, total=len(changed_event_keys))
+
+    if not changed_event_keys:
+        yield CtxImportProgress(message="Writing events", current=0, total=0)
+
+    seen_event_keys = [(key.source_table, key.id) for key in event_keys]
+    repository.prune_events_not_seen(source_id=source_id, seen_keys=seen_event_keys)
+    repository.prune_sessions_not_seen(source_id=source_id, seen_session_ids=[key.id for key in session_keys])
+
+    final_sessions = repository.count_sessions(source_id)
+    final_events = repository.count_events(source_id)
+    repository.update_source_counts(source_id=source_id, sessions=final_sessions, events=final_events)
+    completed_at = _now_ms()
+    refresh_repository.mark_attempt_success(
+        source_id,
+        CtxRefreshSuccess(
+            started_at=started_at,
+            completed_at=completed_at,
+            checkpoint_payload=_checkpoint_payload(source_path, session_keys, event_keys, session_message_keys),
+            source_watermark_payload=_watermark_payload(source, session_message_keys),
+        ),
+    )
     yield CtxImportResult(
         ctx_db_path=repository.db_path,
         source_db_path=source_path,
-        sessions_seen=len(sessions),
+        sessions_seen=len(session_keys),
         sessions_written=sessions_written,
-        events_seen=total_events,
+        events_seen=len(event_keys),
         events_written=events_written,
         files_written=files_written,
         checkpoint_updated=True,
     )
 
 
-def _session_values(*, source_id: int, source_path: Path, session: OpenCodeSessionRow) -> dict[str, Any]:
+def _event_requires_projection(
+    key: OpenCodeTranscriptEventKey,
+    existing_events: dict[tuple[str, str], dict[str, str | None]],
+    changed_session_ids: set[str],
+) -> bool:
+    existing = existing_events.get((key.source_table, key.id))
+    if existing is None:
+        return True
+    if existing["source_fingerprint"] != key.fingerprint:
+        return True
+    if existing["provider_session_id"] != key.session_id:
+        return True
+    if existing["message_id"] != key.message_id:
+        return True
+    return key.session_id in changed_session_ids if key.session_id is not None else False
+
+
+def _session_values(
+    *,
+    source_id: int,
+    source_path: Path,
+    session: OpenCodeSessionRow,
+    source_fingerprint: str,
+) -> dict[str, Any]:
     return {
         "source_id": source_id,
         "provider": PROVIDER,
@@ -97,6 +216,7 @@ def _session_values(*, source_id: int, source_path: Path, session: OpenCodeSessi
         "time_updated": session.time_updated,
         "source_path": str(source_path),
         "payload_json": session.data.model_dump_json(by_alias=True, exclude_none=True),
+        "source_fingerprint": source_fingerprint,
     }
 
 
@@ -105,6 +225,7 @@ def _event_values(
     source_id: int,
     event: OpenCodeTranscriptEventRow,
     session: OpenCodeSessionRow | None,
+    source_fingerprint: str,
 ) -> tuple[dict[str, Any], list[str]]:
     paths = payload_paths(event.data)
     if event.source_path and event.source_path not in paths:
@@ -128,6 +249,7 @@ def _event_values(
             "search_text": search_text,
             "payload_json": event.data.model_dump_json(by_alias=True, exclude_none=True),
             "citation": citation,
+            "source_fingerprint": source_fingerprint,
         },
         paths,
     )
@@ -162,6 +284,56 @@ def _session_workspace(session: OpenCodeSessionRow) -> str | None:
     return session.cwd or session.data.directory or session.data.workspace or session.data.cwd or session.data.path
 
 
-def _checkpoint_payload(source_path: Path) -> str:
+def _checkpoint_payload(
+    source_path: Path,
+    session_keys: Sequence[OpenCodeSessionKey],
+    event_keys: Sequence[OpenCodeTranscriptEventKey],
+    session_message_keys: Sequence[OpenCodeSessionMessageKey],
+) -> str:
     stat = source_path.stat()
-    return json.dumps({"mtime_ns": stat.st_mtime_ns, "size": stat.st_size}, sort_keys=True)
+    return json.dumps(
+        {
+            "mtime_ns": stat.st_mtime_ns,
+            "size": stat.st_size,
+            "sessions": len(session_keys),
+            "events": len(event_keys),
+            "session_messages": len(session_message_keys),
+            "fingerprint": _keys_fingerprint(session_keys, event_keys, session_message_keys),
+        },
+        sort_keys=True,
+    )
+
+
+def _watermark_payload(
+    source: OpenCodeHistorySource,
+    session_message_keys: Sequence[OpenCodeSessionMessageKey],
+) -> str:
+    return json.dumps(
+        {
+            "tables": source.source_table_watermarks(),
+            "session_message_fingerprint": _session_message_fingerprint(session_message_keys),
+        },
+        sort_keys=True,
+    )
+
+
+def _keys_fingerprint(
+    session_keys: Sequence[OpenCodeSessionKey],
+    event_keys: Sequence[OpenCodeTranscriptEventKey],
+    session_message_keys: Sequence[OpenCodeSessionMessageKey],
+) -> str:
+    payload = {
+        "sessions": [key.model_dump(mode="json") for key in session_keys],
+        "events": [key.model_dump(mode="json") for key in event_keys],
+        "session_messages": [key.model_dump(mode="json") for key in session_message_keys],
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _session_message_fingerprint(session_message_keys: Sequence[OpenCodeSessionMessageKey]) -> str:
+    payload = [key.model_dump(mode="json") for key in session_message_keys]
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from ocint.ctx.config import resolve_ctx_db_path
+from ocint.ctx.config import parse_ctx_refresh_ttl, resolve_ctx_db_path, resolve_ctx_refresh_config
 
 
 def test_ctx_db_path_uses_env_override(tmp_path: Path) -> None:
@@ -25,3 +25,27 @@ def test_ctx_db_path_falls_back_to_local_state(tmp_path: Path) -> None:
 def test_ctx_db_path_rejects_memory_before_absolutizing(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match=":memory:"):
         resolve_ctx_db_path(env={"OCINT_CTX_DB": ":memory:"}, cwd=tmp_path)
+
+
+def test_ctx_refresh_ttl_defaults_to_one_hour_and_resolves_artifacts(tmp_path: Path) -> None:
+    ctx_db = tmp_path / "nested" / "ctx.sqlite"
+
+    config = resolve_ctx_refresh_config(ctx_db_path=ctx_db, env={})
+
+    assert config.ttl_ms == 3_600_000
+    assert config.lock_path == ctx_db.parent / "ctx.sqlite.refresh.lock"
+    assert config.log_path == ctx_db.parent / "ctx.sqlite.refresh.log"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_ms"),
+    [("0", 0), ("30s", 30_000), ("10m", 600_000), ("1h", 3_600_000)],
+)
+def test_ctx_refresh_ttl_parser_accepts_supported_duration_grammar(value: str, expected_ms: int) -> None:
+    assert parse_ctx_refresh_ttl(value) == expected_ms
+
+
+@pytest.mark.parametrize("value", ["", "0s", "10", "1d", "abc", "  "])
+def test_ctx_refresh_ttl_parser_rejects_unsupported_values(value: str) -> None:
+    with pytest.raises(ValueError, match="OCINT_CTX_REFRESH_TTL"):
+        parse_ctx_refresh_ttl(value)

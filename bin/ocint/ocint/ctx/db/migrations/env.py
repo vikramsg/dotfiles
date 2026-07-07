@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from ocint.ctx.config import CTX_DB_BUSY_TIMEOUT_MS
 from ocint.ctx.db.schema import metadata
 
 config = context.config
@@ -27,6 +28,10 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        connection.exec_driver_sql("PRAGMA journal_mode=WAL")
+        connection.exec_driver_sql(f"PRAGMA busy_timeout={CTX_DB_BUSY_TIMEOUT_MS}")
+        connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
