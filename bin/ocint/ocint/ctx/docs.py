@@ -117,7 +117,7 @@ def _sql_doc() -> str:
 Stable views:
 
 - `ctx_sessions`: one row per imported OpenCode session with `provider`, `provider_session_id`, `session_id`, `parent_id`, `title`, `workspace`, `time_created`, and `time_updated`.
-- `ctx_events`: imported OpenCode `event`, `part`, and `message` rows normalized into `provider`, `provider_session_id`, `event_id`, `source_table`, `event_type`, `time_created`, `text`, `source_path`, and `citation`.
+- `ctx_events`: imported OpenCode `message` and `part` transcript rows normalized into `provider`, `provider_session_id`, `event_id`, `source_table`, `event_type`, `time_created`, `text`, `source_path`, and `citation`.
 - `ctx_files_touched`: file-like paths found in OpenCode JSON payloads with source event metadata.
 - `ctx_sources`: imported OpenCode SQLite source metadata and counts.
 

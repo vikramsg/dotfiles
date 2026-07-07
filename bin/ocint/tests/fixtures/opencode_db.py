@@ -131,7 +131,27 @@ def create_opencode_db(path: Path) -> Path:
                         "cost": 1.25,
                         "tokens": {"input": 10, "output": 20, "reasoning": 3, "cache": {"read": 4, "write": 5}},
                         "path": "AGENTS.md",
-                        "text": "stable views for ctx skill",
+                        "text": "native event marker read AGENTS.md for stable views related term error text",
+                    }
+                ),
+            ),
+            (
+                "p-primary-patch",
+                "m-primary",
+                "s-primary",
+                now + 4,
+                now + 4,
+                json.dumps(
+                    {
+                        "type": "file.patch",
+                        "text": "file.patch normalized part marker",
+                        "patch": {
+                            "files": ["bin/ocint/ocint/ctx/search.py", "implementation_notes.md"],
+                            "metadata": {
+                                "filePath": "bin/ocint/tests/ctx/test_sql.py",
+                                "relativePath": "bin/ocint/ocint/opencode/schema.py",
+                            },
+                        },
                     }
                 ),
             ),
@@ -152,12 +172,12 @@ def create_opencode_db(path: Path) -> Path:
                 ),
             ),
             (
-                "p-non-usage",
+                "p-long-payload",
                 "m-primary",
                 "s-primary",
-                now + 3,
-                now + 3,
-                json.dumps({"type": "text", "cost": 100, "tokens": {"input": 999}}),
+                now + 5,
+                now + 5,
+                json.dumps({"type": "text", "cost": 100, "tokens": {"input": 999}, "text": long_text}),
             ),
         ],
     )
@@ -173,8 +193,8 @@ def create_opencode_db(path: Path) -> Path:
                     {
                         "sessionID": "s-primary",
                         "timestamp": now + 4,
-                        "text": "native event marker read AGENTS.md for stable views related term error text",
-                        "path": "AGENTS.md",
+                        "text": "RAW_EVENT_ONLY_MARKER ignored raw tool invocation",
+                        "path": "raw-event-only.txt",
                     }
                 ),
             ),
@@ -187,13 +207,8 @@ def create_opencode_db(path: Path) -> Path:
                     {
                         "sessionID": "s-primary",
                         "timestamp": now + 5,
-                        "patch": {
-                            "files": ["bin/ocint/ocint/ctx/search.py", "implementation_notes.md"],
-                            "metadata": {
-                                "filePath": "bin/ocint/tests/ctx/test_sql.py",
-                                "relativePath": "bin/ocint/ocint/opencode/schema.py",
-                            },
-                        },
+                        "text": "RAW_EVENT_ONLY_MARKER ignored raw patch",
+                        "path": "raw-event-only.txt",
                     }
                 ),
             ),
@@ -206,8 +221,8 @@ def create_opencode_db(path: Path) -> Path:
                     {
                         "sessionID": "s-primary",
                         "timestamp": now + 6,
-                        "message": "json session fallback native event marker",
-                        "filePaths": ["README.md", "justfile"],
+                        "message": "RAW_EVENT_ONLY_MARKER ignored raw json session fallback",
+                        "filePaths": ["raw-event-only.txt"],
                     }
                 ),
             ),
@@ -217,7 +232,12 @@ def create_opencode_db(path: Path) -> Path:
                 4,
                 "note.long",
                 json.dumps(
-                    {"sessionID": "s-primary", "timestamp": now + 7, "text": long_text, "path": "long-transcript.txt"}
+                    {
+                        "sessionID": "s-primary",
+                        "timestamp": now + 7,
+                        "text": "RAW_EVENT_ONLY_MARKER ignored raw long payload",
+                        "path": "raw-event-only.txt",
+                    }
                 ),
             ),
             (
@@ -229,8 +249,8 @@ def create_opencode_db(path: Path) -> Path:
                     {
                         "sessionID": "s-sub",
                         "timestamp": now + 24,
-                        "text": "subagent only marker",
-                        "path": "subagent.txt",
+                        "text": "RAW_EVENT_ONLY_MARKER ignored raw subagent payload",
+                        "path": "raw-event-only.txt",
                     }
                 ),
             ),

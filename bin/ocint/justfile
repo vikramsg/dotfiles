@@ -77,12 +77,12 @@ smoke-ctx:
         {{uv_ocint}} ocint ctx show session "s-primary" --mode lite --out "$TMPDIR/ocint-session-lite.txt"; \
         {{uv_ocint}} ocint ctx show session "s-primary" --mode full --out "$TMPDIR/ocint-session-full.txt"; \
         {{uv_ocint}} ocint ctx show session "s-primary" --format markdown --out "$TMPDIR/ocint-session.md"; \
-        {{uv_ocint}} ocint ctx show event "evt_native_tool" --window 5; \
-        {{uv_ocint}} ocint ctx show event "evt_native_tool" --window 0 --json; \
+        {{uv_ocint}} ocint ctx show event "p-primary-step" --window 5; \
+        {{uv_ocint}} ocint ctx show event "p-primary-step" --window 0 --json; \
         {{uv_ocint}} ocint ctx locate session "s-primary"; \
         {{uv_ocint}} ocint ctx locate session "s-primary" --json; \
-        {{uv_ocint}} ocint ctx locate event "evt_native_tool"; \
-        {{uv_ocint}} ocint ctx locate event "evt_native_tool" --json
+        {{uv_ocint}} ocint ctx locate event "p-primary-step"; \
+        {{uv_ocint}} ocint ctx locate event "p-primary-step" --json
 
 # Run all ocint smoke checks
 smoke: smoke-state smoke-ctx

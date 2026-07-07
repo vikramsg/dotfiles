@@ -57,7 +57,7 @@ def test_ctx_sql_rejects_fts_table_read_without_leaking_rows(tmp_path: Path, mon
     result = CliRunner().invoke(main, ["ctx", "sql", "SELECT * FROM ctx_event_fts"])
 
     assert result.exit_code != 0
-    assert "evt_native_tool" not in result.output
+    assert "RAW_EVENT_ONLY_MARKER" not in result.output
 
 
 def test_ctx_sql_rejects_nested_cte_payload_json_leak(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -193,7 +193,7 @@ def test_ctx_sql_views_include_files_touched(tmp_path: Path, monkeypatch: pytest
     rows = _sql_json(
         """
         SELECT path FROM ctx_files_touched
-        WHERE event_id = 'evt_native_patch'
+        WHERE event_id = 'p-primary-patch'
         ORDER BY path
         """
     )
@@ -215,31 +215,34 @@ def test_ctx_sql_raw_output_format_reads_stable_views(tmp_path: Path, monkeypatc
     assert result.output == "opencode\n"
 
 
-def test_ctx_sql_maps_native_event_columns_and_payload_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ctx_sql_maps_message_part_columns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _import_fixture(tmp_path, monkeypatch)
 
     rows = _sql_json(
         """
-        SELECT provider_session_id, event_type, time_created
+        SELECT provider_session_id, event_type, source_table, time_created
         FROM ctx_events
-        WHERE event_id = 'evt_native_tool'
+        WHERE event_id = 'p-primary-step'
         """
     )
 
     assert len(rows) == 1
     assert rows[0]["provider_session_id"] == "s-primary"
-    assert rows[0]["event_type"] == "tool.invocation"
+    assert rows[0]["event_type"] == "step-finish"
+    assert rows[0]["source_table"] == "part"
     assert isinstance(rows[0]["time_created"], int)
 
 
-def test_ctx_sql_falls_back_to_payload_session_id_for_native_events(
+def test_ctx_sql_events_view_contains_only_message_and_part_source_tables(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _import_fixture(tmp_path, monkeypatch)
 
-    rows = _sql_json("SELECT provider_session_id FROM ctx_events WHERE event_id = 'evt_json_session'")
+    rows = _sql_json(
+        "SELECT source_table, COUNT(*) AS events FROM ctx_events GROUP BY source_table ORDER BY source_table"
+    )
 
-    assert rows == [{"provider_session_id": "s-primary"}]
+    assert [row["source_table"] for row in rows] == ["message", "part"]
 
 
 def test_ctx_sql_rejects_mutation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

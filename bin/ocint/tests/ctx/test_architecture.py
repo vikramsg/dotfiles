@@ -152,6 +152,54 @@ def test_ctx_import_uses_generator_events_without_legacy_import_history_wrapper(
     assert 'import_history"' not in package_source
 
 
+def test_ctx_import_source_adapter_is_message_part_only_without_raw_event_fallbacks() -> None:
+    service_source = (CTX_ROOT / "importing" / "service.py").read_text()
+    repository_source = (PACKAGE_ROOT / "opencode" / "repository.py").read_text()
+    models_source = (PACKAGE_ROOT / "opencode" / "models.py").read_text()
+    schema_source = (PACKAGE_ROOT / "opencode" / "schema.py").read_text()
+
+    assert "transcript_event_batches" in service_source
+    assert "transcript_event_batches" in repository_source
+    assert "transcript_event_count" in service_source
+    assert "transcript_event_count" in repository_source
+    assert "all_transcript_events" not in service_source
+    assert "all_transcript_events" not in repository_source
+    assert "def _batches" not in service_source
+    assert "fetchmany" in repository_source
+    assert "all_unified_events" not in service_source
+    assert ".events(" not in service_source
+    for forbidden in [
+        "def events(",
+        "def all_unified_events(",
+        "def _events(",
+        "def _unified_event(",
+        'source_table="event"',
+        'source_table == "event"',
+        "OpenCodeEventData",
+        "OpenCodeEventRow",
+    ]:
+        assert forbidden not in repository_source
+    assert "OpenCodeTranscriptEventRow" in models_source
+    assert "OpenCodeUnifiedEventRow" not in models_source
+    assert "OpenCodeEventData" not in models_source
+    assert "OpenCodeEventRow" not in models_source
+    assert 'Literal["message", "part"]' in models_source
+    assert "event_session_id_expr" not in schema_source
+    assert "event_type_expr" not in schema_source
+    assert "event_time_created_expr" not in schema_source
+
+
+def test_ctx_spec_documents_import_generator_contract() -> None:
+    spec_source = (PACKAGE_ROOT.parent / "docs" / "spec.md").read_text()
+
+    assert "def import_history_events(" in spec_source
+    assert "CtxImportProgress" in spec_source
+    assert "CtxImportResult" in spec_source
+    assert "CtxImportEvent" in spec_source
+    assert "full: bool" not in spec_source
+    assert "def import_history(" not in spec_source
+
+
 def test_status_readiness_uses_sql_contract_without_hard_coded_stable_views() -> None:
     repository_source = (CTX_ROOT / "status" / "repository.py").read_text()
 
@@ -452,6 +500,18 @@ def test_import_repository_prunes_fts_with_set_based_delete() -> None:
     assert "expanding=True" not in source
     assert "DELETE FROM ctx_event_fts" in source
     assert "SELECT id FROM ctx_event WHERE source_id = :source_id" in normalized
+
+
+def test_import_repository_writes_events_in_batches_without_row_upserts() -> None:
+    repository_source = (CTX_ROOT / "importing" / "repository.py").read_text()
+    service_source = (CTX_ROOT / "importing" / "service.py").read_text()
+
+    assert "def insert_events_with_files(" in repository_source
+    assert "def upsert_event_with_files(" not in repository_source
+    assert "tuple_(" in repository_source
+    assert "ctx_event_fts(search_text, event_pk, event_id, source_table)" in repository_source
+    assert "for index, event in enumerate(events" not in service_source
+    assert "repository.insert_events_with_files" in service_source
 
 
 def _class_method_source(path: Path, class_name: str, method_name: str) -> str:
