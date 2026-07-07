@@ -87,16 +87,14 @@ class StateService:
         return self._repository.query(sql)
 
     def _usage_parts(self, window: UsageWindow) -> Iterable[OpenCodePartRow]:
-        for part in self._repository.parts():
-            if part.data.type != "step-finish":
-                continue
-            if part.time_created is None:
-                continue
-            if window.start_ms is not None and part.time_created < window.start_ms:
-                continue
-            if window.end_ms is not None and part.time_created >= window.end_ms:
-                continue
-            yield part
+        for batch in self._repository.usage_part_batches(
+            start_ms=window.start_ms,
+            end_ms=window.end_ms,
+            batch_size=1_000,
+        ):
+            for part in batch:
+                if part.data.type == "step-finish":
+                    yield part
 
 
 def _sum_tokens(parts: Iterable[OpenCodePartRow]) -> UsageTokens:
