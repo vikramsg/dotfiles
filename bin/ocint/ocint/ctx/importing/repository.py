@@ -1,8 +1,8 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select, text, tuple_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -70,67 +70,59 @@ class CtxImportRepository:
         self._session.execute(delete(ctx_event).where(ctx_event.c.source_id == source_id))
         self._session.execute(delete(ctx_session).where(ctx_session.c.source_id == source_id))
 
-    def upsert_sessions(self, sessions: Iterable[Mapping[str, Any]]) -> int:
-        count = 0
-        for values in sessions:
-            statement = sqlite_insert(ctx_session).values(dict(values))
-            excluded = statement.excluded
-            self._session.execute(
-                statement.on_conflict_do_update(
-                    index_elements=[ctx_session.c.source_id, ctx_session.c.provider_session_id],
-                    set_={
-                        "provider": excluded.provider,
-                        "session_id": excluded.session_id,
-                        "parent_id": excluded.parent_id,
-                        "title": excluded.title,
-                        "workspace": excluded.workspace,
-                        "time_created": excluded.time_created,
-                        "time_updated": excluded.time_updated,
-                        "source_path": excluded.source_path,
-                        "payload_json": excluded.payload_json,
-                    },
-                )
-            )
-            count += 1
-        return count
+    def insert_sessions(self, sessions: Iterable[Mapping[str, Any]]) -> int:
+        rows = [dict(values) for values in sessions]
+        if not rows:
+            return 0
+        self._session.execute(sqlite_insert(ctx_session), rows)
+        return len(rows)
 
-    def upsert_event_with_files(self, event_values: Mapping[str, Any], paths: Iterable[str]) -> int:
-        values = dict(event_values)
-        statement = sqlite_insert(ctx_event).values(values)
-        excluded = statement.excluded
-        self._session.execute(
-            statement.on_conflict_do_update(
-                index_elements=[ctx_event.c.source_id, ctx_event.c.source_table, ctx_event.c.event_id],
-                set_={
-                    "provider": excluded.provider,
-                    "provider_session_id": excluded.provider_session_id,
-                    "message_id": excluded.message_id,
-                    "event_type": excluded.event_type,
-                    "time_created": excluded.time_created,
-                    "time_updated": excluded.time_updated,
-                    "source_path": excluded.source_path,
-                    "full_text": excluded.full_text,
-                    "search_text": excluded.search_text,
-                    "payload_json": excluded.payload_json,
-                    "citation": excluded.citation,
-                },
-            )
-        )
-        event_pk = int(
-            self._session.execute(
-                select(ctx_event.c.id).where(
-                    ctx_event.c.source_id == values["source_id"],
-                    ctx_event.c.source_table == values["source_table"],
-                    ctx_event.c.event_id == values["event_id"],
-                )
-            ).scalar_one()
-        )
-        self._replace_event_fts(event_pk=event_pk, values=values)
-        self._replace_files(values=values, paths=paths)
-        return event_pk
+    def insert_events_with_files(
+        self,
+        event_rows: Iterable[tuple[Mapping[str, Any], Iterable[str]]],
+    ) -> tuple[int, int]:
+        pairs = [(dict(values), list(paths)) for values, paths in event_rows]
+        rows = [values for values, _paths in pairs]
+        if not rows:
+            return 0, 0
 
-    def _replace_event_fts(self, *, event_pk: int, values: Mapping[str, Any]) -> None:
-        self._session.execute(text("DELETE FROM ctx_event_fts WHERE event_pk = :event_pk"), {"event_pk": event_pk})
+        # Source rows are cleared before event writes, so inserts are sufficient
+        # and avoid per-row conflict handling or per-row primary-key lookups.
+        self._session.execute(sqlite_insert(ctx_event), rows)
+        event_pk_by_key = self._event_primary_keys(rows)
+        self._insert_fts_rows(rows, event_pk_by_key)
+        files_written = self._insert_file_rows(pairs)
+        return len(rows), files_written
+
+    def _event_primary_keys(self, rows: Sequence[Mapping[str, Any]]) -> dict[tuple[int, str, str], int]:
+        keys = list(dict.fromkeys(_event_key(row) for row in rows))
+        statement = select(
+            ctx_event.c.source_id,
+            ctx_event.c.source_table,
+            ctx_event.c.event_id,
+            ctx_event.c.id,
+        ).where(tuple_(ctx_event.c.source_id, ctx_event.c.source_table, ctx_event.c.event_id).in_(keys))
+        found = {
+            (int(row["source_id"]), str(row["source_table"]), str(row["event_id"])): int(row["id"])
+            for row in self._session.execute(statement).mappings()
+        }
+        missing = [key for key in keys if key not in found]
+        if missing:
+            raise RuntimeError(f"ctx event primary key lookup missed inserted events: {missing[:3]}")
+        return found
+
+    def _insert_fts_rows(
+        self, rows: Sequence[Mapping[str, Any]], event_pk_by_key: Mapping[tuple[int, str, str], int]
+    ) -> None:
+        fts_rows = [
+            {
+                "search_text": row["search_text"],
+                "event_pk": event_pk_by_key[_event_key(row)],
+                "event_id": row["event_id"],
+                "source_table": row["source_table"],
+            }
+            for row in rows
+        ]
         self._session.execute(
             text(
                 """
@@ -138,35 +130,35 @@ class CtxImportRepository:
                 VALUES (:search_text, :event_pk, :event_id, :source_table)
                 """
             ),
-            {
-                "search_text": values["search_text"],
-                "event_pk": event_pk,
-                "event_id": values["event_id"],
-                "source_table": values["source_table"],
-            },
+            fts_rows,
         )
 
-    def _replace_files(self, *, values: Mapping[str, Any], paths: Iterable[str]) -> None:
-        self._session.execute(
-            delete(ctx_file_touched).where(
-                ctx_file_touched.c.source_id == values["source_id"],
-                ctx_file_touched.c.source_table == values["source_table"],
-                ctx_file_touched.c.event_id == values["event_id"],
-            )
-        )
-        seen: set[str] = set()
-        for path in paths:
-            if not path or path in seen:
-                continue
-            seen.add(path)
-            statement = sqlite_insert(ctx_file_touched).values(
-                {
-                    "source_id": values["source_id"],
-                    "provider": values["provider"],
-                    "path": path,
-                    "provider_session_id": values["provider_session_id"],
-                    "event_id": values["event_id"],
-                    "source_table": values["source_table"],
-                }
-            )
-            self._session.execute(statement.on_conflict_do_nothing())
+    def _insert_file_rows(self, pairs: Sequence[tuple[Mapping[str, Any], list[str]]]) -> int:
+        file_rows: list[dict[str, Any]] = []
+        seen: set[tuple[int, str, str, str]] = set()
+        for values, paths in pairs:
+            for path in paths:
+                if not path:
+                    continue
+                key = (int(values["source_id"]), str(values["source_table"]), str(values["event_id"]), path)
+                if key in seen:
+                    continue
+                seen.add(key)
+                file_rows.append(
+                    {
+                        "source_id": values["source_id"],
+                        "provider": values["provider"],
+                        "path": path,
+                        "provider_session_id": values["provider_session_id"],
+                        "event_id": values["event_id"],
+                        "source_table": values["source_table"],
+                    }
+                )
+        if not file_rows:
+            return 0
+        self._session.execute(sqlite_insert(ctx_file_touched), file_rows)
+        return len(file_rows)
+
+
+def _event_key(row: Mapping[str, Any]) -> tuple[int, str, str]:
+    return (int(row["source_id"]), str(row["source_table"]), str(row["event_id"]))

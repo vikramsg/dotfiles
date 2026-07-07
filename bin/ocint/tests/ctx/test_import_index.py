@@ -33,6 +33,41 @@ def test_ctx_import_creates_index_and_is_idempotent(tmp_path: Path, monkeypatch:
     assert counts_after_first["ctx_file_touched"] > 0
 
 
+def test_ctx_import_only_indexes_message_and_part_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+
+    con = sqlite3.connect(ctx_db)
+    try:
+        source_tables = {
+            row[0] for row in con.execute("SELECT DISTINCT source_table FROM ctx_event ORDER BY source_table")
+        }
+        raw_markers = con.execute(
+            """
+            SELECT COUNT(*)
+            FROM ctx_event
+            WHERE full_text LIKE '%RAW_EVENT_ONLY_MARKER%'
+               OR search_text LIKE '%RAW_EVENT_ONLY_MARKER%'
+            """
+        ).fetchone()[0]
+    finally:
+        con.close()
+    assert source_tables == {"message", "part"}
+    assert raw_markers == 0
+
+    result = runner.invoke(main, ["ctx", "search", "RAW_EVENT_ONLY_MARKER", "--refresh", "off"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output == "No results\n"
+
+
 def test_ctx_import_does_not_mutate_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source_db = create_opencode_db(tmp_path / "opencode.db")
     before = hashlib.sha256(source_db.read_bytes()).hexdigest()
@@ -94,7 +129,7 @@ def test_search_uses_imported_index_when_opencode_is_missing(tmp_path: Path, mon
     result = runner.invoke(main, ["ctx", "search", "native event marker", "--refresh", "off"])
 
     assert result.exit_code == 0, result.output
-    assert "evt_native_tool" in result.output
+    assert "p-primary-step" in result.output
 
 
 def test_refresh_off_does_not_create_missing_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -118,19 +153,19 @@ def test_default_import_prunes_rows_missing_from_source(tmp_path: Path, monkeypa
     runner = CliRunner()
     imported = runner.invoke(main, ["ctx", "import"])
     assert imported.exit_code == 0, imported.output
-    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'evt_native_patch'") == 1
+    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-primary-patch'") == 1
     assert _ctx_count(ctx_db, "ctx_session", "provider_session_id = 's-sub'") == 1
 
     _delete_source_history_rows(source_db)
     imported_again = runner.invoke(main, ["ctx", "import"])
 
     assert imported_again.exit_code == 0, imported_again.output
-    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'evt_native_patch'") == 0
-    assert _ctx_count(ctx_db, "ctx_file_touched", "event_id = 'evt_native_patch'") == 0
-    assert _ctx_count(ctx_db, "ctx_event_fts", "event_id = 'evt_native_patch'") == 0
+    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-primary-patch'") == 0
+    assert _ctx_count(ctx_db, "ctx_file_touched", "event_id = 'p-primary-patch'") == 0
+    assert _ctx_count(ctx_db, "ctx_event_fts", "event_id = 'p-primary-patch'") == 0
     assert _ctx_count(ctx_db, "ctx_session", "provider_session_id = 's-sub'") == 0
-    assert _ctx_count(ctx_db, "ctx_event", "event_id IN ('m-sub', 'p-sub-step', 'evt_sub')") == 0
-    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'evt_native_tool'") == 1
+    assert _ctx_count(ctx_db, "ctx_event", "event_id IN ('m-sub', 'p-sub-step')") == 0
+    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-primary-step'") == 1
 
 
 def test_default_search_refresh_prunes_rows_missing_from_source(
@@ -143,13 +178,13 @@ def test_default_search_refresh_prunes_rows_missing_from_source(
     runner = CliRunner()
     imported = runner.invoke(main, ["ctx", "import"])
     assert imported.exit_code == 0, imported.output
-    _delete_event(source_db, "evt_native_tool")
+    _delete_part(source_db, "p-primary-step")
 
     result = runner.invoke(main, ["ctx", "search", "related term error text"])
 
     assert result.exit_code == 0, result.output
     assert result.output == "No results\n"
-    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'evt_native_tool'") == 0
+    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-primary-step'") == 0
 
 
 def test_refresh_off_searches_existing_index_without_pruning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -160,13 +195,13 @@ def test_refresh_off_searches_existing_index_without_pruning(tmp_path: Path, mon
     runner = CliRunner()
     imported = runner.invoke(main, ["ctx", "import"])
     assert imported.exit_code == 0, imported.output
-    _delete_event(source_db, "evt_native_tool")
+    _delete_part(source_db, "p-primary-step")
 
     result = runner.invoke(main, ["ctx", "search", "related term error text", "--refresh", "off"])
 
     assert result.exit_code == 0, result.output
-    assert "evt_native_tool" in result.output
-    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'evt_native_tool'") == 1
+    assert "p-primary-step" in result.output
+    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-primary-step'") == 1
 
 
 def _ctx_counts(ctx_db: Path) -> dict[str, int]:
@@ -215,13 +250,12 @@ def _ctx_count(ctx_db: Path, table: str, where: str) -> int:
 def _delete_source_history_rows(source_db: Path) -> None:
     """Mutate a pytest-owned fixture DB to model source history disappearing between imports."""
     with sqlite3.connect(source_db) as connection:
-        connection.execute("DELETE FROM event WHERE id IN ('evt_native_patch', 'evt_sub')")
-        connection.execute("DELETE FROM part WHERE id = 'p-sub-step'")
+        connection.execute("DELETE FROM part WHERE id IN ('p-primary-patch', 'p-sub-step')")
         connection.execute("DELETE FROM session_message WHERE session_id = 's-sub' OR message_id = 'm-sub'")
         connection.execute("DELETE FROM message WHERE id = 'm-sub'")
         connection.execute("DELETE FROM session WHERE id = 's-sub'")
 
 
-def _delete_event(source_db: Path, event_id: str) -> None:
+def _delete_part(source_db: Path, event_id: str) -> None:
     with sqlite3.connect(source_db) as connection:
-        connection.execute("DELETE FROM event WHERE id = ?", (event_id,))
+        connection.execute("DELETE FROM part WHERE id = ?", (event_id,))

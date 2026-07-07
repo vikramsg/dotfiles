@@ -39,8 +39,8 @@ The workflow is:
 - Run Alembic migrations.
 - Resolve the OpenCode database path.
 - Open OpenCode SQLite read-only.
-- Read OpenCode sessions, messages, parts, and events.
-- Normalize source rows into ctx history records.
+- Read OpenCode sessions, messages, and parts. Raw OpenCode `event` rows are not part of the ctx import source contract.
+- Normalize message/part transcript rows into ctx history records.
 - Upsert sources, sessions, events, files touched, citations, checkpoints, and
   search projections.
 - Return import counts and checkpoint status.
@@ -51,20 +51,30 @@ incremental where checkpoint data allows it.
 ### Import Interface
 
 ```python
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Literal
+from typing import Protocol
 
 from pydantic import BaseModel
 
-
-class ImportRequest(BaseModel):
-    source: Literal["opencode"] = "opencode"
-    source_db_path: Path | None = None
-    full: bool = False
+from ocint.ctx.importing.repository import CtxImportRepository
+from ocint.opencode.models import OpenCodeSessionRow, OpenCodeTranscriptEventRow
 
 
-class ImportResult(BaseModel):
-    source: str
+class CtxImportRequest(BaseModel):
+    source_db_path: Path
+
+
+class CtxImportProgress(BaseModel):
+    message: str
+    current: int | None = None
+    total: int | None = None
+
+
+class CtxImportResult(BaseModel):
+    provider: str = "opencode"
+    ctx_db_path: Path
+    source_db_path: Path
     sessions_seen: int
     sessions_written: int
     events_seen: int
@@ -73,7 +83,22 @@ class ImportResult(BaseModel):
     checkpoint_updated: bool
 
 
-def import_history(request: ImportRequest, repository: ImportRepository) -> ImportResult:
+type CtxImportEvent = CtxImportProgress | CtxImportResult
+
+
+class OpenCodeHistorySource(Protocol):
+    def sessions(self) -> list[OpenCodeSessionRow]: ...
+
+    def transcript_event_count(self) -> int: ...
+
+    def transcript_event_batches(self, batch_size: int) -> Iterator[list[OpenCodeTranscriptEventRow]]: ...
+
+
+def import_history_events(
+    request: CtxImportRequest,
+    repository: CtxImportRepository,
+    source: OpenCodeHistorySource,
+) -> Iterator[CtxImportEvent]:
     ...
 ```
 

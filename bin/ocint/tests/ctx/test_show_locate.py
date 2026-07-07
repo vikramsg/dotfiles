@@ -7,15 +7,15 @@ from ocint.cli import main
 from tests.fixtures.opencode_db import create_opencode_db
 
 
-def test_ctx_show_event_uses_native_event_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ctx_show_event_uses_normalized_message_part_event_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _import_fixture(tmp_path, monkeypatch)
 
-    result = CliRunner().invoke(main, ["ctx", "show", "event", "evt_native_tool", "--json"])
+    result = CliRunner().invoke(main, ["ctx", "show", "event", "p-primary-step", "--json"])
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["selected"]["event_id"] == "evt_native_tool"
-    assert payload["selected"]["source_table"] == "event"
+    assert payload["selected"]["event_id"] == "p-primary-step"
+    assert payload["selected"]["source_table"] == "part"
     assert payload["selected"]["session_id"] == "s-primary"
     assert [event["event_id"] for event in payload["events"]]
 
@@ -38,7 +38,7 @@ def test_ctx_show_event_renders_selected_event_untruncated(
 ) -> None:
     _import_fixture(tmp_path, monkeypatch)
 
-    result = CliRunner().invoke(main, ["ctx", "show", "event", "evt_long_payload", "--window", "0"])
+    result = CliRunner().invoke(main, ["ctx", "show", "event", "p-long-payload", "--window", "0"])
 
     assert result.exit_code == 0, result.output
     assert "IMPORTANT_LATE_MARKER" in result.output
@@ -50,7 +50,7 @@ def test_ctx_show_event_json_includes_full_text_and_snippet(
 ) -> None:
     _import_fixture(tmp_path, monkeypatch)
 
-    result = CliRunner().invoke(main, ["ctx", "show", "event", "evt_long_payload", "--window", "0", "--json"])
+    result = CliRunner().invoke(main, ["ctx", "show", "event", "p-long-payload", "--window", "0", "--json"])
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -58,17 +58,19 @@ def test_ctx_show_event_json_includes_full_text_and_snippet(
     assert "IMPORTANT_LATE_MARKER" not in payload["selected"]["snippet"]
 
 
-def test_ctx_locate_event_uses_native_event_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ctx_locate_event_uses_normalized_message_part_event_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     source_db = _import_fixture(tmp_path, monkeypatch)
 
-    result = CliRunner().invoke(main, ["ctx", "locate", "event", "evt_native_tool", "--json"])
+    result = CliRunner().invoke(main, ["ctx", "locate", "event", "p-primary-step", "--json"])
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["kind"] == "event"
-    assert payload["source_table"] == "event"
+    assert payload["source_table"] == "part"
     assert payload["session_id"] == "s-primary"
-    assert payload["citation"] == "opencode session=s-primary event=evt_native_tool table=event"
+    assert payload["citation"] == "opencode session=s-primary event=p-primary-step table=part"
     assert payload["db_path"] == str(source_db)
 
 

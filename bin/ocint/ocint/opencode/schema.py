@@ -56,47 +56,6 @@ def session_workspace_expr(columns_: list[str], data: str, *, table_alias: str |
     )
 
 
-def event_session_id_expr(columns_: list[str], data: str, *, table_alias: str | None = None) -> str:
-    return coalesce(
-        [
-            column_expr(columns_, ["aggregate_id"], table_alias=table_alias),
-            column_expr(columns_, ["session_id"], table_alias=table_alias),
-            column_expr(columns_, ["sessionID"], table_alias=table_alias),
-            json_extract(data, "$.sessionID"),
-            json_extract(data, "$.sessionId"),
-        ]
-    )
-
-
-def event_type_expr(columns_: list[str], data: str, *, table_alias: str | None = None) -> str:
-    return coalesce(
-        [
-            column_expr(columns_, ["type"], table_alias=table_alias),
-            column_expr(columns_, ["event_type"], table_alias=table_alias),
-            json_extract(data, "$.type"),
-            "'event'",
-        ]
-    )
-
-
-def event_time_created_expr(columns_: list[str], data: str, *, table_alias: str | None = None) -> str:
-    return coalesce(
-        [
-            column_expr(columns_, ["time_created", "timeCreated", "created_at", "createdAt"], table_alias=table_alias),
-            json_extract(data, "$.timestamp"),
-            json_numeric_extract(data, "$.time"),
-            json_extract(data, "$.time.created"),
-            json_extract(data, "$.time.start"),
-            json_extract(data, "$.time.end"),
-            json_extract(data, "$.part.time.created"),
-            json_extract(data, "$.part.time.start"),
-            json_extract(data, "$.part.time.end"),
-            json_extract(data, "$.part.state.time.start"),
-            json_extract(data, "$.part.state.time.end"),
-        ]
-    )
-
-
 def json_tree_path_predicate(tree_alias: str = "tree") -> str:
     tree = quote(tree_alias)
     value_keys = ", ".join(sql_string_literal(key) for key in PATH_VALUE_KEYS)
@@ -125,13 +84,6 @@ def first_column(columns_: list[str], candidates: list[str]) -> str | None:
 
 def json_extract(data: str, path: str) -> str:
     return f"json_extract({data}, {sql_string_literal(path)})"
-
-
-def json_numeric_extract(data: str, path: str) -> str:
-    # Some OpenCode payloads use `time` as an object; only treat it as the event
-    # timestamp when SQLite sees a numeric JSON value at that exact path.
-    literal = sql_string_literal(path)
-    return f"CASE WHEN json_type({data}, {literal}) IN ('integer', 'real') THEN json_extract({data}, {literal}) END"
 
 
 def sql_string_literal(value: str) -> str:

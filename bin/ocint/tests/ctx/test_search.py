@@ -51,7 +51,7 @@ def test_search_filters_by_file_workspace_session_since_and_terms(
     )
 
     assert result.exit_code == 0, result.output
-    assert "evt_native_tool" in result.output
+    assert "p-primary-step" in result.output
     assert "session=s-primary" in result.output
     assert "path=AGENTS.md" in result.output
 
@@ -68,7 +68,7 @@ def test_search_file_filter_matches_all_payload_paths(tmp_path: Path, monkeypatc
         result = runner.invoke(main, ["ctx", "search", "file.patch", "--file", file_filter])
 
         assert result.exit_code == 0, result.output
-        assert "evt_native_patch" in result.output
+        assert "p-primary-patch" in result.output
 
 
 def test_search_preserves_substring_tokens_with_opencode_missing(
@@ -96,7 +96,7 @@ def test_search_excludes_current_session_root_by_default_with_refresh_off(
 
     assert result.exit_code == 0, result.output
     assert result.output == "No results\n"
-    assert "evt_native_tool" not in result.output
+    assert "p-primary-step" not in result.output
 
 
 def test_search_excludes_current_session_child_sessions_by_default_with_refresh_off(
@@ -132,9 +132,9 @@ def test_search_excludes_current_session_when_root_session_row_is_missing(
 
     assert result.exit_code == 0, result.output
     assert result.output == "No results\n"
-    assert "evt_native_tool" not in result.output
+    assert "p-primary-step" not in result.output
     assert included.exit_code == 0, included.output
-    assert "evt_native_tool" in included.output
+    assert "p-primary-step" in included.output
 
 
 def test_search_include_current_session_opt_in_includes_active_tree(
@@ -162,7 +162,7 @@ def test_search_include_current_session_opt_in_includes_active_tree(
     )
 
     assert root_result.exit_code == 0, root_result.output
-    assert "evt_native_tool" in root_result.output
+    assert "p-primary-step" in root_result.output
     assert child_result.exit_code == 0, child_result.output
     assert "s-sub" in child_result.output
 
@@ -185,8 +185,8 @@ def test_search_current_session_exclusion_applies_before_limit(tmp_path: Path, m
     )
 
     assert result.exit_code == 0, result.output
-    assert "evt_other_current_limit_marker" in result.output
-    assert "evt_active_current_limit_decoy" not in result.output
+    assert "p-other-current-limit-marker" in result.output
+    assert "p-active-current-limit-decoy" not in result.output
 
 
 def test_search_applies_terms_before_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -206,7 +206,7 @@ def test_search_applies_terms_before_limit(tmp_path: Path, monkeypatch: pytest.M
     )
 
     assert result.exit_code == 0, result.output
-    assert "evt_old_required_term" in result.output
+    assert "p-old-required-term" in result.output
 
 
 def test_search_uses_fts_as_non_authoritative_boost(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -221,16 +221,16 @@ def test_search_uses_fts_as_non_authoritative_boost(tmp_path: Path, monkeypatch:
     assert imported.exit_code == 0, imported.output
     monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
 
-    _delete_ctx_fts_rows(ctx_db, ["evt_fts_newer_without_boost"])
+    _delete_ctx_fts_rows(ctx_db, ["p-fts-newer-without-boost"])
     boosted = runner.invoke(
         main,
         ["ctx", "search", "fts ranking marker", "--refresh", "off", "--limit", "1", "--json"],
     )
 
     assert boosted.exit_code == 0, boosted.output
-    assert [row["event_id"] for row in json.loads(boosted.output)] == ["evt_fts_older_with_boost"]
+    assert [row["event_id"] for row in json.loads(boosted.output)] == ["p-fts-older-with-boost"]
 
-    _delete_ctx_fts_rows(ctx_db, ["evt_fts_older_with_boost", "evt_fts_newer_without_boost"])
+    _delete_ctx_fts_rows(ctx_db, ["p-fts-older-with-boost", "p-fts-newer-without-boost"])
     like_only = runner.invoke(
         main,
         ["ctx", "search", "fts ranking marker", "--refresh", "off", "--limit", "2", "--json"],
@@ -238,8 +238,8 @@ def test_search_uses_fts_as_non_authoritative_boost(tmp_path: Path, monkeypatch:
 
     assert like_only.exit_code == 0, like_only.output
     assert {row["event_id"] for row in json.loads(like_only.output)} == {
-        "evt_fts_older_with_boost",
-        "evt_fts_newer_without_boost",
+        "p-fts-older-with-boost",
+        "p-fts-newer-without-boost",
     }
 
 
@@ -276,14 +276,14 @@ def _add_current_session_limit_fixture_rows(source_db: Path) -> None:
     ]
     rows = [
         (
-            "evt_other_current_limit_marker",
+            "p-other-current-limit-marker",
+            "m-other-current-limit-marker",
             "s-other",
-            30_000,
-            "note.created",
+            base_time,
+            base_time,
             json.dumps(
                 {
-                    "sessionID": "s-other",
-                    "timestamp": base_time,
+                    "type": "note.created",
                     "text": "current limit marker non-active survivor",
                     "path": "current-limit-other.txt",
                 }
@@ -292,14 +292,14 @@ def _add_current_session_limit_fixture_rows(source_db: Path) -> None:
     ]
     rows.extend(
         (
-            f"evt_active_current_limit_decoy_{index:03d}",
+            f"p-active-current-limit-decoy-{index:03d}",
+            "m-primary",
             "s-primary",
-            30_001 + index,
-            "note.created",
+            base_time + 1_000 + index,
+            base_time + 1_000 + index,
             json.dumps(
                 {
-                    "sessionID": "s-primary",
-                    "timestamp": base_time + 1_000 + index,
+                    "type": "note.created",
                     "text": "current limit marker active-session decoy",
                     "path": f"current-limit-decoy-{index:03d}.txt",
                 }
@@ -309,21 +309,21 @@ def _add_current_session_limit_fixture_rows(source_db: Path) -> None:
     )
     with sqlite3.connect(source_db) as connection:
         connection.executemany("INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?)", sessions)
-        connection.executemany("INSERT INTO event VALUES (?, ?, ?, ?, ?)", rows)
+        connection.executemany("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)", rows)
 
 
 def _add_term_limit_fixture_rows(source_db: Path) -> None:
     base_time = 2_000_000_000_000
     rows = [
         (
-            "evt_old_required_term",
+            "p-old-required-term",
+            "m-primary",
             "s-primary",
-            10_000,
-            "note.created",
+            base_time,
+            base_time,
             json.dumps(
                 {
-                    "sessionID": "s-primary",
-                    "timestamp": base_time,
+                    "type": "note.created",
                     "text": "candidate window marker deep required term",
                     "path": "term-limit-valid.txt",
                 }
@@ -332,14 +332,14 @@ def _add_term_limit_fixture_rows(source_db: Path) -> None:
     ]
     rows.extend(
         (
-            f"evt_new_decoy_{index:03d}",
+            f"p-new-decoy-{index:03d}",
+            "m-primary",
             "s-primary",
-            10_001 + index,
-            "note.created",
+            base_time + 1_000 + index,
+            base_time + 1_000 + index,
             json.dumps(
                 {
-                    "sessionID": "s-primary",
-                    "timestamp": base_time + 1_000 + index,
+                    "type": "note.created",
                     "text": "candidate window marker decoy text",
                     "path": f"term-limit-decoy-{index:03d}.txt",
                 }
@@ -348,35 +348,35 @@ def _add_term_limit_fixture_rows(source_db: Path) -> None:
         for index in range(105)
     )
     with sqlite3.connect(source_db) as connection:
-        connection.executemany("INSERT INTO event VALUES (?, ?, ?, ?, ?)", rows)
+        connection.executemany("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)", rows)
 
 
 def _add_fts_boost_fixture_rows(source_db: Path) -> None:
     base_time = 2_100_000_000_000
     rows = [
         (
-            "evt_fts_older_with_boost",
+            "p-fts-older-with-boost",
+            "m-primary",
             "s-primary",
-            20_000,
-            "note.created",
+            base_time,
+            base_time,
             json.dumps(
                 {
-                    "sessionID": "s-primary",
-                    "timestamp": base_time,
+                    "type": "note.created",
                     "text": "fts ranking marker older indexed event",
                     "path": "fts-boost-older.txt",
                 }
             ),
         ),
         (
-            "evt_fts_newer_without_boost",
+            "p-fts-newer-without-boost",
+            "m-primary",
             "s-primary",
-            20_001,
-            "note.created",
+            base_time + 1_000,
+            base_time + 1_000,
             json.dumps(
                 {
-                    "sessionID": "s-primary",
-                    "timestamp": base_time + 1_000,
+                    "type": "note.created",
                     "text": "fts ranking marker newer like-only event",
                     "path": "fts-boost-newer.txt",
                 }
@@ -384,7 +384,7 @@ def _add_fts_boost_fixture_rows(source_db: Path) -> None:
         ),
     ]
     with sqlite3.connect(source_db) as connection:
-        connection.executemany("INSERT INTO event VALUES (?, ?, ?, ?, ?)", rows)
+        connection.executemany("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)", rows)
 
 
 def _delete_ctx_fts_rows(ctx_db: Path, event_ids: list[str]) -> None:

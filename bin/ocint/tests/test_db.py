@@ -12,7 +12,7 @@ def test_open_readonly_connection_allows_reads_and_rejects_writes(tmp_path: Path
 
     con = open_readonly_connection(db_path)
     try:
-        assert con.execute("SELECT COUNT(*) FROM part").fetchone()[0] == 3
+        assert con.execute("SELECT COUNT(*) FROM part").fetchone()[0] == 4
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
             con.execute("INSERT INTO part VALUES ('x', 'm', 's', 0, 0, '{}')")
     finally:

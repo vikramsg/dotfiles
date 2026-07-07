@@ -18,7 +18,7 @@ def test_search_auto_imports_when_index_missing(tmp_path: Path, monkeypatch: pyt
     result = CliRunner().invoke(main, ["ctx", "search", "native event marker"])
 
     assert result.exit_code == 0, result.output
-    assert "evt_native_tool" in result.output
+    assert "p-primary-step" in result.output
     assert ctx_db.exists()
 
 

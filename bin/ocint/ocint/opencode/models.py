@@ -43,16 +43,6 @@ class OpenCodePartData(OpenCodeJsonModel):
     file_path: str | None = Field(default=None, alias="filePath")
 
 
-class OpenCodeEventData(OpenCodeJsonModel):
-    type: str | None = None
-    text: str | None = None
-    message: str | None = None
-    title: str | None = None
-    path: str | None = None
-    file: str | None = None
-    file_path: str | None = Field(default=None, alias="filePath")
-
-
 class OpenCodeSessionData(OpenCodeJsonModel):
     title: str | None = None
     directory: str | None = None
@@ -91,18 +81,9 @@ class OpenCodePartRow(StorageModel):
     data: OpenCodePartData = Field(default_factory=OpenCodePartData)
 
 
-class OpenCodeEventRow(StorageModel):
+class OpenCodeTranscriptEventRow(StorageModel):
     id: str
-    session_id: str | None = None
-    event_type: str = "event"
-    time_created: int | None = None
-    time_updated: int | None = None
-    data: OpenCodeEventData = Field(default_factory=OpenCodeEventData)
-
-
-class OpenCodeUnifiedEventRow(StorageModel):
-    id: str
-    source_table: Literal["event", "part", "message"]
+    source_table: Literal["message", "part"]
     session_id: str | None = None
     message_id: str | None = None
     time_created: int | None = None

@@ -250,7 +250,7 @@ def test_ctx_readiness_rejects_stable_view_with_same_columns_but_wrong_source(
 
     result = runner.invoke(
         main,
-        ["ctx", "sql", "SELECT text FROM ctx_events WHERE event_id = 'evt_native_tool'", "--format", "json"],
+        ["ctx", "sql", "SELECT text FROM ctx_events WHERE event_id = 'p-primary-step'", "--format", "json"],
     )
 
     assert result.exit_code != 0
