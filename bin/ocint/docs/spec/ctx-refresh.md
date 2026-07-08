@@ -2,6 +2,8 @@
 
 `ocint ctx` refresh keeps the ocint-owned ctx index aligned with OpenCode history without making normal search feel slow.
 
+Implementation mechanics are recorded in `ctx-refresh-mechanics.md`.
+
 The preferred user experience is stale-while-revalidate: search MUST read the existing ready index immediately, then refresh in the background for the next command when the index is stale.
 
 ## Purpose
