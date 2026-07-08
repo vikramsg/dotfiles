@@ -230,6 +230,7 @@ Default search MUST be fast when a ready index exists.
 
 `ocint ctx search "query"` MUST use `auto` mode.
 
+
 `ocint ctx search "query" --refresh off` MUST skip all refresh behavior and read only the existing ready index.
 
 `ocint ctx import` remains the explicit foreground refresh command. It MUST continue to show progress for human output and suppress progress for JSON output.

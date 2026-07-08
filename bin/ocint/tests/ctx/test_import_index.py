@@ -103,6 +103,7 @@ def test_ctx_import_rejects_ctx_db_alias_to_opencode_without_mutating_source(
 ) -> None:
     source_db = create_opencode_db(tmp_path / "opencode.db")
     before_hash = hashlib.sha256(source_db.read_bytes()).hexdigest()
+    before_journal_mode = _sqlite_journal_mode(source_db)
     before_schema = _sqlite_schema(source_db)
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(source_db))
@@ -112,12 +113,91 @@ def test_ctx_import_rejects_ctx_db_alias_to_opencode_without_mutating_source(
     assert result.exit_code != 0
     assert "same file" in result.output
     assert hashlib.sha256(source_db.read_bytes()).hexdigest() == before_hash
+    assert _sqlite_journal_mode(source_db) == before_journal_mode
     assert _sqlite_schema(source_db) == before_schema
     con = sqlite3.connect(source_db)
     try:
         assert con.execute("SELECT 1 FROM sqlite_master WHERE name = 'alembic_version'").fetchone() is None
     finally:
         con.close()
+
+
+def test_default_search_rejects_ctx_db_alias_to_opencode_without_mutating_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    before_hash = hashlib.sha256(source_db.read_bytes()).hexdigest()
+    before_journal_mode = _sqlite_journal_mode(source_db)
+    before_schema = _sqlite_schema(source_db)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(source_db))
+
+    result = CliRunner().invoke(main, ["ctx", "search", "native event marker"])
+
+    assert result.exit_code != 0
+    assert "same file" in result.output
+    assert hashlib.sha256(source_db.read_bytes()).hexdigest() == before_hash
+    assert _sqlite_journal_mode(source_db) == before_journal_mode
+    assert _sqlite_schema(source_db) == before_schema
+    con = sqlite3.connect(source_db)
+    try:
+        assert con.execute("SELECT 1 FROM sqlite_master WHERE name = 'alembic_version'").fetchone() is None
+        assert con.execute("SELECT 1 FROM sqlite_master WHERE name = 'ctx_refresh_state'").fetchone() is None
+    finally:
+        con.close()
+
+
+def test_ctx_db_symlink_to_source_rejected_without_mutating_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_link = tmp_path / "ctx-link.sqlite"
+    ctx_link.symlink_to(source_db)
+    before_hash = hashlib.sha256(source_db.read_bytes()).hexdigest()
+    before_journal_mode = _sqlite_journal_mode(source_db)
+    before_schema = _sqlite_schema(source_db)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_link))
+
+    result = CliRunner().invoke(main, ["ctx", "import"])
+
+    assert result.exit_code != 0
+    assert "same file" in result.output
+    assert hashlib.sha256(source_db.read_bytes()).hexdigest() == before_hash
+    assert _sqlite_journal_mode(source_db) == before_journal_mode
+    assert _sqlite_schema(source_db) == before_schema
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["ctx", "status"],
+        ["ctx", "sources"],
+        ["ctx", "search", "native event marker", "--refresh", "off"],
+        ["ctx", "show", "session"],
+        ["ctx", "show", "event", "p-primary-step"],
+        ["ctx", "locate", "session", "s-primary"],
+        ["ctx", "locate", "event", "p-primary-step"],
+        ["ctx", "sql", "SELECT provider FROM ctx_sources"],
+    ],
+)
+def test_read_only_ctx_commands_reject_ctx_db_alias_before_opening_source(
+    command: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    before_hash = hashlib.sha256(source_db.read_bytes()).hexdigest()
+    before_journal_mode = _sqlite_journal_mode(source_db)
+    before_schema = _sqlite_schema(source_db)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(source_db))
+
+    result = CliRunner().invoke(main, command)
+
+    assert result.exit_code != 0
+    assert "same file" in result.output
+    assert hashlib.sha256(source_db.read_bytes()).hexdigest() == before_hash
+    assert _sqlite_journal_mode(source_db) == before_journal_mode
+    assert _sqlite_schema(source_db) == before_schema
 
 
 def test_ctx_import_help_removes_full_rebuild_flag() -> None:
@@ -262,6 +342,42 @@ def test_incremental_refresh_updates_changed_event_without_replacing_primary_key
     assert _ctx_file_paths(ctx_db, "p-primary-step") == ["docs/incremental-refresh.md"]
 
 
+def test_incremental_refresh_reprojects_events_when_source_session_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    deleted_title = "VanishedSessionTitleAlpha"
+    deleted_workspace = "/tmp/VanishedWorkspaceBeta"
+    _update_session_identity_terms(source_db, session_id="s-sub", title=deleted_title, workspace=deleted_workspace)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    event_pk = _ctx_scalar(ctx_db, "SELECT id FROM ctx_event WHERE event_id = 'p-sub-step'")
+    assert _ctx_count(ctx_db, "ctx_event", f"event_id = 'p-sub-step' AND search_text LIKE '%{deleted_title}%'") == 1
+
+    _delete_session_only(source_db, "s-sub")
+    refreshed = runner.invoke(main, ["ctx", "import"])
+
+    assert refreshed.exit_code == 0, refreshed.output
+    assert _ctx_count(ctx_db, "ctx_session", "provider_session_id = 's-sub'") == 0
+    assert _ctx_count(ctx_db, "ctx_event", "event_id = 'p-sub-step'") == 1
+    assert _ctx_scalar(ctx_db, "SELECT id FROM ctx_event WHERE event_id = 'p-sub-step'") == event_pk
+    assert (
+        _ctx_count(ctx_db, "ctx_event", f"provider_session_id = 's-sub' AND search_text LIKE '%{deleted_title}%'") == 0
+    )
+    assert (
+        _ctx_count(ctx_db, "ctx_event", f"provider_session_id = 's-sub' AND search_text LIKE '%{deleted_workspace}%'")
+        == 0
+    )
+    assert _ctx_fts_match_count(ctx_db, deleted_title) == 0
+    search = runner.invoke(main, ["ctx", "search", deleted_title, "--refresh", "off"])
+    assert search.exit_code == 0, search.output
+    assert search.output == "No results\n"
+
+
 def _ctx_counts(ctx_db: Path) -> dict[str, int]:
     con = sqlite3.connect(ctx_db)
     try:
@@ -305,6 +421,14 @@ def _sqlite_schema(path: Path) -> list[tuple[str, str, str | None]]:
         con.close()
 
 
+def _sqlite_journal_mode(path: Path) -> str:
+    con = sqlite3.connect(path)
+    try:
+        return str(con.execute("PRAGMA journal_mode").fetchone()[0])
+    finally:
+        con.close()
+
+
 def _ctx_count(ctx_db: Path, table: str, where: str) -> int:
     con = sqlite3.connect(ctx_db)
     try:
@@ -335,6 +459,16 @@ def _ctx_file_paths(ctx_db: Path, event_id: str) -> list[str]:
         con.close()
 
 
+def _ctx_fts_match_count(ctx_db: Path, query: str) -> int:
+    con = sqlite3.connect(ctx_db)
+    try:
+        return int(
+            con.execute("SELECT COUNT(*) FROM ctx_event_fts WHERE ctx_event_fts MATCH ?", (query,)).fetchone()[0] or 0
+        )
+    finally:
+        con.close()
+
+
 def _delete_source_history_rows(source_db: Path) -> None:
     """Mutate a pytest-owned fixture DB to model source history disappearing between imports."""
     with sqlite3.connect(source_db) as connection:
@@ -349,9 +483,22 @@ def _delete_part(source_db: Path, event_id: str) -> None:
         connection.execute("DELETE FROM part WHERE id = ?", (event_id,))
 
 
+def _delete_session_only(source_db: Path, session_id: str) -> None:
+    with sqlite3.connect(source_db) as connection:
+        connection.execute("DELETE FROM session WHERE id = ?", (session_id,))
+
+
 def _update_part_payload(source_db: Path, event_id: str, payload: dict[str, object]) -> None:
     with sqlite3.connect(source_db) as connection:
         connection.execute(
             "UPDATE part SET data = ?, timeUpdated = timeUpdated + 1 WHERE id = ?",
             (json.dumps(payload), event_id),
+        )
+
+
+def _update_session_identity_terms(source_db: Path, *, session_id: str, title: str, workspace: str) -> None:
+    with sqlite3.connect(source_db) as connection:
+        connection.execute(
+            "UPDATE session SET title = ?, directory = ?, data = ? WHERE id = ?",
+            (title, workspace, json.dumps({"title": title, "directory": workspace}), session_id),
         )

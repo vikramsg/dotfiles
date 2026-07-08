@@ -9,11 +9,15 @@ import click
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from ocint._config import resolve_paths
 from ocint._errors import OcintError
 from ocint._models import CliContext
 from ocint._render import render_csv, render_json, render_raw, render_table
-from ocint.ctx.config import resolve_ctx_db_path, resolve_ctx_refresh_config
+from ocint.ctx.config import (
+    reject_ctx_source_db_alias,
+    resolve_ctx_db_path,
+    resolve_ctx_refresh_config,
+    resolve_ctx_source_db_path,
+)
 from ocint.ctx.db import ctx_session, current_ctx_head_revision, migrate_ctx_db
 from ocint.ctx.docs import render_doc_topics, search_docs, show_doc
 from ocint.ctx.importing import CtxImportRepository, import_history_events
@@ -28,7 +32,6 @@ from ocint.ctx.models import (
     CtxRefreshAction,
     CtxRefreshConfig,
     CtxRefreshDecision,
-    CtxRefreshFailure,
     CtxRefreshPolicyInput,
     CtxRefreshState,
     CtxSearchRequest,
@@ -43,7 +46,9 @@ from ocint.ctx.models import (
 from ocint.ctx.refresh import (
     CtxRefreshRepository,
     acquire_refresh_lock,
+    begin_refresh_attempt,
     decide_refresh_action,
+    record_refresh_attempt_failure,
     refresh_lock_in_progress,
     schedule_refresh_worker,
 )
@@ -116,7 +121,7 @@ def status(app: CliContext, as_json: bool) -> None:
             sql_config,
             expected_revision,
             refresh_config=refresh_config,
-            refresh_state=refresh_repository.aggregate_state(),
+            refresh_statuses=refresh_repository.source_statuses(),
             refresh_in_progress=in_progress,
             now_ms=_now_ms(),
         )
@@ -210,7 +215,7 @@ def search(
         case RefreshMode.AUTO:
             refresh_config = _ctx_refresh_config(ctx_db)
             source_db = _source_db_path()
-            decision = _auto_refresh_decision(ctx_db=ctx_db, refresh_config=refresh_config)
+            decision = _auto_refresh_decision(ctx_db=ctx_db, source_path=source_db, refresh_config=refresh_config)
             match decision.action:
                 case CtxRefreshAction.FOREGROUND_REFRESH:
                     _consume_import_events(app, source_db=source_db, progress_enabled=not as_json)
@@ -443,8 +448,8 @@ def sql_command(app: CliContext, sql: str, output_format: str) -> None:
     app.output.write(rendered)
 
 
-def _auto_refresh_decision(*, ctx_db: Path, refresh_config: CtxRefreshConfig) -> CtxRefreshDecision:
-    index_ready, refresh_state = _ctx_index_ready_state(ctx_db)
+def _auto_refresh_decision(*, ctx_db: Path, source_path: Path, refresh_config: CtxRefreshConfig) -> CtxRefreshDecision:
+    index_ready, refresh_state = _ctx_index_ready_state(ctx_db=ctx_db, source_path=source_path)
     return decide_refresh_action(
         CtxRefreshPolicyInput(
             mode=RefreshMode.AUTO,
@@ -456,7 +461,8 @@ def _auto_refresh_decision(*, ctx_db: Path, refresh_config: CtxRefreshConfig) ->
     )
 
 
-def _ctx_index_ready_state(ctx_db: Path) -> tuple[bool, CtxRefreshState | None]:
+def _ctx_index_ready_state(*, ctx_db: Path, source_path: Path) -> tuple[bool, CtxRefreshState | None]:
+    _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
     if not ctx_db.exists():
         return False, None
     try:
@@ -466,7 +472,11 @@ def _ctx_index_ready_state(ctx_db: Path) -> tuple[bool, CtxRefreshState | None]:
             if not status_repository.index_ready(sql_config, expected_revision):
                 return False, None
             refresh_repository = CtxRefreshRepository(session, db_path=ctx_db)
-            return True, refresh_repository.aggregate_state()
+            return True, refresh_repository.state_for_source_identity(
+                provider=PROVIDER,
+                source_type=SOURCE_TYPE,
+                source_path=str(source_path),
+            )
     except FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError:
         return False, None
 
@@ -519,32 +529,56 @@ def _import_ctx_events(*, source_db: Path | None) -> Iterator[CtxImportProgress 
     source_path = _source_db_path(source_db)
     ctx_db = _ctx_db_path()
     refresh_config = _ctx_refresh_config(ctx_db)
+    _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
     try:
-        _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
-    except ValueError as error:
-        raise click.ClickException(str(error)) from error
-    try:
-        migrate_ctx_db(ctx_db)
-        with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as lock:
-            if not lock.acquired:
-                raise click.ClickException(
-                    f"ocint ctx refresh is already running for {ctx_db}; try again after it completes"
-                )
-            yield from _run_unlocked_import(ctx_db=ctx_db, source_path=source_path)
+        with _refresh_lock(ctx_db=ctx_db, refresh_config=refresh_config, foreground=True) as lock_acquired:
+            if not lock_acquired:
+                return
+            migrate_ctx_db(ctx_db)
+            yield from _run_refresh_after_lock(ctx_db=ctx_db, source_path=source_path)
     except click.ClickException:
         raise
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
-        _record_refresh_failure(ctx_db=ctx_db, source_path=source_path, error=error)
         raise click.ClickException(str(error)) from error
 
 
-def _run_unlocked_import(*, ctx_db: Path, source_path: Path) -> Iterator[CtxImportProgress | CtxImportResult]:
+def _run_refresh_after_lock(*, ctx_db: Path, source_path: Path) -> Iterator[CtxImportProgress | CtxImportResult]:
+    started_at = _now_ms()
+    source_id: int | None = None
+    try:
+        with ctx_session(ctx_db, commit=True) as session:
+            source_id = begin_refresh_attempt(
+                import_repository=CtxImportRepository(session, db_path=ctx_db),
+                refresh_repository=CtxRefreshRepository(session, db_path=ctx_db),
+                provider=PROVIDER,
+                source_type=SOURCE_TYPE,
+                name=SOURCE_NAME,
+                source_path=source_path,
+                started_at=started_at,
+            )
+        yield from _run_unlocked_import(ctx_db=ctx_db, source_path=source_path, attempt_started_at=started_at)
+    except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
+        if source_id is not None:
+            with ctx_session(ctx_db, commit=True) as session:
+                record_refresh_attempt_failure(
+                    refresh_repository=CtxRefreshRepository(session, db_path=ctx_db),
+                    source_id=source_id,
+                    started_at=started_at,
+                    completed_at=_now_ms(),
+                    error=error,
+                )
+        raise
+
+
+def _run_unlocked_import(
+    *, ctx_db: Path, source_path: Path, attempt_started_at: int
+) -> Iterator[CtxImportProgress | CtxImportResult]:
     with ctx_session(ctx_db, commit=True) as session:
         repository = CtxImportRepository(session, db_path=ctx_db)
         refresh_repository = CtxRefreshRepository(session, db_path=ctx_db)
         source = OpenCodeRepository(source_path)
         yield from import_history_events(
-            CtxImportRequest(source_db_path=source_path),
+            CtxImportRequest(source_db_path=source_path, attempt_started_at=attempt_started_at),
             repository,
             refresh_repository,
             source,
@@ -557,55 +591,37 @@ def _run_refresh_worker() -> None:
     refresh_config = _ctx_refresh_config(ctx_db)
     _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
     try:
-        migrate_ctx_db(ctx_db)
-        with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as lock:
-            if not lock.acquired:
+        with _refresh_lock(ctx_db=ctx_db, refresh_config=refresh_config, foreground=False) as lock_acquired:
+            if not lock_acquired:
                 return
-            for _event in _run_unlocked_import(ctx_db=ctx_db, source_path=source_path):
+            migrate_ctx_db(ctx_db)
+            decision = _auto_refresh_decision(ctx_db=ctx_db, source_path=source_path, refresh_config=refresh_config)
+            if decision.action == CtxRefreshAction.SEARCH_ONLY:
+                return
+            for _event in _run_refresh_after_lock(ctx_db=ctx_db, source_path=source_path):
                 pass
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
-        _record_refresh_failure(ctx_db=ctx_db, source_path=source_path, error=error)
         raise click.ClickException(str(error)) from error
 
 
-def _record_refresh_failure(*, ctx_db: Path, source_path: Path, error: BaseException) -> None:
-    try:
-        migrate_ctx_db(ctx_db)
-        with ctx_session(ctx_db, commit=True) as session:
-            import_repository = CtxImportRepository(session, db_path=ctx_db)
-            refresh_repository = CtxRefreshRepository(session, db_path=ctx_db)
-            source_id = import_repository.upsert_source(
-                provider=PROVIDER,
-                source_type=SOURCE_TYPE,
-                name=SOURCE_NAME,
-                source_path=str(source_path.expanduser()),
-            )
-            refresh_repository.mark_attempt_failed(
-                source_id,
-                CtxRefreshFailure(attempted_at=_now_ms(), error_message=_error_message(error)),
-            )
-    except FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError:
-        return
-
-
-def _error_message(error: BaseException) -> str:
-    message = str(error)
-    if len(message) <= 1_000:
-        return message
-    return f"{message[:997]}..."
+@contextmanager
+def _refresh_lock(*, ctx_db: Path, refresh_config: CtxRefreshConfig, foreground: bool) -> Iterator[bool]:
+    with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as lock:
+        if not lock.acquired:
+            if foreground:
+                raise click.ClickException(
+                    f"ocint ctx refresh is already running for {ctx_db}; try again after it completes"
+                )
+            yield False
+            return
+        yield True
 
 
 def _reject_ctx_source_alias(*, ctx_db: Path, source_path: Path) -> None:
-    """Protect the read-only OpenCode source DB before ctx migrations run."""
-    ctx_resolved = ctx_db.expanduser().resolve(strict=False)
-    source_resolved = source_path.expanduser().resolve(strict=False)
-
-    aliases = ctx_resolved == source_resolved
-    if not aliases and ctx_db.exists() and source_path.exists():
-        aliases = ctx_db.samefile(source_path)
-
-    if aliases:
-        raise ValueError("ocint ctx DB must not be the same file as the OpenCode source DB")
+    try:
+        reject_ctx_source_db_alias(ctx_db_path=ctx_db, source_db_path=source_path)
+    except ValueError as error:
+        raise click.ClickException(str(error)) from error
 
 
 def _ctx_db_path() -> Path:
@@ -628,12 +644,19 @@ def _now_ms() -> int:
 
 def _require_existing_ctx_db_path(*, recovery_hint: str | None = None) -> Path:
     ctx_db = _ctx_db_path()
+    _guard_ctx_db_against_current_source(ctx_db)
     if not ctx_db.exists():
         message = f"ocint ctx index does not exist; run `ocint ctx import` first: {ctx_db}"
         if recovery_hint is not None:
             message = f"{message}\n{recovery_hint}"
         raise click.ClickException(message)
     return ctx_db
+
+
+def _guard_ctx_db_against_current_source(ctx_db: Path) -> None:
+    source_path = _source_db_path_or_none()
+    if source_path is not None:
+        _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
 
 
 def _ctx_readiness_contract() -> tuple[CtxSqlConfig, str]:
@@ -681,7 +704,7 @@ def _active_opencode_session_id() -> str | None:
 
 def _source_db_path(source_db: Path | None = None) -> Path:
     try:
-        return resolve_paths(db_path=source_db).db_path if source_db is not None else resolve_paths().db_path
+        return resolve_ctx_source_db_path(source_db=source_db)
     except ValueError as error:
         raise click.ClickException(str(error)) from error
 

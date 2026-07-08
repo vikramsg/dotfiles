@@ -285,6 +285,17 @@ def test_cli_and_render_use_typed_command_modes_without_callback_repository_help
     assert 'mode != "full"' not in render_source
 
 
+def test_refresh_attempt_lifecycle_transitions_are_service_owned() -> None:
+    cli_source = (CTX_ROOT / "cli.py").read_text()
+    refresh_service_symbols = _top_level_symbols(CTX_ROOT / "refresh" / "service.py")
+
+    assert "begin_refresh_attempt" in refresh_service_symbols
+    assert "record_refresh_attempt_failure" in refresh_service_symbols
+    assert ".mark_attempt_started" not in cli_source
+    assert ".mark_attempt_failed" not in cli_source
+    assert "CtxRefreshFailure(" not in cli_source
+
+
 def test_only_cli_imports_ctx_db_lifecycle_helpers() -> None:
     allowed = {"cli.py", "db/__init__.py"}
     lifecycle_names = {"create_ctx_engine", "ctx_session", "migrate_ctx_db"}

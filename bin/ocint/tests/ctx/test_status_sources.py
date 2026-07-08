@@ -70,6 +70,36 @@ def test_ctx_status_output_does_not_vary_with_current_opencode_db(
     assert payloads[0]["source_db_exists"] is False
 
 
+def test_ctx_status_refresh_summary_uses_one_explicit_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_a = create_opencode_db(tmp_path / "source-a.db")
+    source_b = create_opencode_db(tmp_path / "source-b.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    for source in [source_a, source_b]:
+        monkeypatch.setenv("OPENCODE_DB", str(source))
+        imported = runner.invoke(main, ["ctx", "import"])
+        assert imported.exit_code == 0, imported.output
+    _force_mixed_refresh_states(ctx_db, source_a=source_a, source_b=source_b)
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+
+    status = runner.invoke(main, ["ctx", "status", "--json"])
+
+    assert status.exit_code == 0, status.output
+    payload = json.loads(status.output)
+    assert payload["refresh_source_path"] == str(source_b)
+    assert payload["latest_attempt_status"] == "failed"
+    assert payload["latest_attempt_started_at"] == 2_000
+    assert payload["latest_success_completed_at"] is None
+    assert payload["checkpoint_summary"] is None
+    assert payload["refresh_freshness"] == "unknown"
+    rows_by_path = {row["source_path"]: row for row in payload["refresh_sources"]}
+    assert rows_by_path[str(source_a)]["latest_success_completed_at"] == 1_000
+    assert rows_by_path[str(source_a)]["latest_attempt_status"] == "success"
+    assert rows_by_path[str(source_b)]["latest_attempt_status"] == "failed"
+    assert rows_by_path[str(source_b)]["latest_success_completed_at"] is None
+
+
 def test_ctx_status_and_sources_fail_fast_without_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ctx_db = tmp_path / "missing.sqlite"
     monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
@@ -325,6 +355,50 @@ def _assert_read_commands_require_import(runner: CliRunner, commands: list[list[
         assert result.exit_code != 0, result.output
         assert "run `ocint ctx import` first" in result.output
         assert '"index_ready": true' not in result.output
+
+
+def _force_mixed_refresh_states(ctx_db: Path, *, source_a: Path, source_b: Path) -> None:
+    with sqlite3.connect(ctx_db) as connection:
+        rows = {
+            row[0]: row[1]
+            for row in connection.execute(
+                "SELECT source_path, id FROM ctx_source WHERE source_path IN (?, ?)", (str(source_a), str(source_b))
+            )
+        }
+        source_a_id = rows[str(source_a)]
+        source_b_id = rows[str(source_b)]
+        connection.execute(
+            """
+            UPDATE ctx_refresh_state
+            SET latest_attempt_started_at = 1_000,
+                latest_attempt_completed_at = 1_001,
+                latest_attempt_status = 'success',
+                latest_success_started_at = 999,
+                latest_success_completed_at = 1_000,
+                latest_success_checkpoint_payload = 'source-a-checkpoint',
+                source_watermark_payload = 'source-a-watermark',
+                latest_failed_at = NULL,
+                latest_error_message = NULL
+            WHERE source_id = ?
+            """,
+            (source_a_id,),
+        )
+        connection.execute(
+            """
+            UPDATE ctx_refresh_state
+            SET latest_attempt_started_at = 2_000,
+                latest_attempt_completed_at = 2_001,
+                latest_attempt_status = 'failed',
+                latest_success_started_at = NULL,
+                latest_success_completed_at = NULL,
+                latest_success_checkpoint_payload = NULL,
+                source_watermark_payload = NULL,
+                latest_failed_at = 2_001,
+                latest_error_message = 'source-b-failed'
+            WHERE source_id = ?
+            """,
+            (source_b_id,),
+        )
 
 
 def _create_old_head_ctx_db(ctx_db: Path, *, imported_at: int, checkpoint: str) -> None:

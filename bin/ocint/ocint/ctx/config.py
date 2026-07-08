@@ -2,6 +2,7 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from ocint._config import resolve_paths
 from ocint.ctx.models import CtxRefreshConfig
 
 CTX_DB_NAME = "ctx.sqlite"
@@ -22,19 +23,34 @@ def resolve_ctx_db_path(
 
     if db_path is not None:
         _reject_memory_db_path(db_path)
-        return _absolute(db_path, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
+        return _canonical_path(_absolute(db_path, env=effective_env, cwd=cwd, allow_process_home=use_process_env))
     if env_path := effective_env.get("OCINT_CTX_DB"):
         _reject_memory_db_path(env_path)
-        return _absolute(env_path, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
+        return _canonical_path(_absolute(env_path, env=effective_env, cwd=cwd, allow_process_home=use_process_env))
     if state_home := effective_env.get("XDG_STATE_HOME"):
-        return (
+        return _canonical_path(
             _absolute(state_home, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
             / "ocint"
             / CTX_DB_NAME
         )
-    return (
+    return _canonical_path(
         _home(effective_env, cwd=cwd, allow_process_home=use_process_env) / ".local" / "state" / "ocint" / CTX_DB_NAME
     )
+
+
+def resolve_ctx_source_db_path(
+    *,
+    source_db: str | Path | None = None,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | None = None,
+) -> Path:
+    """Resolve the OpenCode source path for ctx identity without opening the source DB."""
+    resolved = (
+        resolve_paths(db_path=source_db, env=env, cwd=cwd).db_path
+        if source_db is not None
+        else resolve_paths(env=env, cwd=cwd).db_path
+    )
+    return _canonical_path(resolved)
 
 
 def resolve_ctx_refresh_config(
@@ -50,6 +66,23 @@ def resolve_ctx_refresh_config(
         lock_path=ctx_db_path.parent / f"{ctx_db_path.name}.refresh.lock",
         log_path=ctx_db_path.parent / f"{ctx_db_path.name}.refresh.log",
     )
+
+
+def reject_ctx_source_db_alias(*, ctx_db_path: Path, source_db_path: Path) -> None:
+    """Reject configurations that would open the OpenCode source as the ctx DB."""
+    ctx_resolved = ctx_db_path.expanduser().resolve(strict=False)
+    source_resolved = source_db_path.expanduser().resolve(strict=False)
+
+    aliases = ctx_resolved == source_resolved
+    if not aliases and ctx_db_path.exists() and source_db_path.exists():
+        aliases = ctx_db_path.samefile(source_db_path)
+
+    if aliases:
+        raise ValueError("ocint ctx DB must not be the same file as the OpenCode source DB")
+
+
+def _canonical_path(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
 
 
 def parse_ctx_refresh_ttl(value: str) -> int:

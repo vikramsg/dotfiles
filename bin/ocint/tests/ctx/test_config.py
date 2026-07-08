@@ -1,13 +1,35 @@
 from pathlib import Path
 
 import pytest
-from ocint.ctx.config import parse_ctx_refresh_ttl, resolve_ctx_db_path, resolve_ctx_refresh_config
+from ocint.ctx.config import (
+    parse_ctx_refresh_ttl,
+    resolve_ctx_db_path,
+    resolve_ctx_refresh_config,
+    resolve_ctx_source_db_path,
+)
 
 
 def test_ctx_db_path_uses_env_override(tmp_path: Path) -> None:
     path = resolve_ctx_db_path(env={"OCINT_CTX_DB": "ctx.sqlite"}, cwd=tmp_path)
 
     assert path == tmp_path / "ctx.sqlite"
+
+
+def test_ctx_db_path_canonicalizes_relative_segments(tmp_path: Path) -> None:
+    path = resolve_ctx_db_path(env={"OCINT_CTX_DB": "nested/../ctx.sqlite"}, cwd=tmp_path)
+
+    assert path == (tmp_path / "ctx.sqlite").resolve(strict=False)
+
+
+def test_ctx_source_db_path_canonicalizes_symlink_env_path(tmp_path: Path) -> None:
+    source = tmp_path / "source.db"
+    source.touch()
+    link = tmp_path / "source-link.db"
+    link.symlink_to(source)
+
+    path = resolve_ctx_source_db_path(env={"OPENCODE_DB": str(link)}, cwd=tmp_path)
+
+    assert path == source.resolve(strict=False)
 
 
 def test_ctx_db_path_uses_xdg_state_home(tmp_path: Path) -> None:

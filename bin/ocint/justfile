@@ -61,15 +61,17 @@ smoke-ctx:
         {{uv_ocint}} ocint ctx status --json; \
         {{uv_ocint}} ocint ctx sources; \
         {{uv_ocint}} ocint ctx sources --json; \
-        {{uv_ocint}} ocint ctx search "native event marker"; \
         {{uv_ocint}} ocint ctx search "native event marker" --refresh off; \
-        {{uv_ocint}} ocint ctx search "native event marker" --workspace "/work/repo-directory-only"; \
-        {{uv_ocint}} ocint ctx search "native event marker" --file "AGENTS.md"; \
-        {{uv_ocint}} ocint ctx search "native event marker" --since 30d; \
-        {{uv_ocint}} ocint ctx search "native event marker" --term "related term" --term "error text"; \
-        {{uv_ocint}} ocint ctx search "native event marker" --session "s-primary"; \
-        {{uv_ocint}} ocint ctx search "native event marker" --verbose; \
-        {{uv_ocint}} ocint ctx search "subagent only marker" --include-subagents; \
+        {{uv_ocint}} ocint ctx search "native event marker" --workspace "/work/repo-directory-only" --refresh off; \
+        {{uv_ocint}} ocint ctx search "native event marker" --file "AGENTS.md" --refresh off; \
+        {{uv_ocint}} ocint ctx search "native event marker" --since 30d --refresh off; \
+        {{uv_ocint}} ocint ctx search "native event marker" --term "related term" --term "error text" --refresh off; \
+        {{uv_ocint}} ocint ctx search "native event marker" --session "s-primary" --refresh off; \
+        {{uv_ocint}} ocint ctx search "native event marker" --verbose --refresh off; \
+        {{uv_ocint}} ocint ctx search "subagent only marker" --include-subagents --refresh off; \
+        export OPENCODE_DB="$TMPDIR/opencode.db"; \
+        {{uv_ocint}} ocint ctx search "native event marker"; \
+        export OPENCODE_DB="$TMPDIR/missing-opencode.db"; \
         {{uv_ocint}} ocint ctx sql "SELECT provider, COUNT(*) AS sessions FROM ctx_sessions GROUP BY provider"; \
         {{uv_ocint}} ocint ctx sql "SELECT event_type, COUNT(*) AS events FROM ctx_events GROUP BY event_type ORDER BY events DESC"; \
         {{uv_ocint}} ocint ctx sql "SELECT path, provider, provider_session_id FROM ctx_files_touched LIMIT 20"; \

@@ -14,12 +14,14 @@ def test_search_defaults_to_primary_sessions(tmp_path: Path, monkeypatch: pytest
     _import_fixture(tmp_path, monkeypatch)
     runner = CliRunner()
 
-    results = runner.invoke(main, ["ctx", "search", "subagent only marker"])
+    results = runner.invoke(main, ["ctx", "search", "subagent only marker", "--refresh", "off"])
 
     assert results.exit_code == 0, results.output
     assert results.output == "No results\n"
 
-    subagent_results = runner.invoke(main, ["ctx", "search", "subagent only marker", "--include-subagents"])
+    subagent_results = runner.invoke(
+        main, ["ctx", "search", "subagent only marker", "--include-subagents", "--refresh", "off"]
+    )
     assert subagent_results.exit_code == 0, subagent_results.output
     assert "s-sub" in subagent_results.output
 
@@ -47,6 +49,8 @@ def test_search_filters_by_file_workspace_session_since_and_terms(
             "related term",
             "--term",
             "error text",
+            "--refresh",
+            "off",
         ],
     )
 
@@ -65,7 +69,7 @@ def test_search_file_filter_matches_all_payload_paths(tmp_path: Path, monkeypatc
         "implementation_notes.md",
         "bin/ocint/tests/ctx/test_sql.py",
     ]:
-        result = runner.invoke(main, ["ctx", "search", "file.patch", "--file", file_filter])
+        result = runner.invoke(main, ["ctx", "search", "file.patch", "--file", file_filter, "--refresh", "off"])
 
         assert result.exit_code == 0, result.output
         assert "p-primary-patch" in result.output
@@ -202,7 +206,17 @@ def test_search_applies_terms_before_limit(tmp_path: Path, monkeypatch: pytest.M
 
     result = runner.invoke(
         main,
-        ["ctx", "search", "candidate window marker", "--term", "deep required term", "--limit", "1"],
+        [
+            "ctx",
+            "search",
+            "candidate window marker",
+            "--term",
+            "deep required term",
+            "--limit",
+            "1",
+            "--refresh",
+            "off",
+        ],
     )
 
     assert result.exit_code == 0, result.output
