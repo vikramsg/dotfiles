@@ -7,6 +7,7 @@ import pytest
 from click.testing import CliRunner
 from ocint.cli import main
 from ocint.ctx.search import search_history
+from sqlalchemy import create_engine, text
 from tests.fixtures.opencode_db import create_opencode_db
 
 
@@ -90,6 +91,48 @@ def test_search_applies_terms_before_limit(tmp_path: Path, monkeypatch: pytest.M
     assert "evt_old_required_term" in result.output
 
 
+def test_search_semantics_match_across_backends(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _skip_if_duckdb_fts_unavailable(tmp_path)
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    monkeypatch.setenv("OCINT_CTX_DUCKDB", str(tmp_path / "ctx.duckdb"))
+    runner = CliRunner()
+    for backend in ["sqlite", "duckdb"]:
+        imported = runner.invoke(main, ["ctx", "--backend", backend, "import", "--source-db", str(source_db)])
+        assert imported.exit_code == 0, imported.output
+
+    args = [
+        "ctx",
+        "--backend",
+        "sqlite",
+        "search",
+        "native event marker",
+        "--workspace",
+        "repo-directory-only",
+        "--file",
+        "AGENTS.md",
+        "--session",
+        "s-primary",
+        "--since",
+        "30d",
+        "--term",
+        "related term",
+        "--term",
+        "error text",
+        "--refresh",
+        "off",
+        "--json",
+    ]
+    sqlite_results = runner.invoke(main, args)
+    duckdb_results = runner.invoke(main, ["ctx", "--backend", "duckdb", *args[3:]])
+
+    assert sqlite_results.exit_code == 0, sqlite_results.output
+    assert duckdb_results.exit_code == 0, duckdb_results.output
+    assert [row["event_id"] for row in json.loads(sqlite_results.output)] == ["evt_native_tool"]
+    assert json.loads(duckdb_results.output) == json.loads(sqlite_results.output)
+
+
 def test_search_history_contract_is_explicit() -> None:
     signature = inspect.signature(search_history)
 
@@ -144,3 +187,19 @@ def _add_term_limit_fixture_rows(source_db: Path) -> None:
     )
     with sqlite3.connect(source_db) as connection:
         connection.executemany("INSERT INTO event VALUES (?, ?, ?, ?, ?)", rows)
+
+
+def _skip_if_duckdb_fts_unavailable(tmp_path: Path) -> None:
+    try:
+        extension_dir = tmp_path / "duckdb_extensions"
+        extension_dir.mkdir(parents=True, exist_ok=True)
+        engine = create_engine(f"duckdb:///{tmp_path / 'fts-check.duckdb'}")
+        with engine.begin() as connection:
+            connection.execute(text(f"SET extension_directory='{extension_dir.as_posix()}'"))
+            connection.execute(text("INSTALL fts"))
+            connection.execute(text("LOAD fts"))
+    except Exception as error:  # pragma: no cover - environment-dependent extension availability
+        pytest.skip(f"DuckDB FTS extension is unavailable: {error}")
+    finally:
+        if "engine" in locals():
+            engine.dispose()

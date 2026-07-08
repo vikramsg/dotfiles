@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,6 +37,33 @@ class CtxImportRequest(CtxModel):
     full: bool = False
 
 
+class CtxImportSource(CtxModel):
+    provider: str = "opencode"
+    source_type: str
+    name: str
+    source_path: str
+    imported_at: int
+    sessions: int = 0
+    events: int = 0
+    checkpoint_payload: str | None = None
+
+
+class CtxImportBatch(CtxModel):
+    source: CtxImportSource
+    session_rows: list[dict[str, object]] = Field(default_factory=list)
+    event_rows: list[dict[str, object]] = Field(default_factory=list)
+    file_rows: list[dict[str, object]] = Field(default_factory=list)
+
+
+class CtxImportWriteResult(CtxModel):
+    source_id: int
+    sessions_written: int = 0
+    events_written: int = 0
+    files_written: int = 0
+    write_ms: float = 0.0
+    fts_ms: float = 0.0
+
+
 class CtxImportResult(CtxModel):
     provider: str = "opencode"
     ctx_db_path: Path
@@ -46,6 +74,9 @@ class CtxImportResult(CtxModel):
     events_written: int = 0
     files_written: int = 0
     checkpoint_updated: bool = False
+    source_transform_ms: float = 0.0
+    write_ms: float = 0.0
+    fts_ms: float = 0.0
 
 
 class CtxSession(CtxModel):
@@ -143,3 +174,29 @@ class CtxLocateResult(CtxModel):
     session_id: str | None = None
     source_path: str | None = None
     citation: str | None = None
+
+
+class CtxBenchmarkBackendResult(CtxModel):
+    backend: Literal["sqlite", "duckdb"]
+    db_path: Path
+    source_db_path: Path
+    sessions_seen: int = 0
+    sessions_written: int = 0
+    events_seen: int = 0
+    events_written: int = 0
+    files_written: int = 0
+    migration_ms: float = 0.0
+    source_transform_ms: float = 0.0
+    write_ms: float = 0.0
+    fts_ms: float = 0.0
+    total_import_ms: float = 0.0
+    search_ms: float = 0.0
+    search_results: int = 0
+    index_bytes: int = 0
+
+
+class CtxCompareResult(CtxModel):
+    query: str
+    source_db_path: Path
+    results: list[CtxBenchmarkBackendResult] = Field(default_factory=list)
+    speed_ratios: dict[str, float | None] = Field(default_factory=dict)

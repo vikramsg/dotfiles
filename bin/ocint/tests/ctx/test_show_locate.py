@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
+from sqlalchemy import create_engine, text
 from tests.fixtures.opencode_db import create_opencode_db
 
 
@@ -85,11 +86,51 @@ def test_ctx_locate_session_uses_imported_source_path(tmp_path: Path, monkeypatc
     assert payload["db_path"] == str(source_db)
 
 
-def _import_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+@pytest.mark.parametrize("backend", ["sqlite", "duckdb"])
+def test_ctx_show_and_locate_event_work_for_backend(
+    backend: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if backend == "duckdb":
+        _skip_if_duckdb_fts_unavailable(tmp_path)
+    source_db = _import_fixture(tmp_path, monkeypatch, backend=backend)
+    runner = CliRunner()
+
+    shown = runner.invoke(main, ["ctx", "--backend", backend, "show", "event", "evt_native_tool", "--json"])
+    located = runner.invoke(main, ["ctx", "--backend", backend, "locate", "event", "evt_native_tool", "--json"])
+
+    assert shown.exit_code == 0, shown.output
+    assert located.exit_code == 0, located.output
+    shown_payload = json.loads(shown.output)
+    located_payload = json.loads(located.output)
+    assert shown_payload["selected"]["event_id"] == "evt_native_tool"
+    assert shown_payload["selected"]["source_table"] == "event"
+    assert shown_payload["selected"]["session_id"] == "s-primary"
+    assert "native event marker" in shown_payload["selected"]["text"]
+    assert located_payload["db_path"] == str(source_db)
+
+
+def _import_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, backend: str = "sqlite") -> Path:
     source_db = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
-    imported = CliRunner().invoke(main, ["ctx", "import"])
+    monkeypatch.setenv("OCINT_CTX_DUCKDB", str(tmp_path / "ctx.duckdb"))
+    imported = CliRunner().invoke(main, ["ctx", "--backend", backend, "import"])
     assert imported.exit_code == 0, imported.output
     monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
     return source_db
+
+
+def _skip_if_duckdb_fts_unavailable(tmp_path: Path) -> None:
+    try:
+        extension_dir = tmp_path / "duckdb_extensions"
+        extension_dir.mkdir(parents=True, exist_ok=True)
+        engine = create_engine(f"duckdb:///{tmp_path / 'fts-check.duckdb'}")
+        with engine.begin() as connection:
+            connection.execute(text(f"SET extension_directory='{extension_dir.as_posix()}'"))
+            connection.execute(text("INSTALL fts"))
+            connection.execute(text("LOAD fts"))
+    except Exception as error:  # pragma: no cover - environment-dependent extension availability
+        pytest.skip(f"DuckDB FTS extension is unavailable: {error}")
+    finally:
+        if "engine" in locals():
+            engine.dispose()

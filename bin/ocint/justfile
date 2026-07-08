@@ -6,10 +6,9 @@
 # - Use {{...}} only for just-level interpolation.
 
 package_root := justfile_directory()
-requirements_lock := package_root + "/requirements-dev.lock"
-# Use a package-local environment so ocint ctx dependencies are not coupled to
-# the root workspace lockfile while this package is developed from the monorepo.
-uv_ocint := "uv run --no-project --with-requirements '" + requirements_lock + "' --with-editable '" + package_root + "'"
+# Use the package project directly so checks consume the workspace lockfile and
+# stay in sync with bin/ocint/pyproject.toml dependencies.
+uv_ocint := "uv run --project '" + package_root + "'"
 
 # List available ocint commands
 default:

@@ -1,6 +1,6 @@
 SQL_DOC = """# ocint ctx SQL
 
-`ocint ctx sql` runs one read-only SELECT or WITH query against stable views in the imported ocint ctx index. Run `ocint ctx import` first to populate the index from OpenCode.
+`ocint ctx sql` runs one read-only SELECT or WITH query against stable views in the imported ocint ctx index. Run `ocint ctx import` first to populate the index from OpenCode. SQLite is the default ctx backend; pass `ocint ctx --backend duckdb ...` or set `OCINT_CTX_BACKEND=duckdb` to use DuckDB.
 
 Stable views:
 
@@ -18,7 +18,7 @@ ocint ctx sql "SELECT path, provider, provider_session_id FROM ctx_files_touched
 ocint ctx sql "SELECT provider, source_type, name, sessions, events FROM ctx_sources"
 ```
 
-These stable views are persistent objects in the ocint-owned ctx SQLite database. They never read or mutate OpenCode directly; only `ocint ctx import` reads the OpenCode source in read-only mode.
+These stable views are backend-neutral projections. User SQL is executed only inside an in-memory SQLite sandbox populated from those projections, never directly against DuckDB or internal ctx tables. They never read or mutate OpenCode directly; only `ocint ctx import` reads the OpenCode source in read-only mode.
 """
 
 DOCS = {"sql": SQL_DOC}

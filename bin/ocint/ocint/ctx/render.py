@@ -1,6 +1,7 @@
 from ocint._render import render_table
 from ocint._timeutil import format_ms
 from ocint.ctx.models import (
+    CtxCompareResult,
     CtxEventContext,
     CtxEventDetail,
     CtxImportResult,
@@ -27,6 +28,36 @@ def render_import_result(result: CtxImportResult) -> str:
             "",
         ]
     )
+
+
+def render_compare_result(result: CtxCompareResult) -> str:
+    lines = [f"QUERY: {result.query}", f"SOURCE_DB: {result.source_db_path}", ""]
+    for backend_result in result.results:
+        lines.extend(
+            [
+                f"BACKEND: {backend_result.backend}",
+                f"DB: {backend_result.db_path}",
+                f"SOURCE_DB: {backend_result.source_db_path}",
+                f"SESSIONS: seen={backend_result.sessions_seen} written={backend_result.sessions_written}",
+                f"EVENTS: seen={backend_result.events_seen} written={backend_result.events_written}",
+                f"FILES_WRITTEN: {backend_result.files_written}",
+                f"MIGRATION_MS: {backend_result.migration_ms:.3f}",
+                f"SOURCE_TRANSFORM_MS: {backend_result.source_transform_ms:.3f}",
+                f"WRITE_MS: {backend_result.write_ms:.3f}",
+                f"FTS_MS: {backend_result.fts_ms:.3f}",
+                f"TOTAL_IMPORT_MS: {backend_result.total_import_ms:.3f}",
+                f"SEARCH_MS: {backend_result.search_ms:.3f}",
+                f"SEARCH_RESULTS: {backend_result.search_results}",
+                f"INDEX_BYTES: {backend_result.index_bytes}",
+                "",
+            ]
+        )
+    lines.append("SQLITE_TO_DUCKDB_RATIOS:")
+    for metric, value in result.speed_ratios.items():
+        rendered = "n/a" if value is None else f"{value:.3f}"
+        lines.append(f"  {metric}: {rendered}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def render_status(status: CtxStatus) -> str:

@@ -10,19 +10,19 @@ from ocint.ctx.models import (
     CtxStatus,
     CtxTranscript,
 )
-from ocint.ctx.repository import CtxShowRepository, CtxStatusRepository
+from ocint.ctx.protocols import CtxShowRepositoryProtocol, CtxStatusRepositoryProtocol
 from ocint.ctx.transcript import snippet_text
 
 
-def get_status(repository: CtxStatusRepository, *, source_db_path: Path | None = None) -> CtxStatus:
+def get_status(repository: CtxStatusRepositoryProtocol, *, source_db_path: Path | None = None) -> CtxStatus:
     return repository.status(source_db_path=source_db_path)
 
 
-def list_sources(repository: CtxStatusRepository) -> list[CtxSource]:
+def list_sources(repository: CtxStatusRepositoryProtocol) -> list[CtxSource]:
     return repository.sources()
 
 
-def show_session_history(repository: CtxShowRepository, session_id: str) -> CtxTranscript:
+def show_session_history(repository: CtxShowRepositoryProtocol, session_id: str) -> CtxTranscript:
     session = repository.find_session(session_id)
     if session is None:
         raise OcintError(f"Imported ctx session not found: {session_id}")
@@ -42,7 +42,7 @@ def show_session_history(repository: CtxShowRepository, session_id: str) -> CtxT
     )
 
 
-def show_event_history(repository: CtxShowRepository, event_id: str, *, window: int = 5) -> CtxEventContext:
+def show_event_history(repository: CtxShowRepositoryProtocol, event_id: str, *, window: int = 5) -> CtxEventContext:
     selected = repository.find_event(event_id)
     if selected is None:
         raise OcintError(f"Imported ctx event not found: {event_id}")

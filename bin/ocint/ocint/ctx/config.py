@@ -1,8 +1,18 @@
 import os
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 CTX_DB_NAME = "ctx.sqlite"
+CTX_DUCKDB_NAME = "ctx.duckdb"
+CtxBackend = Literal["sqlite", "duckdb"]
+
+
+@dataclass(frozen=True)
+class CtxBackendConfig:
+    backend: CtxBackend
+    db_path: Path
 
 
 def resolve_ctx_db_path(
@@ -12,25 +22,61 @@ def resolve_ctx_db_path(
     cwd: Path | None = None,
 ) -> Path:
     """Resolve the ocint-owned ctx index path without creating directories."""
+    return resolve_ctx_backend_config(backend="sqlite", db_path=db_path, env=env, cwd=cwd).db_path
+
+
+def resolve_ctx_backend_config(
+    *,
+    backend: str | None = None,
+    db_path: str | Path | None = None,
+    env: Mapping[str, str] | None = None,
+    cwd: Path | None = None,
+) -> CtxBackendConfig:
+    """Resolve the selected ctx backend and persistent DB path without touching disk."""
     use_process_env = env is None
     effective_env = os.environ if use_process_env else env
     cwd = Path.cwd() if cwd is None else cwd
+    selected_backend = _resolve_backend(backend=backend, env=effective_env)
+    db_name = CTX_DB_NAME if selected_backend == "sqlite" else CTX_DUCKDB_NAME
+    env_key = "OCINT_CTX_DB" if selected_backend == "sqlite" else "OCINT_CTX_DUCKDB"
 
     if db_path is not None:
         _reject_memory_db_path(db_path)
-        return _absolute(db_path, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
-    if env_path := effective_env.get("OCINT_CTX_DB"):
-        _reject_memory_db_path(env_path)
-        return _absolute(env_path, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
-    if state_home := effective_env.get("XDG_STATE_HOME"):
-        return (
-            _absolute(state_home, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
-            / "ocint"
-            / CTX_DB_NAME
+        return CtxBackendConfig(
+            backend=selected_backend,
+            db_path=_absolute(db_path, env=effective_env, cwd=cwd, allow_process_home=use_process_env),
         )
-    return (
-        _home(effective_env, cwd=cwd, allow_process_home=use_process_env) / ".local" / "state" / "ocint" / CTX_DB_NAME
+    if env_path := effective_env.get(env_key):
+        _reject_memory_db_path(env_path)
+        return CtxBackendConfig(
+            backend=selected_backend,
+            db_path=_absolute(env_path, env=effective_env, cwd=cwd, allow_process_home=use_process_env),
+        )
+    if state_home := effective_env.get("XDG_STATE_HOME"):
+        return CtxBackendConfig(
+            backend=selected_backend,
+            db_path=_absolute(state_home, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
+            / "ocint"
+            / db_name,
+        )
+    return CtxBackendConfig(
+        backend=selected_backend,
+        db_path=_home(effective_env, cwd=cwd, allow_process_home=use_process_env)
+        / ".local"
+        / "state"
+        / "ocint"
+        / db_name,
     )
+
+
+def _resolve_backend(*, backend: str | None, env: Mapping[str, str]) -> CtxBackend:
+    raw_backend = backend or env.get("OCINT_CTX_BACKEND") or "sqlite"
+    normalized = raw_backend.strip().lower()
+    if normalized == "sqlite":
+        return "sqlite"
+    if normalized == "duckdb":
+        return "duckdb"
+    raise ValueError(f"Unsupported ocint ctx backend: {raw_backend}")
 
 
 def _reject_memory_db_path(path: str | Path) -> None:

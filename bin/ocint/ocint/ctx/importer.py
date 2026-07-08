@@ -1,10 +1,11 @@
 import json
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from ocint.ctx.models import CtxImportRequest, CtxImportResult
-from ocint.ctx.repository import CtxImportRepository
+from ocint.ctx.models import CtxImportBatch, CtxImportRequest, CtxImportResult, CtxImportSource
+from ocint.ctx.protocols import CtxImportRepositoryProtocol
 from ocint.opencode.models import OpenCodeSessionRow, OpenCodeUnifiedEventRow, payload_paths, payload_to_text
 from ocint.opencode.repository import OpenCodeRepository
 
@@ -13,8 +14,28 @@ SOURCE_TYPE = "sqlite"
 SOURCE_NAME = "OpenCode DB"
 
 
-def import_history(request: CtxImportRequest, repository: CtxImportRepository) -> CtxImportResult:
-    source_path = request.source_db_path.expanduser()
+def import_history(request: CtxImportRequest, repository: CtxImportRepositoryProtocol) -> CtxImportResult:
+    transform_start = time.perf_counter()
+    batch = build_import_batch(request.source_db_path)
+    transform_ms = (time.perf_counter() - transform_start) * 1000
+    write_result = repository.replace_source_projection(batch)
+    return CtxImportResult(
+        ctx_db_path=repository.db_path,
+        source_db_path=Path(batch.source.source_path),
+        sessions_seen=batch.source.sessions,
+        sessions_written=write_result.sessions_written,
+        events_seen=batch.source.events,
+        events_written=write_result.events_written,
+        files_written=write_result.files_written,
+        checkpoint_updated=True,
+        source_transform_ms=transform_ms,
+        write_ms=write_result.write_ms,
+        fts_ms=write_result.fts_ms,
+    )
+
+
+def build_import_batch(source_db_path: Path) -> CtxImportBatch:
+    source_path = source_db_path.expanduser()
     source_repository = OpenCodeRepository(source_path)
     # OpenCodeRepository opens `mode=ro`; import is the only ctx workflow allowed
     # to inspect native OpenCode storage, and it must never mutate that source DB.
@@ -22,8 +43,7 @@ def import_history(request: CtxImportRequest, repository: CtxImportRepository) -
     events = source_repository.all_unified_events()
     imported_at = int(time.time() * 1000)
     checkpoint = _checkpoint_payload(source_path)
-    source_id = repository.upsert_source(
-        provider=PROVIDER,
+    source = CtxImportSource(
         source_type=SOURCE_TYPE,
         name=SOURCE_NAME,
         source_path=str(source_path),
@@ -32,40 +52,22 @@ def import_history(request: CtxImportRequest, repository: CtxImportRepository) -
         events=len(events),
         checkpoint_payload=checkpoint,
     )
-    # Rebuild only this source's projection so default imports prune source-deleted
-    # history without touching rows imported from other providers or databases.
-    repository.clear_source_rows(source_id)
-    session_rows = [
-        _session_values(source_id=source_id, source_path=source_path, session=session) for session in sessions
-    ]
-    sessions_written = repository.upsert_sessions(session_rows)
     sessions_by_id = {session.id: session for session in sessions}
-    events_written = 0
-    files_written = 0
+    session_rows = [_session_values(source_path=source_path, session=session) for session in sessions]
+    event_rows: list[dict[str, Any]] = []
+    file_rows: list[dict[str, Any]] = []
     for event in events:
         values, paths = _event_values(
-            source_id=source_id,
             event=event,
             session=sessions_by_id.get(event.session_id or ""),
         )
-        repository.upsert_event_with_files(values, paths)
-        events_written += 1
-        files_written += len(set(paths))
-    return CtxImportResult(
-        ctx_db_path=repository.db_path,
-        source_db_path=source_path,
-        sessions_seen=len(sessions),
-        sessions_written=sessions_written,
-        events_seen=len(events),
-        events_written=events_written,
-        files_written=files_written,
-        checkpoint_updated=True,
-    )
+        event_rows.append(values)
+        file_rows.extend(_file_values(event_values=values, paths=paths))
+    return CtxImportBatch(source=source, session_rows=session_rows, event_rows=event_rows, file_rows=file_rows)
 
 
-def _session_values(*, source_id: int, source_path: Path, session: OpenCodeSessionRow) -> dict[str, Any]:
+def _session_values(*, source_path: Path, session: OpenCodeSessionRow) -> dict[str, Any]:
     return {
-        "source_id": source_id,
         "provider": PROVIDER,
         "provider_session_id": session.id,
         "session_id": session.id,
@@ -81,7 +83,6 @@ def _session_values(*, source_id: int, source_path: Path, session: OpenCodeSessi
 
 def _event_values(
     *,
-    source_id: int,
     event: OpenCodeUnifiedEventRow,
     session: OpenCodeSessionRow | None,
 ) -> tuple[dict[str, Any], list[str]]:
@@ -93,7 +94,6 @@ def _event_values(
     citation = f"opencode session={event.session_id or ''} event={event.id} table={event.source_table}"
     return (
         {
-            "source_id": source_id,
             "provider": PROVIDER,
             "provider_session_id": event.session_id,
             "event_id": event.id,
@@ -110,6 +110,25 @@ def _event_values(
         },
         paths,
     )
+
+
+def _file_values(*, event_values: Mapping[str, Any], paths: list[str]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        rows.append(
+            {
+                "provider": event_values["provider"],
+                "path": path,
+                "provider_session_id": event_values["provider_session_id"],
+                "event_id": event_values["event_id"],
+                "source_table": event_values["source_table"],
+            }
+        )
+    return rows
 
 
 def _search_text(

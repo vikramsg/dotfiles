@@ -2,11 +2,11 @@ import re
 
 from ocint._timeutil import parse_since_ms
 from ocint.ctx.models import CtxSearchCandidate, CtxSearchRequest, CtxSearchResult
-from ocint.ctx.repository import CtxSearchRepository
+from ocint.ctx.protocols import CtxSearchRepositoryProtocol
 from ocint.ctx.transcript import snippet_text
 
 
-def search_history(request: CtxSearchRequest, repository: CtxSearchRepository) -> list[CtxSearchResult]:
+def search_history(request: CtxSearchRequest, repository: CtxSearchRepositoryProtocol) -> list[CtxSearchResult]:
     if request.limit is not None and request.limit <= 0:
         raise ValueError("--limit must be greater than zero")
     tokens = _tokens(request.query)

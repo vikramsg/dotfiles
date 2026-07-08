@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
+from sqlalchemy import create_engine, text
 from tests.fixtures.opencode_db import create_opencode_db
 
 
@@ -15,6 +16,19 @@ def test_ctx_sql_queries_imported_views(tmp_path: Path, monkeypatch: pytest.Monk
     )
 
     assert rows == [{"provider": "opencode", "sessions": 2, "workspace": "/work/repo-directory-only"}]
+
+
+@pytest.mark.parametrize("backend", ["sqlite", "duckdb"])
+def test_ctx_sql_is_stable_view_only_for_backend(backend: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    if backend == "duckdb":
+        _skip_if_duckdb_fts_unavailable(tmp_path)
+    _import_fixture(tmp_path, monkeypatch, backend=backend)
+
+    rows = _sql_json("SELECT COUNT(*) AS sessions FROM ctx_sessions", backend=backend)
+    rejected = CliRunner().invoke(main, ["ctx", "--backend", backend, "sql", "SELECT * FROM ctx_event"])
+
+    assert rows == [{"sessions": 2}]
+    assert rejected.exit_code != 0
 
 
 def test_ctx_sql_allows_select_star_from_ctx_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -172,16 +186,33 @@ def test_ctx_sql_rejects_mutation(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert result.exit_code != 0
 
 
-def _import_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _import_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, backend: str = "sqlite") -> None:
     source_db = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
-    imported = CliRunner().invoke(main, ["ctx", "import"])
+    monkeypatch.setenv("OCINT_CTX_DUCKDB", str(tmp_path / "ctx.duckdb"))
+    imported = CliRunner().invoke(main, ["ctx", "--backend", backend, "import"])
     assert imported.exit_code == 0, imported.output
     monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
 
 
-def _sql_json(sql: str) -> list[dict[str, object]]:
-    result = CliRunner().invoke(main, ["ctx", "sql", sql, "--format", "json"])
+def _sql_json(sql: str, *, backend: str = "sqlite") -> list[dict[str, object]]:
+    result = CliRunner().invoke(main, ["ctx", "--backend", backend, "sql", sql, "--format", "json"])
     assert result.exit_code == 0, result.output
     return json.loads(result.output)
+
+
+def _skip_if_duckdb_fts_unavailable(tmp_path: Path) -> None:
+    try:
+        extension_dir = tmp_path / "duckdb_extensions"
+        extension_dir.mkdir(parents=True, exist_ok=True)
+        engine = create_engine(f"duckdb:///{tmp_path / 'fts-check.duckdb'}")
+        with engine.begin() as connection:
+            connection.execute(text(f"SET extension_directory='{extension_dir.as_posix()}'"))
+            connection.execute(text("INSTALL fts"))
+            connection.execute(text("LOAD fts"))
+    except Exception as error:  # pragma: no cover - environment-dependent extension availability
+        pytest.skip(f"DuckDB FTS extension is unavailable: {error}")
+    finally:
+        if "engine" in locals():
+            engine.dispose()

@@ -1,35 +1,22 @@
 import re
-import sqlite3
-from collections.abc import Callable, Iterable, Mapping
+import time
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
-from sqlalchemy import bindparam, delete, func, select, text
+from sqlalchemy import delete, func, insert, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from ocint._sqlsafe import normalize_select_sql
-from ocint.ctx.models import CtxSearchCandidate, CtxSource, CtxStatus
+from ocint.ctx.models import CtxImportBatch, CtxImportWriteResult, CtxSearchCandidate, CtxSource, CtxStatus
 from ocint.ctx.schema import (
     STABLE_CTX_VIEW_COLUMNS,
-    STABLE_CTX_VIEWS,
     ctx_event,
     ctx_file_touched,
     ctx_session,
     ctx_source,
 )
-
-Authorizer = Callable[[int, str | None, str | None, str | None, str | None], int]
-
-_ALLOWED_SANDBOX_ACTIONS = {
-    sqlite3.SQLITE_SELECT,
-    sqlite3.SQLITE_READ,
-    sqlite3.SQLITE_FUNCTION,
-}
-if hasattr(sqlite3, "SQLITE_RECURSIVE"):
-    _ALLOWED_SANDBOX_ACTIONS.add(sqlite3.SQLITE_RECURSIVE)
-
-_SANDBOX_INTEGER_COLUMNS = {"time_created", "time_updated", "sessions", "events", "imported_at"}
 
 
 class _CtxRepositoryBase:
@@ -38,29 +25,61 @@ class _CtxRepositoryBase:
         self.db_path = db_path
 
 
+@dataclass(frozen=True)
+class _FtsClause:
+    join_sql: str = ""
+    where_sql: str = ""
+
+
 class CtxImportRepository(_CtxRepositoryBase):
-    def upsert_source(
-        self,
-        *,
-        provider: str,
-        source_type: str,
-        name: str,
-        source_path: str,
-        imported_at: int,
-        sessions: int,
-        events: int,
-        checkpoint_payload: str | None,
-    ) -> int:
-        values = {
-            "provider": provider,
-            "source_type": source_type,
-            "name": name,
-            "source_path": source_path,
-            "imported_at": imported_at,
-            "sessions": sessions,
-            "events": events,
-            "checkpoint_payload": checkpoint_payload,
-        }
+    def replace_source_projection(self, batch: CtxImportBatch) -> CtxImportWriteResult:
+        """Replace one OpenCode source projection with batched SQLite writes and FTS rows."""
+        write_start = time.perf_counter()
+        source_id = self._upsert_source(batch)
+        self._clear_source_rows(source_id)
+        session_rows = [_with_source_id(row, source_id) for row in batch.session_rows]
+        event_rows = [_with_source_id(row, source_id) for row in batch.event_rows]
+        file_rows = [_with_source_id(row, source_id) for row in batch.file_rows]
+        if session_rows:
+            self._session.execute(insert(ctx_session), session_rows)
+        if event_rows:
+            self._session.execute(insert(ctx_event), event_rows)
+        event_pk_by_key = self._event_pk_by_key(source_id)
+        fts_rows = [
+            {
+                "search_text": row["search_text"],
+                "event_pk": event_pk_by_key[(str(row["source_table"]), str(row["event_id"]))],
+                "event_id": row["event_id"],
+                "source_table": row["source_table"],
+            }
+            for row in event_rows
+        ]
+        if file_rows:
+            self._session.execute(insert(ctx_file_touched), file_rows)
+        write_ms = _elapsed_ms(write_start)
+        fts_start = time.perf_counter()
+        if fts_rows:
+            self._session.execute(
+                text(
+                    """
+                    INSERT INTO ctx_event_fts(search_text, event_pk, event_id, source_table)
+                    VALUES (:search_text, :event_pk, :event_id, :source_table)
+                    """
+                ),
+                fts_rows,
+            )
+        fts_ms = _elapsed_ms(fts_start)
+        return CtxImportWriteResult(
+            source_id=source_id,
+            sessions_written=len(session_rows),
+            events_written=len(event_rows),
+            files_written=len(file_rows),
+            write_ms=write_ms,
+            fts_ms=fts_ms,
+        )
+
+    def _upsert_source(self, batch: CtxImportBatch) -> int:
+        values = batch.source.model_dump()
         statement = sqlite_insert(ctx_source).values(values)
         self._session.execute(
             statement.on_conflict_do_update(
@@ -70,131 +89,44 @@ class CtxImportRepository(_CtxRepositoryBase):
         )
         source_id = self._session.execute(
             select(ctx_source.c.id).where(
-                ctx_source.c.provider == provider,
-                ctx_source.c.source_type == source_type,
-                ctx_source.c.source_path == source_path,
+                ctx_source.c.provider == batch.source.provider,
+                ctx_source.c.source_type == batch.source.source_type,
+                ctx_source.c.source_path == batch.source.source_path,
             )
         ).scalar_one()
         return int(source_id)
 
-    def clear_source_rows(self, source_id: int) -> None:
-        event_pks = list(
-            self._session.execute(select(ctx_event.c.id).where(ctx_event.c.source_id == source_id)).scalars().all()
+    def _clear_source_rows(self, source_id: int) -> None:
+        self._session.execute(
+            text("DELETE FROM ctx_event_fts WHERE event_pk IN (SELECT id FROM ctx_event WHERE source_id = :source_id)"),
+            {"source_id": source_id},
         )
-        if event_pks:
-            self._session.execute(
-                text("DELETE FROM ctx_event_fts WHERE event_pk IN :event_pks").bindparams(
-                    bindparam("event_pks", expanding=True)
-                ),
-                {"event_pks": event_pks},
-            )
         self._session.execute(delete(ctx_file_touched).where(ctx_file_touched.c.source_id == source_id))
         self._session.execute(delete(ctx_event).where(ctx_event.c.source_id == source_id))
         self._session.execute(delete(ctx_session).where(ctx_session.c.source_id == source_id))
 
-    def upsert_sessions(self, sessions: Iterable[Mapping[str, Any]]) -> int:
-        count = 0
-        for values in sessions:
-            statement = sqlite_insert(ctx_session).values(dict(values))
-            excluded = statement.excluded
-            self._session.execute(
-                statement.on_conflict_do_update(
-                    index_elements=[ctx_session.c.source_id, ctx_session.c.provider_session_id],
-                    set_={
-                        "provider": excluded.provider,
-                        "session_id": excluded.session_id,
-                        "parent_id": excluded.parent_id,
-                        "title": excluded.title,
-                        "workspace": excluded.workspace,
-                        "time_created": excluded.time_created,
-                        "time_updated": excluded.time_updated,
-                        "source_path": excluded.source_path,
-                        "payload_json": excluded.payload_json,
-                    },
-                )
-            )
-            count += 1
-        return count
-
-    def upsert_event_with_files(self, event_values: Mapping[str, Any], paths: Iterable[str]) -> int:
-        values = dict(event_values)
-        statement = sqlite_insert(ctx_event).values(values)
-        excluded = statement.excluded
-        self._session.execute(
-            statement.on_conflict_do_update(
-                index_elements=[ctx_event.c.source_id, ctx_event.c.source_table, ctx_event.c.event_id],
-                set_={
-                    "provider": excluded.provider,
-                    "provider_session_id": excluded.provider_session_id,
-                    "message_id": excluded.message_id,
-                    "event_type": excluded.event_type,
-                    "time_created": excluded.time_created,
-                    "time_updated": excluded.time_updated,
-                    "source_path": excluded.source_path,
-                    "full_text": excluded.full_text,
-                    "search_text": excluded.search_text,
-                    "payload_json": excluded.payload_json,
-                    "citation": excluded.citation,
-                },
+    def _event_pk_by_key(self, source_id: int) -> dict[tuple[str, str], int]:
+        rows = self._session.execute(
+            select(ctx_event.c.source_table, ctx_event.c.event_id, ctx_event.c.id).where(
+                ctx_event.c.source_id == source_id
             )
         )
-        event_pk = int(
-            self._session.execute(
-                select(ctx_event.c.id).where(
-                    ctx_event.c.source_id == values["source_id"],
-                    ctx_event.c.source_table == values["source_table"],
-                    ctx_event.c.event_id == values["event_id"],
-                )
-            ).scalar_one()
-        )
-        self._replace_event_fts(event_pk=event_pk, values=values)
-        self._replace_files(values=values, paths=paths)
-        return event_pk
+        return {(str(row.source_table), str(row.event_id)): int(row.id) for row in rows}
 
-    def _replace_event_fts(self, *, event_pk: int, values: Mapping[str, Any]) -> None:
-        self._session.execute(text("DELETE FROM ctx_event_fts WHERE event_pk = :event_pk"), {"event_pk": event_pk})
-        self._session.execute(
-            text(
-                """
-                INSERT INTO ctx_event_fts(search_text, event_pk, event_id, source_table)
-                VALUES (:search_text, :event_pk, :event_id, :source_table)
-                """
-            ),
-            {
-                "search_text": values["search_text"],
-                "event_pk": event_pk,
-                "event_id": values["event_id"],
-                "source_table": values["source_table"],
-            },
+
+class _SQLiteFtsMixin:
+    def _fts_clause(self, query: str, params: dict[str, Any]) -> _FtsClause:
+        fts_query = _sqlite_fts_query(query)
+        if not fts_query:
+            return _FtsClause()
+        params["fts_query"] = fts_query
+        return _FtsClause(
+            join_sql="JOIN ctx_event_fts ON CAST(ctx_event_fts.event_pk AS INTEGER) = e.id",
+            where_sql="ctx_event_fts MATCH :fts_query",
         )
 
-    def _replace_files(self, *, values: Mapping[str, Any], paths: Iterable[str]) -> None:
-        self._session.execute(
-            delete(ctx_file_touched).where(
-                ctx_file_touched.c.source_id == values["source_id"],
-                ctx_file_touched.c.source_table == values["source_table"],
-                ctx_file_touched.c.event_id == values["event_id"],
-            )
-        )
-        seen: set[str] = set()
-        for path in paths:
-            if not path or path in seen:
-                continue
-            seen.add(path)
-            statement = sqlite_insert(ctx_file_touched).values(
-                {
-                    "source_id": values["source_id"],
-                    "provider": values["provider"],
-                    "path": path,
-                    "provider_session_id": values["provider_session_id"],
-                    "event_id": values["event_id"],
-                    "source_table": values["source_table"],
-                }
-            )
-            self._session.execute(statement.on_conflict_do_nothing())
 
-
-class CtxSearchRepository(_CtxRepositoryBase):
+class _CtxSearchReadRepository(_CtxRepositoryBase):
     def search_events(
         self,
         *,
@@ -211,12 +143,9 @@ class CtxSearchRepository(_CtxRepositoryBase):
         """Return already-filtered rows; required predicates are applied before LIMIT."""
         params: dict[str, Any] = {}
         where = ["1 = 1"]
-        join_fts = ""
-        fts_query = _fts_query(query)
-        if fts_query:
-            join_fts = "JOIN ctx_event_fts ON CAST(ctx_event_fts.event_pk AS INTEGER) = e.id"
-            where.append("ctx_event_fts MATCH :fts_query")
-            params["fts_query"] = fts_query
+        fts = self._fts_clause(query, params)
+        if fts.where_sql:
+            where.append(fts.where_sql)
         _add_search_text_filters(where, params, query_tokens, prefix="query_token")
         _add_search_text_filters(where, params, required_terms, prefix="required_term")
         if since_ms is not None:
@@ -254,7 +183,7 @@ class CtxSearchRepository(_CtxRepositoryBase):
               ON s.source_id = e.source_id
              AND s.provider_session_id = e.provider_session_id
             JOIN ctx_source AS src ON src.id = e.source_id
-            {join_fts}
+            {fts.join_sql}
             WHERE {" AND ".join(where)}
             ORDER BY coalesce(e.time_created, 0) DESC, e.source_table DESC, e.event_id DESC
             {limit_sql}
@@ -262,8 +191,12 @@ class CtxSearchRepository(_CtxRepositoryBase):
         )
         return [CtxSearchCandidate.model_validate(row) for row in self._session.execute(statement, params).mappings()]
 
+    def _fts_clause(self, query: str, params: dict[str, Any]) -> _FtsClause:
+        _ = query, params
+        raise NotImplementedError
 
-class CtxShowRepository(_CtxRepositoryBase):
+
+class _CtxLookupReadRepository(_CtxRepositoryBase):
     def find_event(self, event_id: str) -> CtxSearchCandidate | None:
         candidates = _candidate_query(self._session, "e.event_id = :event_id", {"event_id": event_id}, limit=1)
         return candidates[0] if candidates else None
@@ -271,6 +204,8 @@ class CtxShowRepository(_CtxRepositoryBase):
     def find_session(self, session_id: str) -> Mapping[str, Any] | None:
         return _find_session(self._session, session_id)
 
+
+class _CtxShowReadRepository(_CtxLookupReadRepository):
     def session_events(self, *, source_id: int, session_id: str) -> list[CtxSearchCandidate]:
         return _candidate_query(
             self._session,
@@ -288,16 +223,11 @@ class CtxShowRepository(_CtxRepositoryBase):
         return events[start:end]
 
 
-class CtxLocateRepository(_CtxRepositoryBase):
-    def find_event(self, event_id: str) -> CtxSearchCandidate | None:
-        candidates = _candidate_query(self._session, "e.event_id = :event_id", {"event_id": event_id}, limit=1)
-        return candidates[0] if candidates else None
-
-    def find_session(self, session_id: str) -> Mapping[str, Any] | None:
-        return _find_session(self._session, session_id)
+class _CtxLocateReadRepository(_CtxLookupReadRepository):
+    pass
 
 
-class CtxStatusRepository(_CtxRepositoryBase):
+class _CtxStatusReadRepository(_CtxRepositoryBase):
     def status(self, *, source_db_path: Path | None = None) -> CtxStatus:
         index_ready = self.index_ready()
         if not index_ready:
@@ -344,6 +274,34 @@ class CtxStatusRepository(_CtxRepositoryBase):
         return [CtxSource.model_validate(row) for row in self._session.execute(statement).mappings()]
 
     def index_ready(self) -> bool:
+        raise NotImplementedError
+
+
+class _CtxSqlProjectionRepository(_CtxRepositoryBase):
+    def load_stable_projection_rows(self) -> dict[str, list[dict[str, Any]]]:
+        return {name: self._load_projection_rows(name, columns) for name, columns in STABLE_CTX_VIEW_COLUMNS.items()}
+
+    def _load_projection_rows(self, name: str, columns: tuple[str, ...]) -> list[dict[str, Any]]:
+        column_sql = ", ".join(_quote_identifier(column) for column in columns)
+        rows = self._session.execute(text(f"SELECT {column_sql} FROM {_quote_identifier(name)}")).mappings()
+        return [dict(row) for row in rows]
+
+
+class CtxSearchRepository(_SQLiteFtsMixin, _CtxSearchReadRepository):
+    pass
+
+
+class CtxShowRepository(_CtxShowReadRepository):
+    pass
+
+
+class CtxLocateRepository(_CtxLocateReadRepository):
+    pass
+
+
+class CtxStatusRepository(_CtxStatusReadRepository):
+    @override
+    def index_ready(self) -> bool:
         required = {
             "alembic_version",
             "ctx_event_fts",
@@ -363,27 +321,18 @@ class CtxStatusRepository(_CtxRepositoryBase):
         return set(rows) == required
 
 
-class CtxSqlRepository(_CtxRepositoryBase):
-    def execute_stable_view_query(self, sql: str) -> list[dict[str, Any]]:
-        query = normalize_select_sql(sql)
-        _reject_shadowed_ctx_views(query)
-        rows_by_projection = self._load_stable_projection_rows()
-        sandbox = _stable_projection_sandbox(rows_by_projection)
-        try:
-            sandbox.set_authorizer(_stable_projection_authorizer())
-            rows = sandbox.execute(query).fetchall()
-        finally:
-            sandbox.set_authorizer(None)
-            sandbox.close()
-        return [dict(row) for row in rows]
+class CtxSqlRepository(_CtxSqlProjectionRepository):
+    pass
 
-    def _load_stable_projection_rows(self) -> dict[str, list[dict[str, Any]]]:
-        return {name: self._load_projection_rows(name, columns) for name, columns in STABLE_CTX_VIEW_COLUMNS.items()}
 
-    def _load_projection_rows(self, name: str, columns: tuple[str, ...]) -> list[dict[str, Any]]:
-        column_sql = ", ".join(_quote_identifier(column) for column in columns)
-        rows = self._session.execute(text(f"SELECT {column_sql} FROM {_quote_identifier(name)}")).mappings()
-        return [dict(row) for row in rows]
+def _with_source_id(row: Mapping[str, object], source_id: int) -> dict[str, object]:
+    values = dict(row)
+    values["source_id"] = source_id
+    return values
+
+
+def _elapsed_ms(start: float) -> float:
+    return (time.perf_counter() - start) * 1000
 
 
 def _find_session(session: Session, session_id: str) -> Mapping[str, Any] | None:
@@ -401,14 +350,15 @@ def _find_session(session: Session, session_id: str) -> Mapping[str, Any] | None
                        s.time_created AS time_created,
                        s.time_updated AS time_updated,
                        src.source_path AS source_db_path,
-                       count(e.id) AS event_count
+                       (
+                           SELECT count(*)
+                           FROM ctx_event AS e
+                           WHERE e.source_id = s.source_id
+                             AND e.provider_session_id = s.provider_session_id
+                       ) AS event_count
                 FROM ctx_session AS s
                 JOIN ctx_source AS src ON src.id = s.source_id
-                LEFT JOIN ctx_event AS e
-                  ON e.source_id = s.source_id
-                 AND e.provider_session_id = s.provider_session_id
                 WHERE s.provider_session_id = :session_id
-                GROUP BY s.id
                 ORDER BY src.imported_at DESC, s.id DESC
                 LIMIT 1
                 """
@@ -500,202 +450,13 @@ def _like_pattern(value: str) -> str:
     return f"%{escaped}%"
 
 
-def _fts_query(query: str) -> str | None:
+def _sqlite_fts_query(query: str) -> str | None:
     terms = re.findall(r"[\w]+", query.lower())
     if not terms:
         return None
     return " ".join(f'"{term}"' for term in terms)
 
 
-def _stable_projection_sandbox(rows_by_projection: Mapping[str, Iterable[Mapping[str, Any]]]) -> sqlite3.Connection:
-    """Build a transient SQL environment containing only public ctx projections."""
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    try:
-        for name, columns in STABLE_CTX_VIEW_COLUMNS.items():
-            _create_sandbox_table(connection, name, columns)
-            _insert_sandbox_rows(connection, name, columns, rows_by_projection.get(name, []))
-        # `query_only` protects the materialized sandbox even if a future SQL
-        # normalizer bug lets a write-like statement reach sqlite3 execution.
-        connection.execute("PRAGMA query_only = ON")
-    except Exception:
-        connection.close()
-        raise
-    return connection
-
-
-def _create_sandbox_table(connection: sqlite3.Connection, name: str, columns: tuple[str, ...]) -> None:
-    column_defs = ", ".join(f"{_quote_identifier(column)} {_sandbox_column_type(column)}" for column in columns)
-    connection.execute(f"CREATE TABLE {_quote_identifier(name)} ({column_defs})")
-
-
-def _insert_sandbox_rows(
-    connection: sqlite3.Connection,
-    name: str,
-    columns: tuple[str, ...],
-    rows: Iterable[Mapping[str, Any]],
-) -> None:
-    materialized_rows = [dict(row) for row in rows]
-    if not materialized_rows:
-        return
-    column_sql = ", ".join(_quote_identifier(column) for column in columns)
-    parameter_sql = ", ".join(f":{column}" for column in columns)
-    connection.executemany(
-        f"INSERT INTO {_quote_identifier(name)} ({column_sql}) VALUES ({parameter_sql})",
-        materialized_rows,
-    )
-
-
-def _stable_projection_authorizer() -> Authorizer:
-    """Allow reads only from materialized stable projection tables and columns."""
-    allowed_columns = {name: frozenset(columns) for name, columns in STABLE_CTX_VIEW_COLUMNS.items()}
-
-    def authorize(action: int, arg1: str | None, arg2: str | None, _db: str | None, _source: str | None) -> int:
-        if action not in _ALLOWED_SANDBOX_ACTIONS:
-            return sqlite3.SQLITE_DENY
-        if action != sqlite3.SQLITE_READ:
-            return sqlite3.SQLITE_OK
-
-        table = _normalize_identifier(arg1)
-        column = _normalize_identifier(arg2)
-        if table not in allowed_columns:
-            return sqlite3.SQLITE_DENY
-        if column in {None, ""}:
-            return sqlite3.SQLITE_OK
-        return sqlite3.SQLITE_OK if column in allowed_columns[table] else sqlite3.SQLITE_DENY
-
-    return authorize
-
-
-def _sandbox_column_type(column: str) -> str:
-    return "INTEGER" if column in _SANDBOX_INTEGER_COLUMNS else "TEXT"
-
-
 def _quote_identifier(identifier: str) -> str:
     escaped = identifier.replace('"', '""')
     return f'"{escaped}"'
-
-
-def _normalize_identifier(identifier: str | None) -> str | None:
-    return identifier.lower() if identifier is not None else None
-
-
-def _reject_shadowed_ctx_views(query: str) -> None:
-    # A CTE named like an approved view can make SQLite's authorizer report
-    # source=<ctx view name> for non-view reads, so reserve those names.
-    shadowed = sorted(STABLE_CTX_VIEWS.intersection(_cte_names(query)))
-    if shadowed:
-        raise ValueError(f"CTE names must not shadow ctx views: {', '.join(shadowed)}")
-
-
-def _cte_names(query: str) -> set[str]:
-    index = _with_clause_start(query)
-    if index is None:
-        return set()
-    names: set[str] = set()
-    while index < len(query):
-        index = _skip_whitespace(query, index)
-        name, index = _read_identifier(query, index)
-        if name is None:
-            break
-        names.add(name.lower())
-        index = _skip_whitespace(query, index)
-        if index < len(query) and query[index] == "(":
-            index = _skip_balanced_parentheses(query, index)
-            index = _skip_whitespace(query, index)
-        if query[index : index + 2].lower() != "as":
-            break
-        index = _skip_whitespace(query, index + 2)
-        if index >= len(query) or query[index] != "(":
-            break
-        index = _skip_balanced_parentheses(query, index)
-        index = _skip_whitespace(query, index)
-        if index < len(query) and query[index] == ",":
-            index += 1
-            continue
-        break
-    return names
-
-
-def _with_clause_start(query: str) -> int | None:
-    lowered = query.lower()
-    if not lowered.startswith("with"):
-        return None
-    index = _skip_whitespace(query, 4)
-    recursive_end = index + 9
-    if lowered[index:recursive_end] == "recursive" and (
-        recursive_end == len(query) or not _identifier_char(query[recursive_end])
-    ):
-        index = _skip_whitespace(query, index + 9)
-    return index
-
-
-def _skip_whitespace(query: str, index: int) -> int:
-    while index < len(query) and query[index].isspace():
-        index += 1
-    return index
-
-
-def _read_identifier(query: str, index: int) -> tuple[str | None, int]:
-    if index >= len(query):
-        return None, index
-    if query[index] in {'"', "`"}:
-        return _read_quoted_identifier(query, index, query[index], query[index])
-    if query[index] == "[":
-        return _read_quoted_identifier(query, index, "[", "]")
-    start = index
-    while index < len(query) and _identifier_char(query[index]):
-        index += 1
-    return (query[start:index] or None), index
-
-
-def _identifier_char(char: str) -> bool:
-    return char.isalnum() or char == "_"
-
-
-def _read_quoted_identifier(query: str, index: int, opener: str, closer: str) -> tuple[str | None, int]:
-    index += 1
-    chars: list[str] = []
-    while index < len(query):
-        char = query[index]
-        if char == closer:
-            if index + 1 < len(query) and query[index + 1] == closer and opener != "[":
-                chars.append(closer)
-                index += 2
-                continue
-            return "".join(chars), index + 1
-        chars.append(char)
-        index += 1
-    return None, index
-
-
-def _skip_balanced_parentheses(query: str, index: int) -> int:
-    depth = 0
-    while index < len(query):
-        char = query[index]
-        if char in {'"', "'", "`"}:
-            index = _skip_quoted(query, index, char, char)
-            continue
-        if char == "[":
-            index = _skip_quoted(query, index, "[", "]")
-            continue
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return index + 1
-        index += 1
-    return index
-
-
-def _skip_quoted(query: str, index: int, opener: str, closer: str) -> int:
-    index += 1
-    while index < len(query):
-        if query[index] == closer:
-            if index + 1 < len(query) and query[index + 1] == closer and opener != "[":
-                index += 2
-                continue
-            return index + 1
-        index += 1
-    return index

@@ -1,10 +1,10 @@
 from pathlib import Path
 
 from ocint.ctx.models import CtxLocateResult
-from ocint.ctx.repository import CtxLocateRepository
+from ocint.ctx.protocols import CtxLocateRepositoryProtocol
 
 
-def locate_session(repository: CtxLocateRepository, session_id: str) -> CtxLocateResult | None:
+def locate_session(repository: CtxLocateRepositoryProtocol, session_id: str) -> CtxLocateResult | None:
     session = repository.find_session(session_id)
     if session is None:
         return None
@@ -18,7 +18,7 @@ def locate_session(repository: CtxLocateRepository, session_id: str) -> CtxLocat
     )
 
 
-def locate_event(repository: CtxLocateRepository, event_id: str) -> CtxLocateResult | None:
+def locate_event(repository: CtxLocateRepositoryProtocol, event_id: str) -> CtxLocateResult | None:
     event = repository.find_event(event_id)
     if event is None:
         return None
