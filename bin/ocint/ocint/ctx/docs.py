@@ -6,7 +6,9 @@ def docs_catalog() -> tuple[CtxDocTopic, ...]:
         CtxDocTopic(name="quickstart", summary="First useful commands", body=_quickstart_doc()),
         CtxDocTopic(name="commands", summary="Command overview", body=_commands_doc()),
         CtxDocTopic(name="discovery", summary="How to find session IDs", body=_discovery_doc()),
-        CtxDocTopic(name="refresh", summary="Search import behavior and --refresh off", body=_refresh_doc()),
+        CtxDocTopic(
+            name="refresh", summary="Auto refresh, stale-while-revalidate, and --refresh off", body=_refresh_doc()
+        ),
         CtxDocTopic(name="sql", summary="Stable SQL views and examples", body=_sql_doc()),
     )
 
@@ -44,7 +46,7 @@ Start with search when you remember words from a prior OpenCode session:
 ocint ctx search "what you remember"
 ```
 
-Default search imports from `OPENCODE_DB` first when that source database exists. After that, read commands use the imported ocint ctx index:
+Default search creates or refreshes a missing ctx index before searching. Once the index is ready, repeated searches use the index immediately and refresh stale data in the background. After that, read commands use the imported ocint ctx index:
 
 ```bash
 ocint ctx show session
@@ -60,7 +62,7 @@ Use `ocint ctx show session` with no session ID to discover recent session IDs.
 def _commands_doc() -> str:
     return """# ocint ctx commands
 
-- `ocint ctx search "<query>"`: search prior OpenCode history; imports first by default when `OPENCODE_DB` exists.
+- `ocint ctx search "<query>"`: search prior OpenCode history; auto refreshes missing indexes and refreshes stale ready indexes in the background.
 - `ocint ctx show session`: list recent sessions when no ID is supplied.
 - `ocint ctx show session <session-id>`: render a session transcript.
 - `ocint ctx show event <event-id>`: render one event with nearby context.
@@ -99,7 +101,9 @@ Default search is the normal first command:
 ocint ctx search "what you remember"
 ```
 
-When `OPENCODE_DB` exists, default search imports into the ocint ctx index before searching. `--refresh off` never imports and only reads an existing ready index:
+Default `auto` search refreshes in the foreground only when there is no ready index to search. If the index is ready but stale, search results render first and a detached worker refreshes the ctx index for later commands.
+
+`--refresh off` never imports, never parses refresh TTL config, and only reads an existing ready index:
 
 ```bash
 ocint ctx search "what you remember" --refresh off

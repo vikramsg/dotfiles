@@ -1,6 +1,6 @@
 # ocint
 
-`ocint` is a standalone UV package for read-only OpenCode SQLite inspection.
+`ocint` is a standalone UV package for OpenCode SQLite inspection and local ctx history search.
 
 It exposes exactly one console script:
 
@@ -25,8 +25,11 @@ uv tool install ./bin/ocint --force --no-cache
 - Rejects `:memory:` as an OpenCode DB target.
 - Runs arbitrary SQL through a single-statement `SELECT`/`WITH` validator and a
   SQLite read-only authorizer.
-- Installs `ctx_*` SQL views only as temporary connection-local views.
-- Does not import, refresh, migrate, or mutate OpenCode data.
+- Never mutates OpenCode data. `ctx` refresh writes only to the ocint-owned ctx index.
+
+## ctx Refresh
+
+`ocint ctx search` reads the persistent ctx index. Default search imports a missing index, searches stale ready indexes immediately, and refreshes them in the background. `ocint ctx status` shows index readiness, freshness, source DB, refresh log path, and the latest refresh attempt.
 
 ## Examples
 

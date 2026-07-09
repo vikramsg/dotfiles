@@ -1,8 +1,10 @@
+import hashlib
+import json
 import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -16,7 +18,10 @@ from ocint.opencode.models import (
     OpenCodePartData,
     OpenCodePartRow,
     OpenCodeSessionData,
+    OpenCodeSessionKey,
+    OpenCodeSessionMessageKey,
     OpenCodeSessionRow,
+    OpenCodeTranscriptEventKey,
     OpenCodeTranscriptEventRow,
     payload_paths,
 )
@@ -46,20 +51,27 @@ class OpenCodeRepository:
         with self.readonly_connection() as connection:
             if not _table_exists(connection, "session"):
                 return []
-            columns = _columns(connection, "session")
-            data = opencode_schema.data_expr(columns)
+            rows = connection.execute(_sessions_sql(connection)).fetchall()
+            return [_session_from_row(row) for row in rows]
+
+    def session_keys(self) -> list[OpenCodeSessionKey]:
+        with self.readonly_connection() as connection:
+            if not _table_exists(connection, "session"):
+                return []
+            rows = connection.execute(_sessions_sql(connection)).fetchall()
+            return [OpenCodeSessionKey(id=str(row["id"]), fingerprint=_fingerprint_row(row)) for row in rows]
+
+    def sessions_for_ids(self, ids: Sequence[str]) -> list[OpenCodeSessionRow]:
+        unique_ids = list(dict.fromkeys(ids))
+        if not unique_ids:
+            return []
+        with self.readonly_connection() as connection:
+            if not _table_exists(connection, "session"):
+                return []
+            placeholders = ", ".join("?" for _ in unique_ids)
             rows = connection.execute(
-                f"""
-                SELECT
-                  {_expr(columns, ["id"], "id")},
-                  {_expr(columns, ["parent_id", "parentID"], "parent_id")},
-                  {_expr(columns, ["title"], "title")},
-                  {opencode_schema.session_workspace_expr(columns, data)} AS {_quote("cwd")},
-                  {_expr(columns, ["time_created", "timeCreated", "created_at", "createdAt"], "time_created")},
-                  {_expr(columns, ["time_updated", "timeUpdated", "updated_at", "updatedAt"], "time_updated")},
-                  {data} AS {_quote("data")}
-                FROM {_quote("session")}
-                """
+                f"{_sessions_sql(connection)} WHERE {_quote('id')} IN ({placeholders})",
+                tuple(unique_ids),
             ).fetchall()
             return [_session_from_row(row) for row in rows]
 
@@ -112,6 +124,71 @@ class OpenCodeRepository:
             cursor = connection.execute(sql)
             while rows := cursor.fetchmany(batch_size):
                 yield [_transcript_event_from_row(row) for row in rows]
+
+    def transcript_event_keys(self) -> list[OpenCodeTranscriptEventKey]:
+        with self.readonly_connection() as connection:
+            sql = _transcript_events_sql(connection)
+            if sql is None:
+                return []
+            rows = connection.execute(sql).fetchall()
+            return [_transcript_event_key_from_row(row) for row in rows]
+
+    def transcript_event_batches_for_keys(
+        self,
+        keys: Sequence[tuple[str, str]],
+        batch_size: int,
+    ) -> Iterator[list[OpenCodeTranscriptEventRow]]:
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        unique_keys = list(dict.fromkeys(keys))
+        if not unique_keys:
+            return
+        with self.readonly_connection() as connection:
+            sql = _transcript_events_sql(connection)
+            if sql is None:
+                return
+            for chunk in _chunks(unique_keys, max(1, min(batch_size, 500))):
+                predicate = " OR ".join("(source_table = ? AND id = ?)" for _source_table, _id in chunk)
+                params: list[str] = []
+                for source_table, event_id in chunk:
+                    params.extend([source_table, event_id])
+                cursor = connection.execute(f"SELECT * FROM ({sql}) WHERE {predicate}", tuple(params))
+                while rows := cursor.fetchmany(batch_size):
+                    yield [_transcript_event_from_row(row) for row in rows]
+
+    def session_message_keys(self) -> list[OpenCodeSessionMessageKey]:
+        with self.readonly_connection() as connection:
+            if not _table_exists(connection, "session_message"):
+                return []
+            columns = _columns(connection, "session_message")
+            session_col = _first_column(columns, ["session_id", "sessionID"])
+            message_col = _first_column(columns, ["message_id", "messageID"])
+            if session_col is None or message_col is None:
+                return []
+            rows = connection.execute(
+                f"""
+                SELECT {_quote(session_col)} AS session_id,
+                       {_quote(message_col)} AS message_id
+                FROM {_quote("session_message")}
+                ORDER BY session_id, message_id
+                """
+            ).fetchall()
+            return [
+                OpenCodeSessionMessageKey(
+                    session_id=str(row["session_id"]),
+                    message_id=str(row["message_id"]),
+                    fingerprint=_fingerprint_row(row),
+                )
+                for row in rows
+                if row["session_id"] is not None and row["message_id"] is not None
+            ]
+
+    def source_table_watermarks(self) -> dict[str, dict[str, int | None]]:
+        with self.readonly_connection() as connection:
+            return {
+                table: _source_table_watermark(connection, table)
+                for table in ["session", "message", "part", "session_message"]
+            }
 
     def find_session(self, session_id: str) -> OpenCodeSessionRow | None:
         return next((session for session in self.sessions() if session.id == session_id), None)
@@ -195,6 +272,22 @@ def _session_from_row(row: sqlite3.Row) -> OpenCodeSessionRow:
         time_updated=_optional_int(row["time_updated"]),
         data=data,
     )
+
+
+def _sessions_sql(connection: sqlite3.Connection) -> str:
+    columns = _columns(connection, "session")
+    data = opencode_schema.data_expr(columns)
+    return f"""
+                SELECT
+                  {_expr(columns, ["id"], "id")},
+                  {_expr(columns, ["parent_id", "parentID"], "parent_id")},
+                  {_expr(columns, ["title"], "title")},
+                  {opencode_schema.session_workspace_expr(columns, data)} AS {_quote("cwd")},
+                  {_expr(columns, ["time_created", "timeCreated", "created_at", "createdAt"], "time_created")},
+                  {_expr(columns, ["time_updated", "timeUpdated", "updated_at", "updatedAt"], "time_updated")},
+                  {data} AS {_quote("data")}
+                FROM {_quote("session")}
+                """
 
 
 def _transcript_events_sql(connection: sqlite3.Connection) -> str | None:
@@ -371,6 +464,24 @@ def _transcript_event_from_row(row: sqlite3.Row) -> OpenCodeTranscriptEventRow:
     raise ValueError(f"Unsupported OpenCode transcript source table: {source_table}")
 
 
+def _transcript_event_key_from_row(row: sqlite3.Row) -> OpenCodeTranscriptEventKey:
+    source_table = str(row["source_table"])
+    source_table_literal: Literal["message", "part"]
+    if source_table == "message":
+        source_table_literal = "message"
+    elif source_table == "part":
+        source_table_literal = "part"
+    else:
+        raise ValueError(f"Unsupported OpenCode transcript source table: {source_table}")
+    return OpenCodeTranscriptEventKey(
+        id=str(row["id"]),
+        source_table=source_table_literal,
+        session_id=_optional_str(row["session_id"]),
+        message_id=_optional_str(row["message_id"]),
+        fingerprint=_fingerprint_row(row),
+    )
+
+
 def _usage_parts_query(
     connection: sqlite3.Connection,
     *,
@@ -447,6 +558,41 @@ def _table_count(connection: sqlite3.Connection, table: str) -> int:
     if not _table_exists(connection, table):
         return 0
     return int(connection.execute(f"SELECT COUNT(*) FROM {_quote(table)}").fetchone()[0] or 0)
+
+
+def _source_table_watermark(connection: sqlite3.Connection, table: str) -> dict[str, int | None]:
+    if not _table_exists(connection, table):
+        return {"rows": 0, "max_time_created": None, "max_time_updated": None}
+    columns = _columns(connection, table)
+    time_created = opencode_schema.column_expr(columns, ["time_created", "timeCreated", "created_at", "createdAt"])
+    time_updated = opencode_schema.column_expr(columns, ["time_updated", "timeUpdated", "updated_at", "updatedAt"])
+    created_expr = time_created if time_created != "NULL" else "NULL"
+    updated_expr = time_updated if time_updated != "NULL" else "NULL"
+    row = connection.execute(
+        f"""
+        SELECT COUNT(*) AS rows,
+               MAX({created_expr}) AS max_time_created,
+               MAX({updated_expr}) AS max_time_updated
+        FROM {_quote(table)}
+        """
+    ).fetchone()
+    return {
+        "rows": int(row["rows"] or 0),
+        "max_time_created": _optional_int(row["max_time_created"]),
+        "max_time_updated": _optional_int(row["max_time_updated"]),
+    }
+
+
+def _fingerprint_row(row: sqlite3.Row) -> str:
+    payload = dict(row)
+    payload.pop("sort_time", None)
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _chunks[T](items: Sequence[T], size: int) -> Iterator[list[T]]:
+    for index in range(0, len(items), size):
+        yield list(items[index : index + size])
 
 
 def _first_path(payload: OpenCodeJsonModel) -> str | None:

@@ -9,6 +9,7 @@ from ocint.ctx.db.schema import (
     ctx_event_fts_columns,
     ctx_event_fts_create_statement,
     ctx_event_fts_name,
+    ctx_refresh_state,
     ctx_session,
     ctx_source,
     metadata,
@@ -43,16 +44,20 @@ class CtxStatusRepository:
         )
 
     def sources(self) -> list[CtxSource]:
-        statement = select(
-            ctx_source.c.provider,
-            ctx_source.c.source_type,
-            ctx_source.c.name,
-            ctx_source.c.source_path.label("path"),
-            ctx_source.c.events.label("count"),
-            ctx_source.c.sessions,
-            ctx_source.c.events,
-            ctx_source.c.imported_at,
-        ).order_by(ctx_source.c.provider, ctx_source.c.name, ctx_source.c.source_path)
+        statement = (
+            select(
+                ctx_source.c.provider,
+                ctx_source.c.source_type,
+                ctx_source.c.name,
+                ctx_source.c.source_path.label("path"),
+                ctx_source.c.events.label("count"),
+                ctx_source.c.sessions,
+                ctx_source.c.events,
+                ctx_refresh_state.c.latest_success_completed_at.label("imported_at"),
+            )
+            .select_from(ctx_source.outerjoin(ctx_refresh_state, ctx_refresh_state.c.source_id == ctx_source.c.id))
+            .order_by(ctx_source.c.provider, ctx_source.c.name, ctx_source.c.source_path)
+        )
         return [CtxSource.model_validate(row) for row in self._session.execute(statement).mappings()]
 
     def index_ready(self, config: CtxSqlConfig, expected_revision: str) -> bool:

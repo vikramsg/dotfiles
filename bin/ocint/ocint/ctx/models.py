@@ -13,6 +13,88 @@ class RefreshMode(StrEnum):
     OFF = "off"
 
 
+class CtxRefreshAttemptStatus(StrEnum):
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
+class CtxRefreshFreshness(StrEnum):
+    UNKNOWN = "unknown"
+    FRESH = "fresh"
+    STALE = "stale"
+
+
+class CtxRefreshAction(StrEnum):
+    FOREGROUND_REFRESH = "foreground_refresh"
+    SEARCH_ONLY = "search_only"
+    SEARCH_THEN_BACKGROUND_REFRESH = "search_then_background_refresh"
+
+
+class CtxRefreshConfig(CtxModel):
+    ttl_ms: int
+    lock_path: Path
+    log_path: Path
+
+
+class CtxRefreshState(CtxModel):
+    source_id: int | None = None
+    latest_attempt_started_at: int | None = None
+    latest_attempt_completed_at: int | None = None
+    latest_attempt_status: CtxRefreshAttemptStatus | None = None
+    latest_success_started_at: int | None = None
+    latest_success_completed_at: int | None = None
+    latest_success_checkpoint_payload: str | None = None
+    source_watermark_payload: str | None = None
+    latest_failed_at: int | None = None
+    latest_error_message: str | None = None
+
+
+class CtxSourceRefreshStatus(CtxModel):
+    source_id: int
+    provider: str = "opencode"
+    source_type: str
+    name: str
+    source_path: str
+    refresh_freshness: CtxRefreshFreshness = CtxRefreshFreshness.UNKNOWN
+    latest_attempt_started_at: int | None = None
+    latest_attempt_completed_at: int | None = None
+    latest_attempt_status: CtxRefreshAttemptStatus | None = None
+    latest_success_started_at: int | None = None
+    latest_success_completed_at: int | None = None
+    latest_success_checkpoint_payload: str | None = None
+    source_watermark_payload: str | None = None
+    latest_failed_at: int | None = None
+    latest_error_message: str | None = None
+    checkpoint_summary: str | None = None
+
+
+class CtxRefreshPolicyInput(CtxModel):
+    mode: RefreshMode
+    ttl_ms: int
+    index_ready: bool
+    source_state: CtxRefreshState | None = None
+    now_ms: int
+
+
+class CtxRefreshDecision(CtxModel):
+    action: CtxRefreshAction
+    freshness: CtxRefreshFreshness
+
+
+class CtxRefreshFailure(CtxModel):
+    started_at: int
+    completed_at: int
+    error_message: str
+
+
+class CtxRefreshSuccess(CtxModel):
+    started_at: int
+    completed_at: int
+    checkpoint_payload: str | None = None
+    source_watermark_payload: str | None = None
+
+
 class CtxShowMode(StrEnum):
     LITE = "lite"
     FULL = "full"
@@ -60,6 +142,25 @@ class CtxStatus(CtxModel):
     sources: int = 0
     source_db_path: Path | None = None
     source_db_exists: bool = False
+    observed_at_ms: int | None = None
+    refresh_ttl_ms: int | None = None
+    refresh_log_path: Path | None = None
+    refresh_freshness: CtxRefreshFreshness = CtxRefreshFreshness.UNKNOWN
+    refresh_in_progress: bool = False
+    latest_success_started_at: int | None = None
+    latest_success_completed_at: int | None = None
+    latest_attempt_started_at: int | None = None
+    latest_attempt_completed_at: int | None = None
+    latest_attempt_status: CtxRefreshAttemptStatus | None = None
+    latest_failed_at: int | None = None
+    latest_error_message: str | None = None
+    checkpoint_summary: str | None = None
+    refresh_source_id: int | None = None
+    refresh_source_provider: str | None = None
+    refresh_source_type: str | None = None
+    refresh_source_name: str | None = None
+    refresh_source_path: str | None = None
+    refresh_sources: list[CtxSourceRefreshStatus] = Field(default_factory=list)
 
 
 class CtxSource(CtxModel):
@@ -75,6 +176,7 @@ class CtxSource(CtxModel):
 
 class CtxImportRequest(CtxModel):
     source_db_path: Path
+    attempt_started_at: int
 
 
 class CtxImportResult(CtxModel):
@@ -170,6 +272,7 @@ class CtxSearchCandidate(CtxModel):
     source_path: str | None = None
     full_text: str
     search_text: str
+    payload_json: str
     citation: str
     source_db_path: Path | None = None
 

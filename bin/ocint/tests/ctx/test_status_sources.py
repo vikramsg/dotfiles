@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
-from ocint.ctx.db import current_ctx_head_revision
+from ocint.ctx.db import current_ctx_head_revision, migrate_ctx_db
 from ocint.ctx.search import CtxSearchRepository
 from ocint.ctx.sql import CtxSqlRepository
 from ocint.ctx.sql.models import default_ctx_sql_config, stable_view_create_statements
@@ -29,15 +29,24 @@ def test_ctx_status_and_sources_are_opencode_only_json(tmp_path: Path, monkeypat
     assert status_payload["index_ready"] is True
     assert status_payload["sessions"] == 2
     assert status_payload["primary_sessions"] == 1
+    assert status_payload["source_db_path"] == str(tmp_path / "missing-opencode.db")
     assert status_payload["source_db_exists"] is False
+    assert status_payload["observed_at_ms"] is not None
+    assert status_payload["refresh_ttl_ms"] == 3_600_000
+    assert status_payload["refresh_log_path"] == str(tmp_path / "ctx.sqlite.refresh.log")
+    assert status_payload["refresh_freshness"] == "fresh"
+    assert status_payload["latest_attempt_status"] == "success"
+    assert status_payload["latest_success_completed_at"] is not None
+    assert status_payload["checkpoint_summary"]
 
     sources = CliRunner().invoke(main, ["ctx", "sources", "--json"])
     assert sources.exit_code == 0
     assert {row["provider"] for row in json.loads(sources.output)} == {"opencode"}
     assert json.loads(sources.output)[0]["name"] == "OpenCode DB"
+    assert json.loads(sources.output)[0]["imported_at"] == status_payload["latest_success_completed_at"]
 
 
-def test_ctx_status_output_does_not_vary_with_current_opencode_db(
+def test_ctx_status_tracks_current_source_without_changing_refresh_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source_db = create_opencode_db(tmp_path / "opencode.db")
@@ -57,11 +66,74 @@ def test_ctx_status_output_does_not_vary_with_current_opencode_db(
         assert status.exit_code == 0, status.output
         payloads.append(json.loads(status.output))
 
-    assert payloads[0] == payloads[1] == payloads[2]
-    assert payloads[0]["index_ready"] is True
-    assert payloads[0]["sessions"] == 2
-    assert payloads[0]["source_db_path"] is None
-    assert payloads[0]["source_db_exists"] is False
+    assert [payload["source_db_path"] for payload in payloads] == [
+        str(source_db),
+        str(alternate_db),
+        str(tmp_path / "missing-opencode.db"),
+    ]
+    assert [payload["source_db_exists"] for payload in payloads] == [True, True, False]
+    for payload in payloads:
+        assert payload["index_ready"] is True
+        assert payload["sessions"] == 2
+        assert payload["refresh_source_path"] == str(source_db)
+        assert payload["refresh_log_path"] == str(ctx_db.parent / "ctx.sqlite.refresh.log")
+
+
+def test_ctx_status_text_renders_human_readable_refresh_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+
+    status = runner.invoke(main, ["ctx", "status"])
+
+    assert status.exit_code == 0, status.output
+    assert f"CTX_DB: {ctx_db}" in status.output
+    assert f"SOURCE_DB: {source_db}" in status.output
+    assert "SOURCE_DB_EXISTS: True" in status.output
+    assert f"REFRESH_LOG: {ctx_db.parent / 'ctx.sqlite.refresh.log'}" in status.output
+    assert "REFRESH_TTL: 60m" in status.output
+    assert "REFRESH_TTL_MS" not in status.output
+    assert "LATEST_SUCCESS_STARTED_AT: 20" in status.output
+    assert "LATEST_SUCCESS_DURATION:" in status.output
+    assert "CHECKPOINT_EVENTS: 6" in status.output
+    assert "CHECKPOINT_SESSIONS: 2" in status.output
+    assert "CHECKPOINT_SOURCE_SIZE:" in status.output
+    assert "CHECKPOINT_SOURCE_MTIME: 20" in status.output
+    assert "CHECKPOINT_FINGERPRINT:" in status.output
+
+
+def test_ctx_status_refresh_summary_uses_one_explicit_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_a = create_opencode_db(tmp_path / "source-a.db")
+    source_b = create_opencode_db(tmp_path / "source-b.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    for source in [source_a, source_b]:
+        monkeypatch.setenv("OPENCODE_DB", str(source))
+        imported = runner.invoke(main, ["ctx", "import"])
+        assert imported.exit_code == 0, imported.output
+    _force_mixed_refresh_states(ctx_db, source_a=source_a, source_b=source_b)
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+
+    status = runner.invoke(main, ["ctx", "status", "--json"])
+
+    assert status.exit_code == 0, status.output
+    payload = json.loads(status.output)
+    assert payload["refresh_source_path"] == str(source_b)
+    assert payload["latest_attempt_status"] == "failed"
+    assert payload["latest_attempt_started_at"] == 2_000
+    assert payload["latest_success_completed_at"] is None
+    assert payload["checkpoint_summary"] is None
+    assert payload["refresh_freshness"] == "unknown"
+    rows_by_path = {row["source_path"]: row for row in payload["refresh_sources"]}
+    assert rows_by_path[str(source_a)]["latest_success_completed_at"] == 1_000
+    assert rows_by_path[str(source_a)]["latest_attempt_status"] == "success"
+    assert rows_by_path[str(source_b)]["latest_attempt_status"] == "failed"
+    assert rows_by_path[str(source_b)]["latest_success_completed_at"] is None
 
 
 def test_ctx_status_and_sources_fail_fast_without_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -172,6 +244,70 @@ def test_ctx_readiness_rejects_name_compatible_malformed_physical_schema(
     assert result.exit_code != 0
     assert "run `ocint ctx import` first" in result.output
     assert '"index_ready": true' not in result.output
+
+
+def test_ctx_migration_moves_refresh_metadata_out_of_ctx_source(tmp_path: Path) -> None:
+    ctx_db = tmp_path / "old-head.sqlite"
+    imported_at = 1_783_421_234_000
+    checkpoint = '{"mtime_ns": 10, "size": 20}'
+    _create_old_head_ctx_db(ctx_db, imported_at=imported_at, checkpoint=checkpoint)
+
+    migrate_ctx_db(ctx_db)
+
+    with sqlite3.connect(ctx_db) as connection:
+        assert (
+            connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == current_ctx_head_revision()
+        )
+        source_columns = {row[1] for row in connection.execute("PRAGMA table_info(ctx_source)")}
+        assert "imported_at" not in source_columns
+        assert "checkpoint_payload" not in source_columns
+        row = connection.execute(
+            """
+            SELECT latest_attempt_started_at,
+                   latest_attempt_completed_at,
+                   latest_attempt_status,
+                   latest_success_started_at,
+                   latest_success_completed_at,
+                   latest_success_checkpoint_payload
+            FROM ctx_refresh_state
+            """
+        ).fetchone()
+        assert row == (imported_at, imported_at, "success", imported_at, imported_at, checkpoint)
+        derived = connection.execute("SELECT imported_at FROM ctx_sources").fetchone()[0]
+        assert derived == imported_at
+
+
+def test_ctx_migration_drops_stale_ctx_source_batch_temp_table_when_source_exists(tmp_path: Path) -> None:
+    ctx_db = tmp_path / "interrupted-old-head.sqlite"
+    _create_old_head_ctx_db(ctx_db, imported_at=1_783_421_234_000, checkpoint='{"mtime_ns": 10, "size": 20}')
+    with sqlite3.connect(ctx_db) as connection:
+        connection.execute("CREATE TABLE _alembic_tmp_ctx_source (id INTEGER PRIMARY KEY)")
+
+    migrate_ctx_db(ctx_db)
+
+    with sqlite3.connect(ctx_db) as connection:
+        assert (
+            connection.execute("SELECT 1 FROM sqlite_master WHERE name = '_alembic_tmp_ctx_source'").fetchone() is None
+        )
+        assert (
+            connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == current_ctx_head_revision()
+        )
+        assert connection.execute("SELECT COUNT(*) FROM ctx_source").fetchone()[0] == 1
+
+
+def test_ctx_migration_refuses_to_drop_batch_temp_table_when_source_is_missing(tmp_path: Path) -> None:
+    ctx_db = tmp_path / "unsafe-interrupted-old-head.sqlite"
+    _create_old_head_ctx_db(ctx_db, imported_at=1_783_421_234_000, checkpoint='{"mtime_ns": 10, "size": 20}')
+    with sqlite3.connect(ctx_db) as connection:
+        connection.execute("DROP VIEW ctx_sources")
+        connection.execute("ALTER TABLE ctx_source RENAME TO _alembic_tmp_ctx_source")
+
+    with pytest.raises(RuntimeError, match="manual recovery is required"):
+        migrate_ctx_db(ctx_db)
+
+    with sqlite3.connect(ctx_db) as connection:
+        assert connection.execute("SELECT 1 FROM sqlite_master WHERE name = '_alembic_tmp_ctx_source'").fetchone()
+        assert connection.execute("SELECT 1 FROM sqlite_master WHERE name = 'ctx_source'").fetchone() is None
 
 
 def test_ctx_readiness_rejects_malformed_fts_columns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -288,6 +424,124 @@ def _assert_read_commands_require_import(runner: CliRunner, commands: list[list[
         assert result.exit_code != 0, result.output
         assert "run `ocint ctx import` first" in result.output
         assert '"index_ready": true' not in result.output
+
+
+def _force_mixed_refresh_states(ctx_db: Path, *, source_a: Path, source_b: Path) -> None:
+    with sqlite3.connect(ctx_db) as connection:
+        rows = {
+            row[0]: row[1]
+            for row in connection.execute(
+                "SELECT source_path, id FROM ctx_source WHERE source_path IN (?, ?)", (str(source_a), str(source_b))
+            )
+        }
+        source_a_id = rows[str(source_a)]
+        source_b_id = rows[str(source_b)]
+        connection.execute(
+            """
+            UPDATE ctx_refresh_state
+            SET latest_attempt_started_at = 1_000,
+                latest_attempt_completed_at = 1_001,
+                latest_attempt_status = 'success',
+                latest_success_started_at = 999,
+                latest_success_completed_at = 1_000,
+                latest_success_checkpoint_payload = 'source-a-checkpoint',
+                source_watermark_payload = 'source-a-watermark',
+                latest_failed_at = NULL,
+                latest_error_message = NULL
+            WHERE source_id = ?
+            """,
+            (source_a_id,),
+        )
+        connection.execute(
+            """
+            UPDATE ctx_refresh_state
+            SET latest_attempt_started_at = 2_000,
+                latest_attempt_completed_at = 2_001,
+                latest_attempt_status = 'failed',
+                latest_success_started_at = NULL,
+                latest_success_completed_at = NULL,
+                latest_success_checkpoint_payload = NULL,
+                source_watermark_payload = NULL,
+                latest_failed_at = 2_001,
+                latest_error_message = 'source-b-failed'
+            WHERE source_id = ?
+            """,
+            (source_b_id,),
+        )
+
+
+def _create_old_head_ctx_db(ctx_db: Path, *, imported_at: int, checkpoint: str) -> None:
+    with sqlite3.connect(ctx_db) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY);
+            INSERT INTO alembic_version(version_num) VALUES ('20260704_create_ctx_index');
+            CREATE TABLE ctx_source (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              provider VARCHAR NOT NULL,
+              source_type VARCHAR NOT NULL,
+              name VARCHAR NOT NULL,
+              source_path TEXT NOT NULL,
+              imported_at BIGINT NOT NULL,
+              sessions INTEGER NOT NULL,
+              events INTEGER NOT NULL,
+              checkpoint_payload TEXT,
+              CONSTRAINT uq_ctx_source_identity UNIQUE (provider, source_type, source_path)
+            );
+            CREATE TABLE ctx_session (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              source_id INTEGER NOT NULL,
+              provider VARCHAR NOT NULL,
+              provider_session_id VARCHAR NOT NULL,
+              session_id VARCHAR NOT NULL,
+              parent_id VARCHAR,
+              title TEXT,
+              workspace TEXT,
+              time_created BIGINT,
+              time_updated BIGINT,
+              source_path TEXT NOT NULL,
+              payload_json TEXT NOT NULL,
+              CONSTRAINT uq_ctx_session_source_native UNIQUE (source_id, provider_session_id)
+            );
+            CREATE TABLE ctx_event (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              source_id INTEGER NOT NULL,
+              provider VARCHAR NOT NULL,
+              provider_session_id VARCHAR,
+              event_id VARCHAR NOT NULL,
+              source_table VARCHAR NOT NULL,
+              message_id VARCHAR,
+              event_type VARCHAR NOT NULL,
+              time_created BIGINT,
+              time_updated BIGINT,
+              source_path TEXT,
+              full_text TEXT NOT NULL,
+              search_text TEXT NOT NULL,
+              payload_json TEXT NOT NULL,
+              citation TEXT NOT NULL,
+              CONSTRAINT uq_ctx_event_source_native UNIQUE (source_id, source_table, event_id)
+            );
+            CREATE TABLE ctx_file_touched (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              source_id INTEGER NOT NULL,
+              provider VARCHAR NOT NULL,
+              path TEXT NOT NULL,
+              provider_session_id VARCHAR,
+              event_id VARCHAR NOT NULL,
+              source_table VARCHAR NOT NULL,
+              CONSTRAINT uq_ctx_file_source_event_path UNIQUE (source_id, source_table, event_id, path)
+            );
+            CREATE VIRTUAL TABLE ctx_event_fts USING fts5(search_text, event_pk UNINDEXED, event_id UNINDEXED, source_table UNINDEXED);
+            CREATE VIEW ctx_sources AS SELECT provider, source_type, name, source_path AS path, sessions, events, imported_at FROM ctx_source;
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO ctx_source(provider, source_type, name, source_path, imported_at, sessions, events, checkpoint_payload)
+            VALUES ('opencode', 'sqlite', 'OpenCode DB', '/tmp/opencode.db', ?, 0, 0, ?)
+            """,
+            (imported_at, checkpoint),
+        )
 
 
 def _create_name_compatible_malformed_ctx_db(ctx_db: Path) -> None:
