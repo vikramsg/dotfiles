@@ -10,8 +10,8 @@ ocint
 
 Command groups:
 
-- `ocint state ...` provides OpenCode usage analytics under the new prefix.
-- `ocint ctx ...` searches and inspects local OpenCode history on demand.
+- `ocint state ...` provides OpenCode usage analytics.
+- `ocint ctx ...` searches and inspects local OpenCode history via a persistent index.
 
 ## Install
 
@@ -29,7 +29,7 @@ uv tool install ./bin/ocint --force --no-cache
 
 ## ctx Refresh
 
-`ocint ctx search` reads the persistent ctx index. Default search imports a missing index, searches stale ready indexes immediately, and refreshes them in the background. `ocint ctx status` shows index readiness, freshness, source DB, refresh log path, and the latest refresh attempt.
+`ocint ctx search` reads the persistent ctx index. Default search imports a missing index, searches stale ready indexes immediately, and refreshes them in the background (TTL default 60m). `ocint ctx status` shows index readiness, freshness, source DB, refresh log path, and the latest refresh attempt.
 
 ## Examples
 
