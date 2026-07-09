@@ -52,6 +52,7 @@ from ocint.ctx.refresh import (
     refresh_lock_in_progress,
     schedule_refresh_worker,
 )
+from ocint.ctx.refresh.jsonlog import log_refresh_event
 from ocint.ctx.render import (
     render_event_context,
     render_import_result,
@@ -110,6 +111,7 @@ def status(app: CliContext, as_json: bool) -> None:
     """Show imported ctx index availability and counts."""
     ctx_db = _ctx_db_path()
     refresh_config = _ctx_refresh_config(ctx_db)
+    source_db = _source_db_path_or_none()
     in_progress = refresh_lock_in_progress(refresh_config.lock_path)
     with _ready_ctx_session(
         expected_errors=(FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError),
@@ -123,6 +125,8 @@ def status(app: CliContext, as_json: bool) -> None:
             refresh_config=refresh_config,
             refresh_statuses=refresh_repository.source_statuses(),
             refresh_in_progress=in_progress,
+            current_source_db_path=source_db,
+            current_source_db_exists=source_db.exists() if source_db is not None else False,
             now_ms=_now_ms(),
         )
     app.output.write(render_json(result) if as_json else render_status(result))
@@ -218,6 +222,12 @@ def search(
             decision = _auto_refresh_decision(ctx_db=ctx_db, source_path=source_db, refresh_config=refresh_config)
             match decision.action:
                 case CtxRefreshAction.FOREGROUND_REFRESH:
+                    app.output.write(
+                        "ctx index missing or unready for current source; importing before search. "
+                        "Use --refresh off for index-only search.\n",
+                        stderr=True,
+                        enabled=not as_json,
+                    )
                     _consume_import_events(app, source_db=source_db, progress_enabled=not as_json)
                     result = _search_ready_index(request, query=query)
                 case CtxRefreshAction.SEARCH_ONLY:
@@ -538,6 +548,8 @@ def _import_ctx_events(*, source_db: Path | None) -> Iterator[CtxImportProgress 
             yield from _run_refresh_after_lock(ctx_db=ctx_db, source_path=source_path)
     except click.ClickException:
         raise
+    except KeyboardInterrupt as error:
+        raise click.ClickException("ctx refresh interrupted") from error
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
         raise click.ClickException(str(error)) from error
 
@@ -557,17 +569,27 @@ def _run_refresh_after_lock(*, ctx_db: Path, source_path: Path) -> Iterator[CtxI
                 started_at=started_at,
             )
         yield from _run_unlocked_import(ctx_db=ctx_db, source_path=source_path, attempt_started_at=started_at)
-    except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
-        if source_id is not None:
-            with ctx_session(ctx_db, commit=True) as session:
-                record_refresh_attempt_failure(
-                    refresh_repository=CtxRefreshRepository(session, db_path=ctx_db),
-                    source_id=source_id,
-                    started_at=started_at,
-                    completed_at=_now_ms(),
-                    error=error,
-                )
+    except KeyboardInterrupt as error:
+        _record_refresh_failure_if_started(ctx_db=ctx_db, source_id=source_id, started_at=started_at, error=error)
         raise
+    except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
+        _record_refresh_failure_if_started(ctx_db=ctx_db, source_id=source_id, started_at=started_at, error=error)
+        raise
+
+
+def _record_refresh_failure_if_started(
+    *, ctx_db: Path, source_id: int | None, started_at: int, error: BaseException
+) -> None:
+    if source_id is None:
+        return
+    with ctx_session(ctx_db, commit=True) as session:
+        record_refresh_attempt_failure(
+            refresh_repository=CtxRefreshRepository(session, db_path=ctx_db),
+            source_id=source_id,
+            started_at=started_at,
+            completed_at=_now_ms(),
+            error=error,
+        )
 
 
 def _run_unlocked_import(
@@ -586,22 +608,117 @@ def _run_unlocked_import(
 
 
 def _run_refresh_worker() -> None:
-    source_path = _source_db_path()
-    ctx_db = _ctx_db_path()
-    refresh_config = _ctx_refresh_config(ctx_db)
-    _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
+    started_at = _now_ms()
+    outcome = "started"
+    ctx_db: Path | None = None
+    source_path: Path | None = None
+    log_enabled = os.environ.get("OCINT_CTX_REFRESH_LOG_JSONL") == "1"
+    log_refresh_event("refresh_worker_started", enabled=log_enabled)
     try:
+        source_path = _source_db_path()
+        ctx_db = _ctx_db_path()
+        refresh_config = _ctx_refresh_config(ctx_db)
+        log_refresh_event(
+            "refresh_worker_configured",
+            enabled=log_enabled,
+            ctx_db=ctx_db,
+            source_db=source_path,
+            ttl_ms=refresh_config.ttl_ms,
+            lock_path=refresh_config.lock_path,
+        )
+        _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
         with _refresh_lock(ctx_db=ctx_db, refresh_config=refresh_config, foreground=False) as lock_acquired:
             if not lock_acquired:
+                outcome = "skipped"
+                log_refresh_event(
+                    "refresh_skipped",
+                    enabled=log_enabled,
+                    reason="lock_held",
+                    ctx_db=ctx_db,
+                    source_db=source_path,
+                    lock_path=refresh_config.lock_path,
+                )
                 return
+            log_refresh_event(
+                "refresh_lock_acquired",
+                enabled=log_enabled,
+                ctx_db=ctx_db,
+                source_db=source_path,
+                lock_path=refresh_config.lock_path,
+            )
+            log_refresh_event("migration_started", enabled=log_enabled, ctx_db=ctx_db, source_db=source_path)
             migrate_ctx_db(ctx_db)
+            log_refresh_event("migration_completed", enabled=log_enabled, ctx_db=ctx_db, source_db=source_path)
             decision = _auto_refresh_decision(ctx_db=ctx_db, source_path=source_path, refresh_config=refresh_config)
+            log_refresh_event(
+                "refresh_decision",
+                enabled=log_enabled,
+                ctx_db=ctx_db,
+                source_db=source_path,
+                action=decision.action,
+                freshness=decision.freshness,
+                ttl_ms=refresh_config.ttl_ms,
+            )
             if decision.action == CtxRefreshAction.SEARCH_ONLY:
+                outcome = "skipped"
+                log_refresh_event(
+                    "refresh_skipped",
+                    enabled=log_enabled,
+                    reason="fresh_after_lock_recheck",
+                    ctx_db=ctx_db,
+                    source_db=source_path,
+                    freshness=decision.freshness,
+                )
                 return
-            for _event in _run_refresh_after_lock(ctx_db=ctx_db, source_path=source_path):
-                pass
+            for event in _run_refresh_after_lock(ctx_db=ctx_db, source_path=source_path):
+                match event:
+                    case CtxImportProgress():
+                        log_refresh_event(
+                            "import_progress",
+                            enabled=log_enabled,
+                            ctx_db=ctx_db,
+                            source_db=source_path,
+                            message=event.message,
+                            current=event.current,
+                            total=event.total,
+                        )
+                    case CtxImportResult():
+                        outcome = "succeeded"
+                        log_refresh_event(
+                            "refresh_succeeded",
+                            enabled=log_enabled,
+                            ctx_db=ctx_db,
+                            source_db=source_path,
+                            sessions_seen=event.sessions_seen,
+                            sessions_written=event.sessions_written,
+                            events_seen=event.events_seen,
+                            events_written=event.events_written,
+                            files_written=event.files_written,
+                            checkpoint_updated=event.checkpoint_updated,
+                            duration_ms=_now_ms() - started_at,
+                        )
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
+        outcome = "failed"
+        log_refresh_event(
+            "refresh_failed",
+            level="error",
+            enabled=log_enabled,
+            ctx_db=ctx_db,
+            source_db=source_path,
+            error_type=type(error).__name__,
+            error=error,
+            duration_ms=_now_ms() - started_at,
+        )
         raise click.ClickException(str(error)) from error
+    finally:
+        log_refresh_event(
+            "refresh_worker_finished",
+            enabled=log_enabled,
+            ctx_db=ctx_db,
+            source_db=source_path,
+            outcome=outcome,
+            duration_ms=_now_ms() - started_at,
+        )
 
 
 @contextmanager

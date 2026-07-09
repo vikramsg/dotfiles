@@ -92,7 +92,7 @@ def calculate_freshness(state: CtxRefreshState | None, *, ttl_ms: int, now_ms: i
 
 
 def _error_message(error: BaseException) -> str:
-    message = str(error)
+    message = str(error) or type(error).__name__
     if len(message) <= 1_000:
         return message
     return f"{message[:997]}..."

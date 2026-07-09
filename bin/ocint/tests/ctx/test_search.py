@@ -60,6 +60,54 @@ def test_search_filters_by_file_workspace_session_since_and_terms(
     assert "path=AGENTS.md" in result.output
 
 
+def test_search_snippet_uses_event_text_before_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+
+    result = CliRunner().invoke(main, ["ctx", "search", "native event marker", "--refresh", "off", "--json"])
+
+    assert result.exit_code == 0, result.output
+    snippet = json.loads(result.output)[0]["snippet"]
+    assert "native event marker read AGENTS.md" in snippet
+    assert "Primary ctx skill" not in snippet
+
+
+def test_search_text_output_demarcates_text_and_actions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+
+    result = CliRunner().invoke(main, ["ctx", "search", "long-transcript-prefix", "--refresh", "off", "--limit", "1"])
+
+    assert result.exit_code == 0, result.output
+    assert "\n    text:\n" in result.output
+    assert "      long-transcript-prefix" in result.output
+    assert "\n    actions:\n" in result.output
+    assert "      show: ocint ctx show event p-long-payload --window 5" in result.output
+    assert "      session: ocint ctx show session s-primary" in result.output
+
+
+def test_search_tool_output_demarcates_tool_and_actions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    _add_tool_fixture_row(source_db)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+
+    result = runner.invoke(main, ["ctx", "search", "Image read success marker", "--refresh", "off", "--verbose"])
+
+    assert result.exit_code == 0, result.output
+    assert "\n    tool:\n" in result.output
+    assert "      read call_TOOL_TEST completed" in result.output
+    assert "      /tmp/image-test.png" in result.output
+    assert "      Image read success marker" in result.output
+    assert "tool 0 0 0" not in result.output
+    assert "\n    actions:\n" in result.output
+    assert "      citation: opencode session=s-primary event=p-tool-read table=part" in result.output
+    assert "      locate-event: ocint ctx locate event p-tool-read" in result.output
+
+
 def test_search_file_filter_matches_all_payload_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _import_fixture(tmp_path, monkeypatch)
     runner = CliRunner()
@@ -399,6 +447,32 @@ def _add_fts_boost_fixture_rows(source_db: Path) -> None:
     ]
     with sqlite3.connect(source_db) as connection:
         connection.executemany("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)", rows)
+
+
+def _add_tool_fixture_row(source_db: Path) -> None:
+    with sqlite3.connect(source_db) as connection:
+        timestamp = int(connection.execute("SELECT MAX(timeCreated) + 1 FROM part").fetchone()[0] or 1)
+        connection.execute(
+            "INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "p-tool-read",
+                "m-primary",
+                "s-primary",
+                timestamp,
+                timestamp,
+                json.dumps(
+                    {
+                        "type": "tool",
+                        "tool": "read",
+                        "callID": "call_TOOL_TEST",
+                        "status": "completed",
+                        "path": "/tmp/image-test.png",
+                        "output": "Image read success marker",
+                        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+                    }
+                ),
+            ),
+        )
 
 
 def _delete_ctx_fts_rows(ctx_db: Path, event_ids: list[str]) -> None:

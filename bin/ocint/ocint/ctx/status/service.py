@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ocint._errors import OcintError
 from ocint.ctx.models import CtxRefreshConfig, CtxRefreshState, CtxSource, CtxSourceRefreshStatus, CtxStatus
 from ocint.ctx.refresh.service import calculate_freshness
@@ -19,6 +21,8 @@ def get_status(
     refresh_config: CtxRefreshConfig,
     refresh_statuses: list[CtxSourceRefreshStatus],
     refresh_in_progress: bool,
+    current_source_db_path: Path | None,
+    current_source_db_exists: bool,
     now_ms: int,
 ) -> CtxStatus:
     require_ctx_index_ready(repository, config, expected_revision)
@@ -29,7 +33,11 @@ def get_status(
     freshness = calculate_freshness(summary_state, ttl_ms=refresh_config.ttl_ms, now_ms=now_ms)
     return status.model_copy(
         update={
+            "source_db_path": current_source_db_path,
+            "source_db_exists": current_source_db_exists,
+            "observed_at_ms": now_ms,
             "refresh_ttl_ms": refresh_config.ttl_ms,
+            "refresh_log_path": refresh_config.log_path,
             "refresh_freshness": freshness,
             "refresh_in_progress": refresh_in_progress,
             "latest_success_started_at": summary.latest_success_started_at if summary else None,

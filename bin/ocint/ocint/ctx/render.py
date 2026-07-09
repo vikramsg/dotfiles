@@ -1,3 +1,7 @@
+import json
+from datetime import UTC, datetime
+from typing import Any
+
 from ocint._render import render_table
 from ocint._timeutil import format_ms
 from ocint.ctx.models import (
@@ -33,35 +37,135 @@ def render_import_result(result: CtxImportResult) -> str:
 
 
 def render_status(status: CtxStatus) -> str:
-    return "\n".join(
-        [
-            f"PROVIDER: {status.provider}",
-            f"DB: {status.db_path}",
-            f"DB_EXISTS: {status.db_exists}",
-            f"INDEX_READY: {status.index_ready}",
-            f"SESSIONS: {status.sessions}",
-            f"PRIMARY_SESSIONS: {status.primary_sessions}",
-            f"EVENTS: {status.events}",
-            f"SOURCES: {status.sources}",
-            f"SOURCE_DB: {status.source_db_path or ''}",
-            f"SOURCE_DB_EXISTS: {status.source_db_exists}",
-            f"REFRESH_TTL_MS: {status.refresh_ttl_ms if status.refresh_ttl_ms is not None else ''}",
-            f"REFRESH_FRESHNESS: {status.refresh_freshness}",
-            f"REFRESH_IN_PROGRESS: {status.refresh_in_progress}",
-            f"REFRESH_SOURCE_ID: {status.refresh_source_id or ''}",
-            f"REFRESH_SOURCE: {status.refresh_source_path or ''}",
-            f"REFRESH_SOURCES: {len(status.refresh_sources)}",
-            f"LATEST_SUCCESS_STARTED_AT: {status.latest_success_started_at or ''}",
-            f"LATEST_SUCCESS_COMPLETED_AT: {status.latest_success_completed_at or ''}",
-            f"LATEST_ATTEMPT_STARTED_AT: {status.latest_attempt_started_at or ''}",
-            f"LATEST_ATTEMPT_COMPLETED_AT: {status.latest_attempt_completed_at or ''}",
-            f"LATEST_ATTEMPT_STATUS: {status.latest_attempt_status or ''}",
-            f"LATEST_FAILED_AT: {status.latest_failed_at or ''}",
-            f"LATEST_ERROR: {status.latest_error_message or ''}",
-            f"CHECKPOINT: {status.checkpoint_summary or ''}",
-            "",
-        ]
-    )
+    latest_attempt_completed_at = status.latest_attempt_completed_at
+    latest_attempt_running_for = ""
+    if status.latest_attempt_status == "running" and status.latest_attempt_started_at and status.observed_at_ms:
+        latest_attempt_running_for = _duration_between(status.latest_attempt_started_at, status.observed_at_ms)
+    latest_attempt_duration = _duration_between(status.latest_attempt_started_at, latest_attempt_completed_at)
+    lines = [
+        f"PROVIDER: {status.provider}",
+        f"CTX_DB: {status.db_path}",
+        f"DB_EXISTS: {status.db_exists}",
+        f"INDEX_READY: {status.index_ready}",
+        f"SESSIONS: {status.sessions}",
+        f"PRIMARY_SESSIONS: {status.primary_sessions}",
+        f"EVENTS: {status.events}",
+        f"SOURCES: {status.sources}",
+        "",
+        f"SOURCE_DB: {status.source_db_path or ''}",
+        f"SOURCE_DB_EXISTS: {status.source_db_exists}",
+        "",
+        f"REFRESH_LOG: {status.refresh_log_path or ''}",
+        f"REFRESH_TTL: {_format_ttl_ms(status.refresh_ttl_ms)}",
+        f"REFRESH_FRESHNESS: {status.refresh_freshness}",
+        f"REFRESH_IN_PROGRESS: {status.refresh_in_progress}",
+        f"REFRESH_SOURCE_ID: {status.refresh_source_id or ''}",
+        f"REFRESH_SOURCE: {status.refresh_source_path or ''}",
+        f"REFRESH_SOURCES: {len(status.refresh_sources)}",
+        "",
+        f"LATEST_SUCCESS_STARTED_AT: {format_ms(status.latest_success_started_at)}",
+        f"LATEST_SUCCESS_COMPLETED_AT: {format_ms(status.latest_success_completed_at)}",
+        f"LATEST_SUCCESS_DURATION: {_duration_between(status.latest_success_started_at, status.latest_success_completed_at)}",
+        f"LATEST_ATTEMPT_STARTED_AT: {format_ms(status.latest_attempt_started_at)}",
+        f"LATEST_ATTEMPT_COMPLETED_AT: {format_ms(latest_attempt_completed_at)}",
+        f"LATEST_ATTEMPT_STATUS: {status.latest_attempt_status or ''}",
+        f"LATEST_ATTEMPT_DURATION: {latest_attempt_duration}",
+        f"LATEST_ATTEMPT_RUNNING_FOR: {latest_attempt_running_for}",
+        f"LATEST_FAILED_AT: {format_ms(status.latest_failed_at)}",
+        f"LATEST_ERROR: {status.latest_error_message or ''}",
+        "",
+        *_checkpoint_lines(status.checkpoint_summary),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _format_duration_ms(value: int | None) -> str:
+    if value is None:
+        return ""
+    total_seconds = max(0, value // 1000)
+    days, remainder = divmod(total_seconds, 86_400)
+    hours, remainder = divmod(remainder, 3_600)
+    minutes, seconds = divmod(remainder, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds or not parts:
+        parts.append(f"{seconds}s")
+    return " ".join(parts[:2])
+
+
+def _format_ttl_ms(value: int | None) -> str:
+    if value is None:
+        return ""
+    total_seconds = max(0, value // 1000)
+    if total_seconds >= 60 and total_seconds % 60 == 0:
+        return f"{total_seconds // 60}m"
+    return _format_duration_ms(value)
+
+
+def _duration_between(start_ms: int | None, end_ms: int | None) -> str:
+    if start_ms is None or end_ms is None:
+        return ""
+    return _format_duration_ms(max(0, end_ms - start_ms))
+
+
+def _checkpoint_lines(checkpoint: str | None) -> list[str]:
+    if not checkpoint:
+        return ["CHECKPOINT:"]
+    try:
+        payload = json.loads(checkpoint)
+    except json.JSONDecodeError:
+        return [f"CHECKPOINT: {checkpoint}"]
+    if not isinstance(payload, dict):
+        return [f"CHECKPOINT: {checkpoint}"]
+    lines = []
+    if "events" in payload:
+        lines.append(f"CHECKPOINT_EVENTS: {payload['events']}")
+    if "sessions" in payload:
+        lines.append(f"CHECKPOINT_SESSIONS: {payload['sessions']}")
+    if "session_messages" in payload:
+        lines.append(f"CHECKPOINT_SESSION_MESSAGES: {payload['session_messages']}")
+    if "size" in payload:
+        lines.append(f"CHECKPOINT_SOURCE_SIZE: {_format_bytes(payload['size'])}")
+    if "mtime_ns" in payload:
+        lines.append(f"CHECKPOINT_SOURCE_MTIME: {_format_ns_timestamp(payload['mtime_ns'])}")
+    if fingerprint := payload.get("fingerprint"):
+        lines.append(f"CHECKPOINT_FINGERPRINT: {_short_fingerprint(fingerprint)}")
+    return lines or [f"CHECKPOINT: {checkpoint}"]
+
+
+def _format_bytes(value: Any) -> str:
+    try:
+        size = float(value)
+    except TypeError, ValueError:
+        return str(value)
+    units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    unit = units[0]
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            break
+        size /= 1024
+    return f"{int(size)} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+
+
+def _format_ns_timestamp(value: Any) -> str:
+    try:
+        timestamp = int(value) / 1_000_000_000
+    except TypeError, ValueError:
+        return str(value)
+    return datetime.fromtimestamp(timestamp, tz=UTC).isoformat().replace("+00:00", "Z")
+
+
+def _short_fingerprint(value: Any) -> str:
+    text = str(value)
+    if len(text) <= 20:
+        return text
+    return f"{text[:12]}...{text[-4:]}"
 
 
 def render_sources(sources: list[CtxSource]) -> str:
@@ -106,15 +210,29 @@ def render_search_results(results: list[CtxSearchResult], *, verbose: bool = Fal
         ]
         if result.source_path:
             lines.append(f"    path={result.source_path}")
-        lines.append(f"    {result.snippet}")
-        lines.append(f"    show: {result.follow_up}")
-        lines.append(f"    session: ocint ctx show session {result.session_id}")
+        lines.extend(["", f"    {_search_content_label(result.event_type)}:"])
+        lines.extend(f"      {line}" for line in result.snippet.splitlines() or [""])
+        lines.extend(["", "    actions:"])
+        lines.append(f"      show: {result.follow_up}")
+        lines.append(f"      session: ocint ctx show session {result.session_id}")
         if verbose:
-            lines.append(f"    citation: {result.citation}")
-            lines.append(f"    locate-event: ocint ctx locate event {result.event_id}")
-            lines.append(f"    locate-session: ocint ctx locate session {result.session_id}")
+            lines.append(f"      citation: {result.citation}")
+            lines.append(f"      locate-event: ocint ctx locate event {result.event_id}")
+            lines.append(f"      locate-session: ocint ctx locate session {result.session_id}")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks) + "\n"
+
+
+def _search_content_label(event_type: str) -> str:
+    match event_type.lower():
+        case "tool":
+            return "tool"
+        case "file.patch":
+            return "patch"
+        case "assistant" | "user" | "system" | "text" | "part":
+            return "text"
+        case _:
+            return "content"
 
 
 def render_transcript(

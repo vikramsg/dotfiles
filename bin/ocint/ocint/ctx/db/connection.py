@@ -65,7 +65,8 @@ def ctx_session(db_path: Path, *, commit: bool) -> Iterator[Session]:
         yield session
         if commit:
             session.commit()
-    except Exception:
+    except BaseException:
+        # KeyboardInterrupt and SystemExit must also leave the SQLAlchemy session usable for rollback.
         session.rollback()
         raise
     finally:

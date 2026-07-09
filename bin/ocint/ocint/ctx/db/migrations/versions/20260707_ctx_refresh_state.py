@@ -18,6 +18,7 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
+    _drop_stale_ctx_source_batch_temp_table()
     _drop_stable_views()
     if not _table_exists("ctx_refresh_state"):
         op.create_table(
@@ -128,6 +129,16 @@ def _drop_stable_views() -> None:
 def _create_stable_views() -> None:
     for statement in stable_view_create_statements(default_ctx_sql_config()):
         op.execute(statement)
+
+
+def _drop_stale_ctx_source_batch_temp_table() -> None:
+    if not _table_exists("_alembic_tmp_ctx_source"):
+        return
+    if not _table_exists("ctx_source"):
+        raise RuntimeError(
+            "found _alembic_tmp_ctx_source without ctx_source; manual recovery is required before migration"
+        )
+    op.get_bind().execute(text("DROP TABLE _alembic_tmp_ctx_source"))
 
 
 def _table_exists(table_name: str) -> bool:

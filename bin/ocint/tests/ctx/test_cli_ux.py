@@ -43,6 +43,7 @@ def test_search_auto_import_reports_progress_through_injected_output(
 
     assert result.exit_code == 0, result.output
     assert output.progress_starts == ["Importing OpenCode history into ocint ctx index"]
+    assert any("importing before search" in write.text and write.stderr for write in output.writes)
     assert "Loading sessions" in output.progress_messages
     assert "Loading events" in output.progress_messages
     assert "Writing events" in output.progress_messages
@@ -513,6 +514,35 @@ def test_failed_refresh_preserves_success_state_and_attempt_start(
     assert payload["checkpoint_summary"] == previous_status["checkpoint_summary"]
 
 
+def test_interrupted_foreground_refresh_reports_clean_error_and_records_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    attempt_started_at = 1_783_430_101_000
+    attempt_completed_at = attempt_started_at + 500
+    now_values = iter([attempt_started_at, attempt_completed_at])
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    monkeypatch.setattr("ocint.ctx.cli._now_ms", lambda: next(now_values, attempt_completed_at + 1_000))
+    monkeypatch.setattr("ocint.ctx.cli.OpenCodeRepository", lambda _path: InterruptingOpenCodeRepository())
+    runner = CliRunner()
+
+    interrupted = runner.invoke(main, ["ctx", "import"])
+    status = runner.invoke(main, ["ctx", "status", "--json"])
+
+    assert interrupted.exit_code != 0
+    assert "ctx refresh interrupted" in interrupted.output
+    assert "Can't reconnect until invalid transaction is rolled back" not in interrupted.output
+    assert status.exit_code == 0, status.output
+    payload = json.loads(status.output)
+    assert payload["latest_attempt_status"] == "failed"
+    assert payload["latest_attempt_started_at"] == attempt_started_at
+    assert payload["latest_attempt_completed_at"] == attempt_completed_at
+    assert payload["latest_failed_at"] == attempt_completed_at
+    assert payload["latest_error_message"] == "KeyboardInterrupt"
+
+
 def test_show_session_help_explains_no_id_behavior() -> None:
     result = CliRunner().invoke(main, ["ctx", "show", "session", "--help"])
 
@@ -577,6 +607,11 @@ class BlockingOpenCodeRepository:
 class FailingOpenCodeRepository:
     def session_keys(self) -> object:
         raise sqlite3.OperationalError("simulated source failure")
+
+
+class InterruptingOpenCodeRepository:
+    def session_keys(self) -> object:
+        raise KeyboardInterrupt()
 
 
 def _source_alias_path(source_db: Path, *, alias_kind: str) -> Path:

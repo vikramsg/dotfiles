@@ -85,10 +85,19 @@ The lock path is derived from the canonical ctx DB path:
 <canonical ctx db>.refresh.lock
 ```
 
-The lock uses non-blocking `fcntl.flock`.
+The `.refresh.lock` file is only the coordination file. The actual lock is the kernel `flock` held on the open file descriptor, not the file's existence on disk. The lock file may remain after refresh completes.
+
+ocint opens the file and requests an exclusive, non-blocking advisory lock:
+
+```python
+fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+```
+
+If another process already holds the lock, the call fails immediately instead of waiting.
 
 - Foreground `ctx import` lock contention fails visibly.
 - Hidden worker lock contention exits successfully without work.
+- The lock is released when ocint unlocks and closes the file descriptor, or automatically if the process exits.
 - The lock covers migration, freshness re-check, attempt state, import, and success/failure state.
 
 ### Freshness Recheck
@@ -97,10 +106,21 @@ After acquiring the lock and completing migration, the worker re-checks current-
 
 ### Logs
 
-Worker stdout and stderr go to:
+Scheduler and worker diagnostics are JSON Lines written to:
 
 ```text
 <canonical ctx db>.refresh.log
+```
+
+The scheduler appends `refresh_worker_scheduled` and `refresh_worker_spawned` records. The detached worker writes structured lifecycle, decision, progress, success, skip, and failure records to stdout, and stdout/stderr are redirected to the same log file.
+
+Example records:
+
+```jsonl
+{"event":"refresh_worker_spawned","level":"info","pid":581825,"ctx_db":"/home/user/.local/state/ocint/ctx.sqlite","source_db":"/home/user/.local/share/opencode/opencode.db","ts":"2026-07-08T12:00:00.000Z"}
+{"event":"refresh_decision","level":"info","pid":581825,"action":"foreground_refresh","freshness":"stale","ttl_ms":3600000,"ts":"2026-07-08T12:00:00.100Z"}
+{"event":"import_progress","level":"info","pid":581825,"message":"Writing events","current":5000,"total":238886,"ts":"2026-07-08T12:00:01.000Z"}
+{"event":"refresh_succeeded","level":"info","pid":581825,"events_seen":238886,"events_written":42,"duration_ms":8950,"ts":"2026-07-08T12:00:09.000Z"}
 ```
 
 Foreground search output remains focused on search results. JSON command output must remain valid JSON only.

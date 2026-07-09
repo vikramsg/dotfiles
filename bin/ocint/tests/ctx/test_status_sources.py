@@ -29,8 +29,11 @@ def test_ctx_status_and_sources_are_opencode_only_json(tmp_path: Path, monkeypat
     assert status_payload["index_ready"] is True
     assert status_payload["sessions"] == 2
     assert status_payload["primary_sessions"] == 1
+    assert status_payload["source_db_path"] == str(tmp_path / "missing-opencode.db")
     assert status_payload["source_db_exists"] is False
+    assert status_payload["observed_at_ms"] is not None
     assert status_payload["refresh_ttl_ms"] == 3_600_000
+    assert status_payload["refresh_log_path"] == str(tmp_path / "ctx.sqlite.refresh.log")
     assert status_payload["refresh_freshness"] == "fresh"
     assert status_payload["latest_attempt_status"] == "success"
     assert status_payload["latest_success_completed_at"] is not None
@@ -43,7 +46,7 @@ def test_ctx_status_and_sources_are_opencode_only_json(tmp_path: Path, monkeypat
     assert json.loads(sources.output)[0]["imported_at"] == status_payload["latest_success_completed_at"]
 
 
-def test_ctx_status_output_does_not_vary_with_current_opencode_db(
+def test_ctx_status_tracks_current_source_without_changing_refresh_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source_db = create_opencode_db(tmp_path / "opencode.db")
@@ -63,11 +66,44 @@ def test_ctx_status_output_does_not_vary_with_current_opencode_db(
         assert status.exit_code == 0, status.output
         payloads.append(json.loads(status.output))
 
-    assert payloads[0] == payloads[1] == payloads[2]
-    assert payloads[0]["index_ready"] is True
-    assert payloads[0]["sessions"] == 2
-    assert payloads[0]["source_db_path"] is None
-    assert payloads[0]["source_db_exists"] is False
+    assert [payload["source_db_path"] for payload in payloads] == [
+        str(source_db),
+        str(alternate_db),
+        str(tmp_path / "missing-opencode.db"),
+    ]
+    assert [payload["source_db_exists"] for payload in payloads] == [True, True, False]
+    for payload in payloads:
+        assert payload["index_ready"] is True
+        assert payload["sessions"] == 2
+        assert payload["refresh_source_path"] == str(source_db)
+        assert payload["refresh_log_path"] == str(ctx_db.parent / "ctx.sqlite.refresh.log")
+
+
+def test_ctx_status_text_renders_human_readable_refresh_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    ctx_db = tmp_path / "ctx.sqlite"
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+
+    status = runner.invoke(main, ["ctx", "status"])
+
+    assert status.exit_code == 0, status.output
+    assert f"CTX_DB: {ctx_db}" in status.output
+    assert f"SOURCE_DB: {source_db}" in status.output
+    assert "SOURCE_DB_EXISTS: True" in status.output
+    assert f"REFRESH_LOG: {ctx_db.parent / 'ctx.sqlite.refresh.log'}" in status.output
+    assert "REFRESH_TTL: 60m" in status.output
+    assert "REFRESH_TTL_MS" not in status.output
+    assert "LATEST_SUCCESS_STARTED_AT: 20" in status.output
+    assert "LATEST_SUCCESS_DURATION:" in status.output
+    assert "CHECKPOINT_EVENTS: 6" in status.output
+    assert "CHECKPOINT_SESSIONS: 2" in status.output
+    assert "CHECKPOINT_SOURCE_SIZE:" in status.output
+    assert "CHECKPOINT_SOURCE_MTIME: 20" in status.output
+    assert "CHECKPOINT_FINGERPRINT:" in status.output
 
 
 def test_ctx_status_refresh_summary_uses_one_explicit_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -239,6 +275,39 @@ def test_ctx_migration_moves_refresh_metadata_out_of_ctx_source(tmp_path: Path) 
         assert row == (imported_at, imported_at, "success", imported_at, imported_at, checkpoint)
         derived = connection.execute("SELECT imported_at FROM ctx_sources").fetchone()[0]
         assert derived == imported_at
+
+
+def test_ctx_migration_drops_stale_ctx_source_batch_temp_table_when_source_exists(tmp_path: Path) -> None:
+    ctx_db = tmp_path / "interrupted-old-head.sqlite"
+    _create_old_head_ctx_db(ctx_db, imported_at=1_783_421_234_000, checkpoint='{"mtime_ns": 10, "size": 20}')
+    with sqlite3.connect(ctx_db) as connection:
+        connection.execute("CREATE TABLE _alembic_tmp_ctx_source (id INTEGER PRIMARY KEY)")
+
+    migrate_ctx_db(ctx_db)
+
+    with sqlite3.connect(ctx_db) as connection:
+        assert (
+            connection.execute("SELECT 1 FROM sqlite_master WHERE name = '_alembic_tmp_ctx_source'").fetchone() is None
+        )
+        assert (
+            connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == current_ctx_head_revision()
+        )
+        assert connection.execute("SELECT COUNT(*) FROM ctx_source").fetchone()[0] == 1
+
+
+def test_ctx_migration_refuses_to_drop_batch_temp_table_when_source_is_missing(tmp_path: Path) -> None:
+    ctx_db = tmp_path / "unsafe-interrupted-old-head.sqlite"
+    _create_old_head_ctx_db(ctx_db, imported_at=1_783_421_234_000, checkpoint='{"mtime_ns": 10, "size": 20}')
+    with sqlite3.connect(ctx_db) as connection:
+        connection.execute("DROP VIEW ctx_sources")
+        connection.execute("ALTER TABLE ctx_source RENAME TO _alembic_tmp_ctx_source")
+
+    with pytest.raises(RuntimeError, match="manual recovery is required"):
+        migrate_ctx_db(ctx_db)
+
+    with sqlite3.connect(ctx_db) as connection:
+        assert connection.execute("SELECT 1 FROM sqlite_master WHERE name = '_alembic_tmp_ctx_source'").fetchone()
+        assert connection.execute("SELECT 1 FROM sqlite_master WHERE name = 'ctx_source'").fetchone() is None
 
 
 def test_ctx_readiness_rejects_malformed_fts_columns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

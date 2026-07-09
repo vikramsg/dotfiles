@@ -36,6 +36,7 @@ def candidate_query_sql(
                    e.source_path AS source_path,
                    e.full_text AS full_text,
                    e.search_text AS search_text,
+                   e.payload_json AS payload_json,
                    e.citation AS citation,
                    src.source_path AS source_db_path
             FROM ctx_event AS e

@@ -142,7 +142,9 @@ class CtxStatus(CtxModel):
     sources: int = 0
     source_db_path: Path | None = None
     source_db_exists: bool = False
+    observed_at_ms: int | None = None
     refresh_ttl_ms: int | None = None
+    refresh_log_path: Path | None = None
     refresh_freshness: CtxRefreshFreshness = CtxRefreshFreshness.UNKNOWN
     refresh_in_progress: bool = False
     latest_success_started_at: int | None = None
@@ -270,6 +272,7 @@ class CtxSearchCandidate(CtxModel):
     source_path: str | None = None
     full_text: str
     search_text: str
+    payload_json: str
     citation: str
     source_db_path: Path | None = None
 
