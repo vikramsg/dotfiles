@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ocint.ctx.history import candidate_query_sql, candidate_rows
-from ocint.ctx.models import CtxSearchCandidate
+from ocint.ctx.models import CtxSearchCandidate, SearchContentMode
 
 
 class CtxSearchRepository:
@@ -25,7 +25,8 @@ class CtxSearchRepository:
         file_filter: str | None,
         include_subagents: bool,
         exclude_session_tree_root_id: str | None,
-        limit: int | None,
+        content: SearchContentMode,
+        limit: int,
     ) -> list[CtxSearchCandidate]:
         """Return already-filtered rows; required predicates are applied before LIMIT."""
         params: dict[str, Any] = {}
@@ -74,6 +75,13 @@ class CtxSearchRepository:
             params["file_filter"] = _like_pattern(file_filter.lower())
         if not include_subagents:
             where.append("s.parent_id IS NULL")
+        match content:
+            case SearchContentMode.TEXT:
+                where.append("e.event_type != 'tool'")
+            case SearchContentMode.TOOLS:
+                where.append("e.event_type = 'tool'")
+            case SearchContentMode.ALL:
+                pass
         with_sql = ""
         if exclude_session_tree_root_id is not None:
             params["exclude_session_tree_root_id"] = exclude_session_tree_root_id
@@ -93,13 +101,12 @@ class CtxSearchRepository:
                 )
             """
             where.append("coalesce(e.provider_session_id, '') NOT IN (SELECT session_id FROM excluded_session_tree)")
-        if limit is not None:
-            params["limit"] = limit
+        params["limit"] = limit
         statement = text(
             candidate_query_sql(
                 predicate_sql=" AND ".join(where),
                 order="DESC",
-                include_limit=limit is not None,
+                include_limit=True,
                 with_sql=with_sql,
                 join_sql=join_sql,
                 order_prefix_sql=order_prefix_sql,

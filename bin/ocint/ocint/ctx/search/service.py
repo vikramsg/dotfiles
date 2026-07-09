@@ -10,7 +10,7 @@ from ocint.ctx.transcript import snippet_text
 
 
 def search_history(request: CtxSearchRequest, repository: CtxSearchRepository) -> list[CtxSearchResult]:
-    if request.limit is not None and request.limit <= 0:
+    if request.limit <= 0:
         raise ValueError("--limit must be greater than zero")
     tokens = _tokens(request.query)
     required_terms = [term.lower() for term in request.terms]
@@ -24,6 +24,7 @@ def search_history(request: CtxSearchRequest, repository: CtxSearchRepository) -
         file_filter=request.file,
         include_subagents=request.include_subagents,
         exclude_session_tree_root_id=exclude_session_tree_root_id,
+        content=request.content,
         limit=request.limit,
     )
     return [build_search_result(candidate) for candidate in candidates]
