@@ -42,6 +42,7 @@ from ocint.ctx.models import (
     CtxSqlOutputFormat,
     CtxTranscriptFormat,
     RefreshMode,
+    SearchContentMode,
 )
 from ocint.ctx.refresh import (
     CtxRefreshRepository,
@@ -175,7 +176,16 @@ Use --refresh off for deterministic index-only search; it never imports:
     type=click.Choice([RefreshMode.AUTO.value, RefreshMode.OFF.value]),
     help="Refresh mode: auto (default stale-while-revalidate) or off (index-only).",
 )
-@click.option("--limit", type=int, default=50, show_default=True, help="Maximum number of results to print.")
+@click.option(
+    "--content",
+    type=click.Choice(
+        [SearchContentMode.TEXT.value, SearchContentMode.TOOLS.value, SearchContentMode.ALL.value]
+    ),
+    default=SearchContentMode.TEXT.value,
+    show_default=True,
+    help="Event content mode: text (exclude tools), tools (tools only), or all.",
+)
+@click.option("--limit", type=int, default=20, show_default=True, help="Maximum number of results to print.")
 @click.option("--verbose", is_flag=True, help="Show citations and copyable follow-up commands.")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 @click.pass_obj
@@ -190,6 +200,7 @@ def search(
     include_subagents: bool,
     include_current_session: bool,
     refresh: str | None,
+    content: str,
     limit: int,
     verbose: bool,
     as_json: bool,
@@ -199,6 +210,8 @@ def search(
     ctx_db = _ctx_db_path()
     request = CtxSearchRequest(
         query=query,
+        content=SearchContentMode(content),
+        limit=limit,
         session_id=session_id,
         workspace=workspace,
         file=file_filter,
@@ -207,7 +220,6 @@ def search(
         include_subagents=include_subagents,
         active_session_id=_active_opencode_session_id(),
         include_current_session=include_current_session,
-        limit=limit,
     )
     background_source_db: Path | None = None
     background_refresh_config: CtxRefreshConfig | None = None

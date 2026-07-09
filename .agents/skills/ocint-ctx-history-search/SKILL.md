@@ -27,6 +27,8 @@ current task.
    ```bash
    ocint ctx search "<query>"
    ocint ctx search "<query>" --refresh off
+   ocint ctx search "<query>" --content tools
+   ocint ctx search "<query>" --content all
    ocint ctx search "<query>" --workspace <workspace>
    ocint ctx search "<query>" --file <path>
    ocint ctx search "<query>" --since 30d
@@ -36,10 +38,12 @@ current task.
    ocint ctx search "<query>" --include-subagents
    ```
 
-   Default search focuses on primary sessions. Add `--include-subagents` when
-   implementation details, review notes, failure traces, or test output from
-   child sessions are likely to matter. Default search may refresh the index in
-   the background (TTL default 60m). Use `--refresh off` for index-only search.
+   Default search focuses on primary sessions and text events (limit 20). Use
+   `--content tools` or `--content all` when tool output matters. Add
+   `--include-subagents` when implementation details, review notes, failure
+   traces, or test output from child sessions are likely to matter. Default
+   search may refresh the index in the background (TTL default 60m). Use
+   `--refresh off` for index-only search.
 
 3. Inspect promising matches before relying on them:
 

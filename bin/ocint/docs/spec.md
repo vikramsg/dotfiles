@@ -140,9 +140,10 @@ def search_history(request: CtxSearchRequest, repository: CtxSearchRepository) -
     ...
 ```
 
-`CtxSearchRequest` includes `query`, optional `session_id` / `workspace` /
-`file` / `since`, `terms`, `include_subagents`, `active_session_id`,
-`include_current_session`, and `limit`.
+`CtxSearchRequest` includes `query`, required `content` / `limit`, optional
+`session_id` / `workspace` / `file` / `since`, `terms`, `include_subagents`,
+`active_session_id`, and `include_current_session`. CLI defaults are
+`--content text` and `--limit 20`.
 
 ## Show Workflow
 

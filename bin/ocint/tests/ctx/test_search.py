@@ -95,7 +95,10 @@ def test_search_tool_output_demarcates_tool_and_actions(tmp_path: Path, monkeypa
     assert imported.exit_code == 0, imported.output
     monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
 
-    result = runner.invoke(main, ["ctx", "search", "Image read success marker", "--refresh", "off", "--verbose"])
+    result = runner.invoke(
+        main,
+        ["ctx", "search", "Image read success marker", "--content", "tools", "--refresh", "off", "--verbose"],
+    )
 
     assert result.exit_code == 0, result.output
     assert "\n    tool:\n" in result.output
@@ -106,6 +109,62 @@ def test_search_tool_output_demarcates_tool_and_actions(tmp_path: Path, monkeypa
     assert "\n    actions:\n" in result.output
     assert "      citation: opencode session=s-primary event=p-tool-read table=part" in result.output
     assert "      locate-event: ocint ctx locate event p-tool-read" in result.output
+
+
+def test_search_content_modes_filter_tool_events(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    _add_tool_fixture_row(source_db)
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
+
+    default_tool_query = runner.invoke(
+        main, ["ctx", "search", "Image read success marker", "--refresh", "off", "--json"]
+    )
+    tools_only = runner.invoke(
+        main,
+        ["ctx", "search", "Image read success marker", "--content", "tools", "--refresh", "off", "--json"],
+    )
+    text_only = runner.invoke(
+        main,
+        ["ctx", "search", "native event marker", "--content", "text", "--refresh", "off", "--json"],
+    )
+    tools_for_text_marker = runner.invoke(
+        main,
+        ["ctx", "search", "native event marker", "--content", "tools", "--refresh", "off", "--json"],
+    )
+    all_for_text_marker = runner.invoke(
+        main,
+        ["ctx", "search", "native event marker", "--content", "all", "--refresh", "off", "--json"],
+    )
+
+    assert default_tool_query.exit_code == 0, default_tool_query.output
+    assert default_tool_query.output == "[]\n"
+    assert tools_only.exit_code == 0, tools_only.output
+    assert {row["event_id"] for row in json.loads(tools_only.output)} == {"p-tool-read"}
+    assert {row["event_type"] for row in json.loads(tools_only.output)} == {"tool"}
+    assert text_only.exit_code == 0, text_only.output
+    assert "p-primary-step" in {row["event_id"] for row in json.loads(text_only.output)}
+    assert "tool" not in {row["event_type"] for row in json.loads(text_only.output)}
+    assert tools_for_text_marker.exit_code == 0, tools_for_text_marker.output
+    assert tools_for_text_marker.output == "[]\n"
+    assert all_for_text_marker.exit_code == 0, all_for_text_marker.output
+    assert "p-primary-step" in {row["event_id"] for row in json.loads(all_for_text_marker.output)}
+
+
+def test_search_default_limit_is_twenty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _import_fixture(tmp_path, monkeypatch)
+    result = CliRunner().invoke(main, ["ctx", "search", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--limit" in result.output
+    assert "default: 20" in result.output
+    assert "--content" in result.output
+    assert "default: text" in result.output
 
 
 def test_search_file_filter_matches_all_payload_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

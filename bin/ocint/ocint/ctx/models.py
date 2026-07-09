@@ -13,6 +13,12 @@ class RefreshMode(StrEnum):
     OFF = "off"
 
 
+class SearchContentMode(StrEnum):
+    TEXT = "text"
+    TOOLS = "tools"
+    ALL = "all"
+
+
 class CtxRefreshAttemptStatus(StrEnum):
     RUNNING = "running"
     SUCCESS = "success"
@@ -229,6 +235,8 @@ class CtxSessionSummary(CtxModel):
 
 class CtxSearchRequest(CtxModel):
     query: str
+    content: SearchContentMode
+    limit: int
     session_id: str | None = None
     workspace: str | None = None
     file: str | None = None
@@ -237,7 +245,6 @@ class CtxSearchRequest(CtxModel):
     include_subagents: bool = False
     active_session_id: str | None = None
     include_current_session: bool = False
-    limit: int | None = 50
 
 
 class CtxSearchResult(CtxModel):
