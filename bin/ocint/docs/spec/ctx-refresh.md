@@ -160,9 +160,7 @@ The next default search MAY schedule refresh again if TTL still considers the in
 
 Refresh MUST avoid full delete and re-import cycles.
 
-The current rebuild strategy clears all rows for a source and then inserts all sessions, events, file rows, and FTS rows again. That is simple and correct, but it makes every refresh expensive.
-
-The target strategy is incremental reconciliation by stable source keys.
+Refresh uses incremental reconciliation by stable source keys: classify source rows as new, changed, unchanged, or pruned; upsert only what changed; prune missing keys; and keep derived FTS and file rows in sync.
 
 ### Source Keys
 
@@ -186,7 +184,7 @@ Source-row selection MUST account for every OpenCode source table that contribut
 
 Refresh MUST upsert sessions and events using the stable source keys.
 
-For unchanged rows, refresh MUST avoid unnecessary writes when practical. A payload hash or comparable checkpoint MAY be added later if row-level change detection is needed.
+For unchanged rows, refresh MUST avoid unnecessary writes when practical. Row-level fingerprints or comparable checkpoints MUST drive change detection.
 
 For changed events, refresh MUST update the event row and replace dependent projections that derive from the event payload.
 
@@ -194,7 +192,7 @@ For changed events, refresh MUST update the event row and replace dependent proj
 
 Refresh MUST eventually remove ctx rows whose source rows disappeared from OpenCode.
 
-The preferred implementation is a seen-key reconciliation. During refresh, collect the source keys observed for the current source. After upserts complete, delete ctx rows for that source whose keys were not seen.
+Refresh MUST use seen-key reconciliation. During refresh, collect the source keys observed for the current source. After upserts complete, delete ctx rows for that source whose keys were not seen.
 
 This avoids clearing the whole source up front while preserving deletion correctness.
 

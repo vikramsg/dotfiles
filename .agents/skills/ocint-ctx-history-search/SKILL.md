@@ -6,8 +6,7 @@ description: Use ocint ctx to search local OpenCode history before acting. Use w
 # ocint ctx OpenCode History Search
 
 Use `ocint ctx` when local OpenCode history may contain useful context for the
-current task. The commands read the existing OpenCode SQLite database on demand;
-they do not import, refresh, migrate, or mutate OpenCode data.
+current task.
 
 ## Workflow
 
@@ -39,8 +38,8 @@ they do not import, refresh, migrate, or mutate OpenCode data.
 
    Default search focuses on primary sessions. Add `--include-subagents` when
    implementation details, review notes, failure traces, or test output from
-   child sessions are likely to matter. Add `--refresh off` when following older
-   prompts that expect a refresh switch; `ocint ctx` has no persistent index.
+   child sessions are likely to matter. Default search may refresh the index in
+   the background (TTL default 60m). Use `--refresh off` for index-only search.
 
 3. Inspect promising matches before relying on them:
 
