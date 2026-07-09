@@ -51,56 +51,52 @@ incremental where checkpoint data allows it.
 ### Import Interface
 
 ```python
-from collections.abc import Iterator
-from pathlib import Path
-from typing import Protocol
-
-from pydantic import BaseModel
-
 from ocint.ctx.importing.repository import CtxImportRepository
-from ocint.opencode.models import OpenCodeSessionRow, OpenCodeTranscriptEventRow
-
-
-class CtxImportRequest(BaseModel):
-    source_db_path: Path
-
-
-class CtxImportProgress(BaseModel):
-    message: str
-    current: int | None = None
-    total: int | None = None
-
-
-class CtxImportResult(BaseModel):
-    provider: str = "opencode"
-    ctx_db_path: Path
-    source_db_path: Path
-    sessions_seen: int
-    sessions_written: int
-    events_seen: int
-    events_written: int
-    files_written: int
-    checkpoint_updated: bool
-
-
-type CtxImportEvent = CtxImportProgress | CtxImportResult
+from ocint.ctx.models import (
+    CtxImportEvent,
+    CtxImportProgress,
+    CtxImportRequest,
+    CtxImportResult,
+    CtxRefreshSuccess,
+)
 
 
 class OpenCodeHistorySource(Protocol):
+    def session_keys(self) -> list[OpenCodeSessionKey]: ...
+
     def sessions(self) -> list[OpenCodeSessionRow]: ...
 
-    def transcript_event_count(self) -> int: ...
+    def sessions_for_ids(self, ids: Sequence[str]) -> list[OpenCodeSessionRow]: ...
+
+    def transcript_event_keys(self) -> list[OpenCodeTranscriptEventKey]: ...
 
     def transcript_event_batches(self, batch_size: int) -> Iterator[list[OpenCodeTranscriptEventRow]]: ...
+
+    def transcript_event_batches_for_keys(
+        self,
+        keys: Sequence[tuple[str, str]],
+        batch_size: int,
+    ) -> Iterator[list[OpenCodeTranscriptEventRow]]: ...
+
+    def session_message_keys(self) -> list[OpenCodeSessionMessageKey]: ...
+
+    def source_table_watermarks(self) -> dict[str, dict[str, int | None]]: ...
+
+
+class CtxRefreshStateWriter(Protocol):
+    def mark_attempt_success(self, source_id: int, success: CtxRefreshSuccess) -> None: ...
 
 
 def import_history_events(
     request: CtxImportRequest,
     repository: CtxImportRepository,
+    refresh_repository: CtxRefreshStateWriter,
     source: OpenCodeHistorySource,
 ) -> Iterator[CtxImportEvent]:
     ...
 ```
+
+`CtxImportRequest` carries `source_db_path` and `attempt_started_at`.
 
 ## Search Index Workflow
 
@@ -122,46 +118,31 @@ Search reads these projections. Search does not update index rows.
 The workflow is:
 
 - Resolve and open the ctx database.
-- The command handler may run import before search based on command flags.
+- The command handler may refresh or import before search based on `--refresh`
+  (`auto` or `off`). Default `auto` imports a missing index in the foreground,
+  searches a ready index immediately, and refreshes a stale ready index in the
+  background (TTL default 60m).
 - Call search with the user query, filters, and search repository.
 - Search reads indexed ctx history.
 - Return cited results with follow-up commands.
 
-Search itself does not trigger import. Import-before-search is command
+Search itself does not trigger import. Refresh-before-search is command
 orchestration, not search behavior.
 
 ### Search Interface
 
 ```python
-from pydantic import BaseModel
+from ocint.ctx.models import CtxSearchRequest, CtxSearchResult
+from ocint.ctx.search.repository import CtxSearchRepository
 
 
-class SearchRequest(BaseModel):
-    query: str
-    session_id: str | None = None
-    workspace: str | None = None
-    file: str | None = None
-    since: str | None = None
-    include_subagents: bool = False
-    limit: int = 50
-
-
-class SearchResult(BaseModel):
-    session_id: str
-    event_id: str
-    event_type: str
-    time_created: int | None = None
-    title: str | None = None
-    workspace: str | None = None
-    source_path: str | None = None
-    snippet: str
-    citation: str
-    follow_up: str
-
-
-def search_history(request: SearchRequest, repository: SearchRepository) -> list[SearchResult]:
+def search_history(request: CtxSearchRequest, repository: CtxSearchRepository) -> list[CtxSearchResult]:
     ...
 ```
+
+`CtxSearchRequest` includes `query`, optional `session_id` / `workspace` /
+`file` / `since`, `terms`, `include_subagents`, `active_session_id`,
+`include_current_session`, and `limit`.
 
 ## Show Workflow
 
@@ -171,32 +152,39 @@ render transcript context.
 The workflow is:
 
 - Resolve and open the ctx database.
-- Load the requested session or event through the show repository.
+- With no session ID, list recent sessions through the show repository.
+- With a session ID, load that session transcript.
 - For events, load neighboring session events.
 - Render text, markdown, or JSON.
 
 ### Show Interface
 
 ```python
-from pydantic import BaseModel
+from ocint.ctx.models import (
+    CtxEventContext,
+    CtxSession,
+    CtxShowSessionRequest,
+    CtxTranscript,
+)
+from ocint.ctx.show.repository import CtxShowRepository
 
 
-class ShowSessionRequest(BaseModel):
-    session_id: str
-
-
-class ShowEventRequest(BaseModel):
-    event_id: str
-    window: int = 5
-
-
-def show_session(request: ShowSessionRequest, repository: ShowRepository) -> CtxTranscript:
+def show_session_request(
+    repository: CtxShowRepository, request: CtxShowSessionRequest
+) -> list[CtxSession] | CtxTranscript:
     ...
 
 
-def show_event(request: ShowEventRequest, repository: ShowRepository) -> CtxEventContext:
+def show_session_history(repository: CtxShowRepository, session_id: str) -> CtxTranscript:
+    ...
+
+
+def show_event_history(repository: CtxShowRepository, event_id: str, *, window: int = 5) -> CtxEventContext:
     ...
 ```
+
+`CtxShowSessionRequest` is either a recent-sessions request (`limit`) or a
+transcript request (`session_id`).
 
 ## Locate Workflow
 
@@ -212,22 +200,15 @@ The workflow is:
 ### Locate Interface
 
 ```python
-from pydantic import BaseModel
+from ocint.ctx.locate.repository import CtxLocateRepository
+from ocint.ctx.models import CtxLocateResult
 
 
-class LocateSessionRequest(BaseModel):
-    session_id: str
-
-
-class LocateEventRequest(BaseModel):
-    event_id: str
-
-
-def locate_session(request: LocateSessionRequest, repository: LocateRepository) -> CtxLocateResult:
+def locate_session(repository: CtxLocateRepository, session_id: str) -> CtxLocateResult | None:
     ...
 
 
-def locate_event(request: LocateEventRequest, repository: LocateRepository) -> CtxLocateResult:
+def locate_event(repository: CtxLocateRepository, event_id: str) -> CtxLocateResult | None:
     ...
 ```
 
@@ -246,15 +227,10 @@ The workflow is:
 ### SQL Interface
 
 ```python
-from typing import Any
-
-from pydantic import BaseModel
-
-
-class SqlRequest(BaseModel):
-    sql: str
+from ocint.ctx.sql.models import CtxSqlConfig
+from ocint.ctx.sql.repository import CtxSqlRepository
 
 
-def query_sql(request: SqlRequest, repository: SqlRepository) -> list[dict[str, Any]]:
+def run_ctx_sql(repository: CtxSqlRepository, sql: str, config: CtxSqlConfig) -> list[dict[str, object]]:
     ...
 ```
