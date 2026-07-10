@@ -63,7 +63,7 @@
                     "id": "gpt-5.6-sol",
                     "name": "gpt-5.6-sol",
                     "options": {
-                        "reasoningEffort": "xhigh",
+                        "reasoningEffort": "high",
                         "reasoningSummary": "auto"
                     },
                     "modalities": {
@@ -75,7 +75,7 @@
                     "id": "gpt-5.6-terra",
                     "name": "gpt-5.6-terra",
                     "options": {
-                        "reasoningEffort": "xhigh",
+                        "reasoningEffort": "high",
                         "reasoningSummary": "auto"
                     },
                     "modalities": {
