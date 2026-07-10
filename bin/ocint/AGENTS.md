@@ -39,6 +39,14 @@ These instructions apply to `bin/ocint/`.
 - Use root workspace `uv` execution. Example: `uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest ...`.
 - Follow justfile shell variable rules. Example: use `$VAR`, use `$(...)`, do not use `$$VAR`.
 
+### Python testing conventions
+
+- Always prefer having tests work on fake data rather than mocking or patching.
+- Tests should not need helper functions. Construction of helper functions indicates wrong patterns
+- Fixtures are for data, not for creating functions.
+- Always follow the GIVEN/WHEN/THEN structure in tests 
+- Model one test for one behaviour. If multiple similar cases have to be tested, parameterize rather than putting all in one test.
+
 ## Commands
 
 Use the package justfile explicitly:
