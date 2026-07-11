@@ -178,7 +178,7 @@ def create_opencode_db(path: Path) -> Path:
                         "patch": {
                             "files": ["bin/ocint/ocint/ctx/search.py", "implementation_notes.md"],
                             "metadata": {
-                                "filePath": "bin/ocint/tests/integration/ctx/test_sql.py",
+                                "filePath": "bin/ocint/tests/integration/ctx/test_sql_workflow.py",
                                 "relativePath": "bin/ocint/ocint/opencode/schema.py",
                             },
                         },

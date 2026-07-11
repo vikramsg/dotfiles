@@ -13,6 +13,7 @@ class ReleaseWorkspace:
     remote: Path
     environment: dict[str, str]
     baseline_remote_head: str
+    baseline_remote_refs: str
 
 
 @pytest.fixture
@@ -63,6 +64,12 @@ def release_workspace(tmp_path: Path) -> ReleaseWorkspace:
     remote_head = subprocess.run(
         ["git", "rev-parse", "origin/main"], cwd=root, check=True, text=True, capture_output=True
     ).stdout.strip()
+    remote_refs = subprocess.run(
+        ["git", "--git-dir", str(remote), "for-each-ref", "--format=%(refname) %(objectname)"],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
     home = tmp_path / "home"
     tool_dir = tmp_path / "tools"
     tool_bin = tmp_path / "tool-bin"
@@ -80,4 +87,4 @@ def release_workspace(tmp_path: Path) -> ReleaseWorkspace:
         "UV_PROJECT_ENVIRONMENT": str(tmp_path / "project-environment"),
         "PATH": f"{tool_bin}{os.pathsep}{os.environ['PATH']}",
     }
-    return ReleaseWorkspace(root, remote, environment, remote_head)
+    return ReleaseWorkspace(root, remote, environment, remote_head, remote_refs)

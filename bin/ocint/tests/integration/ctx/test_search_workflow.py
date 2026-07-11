@@ -277,7 +277,7 @@ def test_search_file_filter_matches_all_payload_paths(tmp_path: Path, monkeypatc
     for file_filter in [
         "bin/ocint/ocint/ctx/search.py",
         "implementation_notes.md",
-        "bin/ocint/tests/integration/ctx/test_sql.py",
+        "bin/ocint/tests/integration/ctx/test_sql_workflow.py",
     ]:
         result = runner.invoke(main, ["ctx", "search", "file.patch", "--file", file_filter, "--refresh", "off"])
 

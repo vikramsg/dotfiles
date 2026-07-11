@@ -1,13 +1,13 @@
-from datetime import UTC, datetime
+from datetime import date
 
 import pytest
-
 from scripts.ocint_release import (
-    Commit,
     ReleaseError,
     SemVer,
     changelog_section,
     parse_ocint_commit,
+    parse_porcelain_status,
+    prepared_release_date,
     project_version,
     updated_changelog,
 )
@@ -52,16 +52,16 @@ def test_project_version_reads_authoritative_project_field() -> None:
 def test_valid_ocint_commit_preserves_pr_suffix() -> None:
     # GIVEN a conventionally scoped commit
     # WHEN it is parsed
-    result = parse_ocint_commit("a" * 40, 123, "ocint: Improve release safety (#42)")
+    result = parse_ocint_commit("ocint: Improve release safety (#42)")
 
     # THEN only the scope is removed
-    assert result == Commit("a" * 40, 123, "Improve release safety (#42)")
+    assert result == "Improve release safety (#42)"
 
 
 def test_unrelated_commit_is_filtered() -> None:
     # GIVEN another scope
     # WHEN it is parsed
-    result = parse_ocint_commit("a", 1, "nvim: Update plugin")
+    result = parse_ocint_commit("nvim: Update plugin")
 
     # THEN it is omitted
     assert result is None
@@ -72,30 +72,66 @@ def test_malformed_ocint_prefix_is_rejected(subject: str) -> None:
     # GIVEN an almost-ocint prefix
     # WHEN/THEN it is parsed
     with pytest.raises(ReleaseError, match="Malformed"):
-        parse_ocint_commit("a", 1, subject)
+        parse_ocint_commit(subject)
 
 
-def test_changelog_is_newest_first_in_utc() -> None:
-    # GIVEN commits supplied out of order
-    commits = [Commit("a" * 40, 1, "Older"), Commit("b" * 40, 2, "Newer (#7)")]
+def test_changelog_uses_release_date_and_subjects_only() -> None:
+    # GIVEN Git-log subjects in newest-first order and a deterministic UTC date
+    commits = ["Newer (#7)", "Older"]
 
     # WHEN a section is rendered
-    section = changelog_section(SemVer(0, 2, 0), commits)
+    section = changelog_section(SemVer(0, 2, 0), commits, date(2026, 7, 11))
 
-    # THEN timestamps are deterministic UTC and newest is first
-    expected_date = datetime.fromtimestamp(2, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-    assert section.index("Newer (#7)") < section.index("Older")
-    assert expected_date in section
+    # THEN the heading has one date and bullets contain no commit metadata
+    assert section == "## 0.2.0 - 2026-07-11\n\n- Newer (#7)\n- Older\n"
 
 
 def test_changelog_prepends_without_rewriting_history() -> None:
     # GIVEN an existing changelog
-    existing = "# ocint changelog\n\n## 0.1.0\n\n- baseline\n"
+    existing = "# Changelog\n\n## 0.1.0 - 2026-07-01\n\n- baseline\n"
 
     # WHEN the next release is generated
-    result = updated_changelog(existing, SemVer(0, 2, 0), [Commit("a" * 40, 1, "Feature")])
+    result = updated_changelog(existing, SemVer(0, 2, 0), ["Feature (#9)"], date(2026, 7, 11))
 
     # THEN the prior section remains after the new section
-    assert result.count("# ocint changelog") == 1
-    assert result.index("## 0.2.0") < result.index("## 0.1.0")
-    assert result.endswith("- baseline\n")
+    assert result == ("# Changelog\n\n## 0.2.0 - 2026-07-11\n\n- Feature (#9)\n\n## 0.1.0 - 2026-07-01\n\n- baseline\n")
+
+
+def test_prepared_release_date_is_reused_during_later_publish() -> None:
+    # GIVEN a changelog prepared on an earlier UTC date
+    changelog = "# Changelog\n\n## 0.2.0 - 2026-07-11\n\n- Feature (#9)\n"
+
+    # WHEN its release date is read for publish validation
+    result = prepared_release_date(changelog, SemVer(0, 2, 0))
+
+    # THEN the prepared date is retained
+    assert result == date(2026, 7, 11)
+
+
+@pytest.mark.parametrize("value", ["2026-99-11", "11-07-2026", ""])
+def test_invalid_prepared_release_date_is_rejected(value: str) -> None:
+    # GIVEN a malformed prepared heading
+    changelog = f"# Changelog\n\n## 0.2.0 - {value}\n\n- Feature\n"
+
+    # WHEN/THEN publish date validation runs
+    with pytest.raises(ReleaseError, match=r"release (date|heading)"):
+        prepared_release_date(changelog, SemVer(0, 2, 0))
+
+
+def test_porcelain_parser_preserves_unusual_paths() -> None:
+    # GIVEN NUL-delimited status containing spaces, quotes, and a newline
+    raw = b' M ordinary path\0?? quoted"path\0?? line\nbreak\0'
+
+    # WHEN status is parsed
+    result = parse_porcelain_status(raw)
+
+    # THEN paths are returned literally rather than Git-quoted or line-split
+    assert result == {"ordinary path", 'quoted"path', "line\nbreak"}
+
+
+@pytest.mark.parametrize("status", [b"R  renamed\0old\0", b" C copied\0source\0"])
+def test_porcelain_parser_rejects_rename_and_copy_states(status: bytes) -> None:
+    # GIVEN a rename-like status with a second NUL-delimited path
+    # WHEN/THEN status is parsed
+    with pytest.raises(ReleaseError, match="Renamed or copied"):
+        parse_porcelain_status(status)

@@ -201,7 +201,7 @@ def test_ctx_sql_views_include_files_touched(tmp_path: Path, monkeypatch: pytest
     assert rows == [
         {"path": "bin/ocint/ocint/ctx/search.py"},
         {"path": "bin/ocint/ocint/opencode/schema.py"},
-        {"path": "bin/ocint/tests/integration/ctx/test_sql.py"},
+        {"path": "bin/ocint/tests/integration/ctx/test_sql_workflow.py"},
         {"path": "implementation_notes.md"},
     ]
 

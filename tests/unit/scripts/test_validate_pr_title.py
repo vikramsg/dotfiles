@@ -10,9 +10,29 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 SCOPES = MODULE.SCOPES
 validate_pr_title = MODULE.validate_pr_title
+EXPECTED_SCOPES = (
+    "chore",
+    "ghostty",
+    "git",
+    "lch",
+    "nvim",
+    "ocint",
+    "opencode",
+    "screenshot",
+    "terraform",
+    "tmux",
+    "zed",
+)
 
 
-@pytest.mark.parametrize("scope", SCOPES)
+def test_scope_allowlist_is_exact() -> None:
+    # GIVEN the agreed repository scope policy
+    # WHEN the implementation allowlist is inspected
+    # THEN additions and removals both fail this contract
+    assert SCOPES == EXPECTED_SCOPES
+
+
+@pytest.mark.parametrize("scope", EXPECTED_SCOPES)
 def test_all_allowed_scopes_are_accepted(scope: str) -> None:
     # GIVEN an explicitly allowed scope
     title = f"{scope}: useful summary"

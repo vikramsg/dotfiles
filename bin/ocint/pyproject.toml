@@ -30,12 +30,13 @@ build-backend = "uv_build"
 module-root = "."
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
 testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py314"
 line-length = 120
-src = ["ocint", "tests"]
+src = ["ocint", "scripts", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -65,7 +66,7 @@ ignore = [
 python-version = "3.14"
 
 [tool.ty.src]
-include = ["ocint", "tests"]
+include = ["ocint", "scripts", "tests"]
 
 [tool.ty.rules]
 all = "error"

@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 from ocint._db import open_readonly_connection
-
 from tests.support.opencode_db import create_opencode_db
 
 
