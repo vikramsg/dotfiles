@@ -71,20 +71,10 @@ These instructions apply to `bin/ocint/`.
 Use the package justfile explicitly:
 
 ```sh
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile test
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile check
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile smoke
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile smoke-ctx
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile smoke-state
-```
-
-Use root workspace `uv` execution when running tools directly:
-
-```sh
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/tests
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen ruff check /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/ocint /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/tests
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen ruff format --check /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/ocint /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/tests
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen ty check /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/ocint /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/tests
+just --justfile bin/ocint/justfile test
+just --justfile bin/ocint/justfile check
+# May require longer timeout, so prefer only during final verification checks
+just --justfile bin/ocint/justfile smoke
 ```
 
 ## Tree
