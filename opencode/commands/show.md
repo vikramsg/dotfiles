@@ -4,6 +4,8 @@ agent: plan
 subtask: false
 ---
 
+$ARGUMENTS
+
 Give me component map + interface sketch of change
 
 Then ask me if I want to do the next step: Are you ready to see files changed, and patterns used
