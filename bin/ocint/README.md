@@ -17,6 +17,7 @@ Command groups:
 
 ```bash
 uv tool install ./bin/ocint --force --no-cache
+ocint --version
 ```
 
 ## Safety

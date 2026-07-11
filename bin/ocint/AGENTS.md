@@ -87,6 +87,11 @@ bin/ocint/
 ├── implementation_notes.md
 ├── docs/
 ├── tests/
+│   ├── architecture/
+│   ├── e2e/
+│   ├── integration/
+│   ├── unit/
+│   └── support/  # FIXME: This structure is wrong; tests must not use helper functions.
 └── ocint/
     ├── cli/
     │   └── __init__.py
@@ -140,6 +145,11 @@ bin/ocint/
         ├── models.py
         └── repository.py
 ```
+
+## References
+
+- Presentation ownership and output boundaries: `docs/architecture/presentation.md`
+- Release process: `docs/releases.md`
 
 ## Justfile Guardrail
 
