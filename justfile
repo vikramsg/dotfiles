@@ -132,6 +132,14 @@ opencode-sandbox +args:
 ocint:
     uv tool install "{{justfile_directory()}}/bin/ocint" --force --no-cache
 
+# Prepare the three reviewable files for an ocint release
+ocint-release-prepare version:
+    uv run python "{{justfile_directory()}}/bin/ocint/scripts/ocint_release.py" prepare "{{version}}"
+
+# Commit, annotate-tag, and locally install a prepared ocint release (never pushes)
+ocint-release-publish version *flags:
+    uv run python "{{justfile_directory()}}/bin/ocint/scripts/ocint_release.py" publish "{{version}}" {{flags}}
+
 # Set up Ghostty symlink
 ghostty:
     @echo "Setting up Ghostty symlink..."

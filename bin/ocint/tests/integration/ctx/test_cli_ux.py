@@ -11,7 +11,7 @@ from ocint.cli import main
 from ocint.ctx.config import resolve_ctx_refresh_config
 from ocint.ctx.refresh import acquire_refresh_lock
 from ocint.opencode.repository import OpenCodeRepository
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_search_auto_imports_when_index_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

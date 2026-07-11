@@ -7,7 +7,7 @@ import pytest
 from click.testing import CliRunner
 from ocint.cli import main
 from ocint.ctx.search import search_history
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_search_defaults_to_primary_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -277,7 +277,7 @@ def test_search_file_filter_matches_all_payload_paths(tmp_path: Path, monkeypatc
     for file_filter in [
         "bin/ocint/ocint/ctx/search.py",
         "implementation_notes.md",
-        "bin/ocint/tests/ctx/test_sql.py",
+        "bin/ocint/tests/integration/ctx/test_sql.py",
     ]:
         result = runner.invoke(main, ["ctx", "search", "file.patch", "--file", file_filter, "--refresh", "off"])
 

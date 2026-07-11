@@ -7,7 +7,7 @@ import pytest
 from ocint._timeutil import make_window
 from ocint.opencode.repository import OpenCodeRepository
 from ocint.state.service import StateService
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_state_summary_uses_authoritative_session_aggregates_and_counts_messages(tmp_path: Path) -> None:

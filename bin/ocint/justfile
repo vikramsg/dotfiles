@@ -50,7 +50,7 @@ smoke-ctx:
     {{uv_ocint}} ocint ctx docs search "stable views"
     @set -e; \
         TMPDIR="$(mktemp -d /tmp/ocint-smoke-ctx.XXXXXX)"; \
-        OPENCODE_DB="$TMPDIR/opencode.db" {{uv_ocint}} python3 -c 'import os; from pathlib import Path; from tests.fixtures.opencode_db import create_opencode_db; create_opencode_db(Path(os.environ["OPENCODE_DB"]))'; \
+        OPENCODE_DB="$TMPDIR/opencode.db" {{uv_ocint}} python3 -c 'import os; from pathlib import Path; from tests.support.opencode_db import create_opencode_db; create_opencode_db(Path(os.environ["OPENCODE_DB"]))'; \
         export OCINT_CTX_DB="$TMPDIR/ctx.sqlite"; \
         export OPENCODE_DB="$TMPDIR/opencode.db"; \
         {{uv_ocint}} ocint ctx import; \

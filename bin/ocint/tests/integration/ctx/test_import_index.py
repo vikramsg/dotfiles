@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from ocint.cli import main
 from ocint.ctx.db import current_ctx_head_revision
 from ocint.ctx.models import CtxImportRequest
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_ctx_import_creates_index_and_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

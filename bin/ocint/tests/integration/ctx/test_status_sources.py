@@ -10,7 +10,7 @@ from ocint.ctx.search import CtxSearchRepository
 from ocint.ctx.sql import CtxSqlRepository
 from ocint.ctx.sql.models import default_ctx_sql_config, stable_view_create_statements
 from ocint.ctx.status import CtxStatusRepository
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_ctx_status_and_sources_are_opencode_only_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
