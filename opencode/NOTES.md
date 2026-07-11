@@ -5,6 +5,10 @@
     * And auto denies everything else
 4. The implementer, since it creates tests first, always then creates backward compatiblity shims after
 
+## Prompts
+
+1. Give me component map + interface sketch of change
+
 ## Agent requirements
 
 1. For each project, the reviewer has to be much stronger.
