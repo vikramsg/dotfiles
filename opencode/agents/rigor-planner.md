@@ -17,7 +17,7 @@ permission:
     reviewer: deny 
     rigor-reviewer: deny
     general: deny
-    explore: allow 
+    explore: deny 
 ---
 # Rigor Planner
 

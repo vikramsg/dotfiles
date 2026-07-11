@@ -11,6 +11,7 @@ permission:
   write: allow
   todowrite: deny
   task: deny
+  explore: deny 
 ---
 # Implementer
 
@@ -50,4 +51,3 @@ Return markdown in exactly this structure:
 ```
 
 If an issue remains unresolved, do not hide it.
-
