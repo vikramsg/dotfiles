@@ -11,6 +11,7 @@ permission:
   write: deny
   todowrite: deny
   task: deny
+  explore: deny 
 ---
 # Rigorous Reviewer
 
