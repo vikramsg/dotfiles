@@ -27,8 +27,6 @@ These instructions apply to `bin/ocint/`.
 - Parse at the boundary. Example: convert Click strings/env values into typed objects before calling application code.
 - Missing required ctx index is an error. Example: `status` fails if ctx DB is required and absent.
 - CLI commands must be discoverable without pre-known IDs. Example: `ocint ctx show session` lists recent sessions when no session ID is supplied.
-- Do not use nullable dependencies as control flow. Example: no `get_status(None, ...)`.
-- Do not branch on raw strings or `None`. Example: use typed modes and `match`, not `if refresh != "off"`.
 - Do not store behavior data at module scope. Example: no module-level policy, config, schema contracts, security rules, command modes, or behavioral constants.
 - Feature config stays with the feature. Example: SQL config belongs under `ctx/sql/`; app config stays in `ctx/config.py`.
 - Backend-independent models do not import backend libraries. Example: SQL config models should not import `sqlite3`.
@@ -47,6 +45,12 @@ These instructions apply to `bin/ocint/`.
 - Use the package justfile for verification. Example: `just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile check`.
 - Use root workspace `uv` execution. Example: `uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest ...`.
 - Follow justfile shell variable rules. Example: use `$VAR`, use `$(...)`, do not use `$$VAR`.
+
+### Python conventions
+
+- Do not use nullable dependencies as control flow. Example: no `get_status(None, ...)`.
+- Do not branch on raw strings or `None`. Example: use typed modes and `match`, not `if refresh != "off"`.
+- **Do not** bypass static checks using `ty: ignore` or `type: ingore` flags. Properly fix issues, not introduce hacks.
 - Strictly **NO** module constants in either tests or production code. Introducing them indicates that modeling of the problem has not been done correctly. For example in tests, data should be represented via fixtures. In Python code, it probably means config/settings have not been modeled correctly and instead replaced by module constants.
 
 ### Python testing conventions
