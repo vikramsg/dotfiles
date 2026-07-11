@@ -240,5 +240,7 @@ def test_state_status_documentation_records_summary_and_detailed_accounting() ->
     assert "message.time_created" in status_doc
     assert "project/agent" in status_doc
     assert "project, agent, and project/agent" in status_doc
+    assert "## Window Semantics" in status_doc
+    assert "older messages belonging to recently updated sessions" in status_doc
     assert "$5107.520334" in status_doc
     assert "$5142.157824" in status_doc

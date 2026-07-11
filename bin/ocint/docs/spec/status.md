@@ -18,5 +18,14 @@ observed database reported session cost `$5107.520334` and assistant-message
 cost `$5142.157824`; this document does not attribute a cause for that
 difference.
 
+## Window Semantics
+
+`summary --days N` selects sessions by `session.time_updated` and includes their
+lifetime `session.cost`. `detailed --days N` selects assistant messages by
+`message.time_created` and sums `message.data.cost`. Their difference can include
+older messages belonging to recently updated sessions and divergence between
+OpenCode's session aggregates and persisted message costs.
+This is because session dates are based on most recent event in session, but there can be agent calls in that session that are older and do not belong to same window.
+
 OpenCode's overview uses sessions, while its models grouping sums assistant
 message costs.

@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 
 from ocint._models import ResolvedPaths
 from ocint._timeutil import UsageWindow
-from ocint.presentation import Presentation, data_table, document, key_value_section
+from ocint.presentation import Presentation, Text, data_table, document, key_value_section
 from ocint.state.models import StateDetailed, StateSessionUsage, StateSummary, UsageTokens
 
 
@@ -68,23 +68,17 @@ def render_detailed(detailed: StateDetailed, window: UsageWindow) -> Presentatio
                 ("Message-attributed cost", _format_cost(detailed.message_attributed_cost)),
             ],
         ),
+        Text(_detailed_note(window), style="dim"),
+        Text(""),
         data_table(
             "By project",
             ("Project", "Cost"),
-            (
-                (_source_label(row.worktree), _format_cost(row.cost))
-                for row in detailed.projects
-                if row.cost != 0
-            ),
+            ((_source_label(row.worktree), _format_cost(row.cost)) for row in detailed.projects if row.cost != 0),
         ),
         data_table(
             "By agent",
             ("Agent", "Cost"),
-            (
-                (f"{row.agent} ({row.kind})", _format_cost(row.cost))
-                for row in detailed.agents
-                if row.cost != 0
-            ),
+            ((f"{row.agent} ({row.kind})", _format_cost(row.cost)) for row in detailed.agents if row.cost != 0),
         ),
         data_table(
             "By project / agent",
@@ -162,8 +156,7 @@ def _project_agent_rows(detailed: StateDetailed) -> list[tuple[str, str]]:
         if rows:
             rows.append(("", ""))
         rows.extend(
-            (f"{_source_label(row.worktree)}: {row.agent} ({row.kind})", _format_cost(row.cost))
-            for row in project_rows
+            (f"{_source_label(row.worktree)}: {row.agent} ({row.kind})", _format_cost(row.cost)) for row in project_rows
         )
     return rows
 
@@ -178,6 +171,15 @@ def _format_int(value: int) -> str:
 
 def _format_cost(value: float) -> str:
     return f"{value:.6f}"
+
+
+def _detailed_note(window: UsageWindow) -> str:
+    if window.start_ms is None:
+        return "Note: Detailed uses assistant-message costs; Summary uses session aggregates, so totals may differ."
+    return (
+        "Note: Detailed counts assistant messages created in this window. "
+        "Summary counts the lifetime cost of sessions updated in this window, so totals may differ."
+    )
 
 
 def _source_label(value: str | None) -> str:
