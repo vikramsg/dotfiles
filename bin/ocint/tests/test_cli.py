@@ -96,6 +96,7 @@ def test_state_detailed_renders_fixed_readable_sections_and_structured_json(tmp_
     assert "Database:" in content
     assert "opencode.db" in content
     assert "Window: all" in content
+    assert "OpenCode total cost: 30.000000" in content
     assert "Message-attributed cost: 43.000000" in content
     assert "By project" in content
     assert "Project Cost /work/automation 31.000000 /work/dotfiles 12.000000" in content
@@ -106,6 +107,7 @@ def test_state_detailed_renders_fixed_readable_sections_and_structured_json(tmp_
     for excluded in ["Tokens", "Sessions", "Assistant messages", "Project ID", "Worktree"]:
         assert excluded not in table_result.output
     payload = json.loads(json_result.output)
+    assert payload["opencode_total_cost"] == 30.0
     assert payload["message_attributed_cost"] == 43.0
     assert [row["project_id"] for row in payload["projects"]] == ["project-automation", "project-dotfiles"]
     assert [(row["agent"], row["kind"]) for row in payload["agents"]] == [
@@ -134,6 +136,7 @@ def test_state_detailed_human_output_omits_zero_costs_and_separates_projects() -
     # GIVEN positive and zero-cost detailed groups across two projects
     detailed = StateDetailed(
         db_path=Path("/tmp/opencode.db"),
+        opencode_total_cost=5,
         message_attributed_cost=5,
         projects=[
             StateDetailedProjectUsage(project_id="p1", worktree="/p1", cost=3),

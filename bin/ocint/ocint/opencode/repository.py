@@ -130,10 +130,11 @@ class OpenCodeRepository:
             connection.execute("BEGIN")
             try:
                 _require_columns(connection, "message", {"id", "session_id", "time_created", "data"})
-                _require_columns(connection, "session", {"id", "project_id", "parent_id"})
+                _require_columns(connection, "session", {"id", "project_id", "parent_id", "time_updated", "cost"})
                 _require_columns(connection, "project", {"id", "worktree"})
                 time_filter = "AND message.time_created >= ?" if start_ms is not None else ""
-                params = (start_ms,) if start_ms is not None else ()
+                session_time_filter = "WHERE session.time_updated >= ?" if start_ms is not None else ""
+                params = (start_ms, start_ms) if start_ms is not None else ()
                 rows = connection.execute(
                     f"""
                     WITH assistant_message AS MATERIALIZED (
@@ -183,6 +184,11 @@ class OpenCodeRepository:
                          OR (tokens_cache_write_type IS NOT 'integer' AND tokens_cache_write_type IS NOT 'real')
                       ORDER BY message_id
                       LIMIT 1
+                    ),
+                    session_total AS (
+                      SELECT COALESCE(SUM(session.cost), 0.0) AS cost
+                      FROM session
+                      {session_time_filter}
                     )
                     SELECT
                       'invalid' AS section,
@@ -204,8 +210,27 @@ class OpenCodeRepository:
                     FROM invalid_assistant_message
                     UNION ALL
                     SELECT
-                      'project' AS section,
+                      'opencode_total' AS section,
                       1 AS section_order,
+                      NULL AS message_id,
+                      NULL AS invalid_reason,
+                      NULL AS project_id,
+                      NULL AS worktree,
+                      NULL AS agent,
+                      NULL AS kind,
+                      NULL AS sessions,
+                      NULL AS assistant_messages,
+                      cost,
+                      NULL AS tokens_input,
+                      NULL AS tokens_output,
+                      NULL AS tokens_reasoning,
+                      NULL AS tokens_cache_read,
+                      NULL AS tokens_cache_write
+                    FROM session_total
+                    UNION ALL
+                    SELECT
+                      'project' AS section,
+                      2 AS section_order,
                       NULL AS message_id,
                       NULL AS invalid_reason,
                       project_id,
@@ -226,7 +251,7 @@ class OpenCodeRepository:
                     UNION ALL
                     SELECT
                       'agent' AS section,
-                      2 AS section_order,
+                      3 AS section_order,
                       NULL AS message_id,
                       NULL AS invalid_reason,
                       NULL AS project_id,
@@ -247,7 +272,7 @@ class OpenCodeRepository:
                     UNION ALL
                     SELECT
                       'project_agent' AS section,
-                      3 AS section_order,
+                      4 AS section_order,
                       NULL AS message_id,
                       NULL AS invalid_reason,
                       project_id,
@@ -724,6 +749,7 @@ def _require_columns(connection: sqlite3.Connection, table: str, required: set[s
 
 
 def _detailed_usage_result(rows: list[sqlite3.Row]) -> OpenCodeDetailedUsageResult:
+    opencode_total_cost = 0.0
     projects: list[OpenCodeDetailedProjectUsage] = []
     agents: list[OpenCodeDetailedAgentUsage] = []
     project_agents: list[OpenCodeDetailedProjectAgentUsage] = []
@@ -731,6 +757,9 @@ def _detailed_usage_result(rows: list[sqlite3.Row]) -> OpenCodeDetailedUsageResu
         section = row["section"]
         if section == "invalid":
             raise ValueError(f"OpenCode assistant message has invalid {row['invalid_reason']}: {row['message_id']}")
+        if section == "opencode_total":
+            opencode_total_cost = float(row["cost"])
+            continue
         if section == "project":
             projects.append(
                 OpenCodeDetailedProjectUsage(
@@ -770,7 +799,12 @@ def _detailed_usage_result(rows: list[sqlite3.Row]) -> OpenCodeDetailedUsageResu
             )
             continue
         raise ValueError(f"OpenCode detailed usage returned unknown section: {section}")
-    return OpenCodeDetailedUsageResult(projects=projects, agents=agents, project_agents=project_agents)
+    return OpenCodeDetailedUsageResult(
+        opencode_total_cost=opencode_total_cost,
+        projects=projects,
+        agents=agents,
+        project_agents=project_agents,
+    )
 
 
 def _detailed_usage_tokens(row: sqlite3.Row) -> OpenCodeDetailedUsageTokens:

@@ -65,6 +65,7 @@ def render_detailed(detailed: StateDetailed, window: UsageWindow) -> Presentatio
             [
                 ("Database", detailed.db_path),
                 ("Window", window.label),
+                ("OpenCode total cost", _format_cost(detailed.opencode_total_cost)),
                 ("Message-attributed cost", _format_cost(detailed.message_attributed_cost)),
             ],
         ),

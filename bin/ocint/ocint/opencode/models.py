@@ -117,6 +117,7 @@ class OpenCodeDetailedProjectAgentUsage(StorageModel):
 
 
 class OpenCodeDetailedUsageResult(StorageModel):
+    opencode_total_cost: float = 0.0
     projects: list[OpenCodeDetailedProjectUsage] = Field(default_factory=list)
     agents: list[OpenCodeDetailedAgentUsage] = Field(default_factory=list)
     project_agents: list[OpenCodeDetailedProjectAgentUsage] = Field(default_factory=list)

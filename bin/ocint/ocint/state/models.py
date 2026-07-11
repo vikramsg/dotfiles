@@ -65,6 +65,7 @@ class StateDetailedProjectAgentUsage(StateModel):
 
 class StateDetailed(StateModel):
     db_path: Path
+    opencode_total_cost: float = 0.0
     message_attributed_cost: float = 0.0
     projects: list[StateDetailedProjectUsage] = Field(default_factory=list)
     agents: list[StateDetailedAgentUsage] = Field(default_factory=list)

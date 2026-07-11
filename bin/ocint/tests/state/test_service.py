@@ -68,6 +68,7 @@ def test_detailed_groups_assistant_message_data_by_project_and_historical_agent(
     summary = service.summary(make_window())
 
     # THEN project joins and immutable message agents form matching, deliberately divergent groups
+    assert detailed.opencode_total_cost == 30.0
     assert detailed.message_attributed_cost == 43.0
     assert detailed.message_attributed_cost != summary.cost
     assert [(row.project_id, row.worktree, row.cost) for row in detailed.projects] == [
@@ -112,6 +113,7 @@ def test_detailed_days_filters_message_creation_not_session_update(tmp_path: Pat
     summary = service.summary(window)
 
     # THEN detailed includes the recent message while session-authoritative summary includes no stale sessions
+    assert detailed.opencode_total_cost == 0.0
     assert detailed.message_attributed_cost == 12.0
     assert [row.project_id for row in detailed.projects] == ["project-dotfiles"]
     assert summary.sessions == 0
@@ -184,6 +186,8 @@ def test_state_usage_fails_clearly_when_required_columns_are_missing(
         ("session", "id", "OpenCode session table is missing required columns: id"),
         ("session", "project_id", "OpenCode session table is missing required columns: project_id"),
         ("session", "parent_id", "OpenCode session table is missing required columns: parent_id"),
+        ("session", "time_updated", "OpenCode session table is missing required columns: time_updated"),
+        ("session", "cost", "OpenCode session table is missing required columns: cost"),
         ("project", "id", "OpenCode project table is missing required columns: id"),
         ("project", "worktree", "OpenCode project table is missing required columns: worktree"),
     ],

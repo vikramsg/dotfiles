@@ -80,6 +80,7 @@ class StateService:
         ]
         return StateDetailed(
             db_path=self._repository.db_path,
+            opencode_total_cost=detailed_usage.opencode_total_cost,
             message_attributed_cost=sum(project.cost for project in projects),
             projects=projects,
             agents=agents,

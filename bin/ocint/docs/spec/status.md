@@ -1,6 +1,7 @@
 # State Accounting
 
-`ocint state summary` is OpenCode-compatible and session-authoritative: it uses
+`ocint state summary` and `ocint state detailed` expose `OpenCode total cost`
+as OpenCode-compatible, session-authoritative values: they use
 `SUM(session.cost)` for sessions filtered by the `session.time_updated` cutoff.
 A qualifying session contributes its lifetime aggregates, not only usage created
 inside the window.
