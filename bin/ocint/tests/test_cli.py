@@ -1,10 +1,20 @@
 import json
 import tomllib
+from io import StringIO
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from ocint._timeutil import make_window
 from ocint.cli import main
+from ocint.state.models import (
+    StateDetailed,
+    StateDetailedAgentUsage,
+    StateDetailedProjectAgentUsage,
+    StateDetailedProjectUsage,
+)
+from ocint.state.render import render_detailed
+from rich.console import Console
 
 from tests.fixtures.opencode_db import create_opencode_db
 
@@ -118,6 +128,43 @@ def test_state_detailed_renders_fixed_readable_sections_and_structured_json(tmp_
         ("project-automation", "/work/automation", "historical-agent", "subagent", 1, 1, 31.0, 15),
         ("project-dotfiles", "/work/dotfiles", "historical-agent", "root", 1, 1, 12.0, 42),
     ]
+
+
+def test_state_detailed_human_output_omits_zero_costs_and_separates_projects() -> None:
+    # GIVEN positive and zero-cost detailed groups across two projects
+    detailed = StateDetailed(
+        db_path=Path("/tmp/opencode.db"),
+        message_attributed_cost=5,
+        projects=[
+            StateDetailedProjectUsage(project_id="p1", worktree="/p1", cost=3),
+            StateDetailedProjectUsage(project_id="p2", worktree="/p2", cost=2),
+        ],
+        agents=[
+            StateDetailedAgentUsage(agent="build", kind="root", cost=3),
+            StateDetailedAgentUsage(agent="zero-agent", kind="subagent", cost=0),
+            StateDetailedAgentUsage(agent="plan", kind="root", cost=2),
+        ],
+        project_agents=[
+            StateDetailedProjectAgentUsage(project_id="p1", worktree="/p1", agent="build", kind="root", cost=3),
+            StateDetailedProjectAgentUsage(
+                project_id="p1", worktree="/p1", agent="zero-agent", kind="subagent", cost=0
+            ),
+            StateDetailedProjectAgentUsage(project_id="p2", worktree="/p2", agent="plan", kind="root", cost=2),
+        ],
+    )
+    output = StringIO()
+    console = Console(file=output, force_terminal=False, width=120)
+
+    # WHEN the concise human report is rendered
+    console.print(render_detailed(detailed, make_window()))
+    lines = output.getvalue().splitlines()
+
+    # THEN zero costs are absent and a blank row separates project groups
+    assert "zero-agent" not in output.getvalue()
+    assert "0.000000" not in output.getvalue()
+    first_project = next(index for index, line in enumerate(lines) if "/p1: build (root)" in line)
+    second_project = next(index for index, line in enumerate(lines) if "/p2: plan (root)" in line)
+    assert any(not line.strip() for line in lines[first_project + 1 : second_project])
 
 
 @pytest.mark.parametrize(

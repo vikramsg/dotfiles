@@ -71,20 +71,25 @@ def render_detailed(detailed: StateDetailed, window: UsageWindow) -> Presentatio
         data_table(
             "By project",
             ("Project", "Cost"),
-            ((_source_label(row.worktree), _format_cost(row.cost)) for row in detailed.projects),
+            (
+                (_source_label(row.worktree), _format_cost(row.cost))
+                for row in detailed.projects
+                if row.cost != 0
+            ),
         ),
         data_table(
             "By agent",
             ("Agent", "Cost"),
-            ((f"{row.agent} ({row.kind})", _format_cost(row.cost)) for row in detailed.agents),
+            (
+                (f"{row.agent} ({row.kind})", _format_cost(row.cost))
+                for row in detailed.agents
+                if row.cost != 0
+            ),
         ),
         data_table(
             "By project / agent",
             ("Project / agent", "Cost"),
-            (
-                (f"{_source_label(row.worktree)}: {row.agent} ({row.kind})", _format_cost(row.cost))
-                for row in detailed.project_agents
-            ),
+            _project_agent_rows(detailed),
         ),
     )
 
@@ -95,15 +100,23 @@ def render_sessions(sessions: Sequence[StateSessionUsage], window: UsageWindow) 
         key_value_section("Selection", [("Window", window.label), ("Sessions", _format_int(len(sessions)))]),
         data_table(
             "Sessions",
-            ("Session", "First seen", "Last seen", "Messages", "Cost", "Tokens"),
+            ("Session", "Usage"),
             (
                 (
-                    session.session_id,
-                    session.first_seen.isoformat(),
-                    session.last_seen.isoformat(),
-                    _format_int(session.messages),
-                    _format_cost(session.cost),
-                    _format_tokens(session.tokens),
+                    "\n".join(
+                        [
+                            session.session_id,
+                            f"First: {session.first_seen.isoformat()}",
+                            f"Last: {session.last_seen.isoformat()}",
+                        ]
+                    ),
+                    "\n".join(
+                        [
+                            f"Messages: {_format_int(session.messages)}",
+                            f"Cost: {_format_cost(session.cost)}",
+                            _format_tokens(session.tokens),
+                        ]
+                    ),
                 )
                 for session in sessions
             ),
@@ -134,6 +147,25 @@ def _token_rows(tokens: UsageTokens) -> list[tuple[str, object]]:
         ("Cache write", _format_int(tokens.cache_write)),
         ("Total", _format_int(tokens.total)),
     ]
+
+
+def _project_agent_rows(detailed: StateDetailed) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for project in detailed.projects:
+        project_rows = [
+            row
+            for row in detailed.project_agents
+            if row.project_id == project.project_id and row.worktree == project.worktree and row.cost != 0
+        ]
+        if not project_rows:
+            continue
+        if rows:
+            rows.append(("", ""))
+        rows.extend(
+            (f"{_source_label(row.worktree)}: {row.agent} ({row.kind})", _format_cost(row.cost))
+            for row in project_rows
+        )
+    return rows
 
 
 def _format_tokens(tokens: UsageTokens) -> str:
