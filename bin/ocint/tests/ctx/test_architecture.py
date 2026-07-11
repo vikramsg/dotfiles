@@ -143,6 +143,41 @@ def test_feature_clis_use_injected_output_without_direct_echo_or_rich_imports() 
     assert offenders == []
 
 
+def test_presentation_dependencies_stay_at_rendering_boundaries() -> None:
+    # GIVEN typed service and repository modules
+    backend_files = [*_feature_files("service.py"), *_feature_files("repository.py")]
+
+    # WHEN their imports are inspected
+    offenders = [
+        str(path.relative_to(CTX_ROOT))
+        for path in backend_files
+        if any(name == "rich" or name.startswith("rich.") for name in _imports(path))
+    ]
+
+    # THEN Rich is absent while the feature renderer and CLI adapter own presentation
+    assert offenders == []
+    assert "rich.console" in _imports(CTX_ROOT / "render.py")
+    assert "rich.console" in _imports(PACKAGE_ROOT / "cli" / "_render.py")
+    assert "display" in _class_method_source(PACKAGE_ROOT / "cli" / "_render.py", "ClickOutput", "display")
+
+
+def test_presentation_architecture_is_documented_and_referenced() -> None:
+    # GIVEN the package architecture documentation
+    architecture = PACKAGE_ROOT.parent / "docs" / "architecture" / "presentation.md"
+
+    # WHEN presentation ownership is read
+    source = architecture.read_text()
+
+    # THEN human and exact machine boundaries are explicit and discoverable
+    assert architecture.is_file()
+    assert "Services and repositories return typed data" in source
+    assert "ctx/render.py" in source
+    assert "cli/_render.py" in source
+    assert "JSONL" in source
+    assert "unstyled" in source
+    assert "docs/architecture/presentation.md" in (PACKAGE_ROOT.parent / "AGENTS.md").read_text()
+
+
 def test_ctx_import_uses_generator_events_without_legacy_import_history_wrapper() -> None:
     service_path = CTX_ROOT / "importing" / "service.py"
     package_path = CTX_ROOT / "importing" / "__init__.py"

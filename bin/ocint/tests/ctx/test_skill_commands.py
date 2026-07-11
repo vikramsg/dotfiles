@@ -48,7 +48,7 @@ def test_skill_command_suite_reads_imported_index(tmp_path: Path, monkeypatch: p
             "p-primary-step",
         ),
         (["ctx", "search", "native event marker", "--session", "s-primary", "--refresh", "off"], "p-primary-step"),
-        (["ctx", "search", "native event marker", "--verbose", "--refresh", "off"], "citation:"),
+        (["ctx", "search", "native event marker", "--verbose", "--refresh", "off"], "Citation"),
         (["ctx", "search", "subagent only marker", "--include-subagents", "--refresh", "off"], "s-sub"),
         (
             ["ctx", "search", "native event marker", "--include-current-session", "--refresh", "off"],
@@ -109,4 +109,4 @@ def test_skill_command_suite_reads_imported_index(tmp_path: Path, monkeypatch: p
 def _assert_contains(result: Result, expected: str) -> None:
     assert result.exit_code == 0, result.output
     assert result.output.strip()
-    assert expected in result.output
+    assert " ".join(expected.split()) in " ".join(result.output.split())

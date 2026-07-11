@@ -78,6 +78,11 @@ def test_ctx_status_tracks_current_source_without_changing_refresh_summary(
         assert payload["refresh_source_path"] == str(source_db)
         assert payload["refresh_log_path"] == str(ctx_db.parent / "ctx.sqlite.refresh.log")
 
+    monkeypatch.setenv("OPENCODE_DB", str(alternate_db))
+    human_status = runner.invoke(main, ["ctx", "status"])
+    assert human_status.exit_code == 0, human_status.output
+    assert "Configured source: different" in " ".join(human_status.output.split())
+
 
 def test_ctx_status_text_renders_human_readable_refresh_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source_db = create_opencode_db(tmp_path / "opencode.db")
@@ -91,19 +96,56 @@ def test_ctx_status_text_renders_human_readable_refresh_fields(tmp_path: Path, m
     status = runner.invoke(main, ["ctx", "status"])
 
     assert status.exit_code == 0, status.output
-    assert f"CTX_DB: {ctx_db}" in status.output
-    assert f"SOURCE_DB: {source_db}" in status.output
-    assert "SOURCE_DB_EXISTS: True" in status.output
-    assert f"REFRESH_LOG: {ctx_db.parent / 'ctx.sqlite.refresh.log'}" in status.output
-    assert "REFRESH_TTL: 60m" in status.output
-    assert "REFRESH_TTL_MS" not in status.output
-    assert "LATEST_SUCCESS_STARTED_AT: 20" in status.output
-    assert "LATEST_SUCCESS_DURATION:" in status.output
-    assert "CHECKPOINT_EVENTS: 6" in status.output
-    assert "CHECKPOINT_SESSIONS: 2" in status.output
-    assert "CHECKPOINT_SOURCE_SIZE:" in status.output
-    assert "CHECKPOINT_SOURCE_MTIME: 20" in status.output
-    assert "CHECKPOINT_FINGERPRINT:" in status.output
+    content = " ".join(status.output.split())
+    compact = "".join(status.output.split())
+    assert "CTX_DB:" in content
+    assert "SOURCE_DB:" in content
+    assert str(ctx_db) in compact
+    assert str(source_db) in compact
+    assert str(ctx_db.parent / "ctx.sqlite.refresh.log") in compact
+    assert "SOURCE_DB_EXISTS: True" in content
+    assert "Usable: yes" in content
+    assert "Index freshness: fresh" in content
+    assert "Configured source: current" in content
+    assert "Refresh: idle" in content
+    assert "Last success:" in content
+    assert "OBSERVED_AT: 20" in content
+    assert "REFRESH_LOG:" in content
+    assert "REFRESH_TTL: 60m" in content
+    assert "REFRESH_TTL_MS" not in content
+    assert "LATEST_SUCCESS_STARTED_AT: 20" in content
+    assert "LATEST_SUCCESS_DURATION:" in content
+    assert "CHECKPOINT_EVENTS: 6" in content
+    assert "CHECKPOINT_SESSIONS: 2" in content
+    assert "CHECKPOINT_SOURCE_SIZE:" in content
+    assert "CHECKPOINT_SOURCE_MTIME: 20" in content
+    assert "CHECKPOINT_FINGERPRINT:" in content
+    assert "REFRESH_SOURCE_PROVIDER: opencode" in content
+    assert "REFRESH_SOURCE_TYPE: sqlite" in content
+    assert "REFRESH_SOURCE_NAME: OpenCode DB" in content
+    assert "Refresh sources" in content
+    assert "LATEST_SUCCESS_CHECKPOINT_PAYLOAD:" in content
+    assert "SOURCE_WATERMARK_PAYLOAD:" in content
+
+
+def test_ctx_status_historical_failure_does_not_override_newer_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GIVEN a successful current attempt with an older retained failure
+    runner, ctx_db = _import_ctx_fixture(tmp_path, monkeypatch)
+    with sqlite3.connect(ctx_db) as connection:
+        connection.execute(
+            "UPDATE ctx_refresh_state SET latest_failed_at = 1, latest_error_message = 'historical failure'"
+        )
+
+    # WHEN status is rendered for a human
+    status = runner.invoke(main, ["ctx", "status"])
+
+    # THEN the semantic state is idle while the historical detail is retained
+    assert status.exit_code == 0, status.output
+    content = " ".join(status.output.split())
+    assert "Refresh: idle" in content
+    assert "LATEST_ERROR: historical failure" in content
 
 
 def test_ctx_status_refresh_summary_uses_one_explicit_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

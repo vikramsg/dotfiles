@@ -9,11 +9,17 @@ from ocint._models import CliContext, CliProgress
 
 class ClickOutput:
     def __init__(self) -> None:
+        self._stdout_console = Console()
         self._stderr_console = Console(stderr=True)
 
     def write(self, text: str, *, stderr: bool = False, nl: bool = False, enabled: bool = True) -> None:
         if enabled:
             click.echo(text, err=stderr, nl=nl)
+
+    def display(self, renderable: object, *, stderr: bool = False, enabled: bool = True) -> None:
+        if enabled:
+            console = self._stderr_console if stderr else self._stdout_console
+            console.print(renderable)
 
     def progress(self, message: str, *, enabled: bool = True) -> AbstractContextManager[CliProgress]:
         if not enabled or not self._stderr_console.is_terminal:

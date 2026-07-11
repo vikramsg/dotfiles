@@ -26,6 +26,18 @@ def test_search_defaults_to_primary_sessions(tmp_path: Path, monkeypatch: pytest
     assert "s-sub" in subagent_results.output
 
 
+def test_search_help_describes_verbose_action_templates() -> None:
+    # GIVEN the search command
+    runner = CliRunner()
+
+    # WHEN help is requested
+    result = runner.invoke(main, ["ctx", "search", "--help"])
+
+    # THEN verbose output is described consistently with placeholder actions
+    assert result.exit_code == 0, result.output
+    assert "Show citations and additional action templates." in result.output
+
+
 def test_search_filters_by_file_workspace_session_since_and_terms(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -56,8 +68,9 @@ def test_search_filters_by_file_workspace_session_since_and_terms(
 
     assert result.exit_code == 0, result.output
     assert "p-primary-step" in result.output
-    assert "session=s-primary" in result.output
-    assert "path=AGENTS.md" in result.output
+    content = " ".join(result.output.split())
+    assert "Session ID s-primary" in content
+    assert "Path AGENTS.md" in content
 
 
 def test_search_snippet_uses_event_text_before_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,20 +84,87 @@ def test_search_snippet_uses_event_text_before_metadata(tmp_path: Path, monkeypa
     assert "Primary ctx skill" not in snippet
 
 
-def test_search_text_output_demarcates_text_and_actions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_human_output_orders_content_metadata_and_shared_actions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GIVEN an imported text result
     _import_fixture(tmp_path, monkeypatch)
 
+    # WHEN it is rendered for a human
     result = CliRunner().invoke(main, ["ctx", "search", "long-transcript-prefix", "--refresh", "off", "--limit", "1"])
 
+    # THEN content precedes metadata and one shared action section follows
     assert result.exit_code == 0, result.output
-    assert "\n    text:\n" in result.output
-    assert "      long-transcript-prefix" in result.output
-    assert "\n    actions:\n" in result.output
-    assert "      show: ocint ctx show event p-long-payload --window 5" in result.output
-    assert "      session: ocint ctx show session s-primary" in result.output
+    content = " ".join(result.output.split())
+    assert "Result 1" in result.output
+    assert "Title Primary ctx skill" in content
+    assert "Time 20" in content
+    assert "Content type Text" in content
+    assert "text · text" not in result.output
+    assert "\nText\n\n" in result.output
+    assert "long-transcript-prefix" in result.output
+    assert "Provider opencode" in content
+    assert "Event type text" in content
+    assert result.output.index("Title") < result.output.index("long-transcript-prefix")
+    assert result.output.index("long-transcript-prefix") < result.output.index("Metadata")
+    assert result.output.count("Actions") == 1
+    assert "ocint ctx show event <event-id> --window 5" in result.output
+    assert "ocint ctx show session <session-id>" in result.output
+    assert "Citation:" not in result.output
+    assert "locate event" not in result.output
 
 
-def test_search_tool_output_demarcates_tool_and_actions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_multiple_results_have_one_shared_actions_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GIVEN primary and subagent results sharing a query term
+    _import_fixture(tmp_path, monkeypatch)
+
+    # WHEN both are rendered
+    result = CliRunner().invoke(
+        main,
+        ["ctx", "search", "marker", "--include-subagents", "--refresh", "off"],
+    )
+
+    # THEN results share exactly one final actions section
+    assert result.exit_code == 0, result.output
+    assert "Result 1" in result.output
+    assert "Result 2" in result.output
+    assert result.output.count("Actions") == 1
+    assert result.output.rfind("Actions") > result.output.rfind("Metadata")
+
+
+def test_search_text_content_renders_markdown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # GIVEN text content containing Markdown structures
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
+    source_db = create_opencode_db(tmp_path / "opencode.db")
+    with sqlite3.connect(source_db) as connection:
+        connection.execute(
+            "UPDATE part SET data = json_set(data, '$.text', ?) WHERE id = 'p-long-payload'",
+            ("# Markdown presentation heading\n\n- first item\n- second item\n\n```python\nprint('safe')\n```",),
+        )
+    monkeypatch.setenv("OPENCODE_DB", str(source_db))
+    monkeypatch.setenv("OCINT_CTX_DB", str(tmp_path / "ctx.sqlite"))
+    runner = CliRunner()
+    imported = runner.invoke(main, ["ctx", "import"])
+    assert imported.exit_code == 0, imported.output
+
+    # WHEN the Markdown text result is rendered
+    result = runner.invoke(main, ["ctx", "search", "Markdown presentation heading", "--refresh", "off"])
+
+    # THEN Markdown syntax is composed rather than emitted literally
+    assert result.exit_code == 0, result.output
+    assert "Markdown presentation heading" in result.output
+    assert "# Markdown presentation heading" not in result.output
+    assert "first item" in result.output
+    assert "print('safe')" in result.output
+    assert "```" not in result.output
+
+
+def test_search_verbose_tool_output_includes_citation_and_locate_placeholders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GIVEN literal tool output
     monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
     source_db = create_opencode_db(tmp_path / "opencode.db")
     _add_tool_fixture_row(source_db)
@@ -95,20 +175,43 @@ def test_search_tool_output_demarcates_tool_and_actions(tmp_path: Path, monkeypa
     assert imported.exit_code == 0, imported.output
     monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "missing-opencode.db"))
 
+    # WHEN it is rendered verbosely
     result = runner.invoke(
         main,
         ["ctx", "search", "Image read success marker", "--content", "tools", "--refresh", "off", "--verbose"],
     )
 
+    # THEN tool Markdown-like text stays literal and verbose actions remain shared
     assert result.exit_code == 0, result.output
-    assert "\n    tool:\n" in result.output
-    assert "      read call_TOOL_TEST completed" in result.output
-    assert "      /tmp/image-test.png" in result.output
-    assert "      Image read success marker" in result.output
+    content = " ".join(result.output.split())
+    assert "Content type Tool output" in content
+    assert "Event type tool" in content
+    assert "\nTool output\n\n" in result.output
+    assert "read call_TOOL_TEST completed" in result.output
+    assert "/tmp/image-test.png" in result.output
+    assert "Image read success marker" in result.output
+    assert "# Image read success marker" in result.output
     assert "tool 0 0 0" not in result.output
-    assert "\n    actions:\n" in result.output
-    assert "      citation: opencode session=s-primary event=p-tool-read table=part" in result.output
-    assert "      locate-event: ocint ctx locate event p-tool-read" in result.output
+    assert result.output.count("Actions") == 1
+    assert "Citation opencode session=s-primary event=p-tool-read table=part" in " ".join(result.output.split())
+    assert "ocint ctx locate event <event-id>" in result.output
+    assert "ocint ctx locate session <session-id>" in result.output
+    assert "ocint ctx locate event p-tool-read" not in result.output
+
+
+def test_search_patch_output_has_explicit_content_type(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # GIVEN an imported patch result
+    _import_fixture(tmp_path, monkeypatch)
+
+    # WHEN it is rendered for a human
+    result = CliRunner().invoke(main, ["ctx", "search", "file.patch normalized part marker", "--refresh", "off"])
+
+    # THEN the primary type and raw event metadata are both explicit
+    assert result.exit_code == 0, result.output
+    content = " ".join(result.output.split())
+    assert "Content type Patch" in content
+    assert "Event type file.patch" in content
+    assert "\nPatch\n\n" in result.output
 
 
 def test_search_content_modes_filter_tool_events(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -526,7 +629,7 @@ def _add_tool_fixture_row(source_db: Path) -> None:
                         "callID": "call_TOOL_TEST",
                         "status": "completed",
                         "path": "/tmp/image-test.png",
-                        "output": "Image read success marker",
+                        "output": "# Image read success marker",
                         "tokens": {"input": 0, "output": 0, "reasoning": 0},
                     }
                 ),
