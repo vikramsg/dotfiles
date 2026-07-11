@@ -5,42 +5,29 @@ from datetime import UTC, date, datetime, timedelta
 
 @dataclass(frozen=True)
 class UsageWindow:
-    since: date | None = None
-    until: date | None = None
     start_ms: int | None = None
-    end_ms: int | None = None
+    description: str = "all"
 
     @property
     def label(self) -> str:
-        if self.since is None and self.until is None:
-            return "all"
-        start = self.since.isoformat() if self.since else "beginning"
-        end = self.until.isoformat() if self.until else "now"
-        return f"{start}..{end}"
+        return self.description
 
 
-def parse_yyyy_mm_dd(value: str | None) -> date | None:
-    if value is None:
-        return None
-    return date.fromisoformat(value)
-
-
-def make_window(*, since: str | None = None, until: str | None = None, days: int | None = None) -> UsageWindow:
-    since_date = parse_yyyy_mm_dd(since)
-    until_date = parse_yyyy_mm_dd(until)
-    if days is not None:
-        if days <= 0:
-            raise ValueError("--days must be greater than zero")
-        if since_date is None:
-            anchor_date = until_date or datetime.now(UTC).date()
-            since_date = anchor_date - timedelta(days=days - 1)
-
-    if since_date is not None and until_date is not None and since_date > until_date:
-        raise ValueError("--since must be on or before --until")
-
-    start_ms = _start_of_day_ms(since_date) if since_date else None
-    end_ms = _start_of_day_ms(until_date + timedelta(days=1)) if until_date else None
-    return UsageWindow(since=since_date, until=until_date, start_ms=start_ms, end_ms=end_ms)
+def make_window(*, days: int | None = None, now: datetime | None = None) -> UsageWindow:
+    if days is None:
+        return UsageWindow()
+    if days < 0:
+        raise ValueError("--days must be zero or greater")
+    if now is not None and now.tzinfo is None:
+        raise ValueError("now must include a timezone")
+    current = now or datetime.now()
+    if days == 0:
+        start_ms = int(current.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+        description = "today"
+    else:
+        start_ms = int(current.timestamp() * 1000) - days * 86_400_000
+        description = f"last {days} days"
+    return UsageWindow(start_ms=start_ms, description=description)
 
 
 def parse_since_ms(value: str | None) -> int | None:

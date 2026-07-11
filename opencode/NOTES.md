@@ -10,6 +10,11 @@
 - Too happy to invoke subagents
 - I need to create commands that do not invoke subagents
 
+## Prompts
+
+1. Give me component map + interface sketch of change
+2. Next give me files changed, and patterns used
+
 ## Agent requirements
 
 1. For each project, the reviewer has to be much stronger.

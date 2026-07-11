@@ -35,7 +35,9 @@ uv tool install ./bin/ocint --force --no-cache
 
 ```bash
 ocint state summary --days 30
-ocint state models --days 30 --format json
+ocint state sessions --days 30 --format json
+ocint state detailed --days 30
+ocint state detailed --days 30 --format json
 ocint state query "SELECT COUNT(*) AS sessions FROM session"
 
 ocint ctx status

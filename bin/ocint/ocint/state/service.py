@@ -1,11 +1,17 @@
-from collections import defaultdict
-from collections.abc import Iterable
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
 from ocint._timeutil import UsageWindow
-from ocint.opencode.models import OpenCodePartRow, OpenCodeTokenPayload
+from ocint.opencode.models import OpenCodeUsageSession
 from ocint.opencode.repository import OpenCodeRepository
-from ocint.state.models import StateDailyUsage, StateModelUsage, StateSessionUsage, StateSummary, UsageTokens
+from ocint.state.models import (
+    StateDetailed,
+    StateDetailedAgentUsage,
+    StateDetailedProjectAgentUsage,
+    StateDetailedProjectUsage,
+    StateSessionUsage,
+    StateSummary,
+    UsageTokens,
+)
 
 
 class StateService:
@@ -13,121 +19,95 @@ class StateService:
         self._repository = repository
 
     def summary(self, window: UsageWindow) -> StateSummary:
-        parts = list(self._usage_parts(window))
+        sessions = self._repository.usage_sessions(start_ms=window.start_ms)
         return StateSummary(
             db_path=self._repository.db_path,
-            since=window.since,
-            until=window.until,
-            sessions=len({part.session_id for part in parts if part.session_id}),
-            llm_steps=len(parts),
-            cost=sum(float(part.data.cost or 0.0) for part in parts),
-            tokens=_sum_tokens(parts),
+            sessions=len(sessions),
+            messages=sum(session.messages for session in sessions),
+            cost=sum(session.cost for session in sessions),
+            tokens=_sum_tokens(sessions),
         )
 
-    def daily(self, window: UsageWindow) -> list[StateDailyUsage]:
-        buckets: dict[date, list[OpenCodePartRow]] = defaultdict(list)
-        for part in self._usage_parts(window):
-            if part.time_created is not None:
-                buckets[_day(part.time_created)].append(part)
-        return [
-            StateDailyUsage(
-                day=day,
-                sessions=len({part.session_id for part in parts if part.session_id}),
-                llm_steps=len(parts),
-                cost=sum(float(part.data.cost or 0.0) for part in parts),
-                tokens=_sum_tokens(parts),
-            )
-            for day, parts in sorted(buckets.items())
-        ]
-
-    def models(self, window: UsageWindow) -> list[StateModelUsage]:
-        messages = self._repository.messages_by_id()
-        buckets: dict[tuple[str, str], list[OpenCodePartRow]] = defaultdict(list)
-        for part in self._usage_parts(window):
-            message = messages.get(part.message_id or "")
-            provider = message.data.provider_id if message and message.data.provider_id else "(unknown)"
-            model = message.data.model_id if message and message.data.model_id else "(unknown)"
-            buckets[(provider, model)].append(part)
-        rows = [
-            StateModelUsage(
-                provider=provider,
-                model=model,
-                sessions=len({part.session_id for part in parts if part.session_id}),
-                llm_steps=len(parts),
-                cost=sum(float(part.data.cost or 0.0) for part in parts),
-                tokens=_sum_tokens(parts),
-            )
-            for (provider, model), parts in buckets.items()
-        ]
-        return sorted(rows, key=lambda row: (-row.cost, -row.llm_steps, row.provider, row.model))
-
     def sessions(self, window: UsageWindow) -> list[StateSessionUsage]:
-        buckets: dict[str, list[OpenCodePartRow]] = defaultdict(list)
-        for part in self._usage_parts(window):
-            if part.session_id:
-                buckets[part.session_id].append(part)
-        rows = []
-        for session_id, parts in buckets.items():
-            times = [part.time_created for part in parts if part.time_created is not None]
-            if not times:
-                continue
-            rows.append(
-                StateSessionUsage(
-                    session_id=session_id,
-                    first_seen=_dt(min(times)),
-                    last_seen=_dt(max(times)),
-                    llm_steps=len(parts),
-                    cost=sum(float(part.data.cost or 0.0) for part in parts),
-                    tokens=_sum_tokens(parts),
-                )
+        return [
+            StateSessionUsage(
+                session_id=session.id,
+                first_seen=_dt(session.time_created),
+                last_seen=_dt(session.time_updated),
+                messages=session.messages,
+                cost=session.cost,
+                tokens=_sum_tokens([session]),
             )
-        return sorted(rows, key=lambda row: (row.last_seen, row.session_id), reverse=True)
+            for session in self._repository.usage_sessions(start_ms=window.start_ms)
+        ]
+
+    def detailed(self, window: UsageWindow) -> StateDetailed:
+        detailed_usage = self._repository.detailed_usage(start_ms=window.start_ms)
+        projects = [
+            StateDetailedProjectUsage(
+                project_id=row.project_id,
+                worktree=row.worktree,
+                sessions=row.sessions,
+                assistant_messages=row.assistant_messages,
+                cost=row.cost,
+                tokens=UsageTokens.model_validate(row.tokens.model_dump()),
+            )
+            for row in detailed_usage.projects
+        ]
+        agents = [
+            StateDetailedAgentUsage(
+                agent=row.agent,
+                kind=row.kind,
+                sessions=row.sessions,
+                assistant_messages=row.assistant_messages,
+                cost=row.cost,
+                tokens=UsageTokens.model_validate(row.tokens.model_dump()),
+            )
+            for row in detailed_usage.agents
+        ]
+        project_agents = [
+            StateDetailedProjectAgentUsage(
+                project_id=row.project_id,
+                worktree=row.worktree,
+                agent=row.agent,
+                kind=row.kind,
+                sessions=row.sessions,
+                assistant_messages=row.assistant_messages,
+                cost=row.cost,
+                tokens=UsageTokens.model_validate(row.tokens.model_dump()),
+            )
+            for row in detailed_usage.project_agents
+        ]
+        return StateDetailed(
+            db_path=self._repository.db_path,
+            opencode_total_cost=detailed_usage.opencode_total_cost,
+            message_attributed_cost=sum(project.cost for project in projects),
+            projects=projects,
+            agents=agents,
+            project_agents=project_agents,
+        )
 
     def query(self, sql: str) -> list[dict[str, object]]:
         return self._repository.query(sql)
 
-    def _usage_parts(self, window: UsageWindow) -> Iterable[OpenCodePartRow]:
-        for batch in self._repository.usage_part_batches(
-            start_ms=window.start_ms,
-            end_ms=window.end_ms,
-            batch_size=1_000,
-        ):
-            for part in batch:
-                if part.data.type == "step-finish":
-                    yield part
 
-
-def _sum_tokens(parts: Iterable[OpenCodePartRow]) -> UsageTokens:
+def _sum_tokens(sessions: list[OpenCodeUsageSession]) -> UsageTokens:
     totals = UsageTokens()
-    for part in parts:
-        tokens = _tokens(part.data.tokens)
+    for session in sessions:
         totals = UsageTokens(
-            input=totals.input + tokens.input,
-            output=totals.output + tokens.output,
-            reasoning=totals.reasoning + tokens.reasoning,
-            cache_read=totals.cache_read + tokens.cache_read,
-            cache_write=totals.cache_write + tokens.cache_write,
-            total=totals.total + tokens.total,
+            input=totals.input + session.tokens_input,
+            output=totals.output + session.tokens_output,
+            reasoning=totals.reasoning + session.tokens_reasoning,
+            cache_read=totals.cache_read + session.tokens_cache_read,
+            cache_write=totals.cache_write + session.tokens_cache_write,
+            total=totals.total
+            + session.tokens_input
+            + session.tokens_output
+            + session.tokens_reasoning
+            + session.tokens_cache_read
+            + session.tokens_cache_write,
         )
     return totals
-
-
-def _tokens(payload: OpenCodeTokenPayload) -> UsageTokens:
-    total = payload.total
-    if total is None:
-        total = payload.input + payload.output + payload.reasoning + payload.cache.read + payload.cache.write
-    return UsageTokens(
-        input=payload.input,
-        output=payload.output,
-        reasoning=payload.reasoning,
-        cache_read=payload.cache.read,
-        cache_write=payload.cache.write,
-        total=total,
-    )
-
-
-def _day(timestamp_ms: int) -> date:
-    return datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC).date()
 
 
 def _dt(timestamp_ms: int) -> datetime:

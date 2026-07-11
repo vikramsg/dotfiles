@@ -10,17 +10,25 @@ def create_opencode_db(path: Path) -> Path:
         """
         CREATE TABLE session (
           id TEXT PRIMARY KEY,
-          parentID TEXT,
+          parent_id TEXT,
+          project_id TEXT,
           title TEXT,
           directory TEXT,
-          timeCreated INTEGER,
-          timeUpdated INTEGER,
+          time_created INTEGER NOT NULL,
+          time_updated INTEGER NOT NULL,
+          cost REAL NOT NULL DEFAULT 0,
+          tokens_input INTEGER NOT NULL DEFAULT 0,
+          tokens_output INTEGER NOT NULL DEFAULT 0,
+          tokens_reasoning INTEGER NOT NULL DEFAULT 0,
+          tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+          tokens_cache_write INTEGER NOT NULL DEFAULT 0,
           data TEXT NOT NULL
         );
         CREATE TABLE message (
           id TEXT PRIMARY KEY,
-          sessionID TEXT,
-          timeCreated INTEGER,
+          session_id TEXT NOT NULL,
+          time_created INTEGER NOT NULL,
+          time_updated INTEGER NOT NULL,
           data TEXT NOT NULL
         );
         CREATE TABLE session_message (
@@ -44,7 +52,7 @@ def create_opencode_db(path: Path) -> Path:
         );
         CREATE TABLE project (
           id TEXT PRIMARY KEY,
-          path TEXT,
+          worktree TEXT,
           data TEXT NOT NULL
         );
         CREATE TABLE workspace (
@@ -62,38 +70,56 @@ def create_opencode_db(path: Path) -> Path:
     now = int(time.time() * 1000) - 86_400_000
     long_text = " ".join(["long-transcript-prefix"] * 30) + " IMPORTANT_LATE_MARKER full transcript content"
     con.executemany(
-        "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 "s-primary",
                 None,
+                "project-dotfiles",
                 "Primary ctx skill",
                 "/work/repo-directory-only",
                 now,
                 now + 10,
-                json.dumps({"title": "Primary ctx skill"}),
+                10.0,
+                100,
+                200,
+                30,
+                40,
+                50,
+                json.dumps({"title": "Primary ctx skill", "agent": "changed-root-agent"}),
             ),
             (
                 "s-sub",
                 "s-primary",
+                "project-automation",
                 "Subagent implementation",
                 "/work/repo-directory-only",
                 now + 20,
                 now + 30,
-                json.dumps({"title": "Subagent implementation"}),
+                20.0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                json.dumps({"title": "Subagent implementation", "agent": "changed-subagent"}),
             ),
         ],
     )
     con.executemany(
-        "INSERT INTO message VALUES (?, ?, ?, ?)",
+        "INSERT INTO message VALUES (?, ?, ?, ?, ?)",
         [
             (
                 "m-primary",
                 "s-primary",
                 now + 1,
+                now + 1,
                 json.dumps(
                     {
                         "role": "assistant",
+                        "agent": "historical-agent",
+                        "cost": 12.0,
+                        "tokens": {"input": 10, "output": 20, "reasoning": 3, "cache": {"read": 4, "write": 5}},
                         "providerID": "anthropic",
                         "modelID": "claude-sonnet-4-5",
                         "text": "ctx skill migration decision",
@@ -104,9 +130,13 @@ def create_opencode_db(path: Path) -> Path:
                 "m-sub",
                 "s-sub",
                 now + 21,
+                now + 21,
                 json.dumps(
                     {
                         "role": "assistant",
+                        "agent": "historical-agent",
+                        "cost": 31.0,
+                        "tokens": {"input": 1, "output": 2, "reasoning": 3, "cache": {"read": 4, "write": 5}},
                         "providerID": "openai",
                         "modelID": "gpt-5.5",
                         "text": "subagent ctx skill implementation detail",
@@ -258,6 +288,10 @@ def create_opencode_db(path: Path) -> Path:
     )
     con.execute(
         "INSERT INTO project VALUES (?, ?, ?)", ("project-dotfiles", "/work/dotfiles", json.dumps({"name": "dotfiles"}))
+    )
+    con.execute(
+        "INSERT INTO project VALUES (?, ?, ?)",
+        ("project-automation", "/work/automation", json.dumps({"name": "automation"})),
     )
     con.execute(
         "INSERT INTO workspace VALUES (?, ?, ?)",

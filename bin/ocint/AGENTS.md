@@ -32,6 +32,8 @@ These instructions apply to `bin/ocint/`.
 ## Repo Conventions
 
 - Presentation ownership and output boundaries are documented in `docs/architecture/presentation.md`.
+- Import shared presentation APIs only from the `ocint.presentation` facade. Do not import its private modules directly.
+- Keep reusable presentation components, exact machine serializers, and terminal output construction inside `ocint.presentation`.
 
 - Persistence-backed ctx features use `service.py`, `repository.py`, and `__init__.py`. Example: `ctx/search/service.py` and `ctx/search/repository.py`.
 - Ctx DB lifecycle, physical schema, and Alembic files stay under `ctx/db/`. Example: import `ctx_session` from `ocint.ctx.db` in the CLI and physical tables from `ocint.ctx.db.schema` in repositories.
@@ -48,6 +50,11 @@ These instructions apply to `bin/ocint/`.
 - Fixtures are for data, not for creating functions.
 - Always follow the GIVEN/WHEN/THEN structure in tests 
 - Model one test for one behaviour. If multiple similar cases have to be tested, parameterize rather than putting all in one test.
+
+### Typing
+
+- Prefer concrete types. Construct them wherever appropriate. 
+- Do not use `tuple` or `dict` or `object` or `Any`. Create or convert to concrete types.
 
 ## Commands
 
@@ -82,13 +89,16 @@ bin/ocint/
 ├── tests/
 └── ocint/
     ├── cli/
-    │   ├── __init__.py
-    │   └── _render.py
+    │   └── __init__.py
     ├── _config.py
     ├── _errors.py
-    ├── _render.py
     ├── _sqlsafe.py
     ├── _timeutil.py
+    ├── presentation/
+    │   ├── __init__.py
+    │   ├── _components.py
+    │   ├── _output.py
+    │   └── _serialization.py
     ├── ctx/
     │   ├── cli.py
     │   ├── config.py

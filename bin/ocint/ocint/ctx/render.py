@@ -2,13 +2,6 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from rich.console import Group, RenderableType
-from rich.markdown import Markdown
-from rich.rule import Rule
-from rich.table import Table
-from rich.text import Text
-
-from ocint._render import render_table
 from ocint._timeutil import format_ms
 from ocint.ctx.models import (
     CtxEventContext,
@@ -23,6 +16,7 @@ from ocint.ctx.models import (
     CtxTranscript,
     CtxTranscriptFormat,
 )
+from ocint.presentation import Group, Markdown, Presentation, Rule, Table, Text, key_value_section, plain_table
 
 
 def render_import_result(result: CtxImportResult) -> str:
@@ -42,7 +36,7 @@ def render_import_result(result: CtxImportResult) -> str:
     )
 
 
-def render_status(status: CtxStatus) -> RenderableType:
+def render_status(status: CtxStatus) -> Presentation:
     latest_attempt_completed_at = status.latest_attempt_completed_at
     latest_attempt_running_for = ""
     if status.latest_attempt_status == "running" and status.latest_attempt_started_at and status.observed_at_ms:
@@ -59,10 +53,10 @@ def render_status(status: CtxStatus) -> RenderableType:
         ("Refresh", _refresh_summary(status)),
         ("Last success", format_ms(status.latest_success_completed_at) or "never"),
     ]
-    source_groups: list[RenderableType] = []
+    source_groups: list[Presentation] = []
     for index, source in enumerate(status.refresh_sources, start=1):
         source_groups.append(
-            _rich_section(
+            key_value_section(
                 f"Refresh source {index}: {source.name}",
                 [
                     ("SOURCE_ID", source.source_id),
@@ -86,8 +80,8 @@ def render_status(status: CtxStatus) -> RenderableType:
         )
     return Group(
         Text("Context index status", style="bold"),
-        _rich_section("Summary", summary),
-        _rich_section(
+        key_value_section("Summary", summary),
+        key_value_section(
             "Index",
             [
                 ("PROVIDER", status.provider),
@@ -101,11 +95,11 @@ def render_status(status: CtxStatus) -> RenderableType:
                 ("OBSERVED_AT", format_ms(status.observed_at_ms)),
             ],
         ),
-        _rich_section(
+        key_value_section(
             "Configured source",
             [("SOURCE_DB", status.source_db_path), ("SOURCE_DB_EXISTS", status.source_db_exists)],
         ),
-        _rich_section(
+        key_value_section(
             "Refresh",
             [
                 ("REFRESH_LOG", status.refresh_log_path),
@@ -120,7 +114,7 @@ def render_status(status: CtxStatus) -> RenderableType:
                 ("REFRESH_SOURCES", len(status.refresh_sources)),
             ],
         ),
-        _rich_section(
+        key_value_section(
             "Attempts, success, and failure",
             [
                 ("LATEST_SUCCESS_STARTED_AT", format_ms(status.latest_success_started_at)),
@@ -138,22 +132,13 @@ def render_status(status: CtxStatus) -> RenderableType:
                 ("LATEST_ERROR", status.latest_error_message),
             ],
         ),
-        _rich_section(
+        key_value_section(
             "Checkpoint",
             [("CHECKPOINT_SUMMARY", status.checkpoint_summary), *_checkpoint_rows(status.checkpoint_summary)],
         ),
-        _rich_section("Refresh sources", [("COUNT", len(status.refresh_sources))]),
+        key_value_section("Refresh sources", [("COUNT", len(status.refresh_sources))]),
         *source_groups,
     )
-
-
-def _rich_section(title: str, rows: list[tuple[str, object]]) -> RenderableType:
-    table = Table.grid(padding=(0, 2))
-    table.add_column(style="bold", no_wrap=True)
-    table.add_column(overflow="fold")
-    for label, value in rows:
-        table.add_row(Text(f"{label}:"), Text("" if value is None else str(value)))
-    return Group(Text(title, style="bold cyan"), table, Text(""))
 
 
 def _configured_source_summary(status: CtxStatus) -> str:
@@ -280,7 +265,7 @@ def _short_fingerprint(value: Any) -> str:
 
 
 def render_sources(sources: list[CtxSource]) -> str:
-    return render_table(sources)
+    return plain_table(sources)
 
 
 def render_recent_sessions(sessions: list[CtxSession]) -> str:
@@ -300,7 +285,7 @@ def render_recent_sessions(sessions: list[CtxSession]) -> str:
     ]
     return (
         "Recent sessions\n\n"
-        f"{render_table(rows)}\n"
+        f"{plain_table(rows)}\n"
         "\n"
         "Show a session:\n"
         f"  ocint ctx show session {sessions[0].session_id}\n"
@@ -310,10 +295,10 @@ def render_recent_sessions(sessions: list[CtxSession]) -> str:
     )
 
 
-def render_search_results(results: list[CtxSearchResult], *, verbose: bool = False) -> RenderableType:
+def render_search_results(results: list[CtxSearchResult], *, verbose: bool = False) -> Presentation:
     if not results:
         return Text("No results")
-    blocks: list[RenderableType] = []
+    blocks: list[Presentation] = []
     for index, result in enumerate(results, start=1):
         content_name, content_style = _search_content_type(result.event_type)
         primary = Table.grid(padding=(0, 2))
@@ -338,7 +323,7 @@ def render_search_results(results: list[CtxSearchResult], *, verbose: bool = Fal
         if verbose:
             metadata.add_row("Citation", Text(result.citation, style="dim"))
 
-        result_parts: list[RenderableType] = [
+        result_parts: list[Presentation] = [
             Rule(f"Result {index}", style="cyan"),
             Text(""),
             primary,
@@ -373,7 +358,7 @@ def _format_search_time(value: int | None) -> str:
     return datetime.fromtimestamp(value / 1000, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def _render_search_content(result: CtxSearchResult) -> RenderableType:
+def _render_search_content(result: CtxSearchResult) -> Presentation:
     if result.event_type.lower() in {"text", "assistant", "user", "system", "part"}:
         return Markdown(result.snippet)
     return Text(result.snippet)
