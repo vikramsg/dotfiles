@@ -32,8 +32,8 @@ These instructions apply to `bin/ocint/`.
 
 ## Repo Conventions
 
-- Module ownership, shared-type placement, and file-creation rules are documented in `docs/architecture/module-boundaries.md`.
-- Presentation ownership and output boundaries are documented in `docs/architecture/presentation.md`.
+- Module ownership, shared-type placement, and file-creation rules are documented in [module-boundaries.md](docs/architecture/module-boundaries.md).
+- Presentation ownership and output boundaries are documented in [presentation.md](docs/architecture/presentation.md).
 - Import shared presentation APIs only from the `ocint.presentation` facade. Do not import its private modules directly.
 - Keep reusable presentation components, exact machine serializers, and terminal output construction inside `ocint.presentation`.
 
