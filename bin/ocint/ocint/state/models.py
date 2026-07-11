@@ -32,3 +32,40 @@ class StateSessionUsage(StateModel):
     messages: int = 0
     cost: float = 0.0
     tokens: UsageTokens = Field(default_factory=UsageTokens)
+
+
+class StateDetailedProjectUsage(StateModel):
+    project_id: str | None = None
+    worktree: str | None = None
+    sessions: int = 0
+    assistant_messages: int = 0
+    cost: float = 0.0
+    tokens: UsageTokens = Field(default_factory=UsageTokens)
+
+
+class StateDetailedAgentUsage(StateModel):
+    agent: str
+    kind: str
+    sessions: int = 0
+    assistant_messages: int = 0
+    cost: float = 0.0
+    tokens: UsageTokens = Field(default_factory=UsageTokens)
+
+
+class StateDetailedProjectAgentUsage(StateModel):
+    project_id: str | None = None
+    worktree: str | None = None
+    agent: str
+    kind: str
+    sessions: int = 0
+    assistant_messages: int = 0
+    cost: float = 0.0
+    tokens: UsageTokens = Field(default_factory=UsageTokens)
+
+
+class StateDetailed(StateModel):
+    db_path: Path
+    message_attributed_cost: float = 0.0
+    projects: list[StateDetailedProjectUsage] = Field(default_factory=list)
+    agents: list[StateDetailedAgentUsage] = Field(default_factory=list)
+    project_agents: list[StateDetailedProjectAgentUsage] = Field(default_factory=list)

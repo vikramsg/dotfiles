@@ -11,6 +11,7 @@ def create_opencode_db(path: Path) -> Path:
         CREATE TABLE session (
           id TEXT PRIMARY KEY,
           parent_id TEXT,
+          project_id TEXT,
           title TEXT,
           directory TEXT,
           time_created INTEGER NOT NULL,
@@ -51,7 +52,7 @@ def create_opencode_db(path: Path) -> Path:
         );
         CREATE TABLE project (
           id TEXT PRIMARY KEY,
-          path TEXT,
+          worktree TEXT,
           data TEXT NOT NULL
         );
         CREATE TABLE workspace (
@@ -69,11 +70,12 @@ def create_opencode_db(path: Path) -> Path:
     now = int(time.time() * 1000) - 86_400_000
     long_text = " ".join(["long-transcript-prefix"] * 30) + " IMPORTANT_LATE_MARKER full transcript content"
     con.executemany(
-        "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 "s-primary",
                 None,
+                "project-dotfiles",
                 "Primary ctx skill",
                 "/work/repo-directory-only",
                 now,
@@ -84,11 +86,12 @@ def create_opencode_db(path: Path) -> Path:
                 30,
                 40,
                 50,
-                json.dumps({"title": "Primary ctx skill"}),
+                json.dumps({"title": "Primary ctx skill", "agent": "changed-root-agent"}),
             ),
             (
                 "s-sub",
                 "s-primary",
+                "project-automation",
                 "Subagent implementation",
                 "/work/repo-directory-only",
                 now + 20,
@@ -99,7 +102,7 @@ def create_opencode_db(path: Path) -> Path:
                 3,
                 4,
                 5,
-                json.dumps({"title": "Subagent implementation"}),
+                json.dumps({"title": "Subagent implementation", "agent": "changed-subagent"}),
             ),
         ],
     )
@@ -114,6 +117,9 @@ def create_opencode_db(path: Path) -> Path:
                 json.dumps(
                     {
                         "role": "assistant",
+                        "agent": "historical-agent",
+                        "cost": 12.0,
+                        "tokens": {"input": 10, "output": 20, "reasoning": 3, "cache": {"read": 4, "write": 5}},
                         "providerID": "anthropic",
                         "modelID": "claude-sonnet-4-5",
                         "text": "ctx skill migration decision",
@@ -128,6 +134,9 @@ def create_opencode_db(path: Path) -> Path:
                 json.dumps(
                     {
                         "role": "assistant",
+                        "agent": "historical-agent",
+                        "cost": 31.0,
+                        "tokens": {"input": 1, "output": 2, "reasoning": 3, "cache": {"read": 4, "write": 5}},
                         "providerID": "openai",
                         "modelID": "gpt-5.5",
                         "text": "subagent ctx skill implementation detail",
@@ -279,6 +288,10 @@ def create_opencode_db(path: Path) -> Path:
     )
     con.execute(
         "INSERT INTO project VALUES (?, ?, ?)", ("project-dotfiles", "/work/dotfiles", json.dumps({"name": "dotfiles"}))
+    )
+    con.execute(
+        "INSERT INTO project VALUES (?, ?, ?)",
+        ("project-automation", "/work/automation", json.dumps({"name": "automation"})),
     )
     con.execute(
         "INSERT INTO workspace VALUES (?, ?, ?)",

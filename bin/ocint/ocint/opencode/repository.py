@@ -12,6 +12,11 @@ from ocint._db import inspect_schema, open_readonly_connection
 from ocint._sqlsafe import execute_readonly_query
 from ocint.opencode import schema as opencode_schema
 from ocint.opencode.models import (
+    OpenCodeDetailedAgentUsage,
+    OpenCodeDetailedProjectAgentUsage,
+    OpenCodeDetailedProjectUsage,
+    OpenCodeDetailedUsageResult,
+    OpenCodeDetailedUsageTokens,
     OpenCodeJsonModel,
     OpenCodeMessageData,
     OpenCodeMessageRow,
@@ -118,6 +123,155 @@ class OpenCodeRepository:
                 params,
             ).fetchall()
             return [OpenCodeUsageSession.model_validate(dict(row)) for row in rows]
+
+    def detailed_usage(self, *, start_ms: int | None) -> OpenCodeDetailedUsageResult:
+        """Load current-schema assistant message aggregates for state detailed."""
+        with self.readonly_connection() as connection:
+            connection.execute("BEGIN")
+            try:
+                _require_columns(connection, "message", {"id", "session_id", "time_created", "data"})
+                _require_columns(connection, "session", {"id", "project_id", "parent_id"})
+                _require_columns(connection, "project", {"id", "worktree"})
+                time_filter = "AND message.time_created >= ?" if start_ms is not None else ""
+                params = (start_ms,) if start_ms is not None else ()
+                rows = connection.execute(
+                    f"""
+                    WITH assistant_message AS MATERIALIZED (
+                      SELECT
+                        message.id AS message_id,
+                        message.session_id,
+                        session.project_id,
+                        project.worktree,
+                        json_extract(message.data, '$.agent') AS agent,
+                        json_type(message.data, '$.agent') AS agent_type,
+                        trim(json_extract(message.data, '$.agent'), char(9) || char(10) || char(11) || char(12) || char(13) || ' ')
+                          AS agent_trimmed,
+                        CASE WHEN session.parent_id IS NULL THEN 'root' ELSE 'subagent' END AS kind,
+                        json_type(message.data, '$.cost') AS cost_type,
+                        json_type(message.data, '$.tokens.input') AS tokens_input_type,
+                        json_type(message.data, '$.tokens.output') AS tokens_output_type,
+                        json_type(message.data, '$.tokens.reasoning') AS tokens_reasoning_type,
+                        json_type(message.data, '$.tokens.cache.read') AS tokens_cache_read_type,
+                        json_type(message.data, '$.tokens.cache.write') AS tokens_cache_write_type,
+                        CAST(json_extract(message.data, '$.cost') AS REAL) AS cost,
+                        CAST(json_extract(message.data, '$.tokens.input') AS INTEGER) AS tokens_input,
+                        CAST(json_extract(message.data, '$.tokens.output') AS INTEGER) AS tokens_output,
+                        CAST(json_extract(message.data, '$.tokens.reasoning') AS INTEGER) AS tokens_reasoning,
+                        CAST(json_extract(message.data, '$.tokens.cache.read') AS INTEGER) AS tokens_cache_read,
+                        CAST(json_extract(message.data, '$.tokens.cache.write') AS INTEGER) AS tokens_cache_write
+                      FROM message
+                      JOIN session ON session.id = message.session_id
+                      LEFT JOIN project ON project.id = session.project_id
+                      WHERE json_extract(message.data, '$.role') = 'assistant'
+                      {time_filter}
+                    ),
+                    invalid_assistant_message AS (
+                      SELECT
+                        message_id,
+                        CASE
+                          WHEN agent_type IS NOT 'text' OR agent_trimmed = '' THEN 'historical agent identity'
+                          ELSE 'required usage data'
+                        END AS invalid_reason
+                      FROM assistant_message
+                      WHERE agent_type IS NOT 'text'
+                         OR agent_trimmed = ''
+                         OR (cost_type IS NOT 'integer' AND cost_type IS NOT 'real')
+                         OR (tokens_input_type IS NOT 'integer' AND tokens_input_type IS NOT 'real')
+                         OR (tokens_output_type IS NOT 'integer' AND tokens_output_type IS NOT 'real')
+                         OR (tokens_reasoning_type IS NOT 'integer' AND tokens_reasoning_type IS NOT 'real')
+                         OR (tokens_cache_read_type IS NOT 'integer' AND tokens_cache_read_type IS NOT 'real')
+                         OR (tokens_cache_write_type IS NOT 'integer' AND tokens_cache_write_type IS NOT 'real')
+                      ORDER BY message_id
+                      LIMIT 1
+                    )
+                    SELECT
+                      'invalid' AS section,
+                      0 AS section_order,
+                      message_id,
+                      invalid_reason,
+                      NULL AS project_id,
+                      NULL AS worktree,
+                      NULL AS agent,
+                      NULL AS kind,
+                      NULL AS sessions,
+                      NULL AS assistant_messages,
+                      NULL AS cost,
+                      NULL AS tokens_input,
+                      NULL AS tokens_output,
+                      NULL AS tokens_reasoning,
+                      NULL AS tokens_cache_read,
+                      NULL AS tokens_cache_write
+                    FROM invalid_assistant_message
+                    UNION ALL
+                    SELECT
+                      'project' AS section,
+                      1 AS section_order,
+                      NULL AS message_id,
+                      NULL AS invalid_reason,
+                      project_id,
+                      worktree,
+                      NULL AS agent,
+                      NULL AS kind,
+                      COUNT(DISTINCT session_id) AS sessions,
+                      COUNT(*) AS assistant_messages,
+                      SUM(cost) AS cost,
+                      SUM(tokens_input) AS tokens_input,
+                      SUM(tokens_output) AS tokens_output,
+                      SUM(tokens_reasoning) AS tokens_reasoning,
+                      SUM(tokens_cache_read) AS tokens_cache_read,
+                      SUM(tokens_cache_write) AS tokens_cache_write
+                    FROM assistant_message
+                    WHERE NOT EXISTS (SELECT 1 FROM invalid_assistant_message)
+                    GROUP BY project_id, worktree
+                    UNION ALL
+                    SELECT
+                      'agent' AS section,
+                      2 AS section_order,
+                      NULL AS message_id,
+                      NULL AS invalid_reason,
+                      NULL AS project_id,
+                      NULL AS worktree,
+                      agent,
+                      kind,
+                      COUNT(DISTINCT session_id) AS sessions,
+                      COUNT(*) AS assistant_messages,
+                      SUM(cost) AS cost,
+                      SUM(tokens_input) AS tokens_input,
+                      SUM(tokens_output) AS tokens_output,
+                      SUM(tokens_reasoning) AS tokens_reasoning,
+                      SUM(tokens_cache_read) AS tokens_cache_read,
+                      SUM(tokens_cache_write) AS tokens_cache_write
+                    FROM assistant_message
+                    WHERE NOT EXISTS (SELECT 1 FROM invalid_assistant_message)
+                    GROUP BY agent, kind
+                    UNION ALL
+                    SELECT
+                      'project_agent' AS section,
+                      3 AS section_order,
+                      NULL AS message_id,
+                      NULL AS invalid_reason,
+                      project_id,
+                      worktree,
+                      agent,
+                      kind,
+                      COUNT(DISTINCT session_id) AS sessions,
+                      COUNT(*) AS assistant_messages,
+                      SUM(cost) AS cost,
+                      SUM(tokens_input) AS tokens_input,
+                      SUM(tokens_output) AS tokens_output,
+                      SUM(tokens_reasoning) AS tokens_reasoning,
+                      SUM(tokens_cache_read) AS tokens_cache_read,
+                      SUM(tokens_cache_write) AS tokens_cache_write
+                    FROM assistant_message
+                    WHERE NOT EXISTS (SELECT 1 FROM invalid_assistant_message)
+                    GROUP BY project_id, worktree, agent, kind
+                    ORDER BY section_order, cost DESC, worktree, project_id, agent, kind
+                    """,
+                    params,
+                ).fetchall()
+            finally:
+                connection.rollback()
+        return _detailed_usage_result(rows)
 
     def transcript_event_count(self) -> int:
         with self.readonly_connection() as connection:
@@ -567,6 +721,72 @@ def _require_columns(connection: sqlite3.Connection, table: str, required: set[s
     missing = sorted(required - set(_columns(connection, table)))
     if missing:
         raise ValueError(f"OpenCode {table} table is missing required columns: {', '.join(missing)}")
+
+
+def _detailed_usage_result(rows: list[sqlite3.Row]) -> OpenCodeDetailedUsageResult:
+    projects: list[OpenCodeDetailedProjectUsage] = []
+    agents: list[OpenCodeDetailedAgentUsage] = []
+    project_agents: list[OpenCodeDetailedProjectAgentUsage] = []
+    for row in rows:
+        section = row["section"]
+        if section == "invalid":
+            raise ValueError(f"OpenCode assistant message has invalid {row['invalid_reason']}: {row['message_id']}")
+        if section == "project":
+            projects.append(
+                OpenCodeDetailedProjectUsage(
+                    project_id=row["project_id"],
+                    worktree=row["worktree"],
+                    sessions=int(row["sessions"]),
+                    assistant_messages=int(row["assistant_messages"]),
+                    cost=float(row["cost"]),
+                    tokens=_detailed_usage_tokens(row),
+                )
+            )
+            continue
+        if section == "agent":
+            agents.append(
+                OpenCodeDetailedAgentUsage(
+                    agent=row["agent"],
+                    kind=row["kind"],
+                    sessions=int(row["sessions"]),
+                    assistant_messages=int(row["assistant_messages"]),
+                    cost=float(row["cost"]),
+                    tokens=_detailed_usage_tokens(row),
+                )
+            )
+            continue
+        if section == "project_agent":
+            project_agents.append(
+                OpenCodeDetailedProjectAgentUsage(
+                    project_id=row["project_id"],
+                    worktree=row["worktree"],
+                    agent=row["agent"],
+                    kind=row["kind"],
+                    sessions=int(row["sessions"]),
+                    assistant_messages=int(row["assistant_messages"]),
+                    cost=float(row["cost"]),
+                    tokens=_detailed_usage_tokens(row),
+                )
+            )
+            continue
+        raise ValueError(f"OpenCode detailed usage returned unknown section: {section}")
+    return OpenCodeDetailedUsageResult(projects=projects, agents=agents, project_agents=project_agents)
+
+
+def _detailed_usage_tokens(row: sqlite3.Row) -> OpenCodeDetailedUsageTokens:
+    tokens_input = int(row["tokens_input"])
+    tokens_output = int(row["tokens_output"])
+    tokens_reasoning = int(row["tokens_reasoning"])
+    tokens_cache_read = int(row["tokens_cache_read"])
+    tokens_cache_write = int(row["tokens_cache_write"])
+    return OpenCodeDetailedUsageTokens(
+        input=tokens_input,
+        output=tokens_output,
+        reasoning=tokens_reasoning,
+        cache_read=tokens_cache_read,
+        cache_write=tokens_cache_write,
+        total=tokens_input + tokens_output + tokens_reasoning + tokens_cache_read + tokens_cache_write,
+    )
 
 
 def _expr(columns: list[str], candidates: list[str], alias: str, default: str = "NULL") -> str:
