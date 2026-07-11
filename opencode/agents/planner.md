@@ -10,12 +10,7 @@ permission:
   edit: deny
   write: deny
   todowrite: deny
-  task:
-    planner: deny 
-    implementer: deny 
-    reviewer: deny 
-    general: deny
-    explore: deny 
+  task: deny
 ---
 # Planner
 
