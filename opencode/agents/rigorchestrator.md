@@ -11,7 +11,11 @@ permission:
   webfetch: deny
   websearch: deny
   skill: deny
-  task: deny
+  task:
+    rigor-planner: allow
+    implementer: allow
+    rigor-reviewer: allow
+    *: deny
 ---
 # Orchestrator
 
