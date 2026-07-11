@@ -25,9 +25,11 @@ def path_options(command: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def window_options(command: Callable[..., Any]) -> Callable[..., Any]:
-    command = click.option("--until", help="Inclusive UTC end date (YYYY-MM-DD).")(command)
-    command = click.option("--since", help="UTC start date (YYYY-MM-DD).")(command)
-    command = click.option("--days", type=int, help="Include this many UTC days when --since is omitted.")(command)
+    command = click.option(
+        "--days",
+        type=click.IntRange(min=0),
+        help="Include sessions updated in the last N days.",
+    )(command)
     return command
 
 
@@ -68,57 +70,15 @@ def summary(
     config_path: Path | None,
     db_path: Path | None,
     days: int | None,
-    since: str | None,
-    until: str | None,
     output_format: str,
 ) -> None:
-    """Summarize token, cost, session, and LLM step usage."""
-    window = _window(days=days, since=since, until=until)
+    """Summarize authoritative token, cost, session, and message usage."""
+    window = _window(days=days)
     result = _with_service(config_path, db_path, lambda service: service.summary(window))
     app.output.write(
         result.model_dump_json(indent=2) if output_format == "json" else render_summary(result, window),
         nl=output_format == "json",
     )
-
-
-@state.command(name="daily")
-@path_options
-@window_options
-@click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
-@click.pass_obj
-def daily_command(
-    app: CliContext,
-    config_path: Path | None,
-    db_path: Path | None,
-    days: int | None,
-    since: str | None,
-    until: str | None,
-    output_format: str,
-) -> None:
-    """Group usage by UTC day."""
-    window = _window(days=days, since=since, until=until)
-    rows = _with_service(config_path, db_path, lambda service: service.daily(window))
-    app.output.write(render_json(rows) if output_format == "json" else render_rows(rows))
-
-
-@state.command(name="models")
-@path_options
-@window_options
-@click.option("--format", "output_format", type=OutputFormat, default="table", show_default=True)
-@click.pass_obj
-def models_command(
-    app: CliContext,
-    config_path: Path | None,
-    db_path: Path | None,
-    days: int | None,
-    since: str | None,
-    until: str | None,
-    output_format: str,
-) -> None:
-    """Group usage by model."""
-    window = _window(days=days, since=since, until=until)
-    rows = _with_service(config_path, db_path, lambda service: service.models(window))
-    app.output.write(render_json(rows) if output_format == "json" else render_rows(rows))
 
 
 @state.command(name="sessions")
@@ -131,12 +91,10 @@ def sessions_command(
     config_path: Path | None,
     db_path: Path | None,
     days: int | None,
-    since: str | None,
-    until: str | None,
     output_format: str,
 ) -> None:
     """Group usage by session."""
-    window = _window(days=days, since=since, until=until)
+    window = _window(days=days)
     rows = _with_service(config_path, db_path, lambda service: service.sessions(window))
     app.output.write(render_json(rows) if output_format == "json" else render_rows(rows))
 
@@ -152,9 +110,9 @@ def query(app: CliContext, config_path: Path | None, db_path: Path | None, outpu
     app.output.write(render_json(rows, sort_keys=True) if output_format == "json" else render_rows(rows))
 
 
-def _window(*, days: int | None, since: str | None, until: str | None) -> UsageWindow:
+def _window(*, days: int | None) -> UsageWindow:
     try:
-        return make_window(days=days, since=since, until=until)
+        return make_window(days=days)
     except ValueError as error:
         raise click.ClickException(str(error)) from error
 

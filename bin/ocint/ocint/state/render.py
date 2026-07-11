@@ -25,7 +25,7 @@ def render_summary(summary: StateSummary, window: UsageWindow) -> str:
             f"DB: {summary.db_path}",
             f"WINDOW: {window.label}",
             f"SESSIONS: {_format_int(summary.sessions)}",
-            f"LLM_STEPS: {_format_int(summary.llm_steps)}",
+            f"MESSAGES: {_format_int(summary.messages)}",
             f"COST: {summary.cost:.6f}",
             f"TOKENS_INPUT: {_format_int(summary.tokens.input)}",
             f"TOKENS_OUTPUT: {_format_int(summary.tokens.output)}",
