@@ -47,6 +47,7 @@ These instructions apply to `bin/ocint/`.
 - Use the package justfile for verification. Example: `just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile check`.
 - Use root workspace `uv` execution. Example: `uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest ...`.
 - Follow justfile shell variable rules. Example: use `$VAR`, use `$(...)`, do not use `$$VAR`.
+- Strictly **NO** module constants in either tests or production code. Introducing them indicates that modeling of the problem has not been done correctly. For example in tests, data should be represented via fixtures. In Python code, it probably means config/settings have not been modeled correctly and instead replaced by module constants.
 
 ### Python testing conventions
 
