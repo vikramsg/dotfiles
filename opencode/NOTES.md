@@ -13,6 +13,7 @@
 ## Prompts
 
 1. Give me component map + interface sketch of change
+2. Next give me files changed, and patterns used
 
 ## Agent requirements
 
