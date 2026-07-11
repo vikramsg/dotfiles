@@ -49,6 +49,11 @@ These instructions apply to `bin/ocint/`.
 - Always follow the GIVEN/WHEN/THEN structure in tests 
 - Model one test for one behaviour. If multiple similar cases have to be tested, parameterize rather than putting all in one test.
 
+### Typing
+
+- Prefer concrete types. Construct them wherever appropriate. 
+- Do not use `tuple` or `dict` or `object` or `Any`. Create or convert to concrete types.
+
 ## Commands
 
 Use the package justfile explicitly:
