@@ -78,6 +78,50 @@ class OpenCodeUsageSession(StorageModel):
     tokens_cache_write: int
 
 
+class OpenCodeDetailedUsageTokens(StorageModel):
+    input: int
+    output: int
+    reasoning: int
+    cache_read: int
+    cache_write: int
+    total: int
+
+
+class OpenCodeDetailedProjectUsage(StorageModel):
+    project_id: str | None = None
+    worktree: str | None = None
+    sessions: int
+    assistant_messages: int
+    cost: float
+    tokens: OpenCodeDetailedUsageTokens
+
+
+class OpenCodeDetailedAgentUsage(StorageModel):
+    agent: str
+    kind: Literal["root", "subagent"]
+    sessions: int
+    assistant_messages: int
+    cost: float
+    tokens: OpenCodeDetailedUsageTokens
+
+
+class OpenCodeDetailedProjectAgentUsage(StorageModel):
+    project_id: str | None = None
+    worktree: str | None = None
+    agent: str
+    kind: Literal["root", "subagent"]
+    sessions: int
+    assistant_messages: int
+    cost: float
+    tokens: OpenCodeDetailedUsageTokens
+
+
+class OpenCodeDetailedUsageResult(StorageModel):
+    projects: list[OpenCodeDetailedProjectUsage] = Field(default_factory=list)
+    agents: list[OpenCodeDetailedAgentUsage] = Field(default_factory=list)
+    project_agents: list[OpenCodeDetailedProjectAgentUsage] = Field(default_factory=list)
+
+
 class OpenCodeMessageRow(StorageModel):
     id: str
     session_id: str | None = None

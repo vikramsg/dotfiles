@@ -230,7 +230,7 @@ def test_ctx_import_source_adapter_is_message_part_only_without_raw_event_fallba
 
 
 def test_ctx_spec_documents_import_generator_contract() -> None:
-    spec_source = (PACKAGE_ROOT.parent / "docs" / "spec.md").read_text()
+    spec_source = (PACKAGE_ROOT.parent / "docs" / "spec" / "ctx.md").read_text()
 
     assert "def import_history_events(" in spec_source
     assert "CtxImportProgress" in spec_source

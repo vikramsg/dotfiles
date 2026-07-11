@@ -4,7 +4,7 @@ from typing import Any
 from ocint._models import ResolvedPaths
 from ocint._render import render_table
 from ocint._timeutil import UsageWindow
-from ocint.state.models import StateSummary
+from ocint.state.models import StateDetailed, StateSummary
 
 
 def render_paths(paths: ResolvedPaths) -> str:
@@ -38,9 +38,38 @@ def render_summary(summary: StateSummary, window: UsageWindow) -> str:
     )
 
 
+def render_detailed(detailed: StateDetailed, window: UsageWindow) -> str:
+    projects = [f"{_source_label(row.worktree)}: {row.cost:.6f}" for row in detailed.projects]
+    agents = [f"{row.agent} ({row.kind}): {row.cost:.6f}" for row in detailed.agents]
+    project_agents = [
+        f"{_source_label(row.worktree)}: {row.agent} ({row.kind}): {row.cost:.6f}" for row in detailed.project_agents
+    ]
+    return "\n".join(
+        [
+            f"DB: {detailed.db_path}",
+            f"WINDOW: {window.label}",
+            f"MESSAGE_ATTRIBUTED_COST: {detailed.message_attributed_cost:.6f}",
+            "",
+            "BY PROJECT",
+            *projects,
+            "",
+            "BY AGENT",
+            *agents,
+            "",
+            "BY PROJECT / AGENT",
+            *project_agents,
+            "",
+        ]
+    )
+
+
 def render_rows(rows: Iterable[Any]) -> str:
     return render_table(rows)
 
 
 def _format_int(value: int) -> str:
     return f"{value:,}"
+
+
+def _source_label(value: str | None) -> str:
+    return "(unknown)" if value is None else value
