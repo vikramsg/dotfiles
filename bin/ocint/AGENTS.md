@@ -4,8 +4,8 @@ These instructions apply to `bin/ocint/`.
 
 ## Principles
 
-- Separation of concerns: keep parsing, behavior, persistence, and rendering apart. Example: CLI parses `--refresh`; service receives a typed refresh mode.
-- Single responsibility: one module should have one reason to change. Example: a repository loads rows; it does not parse SQL or define sandbox policy.
+- Separation of concerns: separate policy from mechanisms through APIs; do not create a module, class, or repository merely because code performs I/O. Example: CLI parses `--refresh`; service receives a typed refresh mode.
+- Single responsibility: one module should have one reason to change, not one function or class. Keep operations together when they own the same format, transport, or lifecycle. Example: a refresh logging adapter may emit, read, and parse its JSONL format, while the status service decides which records to show.
 - Dependency inversion: higher-level behavior receives dependencies explicitly. Example: `search_history(request, repository)`, not `search_history()` reading env.
 - Explicit preconditions / fail fast: required infrastructure must exist before command behavior runs. Example: missing ctx DB fails with `run ocint ctx import first`, not an empty status result.
 - Type safety: command modes and config are typed at the boundary. Example: use `RefreshMode.OFF`, not `refresh != "off"`.
@@ -18,8 +18,9 @@ These instructions apply to `bin/ocint/`.
 ## Project Rules
 
 - CLI is the composition root. Example: `ctx/cli.py` creates repositories, sessions, typed config, and request models.
-- Services coordinate use cases only. Example: service calls repository and applies typed command behavior.
-- Repositories only access persistence. Example: repository executes SQLAlchemy queries; it does not decide command policy.
+- Services coordinate use cases and own selection policy. Example: service calls repository and applies typed command behavior.
+- A repository provides domain-oriented access to durable application state. Current ctx repositories access SQL-backed state through SQLAlchemy; they contain persistence queries and do not decide command policy.
+- Do not introduce a repository for operational artifacts such as logs, temporary files, generated output, or diagnostic streams. Keep their format and I/O in the owning infrastructure adapter unless the artifact becomes a first-class domain data store.
 - Parse at the boundary. Example: convert Click strings/env values into typed objects before calling services.
 - Missing required ctx index is an error. Example: `status` fails if ctx DB is required and absent.
 - CLI commands must be discoverable without pre-known IDs. Example: `ocint ctx show session` lists recent sessions when no session ID is supplied.
@@ -35,7 +36,7 @@ These instructions apply to `bin/ocint/`.
 - Import shared presentation APIs only from the `ocint.presentation` facade. Do not import its private modules directly.
 - Keep reusable presentation components, exact machine serializers, and terminal output construction inside `ocint.presentation`.
 
-- Persistence-backed ctx features use `service.py`, `repository.py`, and `__init__.py`. Example: `ctx/search/service.py` and `ctx/search/repository.py`.
+- Ctx features backed by durable domain state use `service.py`, `repository.py`, and `__init__.py`. This convention does not apply automatically to incidental filesystem I/O or operational artifacts. Example: `ctx/search/service.py` and `ctx/search/repository.py`.
 - Ctx DB lifecycle, physical schema, and Alembic files stay under `ctx/db/`. Example: import `ctx_session` from `ocint.ctx.db` in the CLI and physical tables from `ocint.ctx.db.schema` in repositories.
 - Do not add root god modules. Example: no `ctx/repository.py`, `ctx/service.py`, or `ctx/workflow.py`.
 - Do not re-add root ctx DB ownership modules. Example: no `ctx/db.py`, `ctx/schema.py`, or root `ctx/migrations/` source package.
