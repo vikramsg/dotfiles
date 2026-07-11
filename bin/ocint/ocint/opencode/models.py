@@ -65,6 +65,19 @@ class OpenCodeSessionRow(StorageModel):
     data: OpenCodeSessionData = Field(default_factory=OpenCodeSessionData)
 
 
+class OpenCodeUsageSession(StorageModel):
+    id: str
+    time_created: int
+    time_updated: int
+    messages: int
+    cost: float
+    tokens_input: int
+    tokens_output: int
+    tokens_reasoning: int
+    tokens_cache_read: int
+    tokens_cache_write: int
+
+
 class OpenCodeMessageRow(StorageModel):
     id: str
     session_id: str | None = None

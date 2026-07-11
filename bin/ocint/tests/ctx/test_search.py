@@ -429,7 +429,13 @@ def _add_current_session_limit_fixture_rows(source_db: Path) -> None:
         for index in range(5)
     )
     with sqlite3.connect(source_db) as connection:
-        connection.executemany("INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?)", sessions)
+        connection.executemany(
+            """
+            INSERT INTO session (id, parent_id, title, directory, time_created, time_updated, data)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            sessions,
+        )
         connection.executemany("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)", rows)
 
 

@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import ValidationError
 
 from ocint._db import inspect_schema, open_readonly_connection
 from ocint._sqlsafe import execute_readonly_query
@@ -23,6 +23,7 @@ from ocint.opencode.models import (
     OpenCodeSessionRow,
     OpenCodeTranscriptEventKey,
     OpenCodeTranscriptEventRow,
+    OpenCodeUsageSession,
     payload_paths,
 )
 
@@ -83,30 +84,40 @@ class OpenCodeRepository:
         with self.readonly_connection() as connection:
             return self._parts(connection)
 
-    def usage_part_batches(
-        self,
-        *,
-        start_ms: int | None,
-        end_ms: int | None,
-        batch_size: int,
-    ) -> Iterator[list[OpenCodePartRow]]:
-        """Yield time-windowed part rows in batches for state usage analytics."""
-        if batch_size <= 0:
-            raise ValueError("batch_size must be positive")
-
-        data_adapter = TypeAdapter(list[OpenCodePartData])
+    def usage_sessions(self, *, start_ms: int | None) -> list[OpenCodeUsageSession]:
         with self.readonly_connection() as connection:
-            query = _usage_parts_query(connection, start_ms=start_ms, end_ms=end_ms)
-            if query is None:
-                return
-            sql, params = query
-            session_by_message = _session_message_map(connection)
-            cursor = connection.execute(sql, params)
-            while rows := cursor.fetchmany(batch_size):
-                yield _parts_from_rows(rows, session_by_message=session_by_message, data_adapter=data_adapter)
-
-    def messages_by_id(self) -> dict[str, OpenCodeMessageRow]:
-        return {message.id: message for message in self.messages()}
+            required_session = {
+                "id",
+                "time_created",
+                "time_updated",
+                "cost",
+                "tokens_input",
+                "tokens_output",
+                "tokens_reasoning",
+                "tokens_cache_read",
+                "tokens_cache_write",
+            }
+            required_message = {"id", "session_id"}
+            _require_columns(connection, "session", required_session)
+            _require_columns(connection, "message", required_message)
+            where = "WHERE session.time_updated >= ?" if start_ms is not None else ""
+            params = (start_ms,) if start_ms is not None else ()
+            rows = connection.execute(
+                f"""
+                SELECT session.id, session.time_created, session.time_updated,
+                       COUNT(message.id) AS messages, session.cost,
+                       session.tokens_input, session.tokens_output,
+                       session.tokens_reasoning, session.tokens_cache_read,
+                       session.tokens_cache_write
+                FROM session
+                LEFT JOIN message ON message.session_id = session.id
+                {where}
+                GROUP BY session.id
+                ORDER BY session.time_updated DESC, session.id DESC
+                """,
+                params,
+            ).fetchall()
+            return [OpenCodeUsageSession.model_validate(dict(row)) for row in rows]
 
     def transcript_event_count(self) -> int:
         with self.readonly_connection() as connection:
@@ -482,78 +493,6 @@ def _transcript_event_key_from_row(row: sqlite3.Row) -> OpenCodeTranscriptEventK
     )
 
 
-def _usage_parts_query(
-    connection: sqlite3.Connection,
-    *,
-    start_ms: int | None,
-    end_ms: int | None,
-) -> tuple[str, tuple[int, ...]] | None:
-    if not _table_exists(connection, "part"):
-        return None
-    columns = _columns(connection, "part")
-    time_expr = opencode_schema.column_expr(columns, ["time_created", "timeCreated", "created_at", "createdAt"])
-    if time_expr == "NULL":
-        return None
-    data = _object_data_expr(columns)
-    where = [f"{time_expr} IS NOT NULL"]
-    params: list[int] = []
-    if start_ms is not None:
-        where.append(f"{time_expr} >= ?")
-        params.append(start_ms)
-    if end_ms is not None:
-        where.append(f"{time_expr} < ?")
-        params.append(end_ms)
-    return (
-        f"""
-        SELECT
-          {_expr(columns, ["id"], "id")},
-          {_expr(columns, ["message_id", "messageID"], "message_id")},
-          {_expr(columns, ["session_id", "sessionID"], "session_id")},
-          {_expr(columns, ["time_created", "timeCreated", "created_at", "createdAt"], "time_created")},
-          {_expr(columns, ["time_updated", "timeUpdated", "updated_at", "updatedAt"], "time_updated")},
-          {data} AS {_quote("data")}
-        FROM {_quote("part")}
-        WHERE {" AND ".join(where)}
-        ORDER BY {time_expr}, {_quote("id")}
-        """,
-        tuple(params),
-    )
-
-
-def _object_data_expr(columns: list[str]) -> str:
-    data = opencode_schema.column_expr(columns, ["data"])
-    if data == "NULL":
-        return "'{}'"
-    # Batch validation expects every payload to be a JSON object. Preserve the
-    # old per-row tolerant parsing behavior by converting invalid or non-object
-    # payloads to an empty object before building the batch JSON array.
-    return f"CASE WHEN json_valid({data}) THEN CASE WHEN json_type({data}) = 'object' THEN {data} ELSE '{{}}' END ELSE '{{}}' END"
-
-
-def _parts_from_rows(
-    rows: Sequence[sqlite3.Row],
-    *,
-    session_by_message: dict[str, str],
-    data_adapter: TypeAdapter[list[OpenCodePartData]],
-) -> list[OpenCodePartRow]:
-    data_items = data_adapter.validate_json("[" + ",".join(str(row["data"]) for row in rows) + "]")
-    parts = []
-    for row, data in zip(rows, data_items, strict=True):
-        message_id = _optional_str(row["message_id"])
-        session_id = _optional_str(row["session_id"]) or (session_by_message.get(message_id) if message_id else None)
-        parts.append(
-            OpenCodePartRow(
-                id=str(row["id"]),
-                message_id=message_id,
-                session_id=session_id,
-                time_created=_optional_int(row["time_created"]),
-                time_updated=_optional_int(row["time_updated"]),
-                data=data,
-            )
-        )
-    return parts
-
-
 def _table_count(connection: sqlite3.Connection, table: str) -> int:
     if not _table_exists(connection, table):
         return 0
@@ -620,6 +559,14 @@ def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
 
 def _columns(connection: sqlite3.Connection, table: str) -> list[str]:
     return opencode_schema.columns(connection, table)
+
+
+def _require_columns(connection: sqlite3.Connection, table: str, required: set[str]) -> None:
+    if not _table_exists(connection, table):
+        raise ValueError(f"OpenCode database is missing required table: {table}")
+    missing = sorted(required - set(_columns(connection, table)))
+    if missing:
+        raise ValueError(f"OpenCode {table} table is missing required columns: {', '.join(missing)}")
 
 
 def _expr(columns: list[str], candidates: list[str], alias: str, default: str = "NULL") -> str:

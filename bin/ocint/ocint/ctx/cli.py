@@ -178,9 +178,7 @@ Use --refresh off for deterministic index-only search; it never imports:
 )
 @click.option(
     "--content",
-    type=click.Choice(
-        [SearchContentMode.TEXT.value, SearchContentMode.TOOLS.value, SearchContentMode.ALL.value]
-    ),
+    type=click.Choice([SearchContentMode.TEXT.value, SearchContentMode.TOOLS.value, SearchContentMode.ALL.value]),
     default=SearchContentMode.TEXT.value,
     show_default=True,
     help="Event content mode: text (exclude tools), tools (tools only), or all.",

@@ -10,17 +10,24 @@ def create_opencode_db(path: Path) -> Path:
         """
         CREATE TABLE session (
           id TEXT PRIMARY KEY,
-          parentID TEXT,
+          parent_id TEXT,
           title TEXT,
           directory TEXT,
-          timeCreated INTEGER,
-          timeUpdated INTEGER,
+          time_created INTEGER NOT NULL,
+          time_updated INTEGER NOT NULL,
+          cost REAL NOT NULL DEFAULT 0,
+          tokens_input INTEGER NOT NULL DEFAULT 0,
+          tokens_output INTEGER NOT NULL DEFAULT 0,
+          tokens_reasoning INTEGER NOT NULL DEFAULT 0,
+          tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+          tokens_cache_write INTEGER NOT NULL DEFAULT 0,
           data TEXT NOT NULL
         );
         CREATE TABLE message (
           id TEXT PRIMARY KEY,
-          sessionID TEXT,
-          timeCreated INTEGER,
+          session_id TEXT NOT NULL,
+          time_created INTEGER NOT NULL,
+          time_updated INTEGER NOT NULL,
           data TEXT NOT NULL
         );
         CREATE TABLE session_message (
@@ -62,7 +69,7 @@ def create_opencode_db(path: Path) -> Path:
     now = int(time.time() * 1000) - 86_400_000
     long_text = " ".join(["long-transcript-prefix"] * 30) + " IMPORTANT_LATE_MARKER full transcript content"
     con.executemany(
-        "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 "s-primary",
@@ -71,6 +78,12 @@ def create_opencode_db(path: Path) -> Path:
                 "/work/repo-directory-only",
                 now,
                 now + 10,
+                10.0,
+                100,
+                200,
+                30,
+                40,
+                50,
                 json.dumps({"title": "Primary ctx skill"}),
             ),
             (
@@ -80,16 +93,23 @@ def create_opencode_db(path: Path) -> Path:
                 "/work/repo-directory-only",
                 now + 20,
                 now + 30,
+                20.0,
+                1,
+                2,
+                3,
+                4,
+                5,
                 json.dumps({"title": "Subagent implementation"}),
             ),
         ],
     )
     con.executemany(
-        "INSERT INTO message VALUES (?, ?, ?, ?)",
+        "INSERT INTO message VALUES (?, ?, ?, ?, ?)",
         [
             (
                 "m-primary",
                 "s-primary",
+                now + 1,
                 now + 1,
                 json.dumps(
                     {
@@ -103,6 +123,7 @@ def create_opencode_db(path: Path) -> Path:
             (
                 "m-sub",
                 "s-sub",
+                now + 21,
                 now + 21,
                 json.dumps(
                     {

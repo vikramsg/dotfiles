@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,27 +19,8 @@ class UsageTokens(StateModel):
 
 class StateSummary(StateModel):
     db_path: Path
-    since: date | None = None
-    until: date | None = None
     sessions: int = 0
-    llm_steps: int = 0
-    cost: float = 0.0
-    tokens: UsageTokens = Field(default_factory=UsageTokens)
-
-
-class StateDailyUsage(StateModel):
-    day: date
-    sessions: int = 0
-    llm_steps: int = 0
-    cost: float = 0.0
-    tokens: UsageTokens = Field(default_factory=UsageTokens)
-
-
-class StateModelUsage(StateModel):
-    provider: str
-    model: str
-    sessions: int = 0
-    llm_steps: int = 0
+    messages: int = 0
     cost: float = 0.0
     tokens: UsageTokens = Field(default_factory=UsageTokens)
 
@@ -48,6 +29,6 @@ class StateSessionUsage(StateModel):
     session_id: str
     first_seen: datetime
     last_seen: datetime
-    llm_steps: int = 0
+    messages: int = 0
     cost: float = 0.0
     tokens: UsageTokens = Field(default_factory=UsageTokens)

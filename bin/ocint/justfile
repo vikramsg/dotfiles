@@ -34,12 +34,8 @@ smoke-state:
         if [ "$DB_EXISTS" = "True" ]; then \
             {{uv_ocint}} ocint state schema; \
             {{uv_ocint}} ocint state summary --days 30; \
-            {{uv_ocint}} ocint state daily --days 30; \
-            {{uv_ocint}} ocint state models --days 30; \
             {{uv_ocint}} ocint state sessions --days 30; \
             {{uv_ocint}} ocint state summary --days 30 --format json; \
-            {{uv_ocint}} ocint state daily --days 30 --format json; \
-            {{uv_ocint}} ocint state models --days 30 --format json; \
             {{uv_ocint}} ocint state sessions --days 30 --format json; \
             {{uv_ocint}} ocint state query "SELECT COUNT(*) AS sessions FROM session"; \
         else \
