@@ -15,7 +15,7 @@ permission:
     implementer: deny 
     reviewer: deny 
     general: deny
-    explore: allow 
+    explore: deny 
 ---
 # Planner
 
