@@ -81,24 +81,19 @@ def test_state_detailed_renders_fixed_readable_sections_and_structured_json(tmp_
 
     # THEN readable output has fixed detail-free sections and JSON preserves all structured groups
     assert table_result.exit_code == 0, table_result.output
-    assert table_result.output == (
-        f"DB: {db_path}\n"
-        "WINDOW: all\n"
-        "MESSAGE_ATTRIBUTED_COST: 43.000000\n"
-        "\n"
-        "BY PROJECT\n"
-        "/work/automation: 31.000000\n"
-        "/work/dotfiles: 12.000000\n"
-        "\n"
-        "BY AGENT\n"
-        "historical-agent (subagent): 31.000000\n"
-        "historical-agent (root): 12.000000\n"
-        "\n"
-        "BY PROJECT / AGENT\n"
-        "/work/automation: historical-agent (subagent): 31.000000\n"
-        "/work/dotfiles: historical-agent (root): 12.000000\n"
-    )
-    for excluded in ["TOKENS_", "SESSIONS", "ASSISTANT_MESSAGES", "PROJECT_ID", "WORKTREE"]:
+    content = " ".join(table_result.output.split())
+    assert "Detailed OpenCode usage" in content
+    assert "Database:" in content
+    assert "opencode.db" in content
+    assert "Window: all" in content
+    assert "Message-attributed cost: 43.000000" in content
+    assert "By project" in content
+    assert "Project Cost /work/automation 31.000000 /work/dotfiles 12.000000" in content
+    assert "By agent" in content
+    assert "Agent Cost historical-agent (subagent) 31.000000 historical-agent (root) 12.000000" in content
+    assert "/work/automation: historical-agent (subagent) 31.000000" in content
+    assert "/work/dotfiles: historical-agent (root) 12.000000" in content
+    for excluded in ["Tokens", "Sessions", "Assistant messages", "Project ID", "Worktree"]:
         assert excluded not in table_result.output
     payload = json.loads(json_result.output)
     assert payload["message_attributed_cost"] == 43.0
@@ -123,3 +118,70 @@ def test_state_detailed_renders_fixed_readable_sections_and_structured_json(tmp_
         ("project-automation", "/work/automation", "historical-agent", "subagent", 1, 1, 31.0, 15),
         ("project-dotfiles", "/work/dotfiles", "historical-agent", "root", 1, 1, 12.0, 42),
     ]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "heading"),
+    [
+        (("config", "--db", "{db}"), "OpenCode paths"),
+        (("schema", "--db", "{db}"), "OpenCode database schema"),
+        (("summary", "--db", "{db}"), "OpenCode usage summary"),
+        (("detailed", "--db", "{db}"), "Detailed OpenCode usage"),
+        (("sessions", "--db", "{db}"), "OpenCode session usage"),
+        (("query", "--db", "{db}", "SELECT COUNT(*) AS sessions FROM session"), "OpenCode query results"),
+    ],
+)
+def test_all_state_commands_render_friendly_human_output(
+    tmp_path: Path, arguments: tuple[str, ...], heading: str
+) -> None:
+    # GIVEN a current OpenCode SQLite fixture
+    db_path = create_opencode_db(tmp_path / "opencode.db")
+    command = [argument.format(db=db_path) for argument in arguments]
+
+    # WHEN each state command uses its default human format
+    result = CliRunner().invoke(main, ["state", *command])
+
+    # THEN the command renders its human-facing document
+    assert result.exit_code == 0, result.output
+    assert heading in result.output
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ("config", "--db", "{db}"),
+        ("schema", "--db", "{db}"),
+        ("summary", "--db", "{db}"),
+        ("detailed", "--db", "{db}"),
+        ("sessions", "--db", "{db}"),
+        ("query", "--db", "{db}", "SELECT COUNT(*) AS sessions FROM session"),
+    ],
+)
+def test_all_state_commands_keep_json_machine_readable(tmp_path: Path, arguments: tuple[str, ...]) -> None:
+    # GIVEN a current OpenCode SQLite fixture
+    db_path = create_opencode_db(tmp_path / "opencode.db")
+    command = [argument.format(db=db_path) for argument in arguments]
+
+    # WHEN each state command requests JSON
+    result = CliRunner().invoke(main, ["state", *command, "--format", "json"])
+
+    # THEN the complete output remains one machine-readable JSON value
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) is not None
+    assert "OpenCode" not in result.output
+
+
+def test_state_query_human_output_has_explicit_empty_state(tmp_path: Path) -> None:
+    # GIVEN a current OpenCode SQLite fixture
+    db_path = create_opencode_db(tmp_path / "opencode.db")
+
+    # WHEN a read-only query returns no rows
+    result = CliRunner().invoke(
+        main,
+        ["state", "query", "--db", str(db_path), "SELECT id FROM session WHERE 0"],
+    )
+
+    # THEN the human output explains that the result is empty
+    assert result.exit_code == 0, result.output
+    assert "OpenCode query results" in result.output
+    assert "No rows" in result.output

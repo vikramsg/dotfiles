@@ -7,10 +7,17 @@ import click
 
 from ocint._config import resolve_paths
 from ocint._models import CliContext, ResolvedPaths
-from ocint._render import render_json
 from ocint._timeutil import UsageWindow, make_window
 from ocint.opencode.repository import OpenCodeRepository
-from ocint.state.render import render_detailed, render_paths, render_rows, render_summary
+from ocint.presentation import render_json
+from ocint.state.render import (
+    render_config,
+    render_detailed,
+    render_query,
+    render_schema,
+    render_sessions,
+    render_summary,
+)
 from ocint.state.service import StateService
 
 OutputFormat = click.Choice(["table", "json"])
@@ -43,9 +50,10 @@ def state() -> None:
 def config(app: CliContext, config_path: Path | None, db_path: Path | None, output_format: str) -> None:
     """Show resolved OpenCode config and DB paths without opening the DB."""
     paths = _resolve_paths(config_path=config_path, db_path=db_path)
-    app.output.write(
-        paths.model_dump_json(indent=2) if output_format == "json" else render_paths(paths), nl=output_format == "json"
-    )
+    if output_format == "json":
+        app.output.write(render_json(paths))
+    else:
+        app.output.display(render_config(paths))
 
 
 @state.command()
@@ -55,7 +63,10 @@ def config(app: CliContext, config_path: Path | None, db_path: Path | None, outp
 def schema(app: CliContext, config_path: Path | None, db_path: Path | None, output_format: str) -> None:
     """Inspect SQLite table columns read-only."""
     rows = _with_repository(config_path, db_path, lambda repository: repository.schema())
-    app.output.write(render_json(rows, sort_keys=True) if output_format == "json" else render_rows(rows))
+    if output_format == "json":
+        app.output.write(render_json(rows, sort_keys=True))
+    else:
+        app.output.display(render_schema(rows))
 
 
 @state.command()
@@ -73,10 +84,10 @@ def summary(
     """Summarize authoritative token, cost, session, and message usage."""
     window = _window(days=days)
     result = _with_service(config_path, db_path, lambda service: service.summary(window))
-    app.output.write(
-        result.model_dump_json(indent=2) if output_format == "json" else render_summary(result, window),
-        nl=output_format == "json",
-    )
+    if output_format == "json":
+        app.output.write(render_json(result))
+    else:
+        app.output.display(render_summary(result, window))
 
 
 @state.command()
@@ -94,9 +105,10 @@ def detailed(
     """Group assistant-message usage by project and historical agent."""
     window = _window(days=days)
     result = _with_service(config_path, db_path, lambda service: service.detailed(window))
-    app.output.write(
-        render_json(result) if output_format == "json" else render_detailed(result, window),
-    )
+    if output_format == "json":
+        app.output.write(render_json(result))
+    else:
+        app.output.display(render_detailed(result, window))
 
 
 @state.command(name="sessions")
@@ -114,7 +126,10 @@ def sessions_command(
     """Group usage by session."""
     window = _window(days=days)
     rows = _with_service(config_path, db_path, lambda service: service.sessions(window))
-    app.output.write(render_json(rows) if output_format == "json" else render_rows(rows))
+    if output_format == "json":
+        app.output.write(render_json(rows))
+    else:
+        app.output.display(render_sessions(rows, window))
 
 
 @state.command()
@@ -125,7 +140,10 @@ def sessions_command(
 def query(app: CliContext, config_path: Path | None, db_path: Path | None, output_format: str, sql: str) -> None:
     """Run a single read-only SELECT/WITH query."""
     rows = _with_service(config_path, db_path, lambda service: service.query(sql))
-    app.output.write(render_json(rows, sort_keys=True) if output_format == "json" else render_rows(rows))
+    if output_format == "json":
+        app.output.write(render_json(rows, sort_keys=True))
+    else:
+        app.output.display(render_query(rows))
 
 
 def _window(*, days: int | None) -> UsageWindow:

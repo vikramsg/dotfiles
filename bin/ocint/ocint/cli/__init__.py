@@ -1,7 +1,7 @@
 import click
 
-from ocint.cli._render import default_cli_context
 from ocint.ctx.cli import ctx
+from ocint.presentation import default_cli_context
 from ocint.state.cli import state
 
 

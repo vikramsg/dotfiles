@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from ocint._errors import OcintError
 from ocint._models import CliContext
-from ocint._render import render_csv, render_json, render_raw, render_table
 from ocint.ctx.config import (
     reject_ctx_source_db_alias,
     resolve_ctx_db_path,
@@ -70,6 +69,7 @@ from ocint.ctx.sql import CtxSqlRepository, run_ctx_sql
 from ocint.ctx.sql.models import CtxSqlConfig, default_ctx_sql_config
 from ocint.ctx.status import CtxStatusRepository, get_status, list_sources, require_ctx_index_ready
 from ocint.opencode.repository import OpenCodeRepository
+from ocint.presentation import plain_table, render_csv, render_json, render_raw
 
 
 @click.group(
@@ -473,7 +473,7 @@ def sql_command(app: CliContext, sql: str, output_format: str) -> None:
         case CtxSqlOutputFormat.RAW:
             rendered = render_raw(rows)
         case CtxSqlOutputFormat.TABLE:
-            rendered = render_table(rows)
+            rendered = plain_table(rows)
     app.output.write(rendered)
 
 

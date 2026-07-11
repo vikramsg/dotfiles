@@ -1,75 +1,156 @@
-from collections.abc import Iterable
-from typing import Any
+from collections.abc import Mapping, Sequence
 
 from ocint._models import ResolvedPaths
-from ocint._render import render_table
 from ocint._timeutil import UsageWindow
-from ocint.state.models import StateDetailed, StateSummary
+from ocint.presentation import Presentation, data_table, document, key_value_section
+from ocint.state.models import StateDetailed, StateSessionUsage, StateSummary, UsageTokens
 
 
-def render_paths(paths: ResolvedPaths) -> str:
-    return "\n".join(
-        [
-            f"CONFIG: {paths.config_path}",
-            f"CONFIG_EXISTS: {paths.config_exists}",
-            f"DB: {paths.db_path}",
-            f"DB_EXISTS: {paths.db_exists}",
-            "",
-        ]
+def render_config(paths: ResolvedPaths) -> Presentation:
+    return document(
+        "OpenCode paths",
+        key_value_section(
+            "Resolved paths",
+            [
+                ("Config", paths.config_path),
+                ("Config exists", _yes_no(paths.config_exists)),
+                ("Database", paths.db_path),
+                ("Database exists", _yes_no(paths.db_exists)),
+            ],
+        ),
     )
 
 
-def render_summary(summary: StateSummary, window: UsageWindow) -> str:
-    return "\n".join(
-        [
-            f"DB: {summary.db_path}",
-            f"WINDOW: {window.label}",
-            f"SESSIONS: {_format_int(summary.sessions)}",
-            f"MESSAGES: {_format_int(summary.messages)}",
-            f"COST: {summary.cost:.6f}",
-            f"TOKENS_INPUT: {_format_int(summary.tokens.input)}",
-            f"TOKENS_OUTPUT: {_format_int(summary.tokens.output)}",
-            f"TOKENS_REASONING: {_format_int(summary.tokens.reasoning)}",
-            f"TOKENS_CACHE_READ: {_format_int(summary.tokens.cache_read)}",
-            f"TOKENS_CACHE_WRITE: {_format_int(summary.tokens.cache_write)}",
-            f"TOKENS_TOTAL: {_format_int(summary.tokens.total)}",
-            "",
-        ]
+def render_schema(rows: Sequence[Mapping[str, object]]) -> Presentation:
+    return document(
+        "OpenCode database schema",
+        data_table(
+            "Columns",
+            ("Table", "Column", "Type", "Primary key"),
+            (
+                (
+                    row.get("table_name"),
+                    row.get("column_name"),
+                    row.get("column_type"),
+                    _yes_no(bool(row.get("primary_key"))),
+                )
+                for row in rows
+            ),
+        ),
     )
 
 
-def render_detailed(detailed: StateDetailed, window: UsageWindow) -> str:
-    projects = [f"{_source_label(row.worktree)}: {row.cost:.6f}" for row in detailed.projects]
-    agents = [f"{row.agent} ({row.kind}): {row.cost:.6f}" for row in detailed.agents]
-    project_agents = [
-        f"{_source_label(row.worktree)}: {row.agent} ({row.kind}): {row.cost:.6f}" for row in detailed.project_agents
+def render_summary(summary: StateSummary, window: UsageWindow) -> Presentation:
+    return document(
+        "OpenCode usage summary",
+        key_value_section(
+            "Usage",
+            [
+                ("Database", summary.db_path),
+                ("Window", window.label),
+                ("Sessions", _format_int(summary.sessions)),
+                ("Messages", _format_int(summary.messages)),
+                ("Cost", _format_cost(summary.cost)),
+            ],
+        ),
+        key_value_section("Tokens", _token_rows(summary.tokens)),
+    )
+
+
+def render_detailed(detailed: StateDetailed, window: UsageWindow) -> Presentation:
+    return document(
+        "Detailed OpenCode usage",
+        key_value_section(
+            "Summary",
+            [
+                ("Database", detailed.db_path),
+                ("Window", window.label),
+                ("Message-attributed cost", _format_cost(detailed.message_attributed_cost)),
+            ],
+        ),
+        data_table(
+            "By project",
+            ("Project", "Cost"),
+            ((_source_label(row.worktree), _format_cost(row.cost)) for row in detailed.projects),
+        ),
+        data_table(
+            "By agent",
+            ("Agent", "Cost"),
+            ((f"{row.agent} ({row.kind})", _format_cost(row.cost)) for row in detailed.agents),
+        ),
+        data_table(
+            "By project / agent",
+            ("Project / agent", "Cost"),
+            (
+                (f"{_source_label(row.worktree)}: {row.agent} ({row.kind})", _format_cost(row.cost))
+                for row in detailed.project_agents
+            ),
+        ),
+    )
+
+
+def render_sessions(sessions: Sequence[StateSessionUsage], window: UsageWindow) -> Presentation:
+    return document(
+        "OpenCode session usage",
+        key_value_section("Selection", [("Window", window.label), ("Sessions", _format_int(len(sessions)))]),
+        data_table(
+            "Sessions",
+            ("Session", "First seen", "Last seen", "Messages", "Cost", "Tokens"),
+            (
+                (
+                    session.session_id,
+                    session.first_seen.isoformat(),
+                    session.last_seen.isoformat(),
+                    _format_int(session.messages),
+                    _format_cost(session.cost),
+                    _format_tokens(session.tokens),
+                )
+                for session in sessions
+            ),
+        ),
+    )
+
+
+def render_query(rows: Sequence[Mapping[str, object]]) -> Presentation:
+    if not rows:
+        return document("OpenCode query results", data_table("Rows", (), ()))
+    columns = tuple(rows[0])
+    return document(
+        "OpenCode query results",
+        data_table(
+            "Rows",
+            columns,
+            (tuple(row.get(column) for column in columns) for row in rows),
+        ),
+    )
+
+
+def _token_rows(tokens: UsageTokens) -> list[tuple[str, object]]:
+    return [
+        ("Input", _format_int(tokens.input)),
+        ("Output", _format_int(tokens.output)),
+        ("Reasoning", _format_int(tokens.reasoning)),
+        ("Cache read", _format_int(tokens.cache_read)),
+        ("Cache write", _format_int(tokens.cache_write)),
+        ("Total", _format_int(tokens.total)),
     ]
-    return "\n".join(
-        [
-            f"DB: {detailed.db_path}",
-            f"WINDOW: {window.label}",
-            f"MESSAGE_ATTRIBUTED_COST: {detailed.message_attributed_cost:.6f}",
-            "",
-            "BY PROJECT",
-            *projects,
-            "",
-            "BY AGENT",
-            *agents,
-            "",
-            "BY PROJECT / AGENT",
-            *project_agents,
-            "",
-        ]
-    )
 
 
-def render_rows(rows: Iterable[Any]) -> str:
-    return render_table(rows)
+def _format_tokens(tokens: UsageTokens) -> str:
+    return "\n".join(f"{label}: {value}" for label, value in _token_rows(tokens))
 
 
 def _format_int(value: int) -> str:
     return f"{value:,}"
 
 
+def _format_cost(value: float) -> str:
+    return f"{value:.6f}"
+
+
 def _source_label(value: str | None) -> str:
     return "(unknown)" if value is None else value
+
+
+def _yes_no(value: bool) -> str:
+    return "yes" if value else "no"

@@ -118,7 +118,9 @@ def test_sql_models_own_stable_view_config_without_sqlite_backend_import() -> No
 
 def test_root_cli_package_owns_output_context_injection() -> None:
     assert (PACKAGE_ROOT / "cli" / "__init__.py").is_file()
-    assert (PACKAGE_ROOT / "cli" / "_render.py").is_file()
+    assert (PACKAGE_ROOT / "presentation" / "_output.py").is_file()
+    assert not (PACKAGE_ROOT / "cli" / "_render.py").exists()
+    assert not (PACKAGE_ROOT / "_render.py").exists()
     assert not (PACKAGE_ROOT / "cli.py").exists()
 
     model_symbols = _top_level_symbols(PACKAGE_ROOT / "_models.py")
@@ -144,21 +146,53 @@ def test_feature_clis_use_injected_output_without_direct_echo_or_rich_imports() 
 
 
 def test_presentation_dependencies_stay_at_rendering_boundaries() -> None:
-    # GIVEN typed service and repository modules
+    # GIVEN typed service and repository modules and one presentation package
     backend_files = [*_feature_files("service.py"), *_feature_files("repository.py")]
+    presentation_root = PACKAGE_ROOT / "presentation"
 
     # WHEN their imports are inspected
     offenders = [
         str(path.relative_to(CTX_ROOT))
         for path in backend_files
-        if any(name == "rich" or name.startswith("rich.") for name in _imports(path))
+        if any(
+            name == "rich"
+            or name.startswith("rich.")
+            or name == "ocint.presentation"
+            or name.startswith("ocint.presentation.")
+            for name in _imports(path)
+        )
     ]
 
-    # THEN Rich is absent while the feature renderer and CLI adapter own presentation
+    # THEN backend code is presentation-free and Rich stays behind the presentation facade
     assert offenders == []
-    assert "rich.console" in _imports(CTX_ROOT / "render.py")
-    assert "rich.console" in _imports(PACKAGE_ROOT / "cli" / "_render.py")
-    assert "display" in _class_method_source(PACKAGE_ROOT / "cli" / "_render.py", "ClickOutput", "display")
+    rich_importers = {
+        path.relative_to(PACKAGE_ROOT)
+        for path in iter_python_files(PACKAGE_ROOT)
+        if any(name == "rich" or name.startswith("rich.") for name in _imports(path))
+    }
+    assert rich_importers
+    assert all(path.is_relative_to(presentation_root.relative_to(PACKAGE_ROOT)) for path in rich_importers)
+    assert "display" in _class_method_source(presentation_root / "_output.py", "ClickOutput", "display")
+
+
+def test_presentation_consumers_use_only_the_public_facade() -> None:
+    # GIVEN private implementation modules behind ocint.presentation
+    presentation_root = PACKAGE_ROOT / "presentation"
+
+    # WHEN package imports are inspected
+    offenders = []
+    for path in iter_python_files(PACKAGE_ROOT):
+        if path.is_relative_to(presentation_root):
+            continue
+        for imported_module in _imports(path):
+            if imported_module.startswith("ocint.presentation."):
+                offenders.append(str(path.relative_to(PACKAGE_ROOT)))
+
+    # THEN consumers import only the package facade
+    assert offenders == []
+    facade = presentation_root / "__init__.py"
+    assert ast.get_docstring(ast.parse(facade.read_text()))
+    assert "__all__" in _top_level_symbols(facade)
 
 
 def test_presentation_architecture_is_documented_and_referenced() -> None:
@@ -171,8 +205,10 @@ def test_presentation_architecture_is_documented_and_referenced() -> None:
     # THEN human and exact machine boundaries are explicit and discoverable
     assert architecture.is_file()
     assert "Services and repositories return typed data" in source
-    assert "ctx/render.py" in source
-    assert "cli/_render.py" in source
+    assert "Feature `render.py` modules" in source
+    assert "ocint.presentation" in source
+    assert "presentation/__init__.py" in source
+    assert "facade-only imports" in source
     assert "JSONL" in source
     assert "unstyled" in source
     assert "docs/architecture/presentation.md" in (PACKAGE_ROOT.parent / "AGENTS.md").read_text()

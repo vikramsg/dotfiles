@@ -38,7 +38,7 @@ def render_raw(rows: Sequence[Mapping[str, Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_table(rows: Iterable[Any]) -> str:
+def plain_table(rows: Iterable[Any]) -> str:
     flattened = [_flatten(_row_mapping(row)) for row in rows]
     if not flattened:
         return "No rows\n"
