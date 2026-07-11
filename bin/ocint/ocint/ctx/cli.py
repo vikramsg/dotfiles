@@ -130,7 +130,10 @@ def status(app: CliContext, as_json: bool) -> None:
             current_source_db_exists=source_db.exists() if source_db is not None else False,
             now_ms=_now_ms(),
         )
-    app.output.write(render_json(result) if as_json else render_status(result))
+    if as_json:
+        app.output.write(render_json(result))
+    else:
+        app.output.display(render_status(result))
 
 
 @ctx.command()
@@ -178,15 +181,13 @@ Use --refresh off for deterministic index-only search; it never imports:
 )
 @click.option(
     "--content",
-    type=click.Choice(
-        [SearchContentMode.TEXT.value, SearchContentMode.TOOLS.value, SearchContentMode.ALL.value]
-    ),
+    type=click.Choice([SearchContentMode.TEXT.value, SearchContentMode.TOOLS.value, SearchContentMode.ALL.value]),
     default=SearchContentMode.TEXT.value,
     show_default=True,
     help="Event content mode: text (exclude tools), tools (tools only), or all.",
 )
 @click.option("--limit", type=int, default=20, show_default=True, help="Maximum number of results to print.")
-@click.option("--verbose", is_flag=True, help="Show citations and copyable follow-up commands.")
+@click.option("--verbose", is_flag=True, help="Show citations and additional action templates.")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 @click.pass_obj
 def search(
@@ -226,7 +227,10 @@ def search(
     match mode:
         case RefreshMode.OFF:
             result = _search_ready_index(request, query=query)
-            app.output.write(render_json(result) if as_json else render_search_results(result, verbose=verbose))
+            if as_json:
+                app.output.write(render_json(result))
+            else:
+                app.output.display(render_search_results(result, verbose=verbose))
             return
         case RefreshMode.AUTO:
             refresh_config = _ctx_refresh_config(ctx_db)
@@ -248,7 +252,10 @@ def search(
                     result = _search_ready_index(request, query=query)
                     background_source_db = source_db
                     background_refresh_config = refresh_config
-    app.output.write(render_json(result) if as_json else render_search_results(result, verbose=verbose))
+    if as_json:
+        app.output.write(render_json(result))
+    else:
+        app.output.display(render_search_results(result, verbose=verbose))
     if background_source_db is not None and background_refresh_config is not None:
         _schedule_refresh_after_search(
             app,

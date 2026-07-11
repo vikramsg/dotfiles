@@ -14,10 +14,8 @@ permission:
   task:
     rigor-planner: allow
     implementer: allow
-    reviewer: deny 
-    rigor-reviewer: allow 
-    general: deny
-    explore: deny
+    rigor-reviewer: allow
+    *: deny
 ---
 # Orchestrator
 

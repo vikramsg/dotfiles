@@ -5,6 +5,11 @@
     * And auto denies everything else
 4. The implementer, since it creates tests first, always then creates backward compatiblity shims after
 
+## 5.6
+
+- Too happy to invoke subagents
+- I need to create commands that do not invoke subagents
+
 ## Agent requirements
 
 1. For each project, the reviewer has to be much stronger.

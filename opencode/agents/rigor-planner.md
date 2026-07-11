@@ -10,14 +10,7 @@ permission:
   edit: deny
   write: deny
   todowrite: deny
-  task:
-    planner: deny
-    rigor-planner: deny 
-    implementer: deny 
-    reviewer: deny 
-    rigor-reviewer: deny
-    general: deny
-    explore: deny 
+  task: deny
 ---
 # Rigor Planner
 

@@ -47,7 +47,7 @@ def test_search_auto_import_reports_progress_through_injected_output(
     assert "Loading sessions" in output.progress_messages
     assert "Loading events" in output.progress_messages
     assert "Writing events" in output.progress_messages
-    assert any("session=s-primary" in write.text for write in output.writes)
+    assert len(output.displays) == 1
 
 
 def test_search_json_disables_import_progress_and_keeps_output_json(
@@ -68,6 +68,7 @@ def test_search_json_disables_import_progress_and_keeps_output_json(
     assert output.progress_starts == []
     payload = json.loads(output.writes[0].text)
     assert payload[0]["event_id"]
+    assert output.displays == []
 
 
 def test_import_command_reports_progress_for_human_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -275,7 +276,7 @@ def test_default_search_reuses_fresh_index_for_canonical_source_alias(
     )
 
     assert result.exit_code == 0, result.output
-    assert "p-primary-step" in _output_text(output)
+    assert len(output.displays) == 1
     assert output.progress_starts == []
     assert scheduled == []
     assert _ctx_source_paths(ctx_db) == [str(source_db.resolve(strict=False))]
@@ -423,6 +424,7 @@ def test_status_reports_running_attempt_while_import_work_is_blocked(
     assert blocking_source.entered.wait(timeout=5), "import did not reach the blocked source read"
 
     status = runner.invoke(main, ["ctx", "status", "--json"])
+    human_status = runner.invoke(main, ["ctx", "status"])
 
     blocking_source.release.set()
     thread.join(timeout=10)
@@ -436,6 +438,8 @@ def test_status_reports_running_attempt_while_import_work_is_blocked(
     assert payload["latest_attempt_started_at"] is not None
     assert payload["latest_attempt_completed_at"] is None
     assert payload["latest_success_completed_at"] == previous_status["latest_success_completed_at"]
+    assert human_status.exit_code == 0, human_status.output
+    assert "Refresh: running" in " ".join(human_status.output.split())
 
 
 def test_hidden_refresh_worker_skips_import_when_post_lock_recheck_is_fresh(
@@ -493,7 +497,9 @@ def test_failed_refresh_preserves_success_state_and_attempt_start(
     imported = runner.invoke(main, ["ctx", "import"])
     assert imported.exit_code == 0, imported.output
     previous_status = json.loads(runner.invoke(main, ["ctx", "status", "--json"]).output)
-    attempt_started_at = 1_783_430_001_000
+    previous_success = previous_status["latest_success_completed_at"]
+    assert isinstance(previous_success, int)
+    attempt_started_at = previous_success + 1_000
     attempt_completed_at = attempt_started_at + 500
     now_values = iter([attempt_started_at, attempt_completed_at])
     monkeypatch.setattr("ocint.ctx.cli._now_ms", lambda: next(now_values, attempt_completed_at + 1_000))
@@ -501,6 +507,7 @@ def test_failed_refresh_preserves_success_state_and_attempt_start(
 
     failed = runner.invoke(main, ["ctx", "import"])
     status = runner.invoke(main, ["ctx", "status", "--json"])
+    human_status = runner.invoke(main, ["ctx", "status"])
 
     assert failed.exit_code != 0
     assert "simulated source failure" in failed.output
@@ -512,6 +519,9 @@ def test_failed_refresh_preserves_success_state_and_attempt_start(
     assert payload["latest_failed_at"] == attempt_completed_at
     assert payload["latest_success_completed_at"] == previous_status["latest_success_completed_at"]
     assert payload["checkpoint_summary"] == previous_status["checkpoint_summary"]
+    assert human_status.exit_code == 0, human_status.output
+    assert "Refresh: failed" in " ".join(human_status.output.split())
+    assert "simulated source failure" in human_status.output
 
 
 def test_interrupted_foreground_refresh_reports_clean_error_and_records_failure(
@@ -570,6 +580,7 @@ class RecordingProgress:
 class RecordingOutput:
     def __init__(self) -> None:
         self.writes: list[RecordedWrite] = []
+        self.displays: list[tuple[object, bool]] = []
         self.progress_starts: list[str] = []
         self.progress_events: list[tuple[str, int | None, int | None]] = []
 
@@ -580,6 +591,10 @@ class RecordingOutput:
     def write(self, text: str, *, stderr: bool = False, nl: bool = False, enabled: bool = True) -> None:
         if enabled:
             self.writes.append(RecordedWrite(text, stderr=stderr, nl=nl))
+
+    def display(self, renderable: object, *, stderr: bool = False, enabled: bool = True) -> None:
+        if enabled:
+            self.displays.append((renderable, stderr))
 
     def progress(self, message: str, *, enabled: bool = True) -> AbstractContextManager[CliProgress]:
         if not enabled:

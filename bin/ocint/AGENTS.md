@@ -31,6 +31,8 @@ These instructions apply to `bin/ocint/`.
 
 ## Repo Conventions
 
+- Presentation ownership and output boundaries are documented in `docs/architecture/presentation.md`.
+
 - Persistence-backed ctx features use `service.py`, `repository.py`, and `__init__.py`. Example: `ctx/search/service.py` and `ctx/search/repository.py`.
 - Ctx DB lifecycle, physical schema, and Alembic files stay under `ctx/db/`. Example: import `ctx_session` from `ocint.ctx.db` in the CLI and physical tables from `ocint.ctx.db.schema` in repositories.
 - Do not add root god modules. Example: no `ctx/repository.py`, `ctx/service.py`, or `ctx/workflow.py`.
