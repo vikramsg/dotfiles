@@ -41,3 +41,6 @@ Pull request titles must use `scope: summary` with one of these explicit scopes:
 - `zed`
 
 The summary must be non-empty and the title must not contain leading, trailing, or multiline whitespace.
+
+All changes, including releases, must go through a pull request. Never commit or push directly to
+`main`.

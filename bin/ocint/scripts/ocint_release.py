@@ -1,14 +1,10 @@
-"""Prepare and locally publish safe ocint releases.
-
-This is repository automation, deliberately not an installed ocint command.
-"""
+"""Prepare PR-only ocint releases and create release tags in CI."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tomllib
@@ -18,7 +14,7 @@ from pathlib import Path
 
 
 class ReleaseError(RuntimeError):
-    """A release precondition failed without changing release state."""
+    """A release invariant was not satisfied."""
 
 
 @dataclass(frozen=True, order=True)
@@ -39,28 +35,67 @@ class SemVer:
 
 
 @dataclass(frozen=True)
+class ReleasePolicy:
+    files: tuple[str, str, str]
+    baseline_version: SemVer
+    baseline_commit: str
+    baseline_confirmation: str
+
+    def branch(self, version: SemVer) -> str:
+        return f"ocint-release/v{version}"
+
+    def title(self, version: SemVer) -> str:
+        return f"ocint: Release v{version}"
+
+    def tag(self, version: SemVer) -> str:
+        return f"ocint-v{version}"
+
+
+@dataclass(frozen=True)
 class ReleasePaths:
     root: Path
+    policy: ReleasePolicy
 
     @property
     def pyproject(self) -> Path:
-        return self.root / "bin" / "ocint" / "pyproject.toml"
+        return self.root / self.policy.files[0]
 
     @property
     def changelog(self) -> Path:
-        return self.root / "bin" / "ocint" / "CHANGELOG.md"
+        return self.root / self.policy.files[1]
 
     @property
     def lock(self) -> Path:
-        return self.root / "uv.lock"
+        return self.root / self.policy.files[2]
 
-    @property
-    def relative_files(self) -> tuple[str, str, str]:
-        return ("bin/ocint/pyproject.toml", "bin/ocint/CHANGELOG.md", "uv.lock")
+
+@dataclass(frozen=True)
+class CiContext:
+    actions: str
+    event_name: str
+    ref: str
+    sha: str
+
+
+def release_policy() -> ReleasePolicy:
+    return ReleasePolicy(
+        files=("bin/ocint/pyproject.toml", "bin/ocint/CHANGELOG.md", "uv.lock"),
+        baseline_version=SemVer(0, 1, 0),
+        baseline_commit="8e13c509ec1b31a6f97501ef3f0215a4bdb58a8e",
+        baseline_confirmation="create ocint-v0.1.0 baseline tag",
+    )
+
+
+def ci_context() -> CiContext:
+    return CiContext(
+        actions=os.environ.get("GITHUB_ACTIONS", ""),
+        event_name=os.environ.get("GITHUB_EVENT_NAME", ""),
+        ref=os.environ.get("GITHUB_REF", ""),
+        sha=os.environ.get("GITHUB_SHA", ""),
+    )
 
 
 def run(command: list[str], *, cwd: Path, capture: bool = True) -> str:
-    """Run a subprocess without a shell and turn failures into release errors."""
     try:
         result = subprocess.run(command, cwd=cwd, check=True, text=True, capture_output=capture)
     except (OSError, subprocess.CalledProcessError) as error:
@@ -100,26 +135,18 @@ def lock_version(path: Path) -> SemVer:
     return SemVer.parse(value)
 
 
-def latest_annotated_tag(root: Path, revision: str = "HEAD") -> tuple[str, SemVer]:
-    tags = git(root, "tag", "--merged", revision, "--list", "ocint-v*").splitlines()
-    versions: list[tuple[SemVer, str]] = []
-    for tag in tags:
-        try:
-            version = SemVer.parse(tag.removeprefix("ocint-v"))
-        except ReleaseError:
-            continue
-        if git(root, "cat-file", "-t", tag) != "tag":
-            raise ReleaseError(f"Release tag must be annotated: {tag}")
-        versions.append((version, tag))
-    if not versions:
-        raise ReleaseError("No reachable annotated ocint-v* release tag exists")
-    version, tag = max(versions)
-    return tag, version
+def parse_release_title(subject: str) -> SemVer:
+    match = re.fullmatch(r"ocint: Release v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?: \(#[1-9]\d*\))?", subject)
+    if match is None:
+        raise ReleaseError(f"Expected release title 'ocint: Release vX.Y.Z', got: {subject}")
+    return SemVer(*(int(part) for part in match.groups()))
 
 
-def version_at_tag(root: Path, tag: str) -> SemVer:
-    source = git(root, "show", f"{tag}:bin/ocint/pyproject.toml")
-    return project_version(source)
+def parse_pr_title(title: str) -> SemVer:
+    match = re.fullmatch(r"ocint: Release v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", title)
+    if match is None:
+        raise ReleaseError(f"Expected release title 'ocint: Release vX.Y.Z', got: {title}")
+    return SemVer(*(int(part) for part in match.groups()))
 
 
 def parse_ocint_commit(subject: str) -> str | None:
@@ -130,21 +157,8 @@ def parse_ocint_commit(subject: str) -> str | None:
     return None
 
 
-def collect_ocint_commits(root: Path, start: str, end: str = "HEAD") -> list[str]:
-    subjects = [
-        parse_ocint_commit(subject) for subject in git(root, "log", "--format=%s", f"{start}..{end}").splitlines()
-    ]
-    commits = [subject for subject in subjects if subject is not None]
-    if not commits:
-        raise ReleaseError(f"No valid 'ocint: ' commits exist after {start}")
-    return commits
-
-
 def changelog_section(version: SemVer, commits: list[str], release_date: date) -> str:
-    lines = [f"## {version} - {release_date.isoformat()}", ""]
-    for subject in commits:
-        lines.append(f"- {subject}")
-    return "\n".join(lines) + "\n"
+    return "\n".join([f"## {version} - {release_date.isoformat()}", "", *(f"- {item}" for item in commits)]) + "\n"
 
 
 def updated_changelog(existing: str, version: SemVer, commits: list[str], release_date: date) -> str:
@@ -167,6 +181,19 @@ def prepared_release_date(changelog: str, version: SemVer) -> date:
         raise ReleaseError(f"Prepared changelog has an invalid release date: {match.group(1)}") from error
 
 
+def parse_porcelain_status(raw: bytes) -> set[str]:
+    changes: set[str] = set()
+    for entry in raw.split(b"\0"):
+        if not entry:
+            continue
+        if len(entry) < 4 or entry[2:3] != b" ":
+            raise ReleaseError("Unexpected Git porcelain status entry")
+        if b"R" in entry[:2] or b"C" in entry[:2]:
+            raise ReleaseError("Renamed or copied paths are not valid release changes")
+        changes.add(os.fsdecode(entry[3:]))
+    return changes
+
+
 def changed_files(root: Path) -> set[str]:
     try:
         result = subprocess.run(
@@ -180,227 +207,295 @@ def changed_files(root: Path) -> set[str]:
     return parse_porcelain_status(result.stdout)
 
 
-def parse_porcelain_status(raw: bytes) -> set[str]:
-    """Parse NUL-delimited porcelain without Git's path quoting."""
-    entries = raw.split(b"\0")
-    changes: set[str] = set()
-    for entry in entries:
-        if not entry:
+def validate_root(paths: ReleasePaths) -> None:
+    actual = Path(git(paths.root, "rev-parse", "--show-toplevel")).resolve()
+    if actual != paths.root.resolve() or not paths.pyproject.is_file():
+        raise ReleaseError(f"Not the expected dotfiles repository: {paths.root}")
+
+
+def latest_annotated_tag(root: Path, revision: str) -> tuple[str, SemVer]:
+    versions: list[tuple[SemVer, str]] = []
+    for tag in git(root, "tag", "--merged", revision, "--list", "ocint-v*").splitlines():
+        try:
+            version = SemVer.parse(tag.removeprefix("ocint-v"))
+        except ReleaseError:
             continue
-        if len(entry) < 4 or entry[2:3] != b" ":
-            raise ReleaseError("Unexpected Git porcelain status entry")
-        status = entry[:2]
-        if b"R" in status or b"C" in status:
-            raise ReleaseError("Renamed or copied paths are not valid release changes")
-        changes.add(os.fsdecode(entry[3:]))
-    return changes
+        if git(root, "cat-file", "-t", tag) != "tag":
+            raise ReleaseError(f"Release tag must be annotated: {tag}")
+        versions.append((version, tag))
+    if not versions:
+        raise ReleaseError("No reachable annotated ocint-v* release tag exists")
+    version, tag = max(versions)
+    return tag, version
 
 
-def validate_repository(root: Path) -> None:
-    actual = Path(git(root, "rev-parse", "--show-toplevel")).resolve()
-    if actual != root.resolve() or not (root / "bin" / "ocint" / "pyproject.toml").is_file():
-        raise ReleaseError(f"Not the expected dotfiles repository: {root}")
-    if git(root, "branch", "--show-current") != "main":
-        raise ReleaseError("ocint releases must run on the main branch")
-    try:
-        origin_main = git(root, "rev-parse", "origin/main")
-    except ReleaseError as error:
-        raise ReleaseError("Locally known origin/main is required; fetch it before releasing") from error
-    if git(root, "rev-parse", "HEAD") != origin_main:
-        raise ReleaseError("Local main must exactly equal locally known origin/main")
+def git_path_exists(root: Path, revision: str, path: str) -> bool:
+    git(root, "cat-file", "-e", f"{revision}^{{commit}}")
+    return path in git(root, "ls-tree", "-z", "--name-only", revision, "--", path).split("\0")
 
 
-def validate_versions(paths: ReleasePaths, requested: SemVer, tag: str, tagged: SemVer) -> None:
-    current = file_version(paths.pyproject)
-    if current != tagged:
-        raise ReleaseError(f"Current package version {current} differs from {tag} version {tagged}")
-    if requested <= current:
-        raise ReleaseError(f"Requested version {requested} must be greater than current version {current}")
+def release_commits(root: Path, tag: str, end: str) -> list[str]:
+    commits = [
+        parsed
+        for subject in git(root, "log", "--format=%s", f"{tag}..{end}").splitlines()
+        if (parsed := parse_ocint_commit(subject)) is not None
+    ]
+    if not commits:
+        raise ReleaseError(f"No valid 'ocint: ' commits exist after {tag}")
+    return commits
 
 
-def validate_consistency(paths: ReleasePaths, version: SemVer) -> None:
+def validate_release_content(paths: ReleasePaths, version: SemVer, history_end: str) -> None:
     if file_version(paths.pyproject) != version or lock_version(paths.lock) != version:
         raise ReleaseError(f"pyproject.toml and uv.lock must both contain ocint {version}")
+    tag, tagged = latest_annotated_tag(paths.root, history_end)
+    tagged_source = git(paths.root, "show", f"{tag}:{paths.policy.files[0]}")
+    if project_version(tagged_source) != tagged:
+        raise ReleaseError(f"Tag {tag} does not contain package version {tagged}")
+    if version <= tagged:
+        raise ReleaseError(f"Requested version {version} must be greater than current version {tagged}")
+    previous = (
+        git(paths.root, "show", f"{tag}:{paths.policy.files[1]}")
+        if git_path_exists(paths.root, tag, paths.policy.files[1])
+        else ""
+    )
+    actual = paths.changelog.read_text()
+    expected = updated_changelog(
+        previous,
+        version,
+        release_commits(paths.root, tag, history_end),
+        prepared_release_date(actual, version),
+    )
+    if actual != expected:
+        raise ReleaseError("Prepared changelog does not exactly match release history")
 
 
 def run_checks(paths: ReleasePaths) -> None:
     run(["uv", "lock", "--check"], cwd=paths.root, capture=False)
     for recipe in ("test", "check", "smoke"):
-        run(
-            ["just", "--justfile", str(paths.root / "bin" / "ocint" / "justfile"), recipe],
-            cwd=paths.root,
-            capture=False,
-        )
+        run(["just", "--justfile", str(paths.root / "bin/ocint/justfile"), recipe], cwd=paths.root, capture=False)
 
 
-def _snapshots(paths: ReleasePaths) -> dict[Path, bytes | None]:
-    return {
+def prepare(root: Path, version: SemVer, policy: ReleasePolicy) -> None:
+    paths = ReleasePaths(root, policy)
+    validate_root(paths)
+    branch = git(root, "branch", "--show-current")
+    if branch != policy.branch(version):
+        raise ReleaseError(f"Prepare must run on branch {policy.branch(version)}")
+    try:
+        base = git(root, "rev-parse", "origin/main")
+    except ReleaseError as error:
+        raise ReleaseError("Locally known origin/main is required; fetch it before preparing") from error
+    if git(root, "rev-parse", "HEAD") != base:
+        raise ReleaseError("Release branch HEAD must exactly equal locally known origin/main")
+    changes = changed_files(root)
+    if changes and changes != set(policy.files):
+        raise ReleaseError(f"Worktree is not clean; unexpected changes: {', '.join(sorted(changes))}")
+    if changes:
+        validate_release_content(paths, version, base)
+        print(f"ocint {version} is already prepared")
+        return
+    tag, tagged = latest_annotated_tag(root, base)
+    if project_version(git(root, "show", f"{tag}:{policy.files[0]}")) != tagged:
+        raise ReleaseError(f"Tag {tag} does not contain package version {tagged}")
+    current = file_version(paths.pyproject)
+    if current != tagged:
+        raise ReleaseError(f"Current package version {current} differs from {tag} version {tagged}")
+    if version <= current:
+        raise ReleaseError(f"Requested version {version} must be greater than current version {current}")
+    previous = git(root, "show", f"{tag}:{policy.files[1]}") if git_path_exists(root, tag, policy.files[1]) else ""
+    expected = updated_changelog(previous, version, release_commits(root, tag, base), datetime.now(UTC).date())
+    snapshots = {
         path: path.read_bytes() if path.exists() else None for path in (paths.pyproject, paths.changelog, paths.lock)
     }
-
-
-def _restore(snapshots: dict[Path, bytes | None]) -> None:
-    for path, content in snapshots.items():
-        if content is None:
-            path.unlink(missing_ok=True)
-        else:
-            path.write_bytes(content)
-
-
-def prepare(root: Path, requested: SemVer) -> None:
-    paths = ReleasePaths(root)
-    validate_repository(root)
-    tag, tagged = latest_annotated_tag(root)
-    if version_at_tag(root, tag) != tagged:
-        raise ReleaseError(f"Tag {tag} does not contain package version {tagged}")
-    commits = collect_ocint_commits(root, tag)
-    tagged_changelog = (
-        git(root, "show", f"{tag}:bin/ocint/CHANGELOG.md")
-        if _git_path_exists(root, tag, "bin/ocint/CHANGELOG.md")
-        else ""
-    )
-    changes = changed_files(root)
-    release_date = (
-        prepared_release_date(paths.changelog.read_text(), requested)
-        if changes == set(paths.relative_files) and paths.changelog.is_file()
-        else datetime.now(UTC).date()
-    )
-    expected_changelog = updated_changelog(tagged_changelog, requested, commits, release_date)
-    if changes:
-        if changes != set(paths.relative_files):
-            raise ReleaseError(f"Worktree is not clean; unexpected changes: {', '.join(sorted(changes))}")
-        validate_consistency(paths, requested)
-        if paths.changelog.read_text() != expected_changelog:
-            raise ReleaseError("Existing prepared changelog does not match release history")
-        print(f"ocint {requested} is already prepared")
-        return
-    validate_versions(paths, requested, tag, tagged)
-    snapshots = _snapshots(paths)
     try:
-        run(
-            ["uv", "version", "--directory", str(root), "--package", "ocint", str(requested)],
-            cwd=root,
-            capture=False,
-        )
-        paths.changelog.write_text(expected_changelog)
-        validate_consistency(paths, requested)
-        actual_changes = changed_files(root)
-        if actual_changes != set(paths.relative_files):
-            raise ReleaseError(
-                "Prepare must change only pyproject.toml, CHANGELOG.md, and uv.lock; "
-                f"found: {', '.join(sorted(actual_changes))}"
-            )
+        run(["uv", "version", "--directory", str(root), "--package", "ocint", str(version)], cwd=root, capture=False)
+        paths.changelog.write_text(expected)
+        if changed_files(root) != set(policy.files):
+            raise ReleaseError("Prepare must change exactly pyproject.toml, CHANGELOG.md, and uv.lock")
+        validate_release_content(paths, version, base)
         run_checks(paths)
     except BaseException:
-        _restore(snapshots)
+        for path, content in snapshots.items():
+            if content is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(content)
         raise
-    print(f"Prepared ocint {requested}; review the three changed files, then publish")
+    print(f"Prepared ocint {version}; review and submit the release branch through a pull request")
 
 
-def _release_commit_state(paths: ReleasePaths, version: SemVer) -> tuple[bool, str]:
-    subject = f"ocint: Release v{version}"
-    if git(paths.root, "log", "-1", "--format=%s") != subject:
-        return False, git(paths.root, "rev-parse", "HEAD")
-    if git(paths.root, "rev-parse", "HEAD^") != git(paths.root, "rev-parse", "origin/main"):
-        raise ReleaseError("Release commit parent is not locally known origin/main")
-    files = set(git(paths.root, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD").splitlines())
-    if files != set(paths.relative_files):
-        raise ReleaseError("Release commit does not contain exactly the three release files")
-    return True, git(paths.root, "rev-parse", "HEAD^")
-
-
-def _validate_publish_content(paths: ReleasePaths, version: SemVer, history_end: str) -> str:
-    validate_consistency(paths, version)
-    tag, tagged = latest_annotated_tag(paths.root, history_end)
-    if tagged >= version or version_at_tag(paths.root, tag) != tagged:
-        raise ReleaseError("Requested publish version conflicts with release tag history")
-    commits = collect_ocint_commits(paths.root, tag, history_end)
-    old = (
-        git(paths.root, "show", f"{tag}:bin/ocint/CHANGELOG.md")
-        if _git_path_exists(paths.root, tag, "bin/ocint/CHANGELOG.md")
-        else ""
+def release_candidate(
+    policy: ReleasePolicy,
+    *,
+    branch: str,
+    title: str,
+    files: set[str],
+    base_version: SemVer,
+    head_version: SemVer,
+) -> bool:
+    return (
+        branch.startswith("ocint-release/")
+        or re.match(r"(?i)^ocint:\s*release\b", title) is not None
+        or policy.files[1] in files
+        or base_version != head_version
     )
-    prepared = paths.changelog.read_text()
-    expected = updated_changelog(old, version, commits, prepared_release_date(prepared, version))
-    if prepared != expected:
-        raise ReleaseError("Prepared changelog does not exactly match release history")
-    return tag
 
 
-def _git_path_exists(root: Path, revision: str, path: str) -> bool:
-    git(root, "cat-file", "-e", f"{revision}^{{commit}}")
-    return path in git(root, "ls-tree", "-z", "--name-only", revision, "--", path).split("\0")
+def validate_pr(
+    root: Path,
+    base: str,
+    base_ref: str,
+    title: str,
+    branch: str,
+    policy: ReleasePolicy,
+) -> None:
+    paths = ReleasePaths(root, policy)
+    validate_root(paths)
+    if base_ref != "main":
+        raise ReleaseError("Release PR validation requires base ref main")
+    git(root, "cat-file", "-e", f"{base}^{{commit}}")
+    files = set(git(root, "diff", "--name-only", f"{base}...HEAD").splitlines())
+    base_version = project_version(git(root, "show", f"{base}:{policy.files[0]}"))
+    head_version = file_version(paths.pyproject)
+    if not release_candidate(
+        policy,
+        branch=branch,
+        title=title,
+        files=files,
+        base_version=base_version,
+        head_version=head_version,
+    ):
+        print("Not an ocint release PR; validation is not applicable")
+        return
+    version = parse_pr_title(title)
+    if title != policy.title(version):
+        raise ReleaseError(f"Release PR title must be exactly: {policy.title(version)}")
+    if branch != policy.branch(version):
+        raise ReleaseError(f"Release PR branch must be exactly: {policy.branch(version)}")
+    if git(root, "merge-base", base, "HEAD") != git(root, "rev-parse", base):
+        raise ReleaseError("Release PR base must be an ancestor of HEAD")
+    if files != set(policy.files):
+        raise ReleaseError("Release PR must change exactly the three release files")
+    if changed_files(root):
+        raise ReleaseError("Release PR validation requires a clean worktree")
+    validate_release_content(paths, version, base)
+    print(f"Validated release PR for ocint {version}")
 
 
-def _install_and_verify(paths: ReleasePaths, version: SemVer) -> None:
+def require_ci(root: Path, context: CiContext, event_name: str) -> str:
+    if context.actions != "true" or context.event_name != event_name or context.ref != "refs/heads/main":
+        raise ReleaseError("Tag creation is restricted to GitHub Actions on refs/heads/main")
+    head = git(root, "rev-parse", "HEAD")
+    if context.sha != head:
+        raise ReleaseError("GITHUB_SHA must equal the checked-out HEAD")
+    return head
+
+
+def ensure_tag(root: Path, tag: str, target: str) -> bool:
+    if git(root, "tag", "--list", tag):
+        if git(root, "cat-file", "-t", tag) != "tag" or git(root, "rev-list", "-n", "1", tag) != target:
+            raise ReleaseError(f"Conflicting tag exists: {tag}")
+        return False
+    return True
+
+
+def create_ci_tag(root: Path, tag: str, target: str, message: str) -> None:
     run(
-        ["uv", "tool", "install", str(paths.root / "bin" / "ocint"), "--force", "--no-cache"],
-        cwd=paths.root,
-        capture=False,
+        [
+            "git",
+            "-c",
+            "user.name=github-actions[bot]",
+            "-c",
+            "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+            "tag",
+            "-a",
+            tag,
+            target,
+            "-m",
+            message,
+        ],
+        cwd=root,
     )
-    configured_bin = os.environ.get("UV_TOOL_BIN_DIR")
-    executable = Path(configured_bin) / "ocint" if configured_bin else Path(shutil.which("ocint") or "ocint")
-    output = run([str(executable), "--version"], cwd=paths.root)
-    if output != f"ocint {version}":
-        raise ReleaseError(f"Installed version check failed: {output!r}")
 
 
-def publish(root: Path, version: SemVer, *, yes: bool) -> None:
-    paths = ReleasePaths(root)
-    actual = Path(git(root, "rev-parse", "--show-toplevel")).resolve()
-    if actual != root.resolve() or git(root, "branch", "--show-current") != "main":
-        raise ReleaseError("Publish must run at the expected repository root on main")
-    committed, history_end = _release_commit_state(paths, version)
-    if not committed and history_end != git(root, "rev-parse", "origin/main"):
-        raise ReleaseError("Prepared release HEAD must exactly equal locally known origin/main")
-    changes = changed_files(root)
-    if committed:
-        if changes:
-            raise ReleaseError("Recovery requires a clean worktree after the release commit")
-    elif changes != set(paths.relative_files):
-        raise ReleaseError("Publish requires exactly the three prepared release changes")
-    _validate_publish_content(paths, version, history_end)
-    tag_name = f"ocint-v{version}"
-    existing_tag = git(root, "tag", "--list", tag_name)
-    if existing_tag:
-        if not committed or git(root, "cat-file", "-t", tag_name) != "tag":
-            raise ReleaseError(f"Conflicting tag exists: {tag_name}")
-        if git(root, "rev-list", "-n", "1", tag_name) != git(root, "rev-parse", "HEAD"):
-            raise ReleaseError(f"Tag {tag_name} does not target the release commit")
-    run_checks(paths)
-    if not yes:
-        response = input(f"Commit, tag, and install ocint {version} locally? [y/N] ")
-        if response.lower() not in {"y", "yes"}:
-            raise ReleaseError("Publish cancelled")
-    if not committed:
-        run(["git", "add", "--", *paths.relative_files], cwd=root)
-        run(["git", "commit", "-m", f"ocint: Release v{version}"], cwd=root, capture=False)
-    if not existing_tag:
-        run(["git", "tag", "-a", tag_name, "-m", f"ocint v{version}"], cwd=root)
-    _install_and_verify(paths, version)
-    print(f"Published ocint {version} locally; no remote refs or GitHub releases were changed")
+def ci_tag(root: Path, policy: ReleasePolicy, context: CiContext) -> None:
+    paths = ReleasePaths(root, policy)
+    validate_root(paths)
+    head = require_ci(root, context, "push")
+    subject = git(root, "log", "-1", "--format=%s")
+    version = parse_release_title(subject)
+    parent_line = git(root, "rev-list", "--parents", "-n", "1", "HEAD").split()
+    if len(parent_line) != 2:
+        raise ReleaseError("A release squash commit must have exactly one parent")
+    parent = parent_line[1]
+    files = set(git(root, "diff-tree", "--no-commit-id", "--name-only", "-r", parent, head).splitlines())
+    if files != set(policy.files):
+        raise ReleaseError("Merged release commit must change exactly the three release files")
+    if changed_files(root):
+        raise ReleaseError("CI tag creation requires a clean worktree")
+    tag = policy.tag(version)
+    should_create = ensure_tag(root, tag, head)
+    validate_release_content(paths, version, parent)
+    if should_create:
+        create_ci_tag(root, tag, head, f"ocint v{version}")
+    run(["git", "push", "origin", f"refs/tags/{tag}:refs/tags/{tag}"], cwd=root, capture=False)
+    print(f"Ensured annotated tag {tag} targets {head}")
+
+
+def bootstrap_baseline(root: Path, policy: ReleasePolicy, context: CiContext, confirmation: str) -> None:
+    paths = ReleasePaths(root, policy)
+    validate_root(paths)
+    require_ci(root, context, "workflow_dispatch")
+    if confirmation != policy.baseline_confirmation:
+        raise ReleaseError(f"Baseline confirmation must be exactly: {policy.baseline_confirmation}")
+    target = git(root, "rev-parse", f"{policy.baseline_commit}^{{commit}}")
+    source = git(root, "show", f"{target}:{policy.files[0]}")
+    if project_version(source) != policy.baseline_version:
+        raise ReleaseError(f"Historical commit {target} did not introduce ocint {policy.baseline_version}")
+    target_with_parents = git(root, "rev-list", "--parents", "-n", "1", target).split()
+    if len(target_with_parents) > 2:
+        raise ReleaseError(f"Historical commit {target} must not be a merge commit")
+    if len(target_with_parents) == 2 and git_path_exists(root, target_with_parents[1], policy.files[0]):
+        raise ReleaseError(f"Historical commit {target} did not introduce {policy.files[0]}")
+    tag = policy.tag(policy.baseline_version)
+    if ensure_tag(root, tag, target):
+        create_ci_tag(root, tag, target, f"ocint v{policy.baseline_version}")
+    run(["git", "push", "origin", f"refs/tags/{tag}:refs/tags/{tag}"], cwd=root, capture=False)
+    print(f"Ensured historical baseline tag {tag} targets {target}")
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description="Prepare or locally publish an ocint stable release")
+    result = argparse.ArgumentParser(description="Prepare and validate PR-only ocint releases")
     result.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[3], help=argparse.SUPPRESS)
     commands = result.add_subparsers(dest="command", required=True)
-    prepare_parser = commands.add_parser("prepare", help="update exactly the version, changelog, and lock file")
+    prepare_parser = commands.add_parser("prepare")
     prepare_parser.add_argument("version")
-    publish_parser = commands.add_parser("publish", help="commit, annotate-tag, install, and verify a prepared release")
-    publish_parser.add_argument("version")
-    publish_parser.add_argument("--yes", action="store_true", help="skip the interactive confirmation")
+    validate_parser = commands.add_parser("validate-pr")
+    validate_parser.add_argument("--base", required=True)
+    validate_parser.add_argument("--base-ref", required=True)
+    validate_parser.add_argument("--title", required=True)
+    validate_parser.add_argument("--branch", default=os.environ.get("GITHUB_HEAD_REF", ""))
+    commands.add_parser("ci-tag")
+    baseline_parser = commands.add_parser("bootstrap-baseline")
+    baseline_parser.add_argument("--confirmation", required=True)
     return result
 
 
 def main(arguments: list[str] | None = None) -> int:
     args = parser().parse_args(arguments)
+    policy = release_policy()
+    root = args.root.resolve()
     try:
-        version = SemVer.parse(args.version)
-        if args.command == "prepare":
-            prepare(args.root.resolve(), version)
-        else:
-            publish(args.root.resolve(), version, yes=args.yes)
+        match args.command:
+            case "prepare":
+                prepare(root, SemVer.parse(args.version), policy)
+            case "validate-pr":
+                validate_pr(root, args.base, args.base_ref, args.title, args.branch, policy)
+            case "ci-tag":
+                ci_tag(root, policy, ci_context())
+            case "bootstrap-baseline":
+                bootstrap_baseline(root, policy, ci_context(), args.confirmation)
     except ReleaseError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

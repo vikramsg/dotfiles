@@ -71,6 +71,7 @@ def release_workspace(tmp_path: Path) -> ReleaseWorkspace:
         capture_output=True,
     ).stdout
     home = tmp_path / "home"
+    subprocess.run(["git", "switch", "-c", "ocint-release/v0.2.0", "origin/main"], cwd=root, check=True)
     tool_dir = tmp_path / "tools"
     tool_bin = tmp_path / "tool-bin"
     cache = tmp_path / "cache"

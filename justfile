@@ -136,9 +136,9 @@ ocint:
 ocint-release-prepare version:
     uv run python "{{justfile_directory()}}/bin/ocint/scripts/ocint_release.py" prepare "{{version}}"
 
-# Commit, annotate-tag, and locally install a prepared ocint release (never pushes)
-ocint-release-publish version *flags:
-    uv run python "{{justfile_directory()}}/bin/ocint/scripts/ocint_release.py" publish "{{version}}" {{flags}}
+# Validate a committed ocint release branch before opening its PR
+ocint-release-validate base title:
+    uv run python "{{justfile_directory()}}/bin/ocint/scripts/ocint_release.py" validate-pr --base "{{base}}" --base-ref main --title "{{title}}" --branch "$(git branch --show-current)"
 
 # Set up Ghostty symlink
 ghostty:

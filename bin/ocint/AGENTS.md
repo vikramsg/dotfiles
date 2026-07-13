@@ -149,7 +149,7 @@ bin/ocint/
 ## References
 
 - Presentation ownership and output boundaries: `docs/architecture/presentation.md`
-- Release process: `docs/releases.md`
+- PR-only release process: `docs/releases.md`
 
 ## Justfile Guardrail
 

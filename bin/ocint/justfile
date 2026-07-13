@@ -27,6 +27,14 @@ check:
 install:
     uv tool install "{{justfile_directory()}}" --force --no-cache
 
+# Prepare release files on an explicit release branch
+release-prepare version:
+    uv run --directory "{{workspace_root}}" python "{{justfile_directory()}}/scripts/ocint_release.py" prepare "{{version}}"
+
+# Read-only validation for a committed release branch
+release-validate base title:
+    uv run --directory "{{workspace_root}}" python "{{justfile_directory()}}/scripts/ocint_release.py" validate-pr --base "{{base}}" --base-ref main --title "{{title}}" --branch "$(git branch --show-current)"
+
 # Smoke-test ocint state commands against the configured OpenCode DB when present
 smoke-state:
     {{uv_ocint}} ocint state config
