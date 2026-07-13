@@ -12,12 +12,23 @@ jobs:
     name: Validate PR title
     runs-on: ubuntu-latest
     steps:
-      - name: Check out trusted base branch
+      - name: Check out pull request
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - name: Validate title
         env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: python3 scripts/validate_pr_title.py "$PR_TITLE"
+        run: |
+          set -euo pipefail
+          validator="$RUNNER_TEMP/validate_pr_title.py"
+          if git cat-file -e "$BASE_SHA:scripts/validate_pr_title.py" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/validate_pr_title.py" > "$validator"
+          else
+            # One-time bootstrap: main does not contain the validator until this PR merges.
+            cp scripts/validate_pr_title.py "$validator"
+          fi
+          python3 "$validator" "$PR_TITLE"

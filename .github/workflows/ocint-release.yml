@@ -34,6 +34,26 @@ jobs:
         run: |
           set -euo pipefail
           validator="$RUNNER_TEMP/ocint_release.py"
+          if ! git cat-file -e "$BASE_SHA:bin/ocint/scripts/ocint_release.py" 2>/dev/null; then
+            # One-time bootstrap: release changes are forbidden until the trusted validator is on main.
+            shopt -s nocasematch
+            if [[ "$PR_HEAD_REF" == ocint-release/* || "$PR_TITLE" =~ ^ocint:[[:space:]]*release([[:space:]]|$) ]]; then
+              echo "The release validator must be merged before the first release PR" >&2
+              exit 1
+            fi
+            if git diff --name-only "$BASE_SHA...HEAD" | grep -Fxq bin/ocint/CHANGELOG.md; then
+              echo "The bootstrap PR must not create an ocint changelog" >&2
+              exit 1
+            fi
+            base_version="$(git show "$BASE_SHA:bin/ocint/pyproject.toml" | python3 -c 'import sys, tomllib; print(tomllib.load(sys.stdin.buffer)["project"]["version"])')"
+            head_version="$(python3 -c 'import tomllib; print(tomllib.load(open("bin/ocint/pyproject.toml", "rb"))["project"]["version"])')"
+            if [[ "$base_version" != "$head_version" ]]; then
+              echo "The bootstrap PR must not change the ocint version" >&2
+              exit 1
+            fi
+            echo "Release validation is not applicable to the validator bootstrap PR"
+            exit 0
+          fi
           git show "$BASE_SHA:bin/ocint/scripts/ocint_release.py" > "$validator"
           python "$validator" --root "$GITHUB_WORKSPACE" validate-pr \
             --base "$BASE_SHA" --base-ref "$BASE_REF" --title "$PR_TITLE" --branch "$PR_HEAD_REF"

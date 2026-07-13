@@ -56,9 +56,15 @@ These instructions apply to `bin/ocint/`.
 ### Python testing conventions
 
 - Always prefer having tests work on fake data rather than mocking or patching.
-- Tests should not need helper functions. Construction of helper functions indicates wrong patterns
+- Test paths mirror production paths within each test layer.
+- Keep one canonical test module per production module per test layer.
+- Do not split scenarios into suffix modules such as `_safety`, `_errors`, `_edge_cases`, `_failures`, or `_happy_path`.
+- Unit and E2E test modules may share a basename because they are in different test layers.
+- General test helper functions and support modules are prohibited.
+- Keep a fixture inline when one module owns it; put a genuinely shared fixture in the nearest common `conftest.py`.
+- `conftest.py` contains pytest fixtures only, not helper functions or general setup helpers.
 - Fixtures are for data, not for creating functions.
-- Always follow the GIVEN/WHEN/THEN structure in tests 
+- Always follow the GIVEN/WHEN/THEN structure in tests.
 - Model one test for one behaviour. If multiple similar cases have to be tested, parameterize rather than putting all in one test.
 
 ### Typing
@@ -91,7 +97,7 @@ bin/ocint/
 │   ├── e2e/
 │   ├── integration/
 │   ├── unit/
-│   └── support/  # FIXME: This structure is wrong; tests must not use helper functions.
+│   └── support/  # FIXME: Remove; test helper modules and functions are prohibited.
 └── ocint/
     ├── cli/
     │   └── __init__.py

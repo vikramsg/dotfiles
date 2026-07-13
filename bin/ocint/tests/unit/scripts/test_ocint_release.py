@@ -163,6 +163,20 @@ def test_tag_workflow_extracts_tagger_from_trusted_parent() -> None:
     assert "python bin/ocint/scripts/ocint_release.py ci-tag" not in tag_step
 
 
+def test_release_workflow_bootstrap_forbids_release_state() -> None:
+    # GIVEN the repository release workflow before its validator exists on main
+    workflow = (Path(__file__).resolve().parents[5] / ".github/workflows/ocint-release.yml").read_text()
+    validation_step = workflow.split("Validate release PR when applicable", 1)[1].split("tag-merged-release:", 1)[0]
+
+    # WHEN the bootstrap fallback is inspected
+    # THEN release branches, titles, changelogs, and version changes are rejected
+    assert '"$PR_HEAD_REF" == ocint-release/*' in validation_step
+    assert '"$PR_TITLE" =~ ^ocint:' in validation_step
+    assert "grep -Fxq bin/ocint/CHANGELOG.md" in validation_step
+    assert '"$base_version" != "$head_version"' in validation_step
+    assert 'git show "$BASE_SHA:bin/ocint/scripts/ocint_release.py" > "$validator"' in validation_step
+
+
 def test_valid_ocint_commit_preserves_pr_suffix() -> None:
     # GIVEN a conventionally scoped commit
     # WHEN it is parsed

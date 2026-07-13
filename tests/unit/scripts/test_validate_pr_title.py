@@ -74,3 +74,14 @@ def test_shell_syntax_is_inert_title_data() -> None:
 
     # THEN it remains ordinary text
     assert error is None
+
+
+def test_workflow_uses_trusted_validator_with_one_time_bootstrap_fallback() -> None:
+    # GIVEN the repository PR-title workflow
+    workflow = (Path(__file__).parents[3] / ".github/workflows/pr-title.yml").read_text()
+
+    # WHEN the validator selection is inspected
+    # THEN established repositories execute the base revision and only bootstrap uses the PR copy
+    assert 'git show "$BASE_SHA:scripts/validate_pr_title.py" > "$validator"' in workflow
+    assert 'cp scripts/validate_pr_title.py "$validator"' in workflow
+    assert 'python3 "$validator" "$PR_TITLE"' in workflow

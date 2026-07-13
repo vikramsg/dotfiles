@@ -5,6 +5,11 @@
     * And auto denies everything else
 4. The implementer, since it creates tests first, always then creates backward compatiblity shims after
 
+## Daemon
+
+1. Use Github as the issue tracker. Should be triggered on some event on Github
+2. Lock so that one feature at a time only
+
 ## 5.6
 
 - Too happy to invoke subagents
