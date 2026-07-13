@@ -8,7 +8,8 @@
 ## Daemon
 
 1. Use Github as the issue tracker. Should be triggered on some event on Github
-2. Lock so that one feature at a time only
+2. Lock so that one feature at a time only.
+3. May always need a refactor PR after a feature PR, including updating docs.
 
 ## 5.6
 

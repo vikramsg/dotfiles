@@ -93,6 +93,7 @@ def release_workspace(tmp_path: Path) -> ReleaseWorkspace:
     return ReleaseWorkspace(root, remote, environment, remote_head, remote_refs)
 
 
+# Prepare
 def test_pr_release_is_prepared_validated_and_tagged_only_after_squash_merge(
     release_workspace: ReleaseWorkspace,
 ) -> None:
@@ -355,6 +356,7 @@ def test_prepare_rolls_back_when_checks_fail(release_workspace: ReleaseWorkspace
     )
 
 
+# Validate PR
 @pytest.mark.parametrize(
     ("title", "branch", "message"),
     [
@@ -546,6 +548,7 @@ def test_validate_pr_rejects_non_main_base_ref(release_workspace: ReleaseWorkspa
     assert "base ref main" in result.stderr
 
 
+# CI tag
 def test_ci_tag_rejects_conflicting_target_tag(release_workspace: ReleaseWorkspace) -> None:
     # GIVEN a valid simulated squash merge and target tag already on its parent
     root = release_workspace.root
@@ -756,6 +759,7 @@ def test_ci_tag_rejects_incorrect_github_push_identity(release_workspace: Releas
     )
 
 
+# Baseline
 @pytest.mark.parametrize("invalid", ["event", "confirmation"])
 def test_baseline_rejects_wrong_command_boundary(release_workspace: ReleaseWorkspace, invalid: str) -> None:
     # GIVEN typed baseline policy and one invalid workflow-dispatch boundary value
