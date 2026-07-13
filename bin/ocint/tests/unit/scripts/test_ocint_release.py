@@ -155,12 +155,14 @@ def test_tag_workflow_extracts_tagger_from_trusted_parent() -> None:
     workflow = (Path(__file__).resolve().parents[5] / ".github/workflows/ocint-release.yml").read_text()
 
     # WHEN the write-token tag step is inspected
-    tag_step = workflow.split("tag-merged-release:", 1)[1].split("baseline-tag:", 1)[0]
+    tag_step = workflow.split("tag-merged-release:", 1)[1]
 
     # THEN it extracts and executes the parent revision's validator
     assert 'git show "$parent:bin/ocint/scripts/ocint_release.py"' in tag_step
     assert 'python "$validator" --root "$GITHUB_WORKSPACE" ci-tag' in tag_step
     assert "python bin/ocint/scripts/ocint_release.py ci-tag" not in tag_step
+    assert "workflow_dispatch" not in workflow
+    assert "bootstrap-baseline" not in workflow
 
 
 def test_release_workflow_bootstrap_forbids_release_state() -> None:
