@@ -15,13 +15,21 @@ types belong, and how dependencies should flow.
 ## File responsibilities
 
 - `cli.py`: Parse inputs and wire components together.
-- `service.py`: Implement application behavior.
+- `run.py`: Coordinate a feature's complex application workflow across services, repositories, locks, and infrastructure.
+- `service.py`: Implement business rules independently of framework and workflow lifecycle.
 - `repository.py`: Read and write durable application data.
 - `models.py`: Define types shared by multiple files.
 - `config.py`: Define typed settings and runtime configuration.
 - `logging.py`: Configure and manage application logs.
 - `render.py`: Turn results into human-readable output.
 - `__init__.py`: Define the package's public imports.
+
+`cli.py` is an outer adapter and composition root: it parses framework inputs,
+resolves configuration, constructs typed requests, calls exported application
+operations, maps expected failures to framework errors, and selects rendering.
+`run.py` owns multi-step application orchestration that would otherwise turn the
+CLI into the workflow implementation. `service.py` retains business rules that
+can be evaluated independently of CLI, persistence, and process mechanics.
 
 Repositories are for durable application data. Operational logs, temporary
 files, generated output, and diagnostic streams remain with their owning
@@ -62,6 +70,9 @@ Configuration is typed data, not a collection of functions.
 - Packages expose supported types and functions through `__init__.py`.
 - Callers use package APIs rather than private implementation modules.
 - Private modules may change without preserving an external contract.
+- Production callers outside a feature package import supported operations from
+  that feature's `__init__.py` facade, not from private adapter or implementation
+  modules.
 
 ## Patterns and anti-patterns
 
@@ -70,6 +81,20 @@ Configuration is typed data, not a collection of functions.
 `ocint/_models.py` declares the `CliOutput` and `CliProgress` protocols.
 `ocint/presentation/_output.py` provides concrete terminal implementations.
 The shared contract does not import the implementation.
+
+### Pattern: CLI delegates workflow to a run module
+
+```python
+request = RefreshWorkerRequest(...)
+try:
+    run_refresh_worker(request, sql_config, expected_revision)
+except ExpectedInfrastructureError as error:
+    raise click.ClickException(str(error)) from error
+```
+
+The CLI owns Click and construction. `refresh/run.py` owns the lock, migration,
+attempt lifecycle, import execution, and feature-local logging coordination.
+Business decisions remain in `refresh/service.py`.
 
 ### Pattern: shared feature types
 
@@ -123,3 +148,10 @@ their closest common `models.py`.
 
 A new file exists only for one helper, or a repository is introduced for an
 operational artifact that is not durable application data.
+
+### Anti-pattern: CLI-owned workflow or private cross-package import
+
+A CLI that acquires feature locks, starts attempt state, runs migrations, or
+executes workers owns application workflow that belongs in `run.py`. A caller
+outside `refresh/` importing `refresh.logging` bypasses the feature facade and
+couples production code to a private adapter.

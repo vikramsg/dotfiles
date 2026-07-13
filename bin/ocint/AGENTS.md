@@ -18,10 +18,13 @@ These instructions apply to `bin/ocint/`.
 ## Project Rules
 
 - CLI is the composition root. Example: `ctx/cli.py` creates repositories, sessions, typed config, and request models.
-- Services coordinate use cases and own selection policy. Example: service calls repository and applies typed command behavior.
+- CLI modules are outer adapters: parse framework input, resolve config, construct typed requests, call exported orchestration, map expected errors, and render.
+- Use feature `run.py` modules for complex workflows spanning services, repositories, locks, migrations, workers, or feature-local infrastructure. Keep business rules in `service.py`.
+- Production code outside a feature imports supported operations through that feature's `__init__.py`, not private adapters such as `refresh.logging`.
+- Services implement business rules independently of CLI frameworks and workflow lifecycle. Example: a service evaluates typed refresh policy without acquiring locks or rendering output.
 - A repository provides domain-oriented access to durable application state. Current ctx repositories access SQL-backed state through SQLAlchemy; they contain persistence queries and do not decide command policy.
 - Do not introduce a repository for operational artifacts such as logs, temporary files, generated output, or diagnostic streams. Keep their format and I/O in the owning infrastructure adapter unless the artifact becomes a first-class domain data store.
-- Parse at the boundary. Example: convert Click strings/env values into typed objects before calling services.
+- Parse at the boundary. Example: convert Click strings/env values into typed objects before calling application code.
 - Missing required ctx index is an error. Example: `status` fails if ctx DB is required and absent.
 - CLI commands must be discoverable without pre-known IDs. Example: `ocint ctx show session` lists recent sessions when no session ID is supplied.
 - Do not use nullable dependencies as control flow. Example: no `get_status(None, ...)`.
@@ -117,6 +120,11 @@ bin/ocint/
     │   ├── importing/
     │   │   ├── service.py
     │   │   └── repository.py
+    │   ├── refresh/
+    │   │   ├── __init__.py
+    │   │   ├── logging.py
+    │   │   ├── run.py
+    │   │   └── service.py
     │   ├── search/
     │   │   ├── service.py
     │   │   └── repository.py

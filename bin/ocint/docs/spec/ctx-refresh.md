@@ -262,6 +262,15 @@ Status output MUST include:
 
 Status output MAY include source-table watermarks or checkpoint details when useful for debugging.
 
+`ocint ctx status --logs` MUST render normal human status followed by the full
+refresh log path and colored structured diagnostics for the most recent actual
+background import. Selection starts at that run's matching
+`refresh_worker_scheduled` event and retains every subsequent line, including
+interleaved skipped workers and raw non-JSON diagnostics. Event names and field
+names remain verbatim. Missing, empty, malformed, or no-attempt logs produce a
+clear human diagnostic without failing status. `--logs` and `--json` are
+mutually exclusive.
+
 Observability fields are diagnostic. Search correctness MUST NOT depend on diagnostic rendering.
 
 ## Non-Goals

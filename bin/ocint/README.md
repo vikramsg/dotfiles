@@ -29,7 +29,7 @@ uv tool install ./bin/ocint --force --no-cache
 
 ## ctx Refresh
 
-`ocint ctx search` reads the persistent ctx index. Default search imports a missing index, searches stale ready indexes immediately, and refreshes them in the background (TTL default 60m). `ocint ctx status` shows index readiness, freshness, source DB, refresh log path, and the latest refresh attempt.
+`ocint ctx search` reads the persistent ctx index. Default search imports a missing index, searches stale ready indexes immediately, and refreshes them in the background (TTL default 60m). `ocint ctx status` shows index readiness, freshness, source DB, refresh log path, and the latest refresh attempt. `ocint ctx status --logs` appends human-friendly diagnostics for the latest actual background import.
 
 ## Examples
 
@@ -41,6 +41,7 @@ ocint state detailed --days 30 --format json
 ocint state query "SELECT COUNT(*) AS sessions FROM session"
 
 ocint ctx status
+ocint ctx status --logs
 ocint ctx search "ctx skill" --verbose
 ocint ctx show session <opencode-session-id> --format markdown --out /tmp/ocint-session.md
 ocint ctx docs show sql

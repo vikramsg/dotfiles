@@ -43,6 +43,43 @@ class CtxRefreshConfig(CtxModel):
     log_path: Path
 
 
+class CtxRefreshRunRequest(CtxModel):
+    ctx_db_path: Path
+    source_db_path: Path
+    refresh_config: CtxRefreshConfig
+
+
+class CtxRefreshWorkerRequest(CtxRefreshRunRequest):
+    run_id: str
+    log_jsonl: bool
+
+
+class CtxRefreshStructuredLogEntry(CtxModel):
+    json_line: str
+    event: str
+    run_id: str
+
+
+class CtxRefreshRawLogEntry(CtxModel):
+    text: str
+
+
+type CtxRefreshLogEntry = CtxRefreshStructuredLogEntry | CtxRefreshRawLogEntry
+
+
+class CtxRefreshLogsAvailable(CtxModel):
+    path: Path
+    entries: list[CtxRefreshLogEntry] = Field(default_factory=list)
+
+
+class CtxRefreshLogsUnavailable(CtxModel):
+    path: Path
+    message: str
+
+
+type CtxRefreshLogs = CtxRefreshLogsAvailable | CtxRefreshLogsUnavailable
+
+
 class CtxRefreshState(CtxModel):
     source_id: int | None = None
     latest_attempt_started_at: int | None = None

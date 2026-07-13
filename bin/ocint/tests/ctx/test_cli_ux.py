@@ -331,7 +331,7 @@ def test_hidden_refresh_worker_exits_successfully_when_lock_is_held(
 
     with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as lock:
         assert lock.acquired
-        result = runner.invoke(main, ["ctx", "refresh-worker"])
+        result = runner.invoke(main, ["ctx", "refresh-worker", "--run-id", "held-lock-run"])
 
     assert result.exit_code == 0, result.output
     assert "refresh-worker" not in runner.invoke(main, ["ctx", "--help"]).output
@@ -346,7 +346,7 @@ def test_foreground_refresh_startup_acquires_lock_before_migration(
     migrate_calls: list[Path] = []
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
-    monkeypatch.setattr("ocint.ctx.cli.migrate_ctx_db", lambda path: migrate_calls.append(path))
+    monkeypatch.setattr("ocint.ctx.refresh.run.migrate_ctx_db", lambda path: migrate_calls.append(path))
 
     with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as lock:
         assert lock.acquired
@@ -366,11 +366,11 @@ def test_hidden_refresh_worker_startup_acquires_lock_before_migration(
     migrate_calls: list[Path] = []
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
-    monkeypatch.setattr("ocint.ctx.cli.migrate_ctx_db", lambda path: migrate_calls.append(path))
+    monkeypatch.setattr("ocint.ctx.refresh.run.migrate_ctx_db", lambda path: migrate_calls.append(path))
 
     with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as lock:
         assert lock.acquired
-        result = CliRunner().invoke(main, ["ctx", "refresh-worker"])
+        result = CliRunner().invoke(main, ["ctx", "refresh-worker", "--run-id", "startup-lock-run"])
 
     assert result.exit_code == 0, result.output
     assert result.output == ""
@@ -382,9 +382,9 @@ def test_first_refresh_startup_holds_lock_while_migration_runs(tmp_path: Path, m
     ctx_db = tmp_path / "ctx.sqlite"
     refresh_config = resolve_ctx_refresh_config(ctx_db_path=ctx_db, env={})
     observed_probe_acquired: list[bool] = []
-    from ocint.ctx import cli as ctx_cli
+    from ocint.ctx.refresh import run as refresh_run
 
-    real_migrate = ctx_cli.migrate_ctx_db
+    real_migrate = refresh_run.migrate_ctx_db
 
     def assert_locked_during_migration(path: Path) -> None:
         with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as probe:
@@ -393,7 +393,7 @@ def test_first_refresh_startup_holds_lock_while_migration_runs(tmp_path: Path, m
 
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
-    monkeypatch.setattr("ocint.ctx.cli.migrate_ctx_db", assert_locked_during_migration)
+    monkeypatch.setattr("ocint.ctx.refresh.run.migrate_ctx_db", assert_locked_during_migration)
 
     result = CliRunner().invoke(main, ["ctx", "import"])
 
@@ -413,7 +413,7 @@ def test_status_reports_running_attempt_while_import_work_is_blocked(
     assert imported.exit_code == 0, imported.output
     previous_status = json.loads(runner.invoke(main, ["ctx", "status", "--json"]).output)
     blocking_source = BlockingOpenCodeRepository(source_db)
-    monkeypatch.setattr("ocint.ctx.cli.OpenCodeRepository", lambda _path: blocking_source)
+    monkeypatch.setattr("ocint.ctx.refresh.run.OpenCodeRepository", lambda _path: blocking_source)
     import_result: list[Result] = []
 
     def run_import() -> None:
@@ -455,7 +455,7 @@ def test_hidden_refresh_worker_skips_import_when_post_lock_recheck_is_fresh(
     assert imported.exit_code == 0, imported.output
     _insert_worker_skip_source_part(source_db)
 
-    worker = runner.invoke(main, ["ctx", "refresh-worker"])
+    worker = runner.invoke(main, ["ctx", "refresh-worker", "--run-id", "fresh-skip-run"])
     search = runner.invoke(main, ["ctx", "search", "post lock worker skip marker", "--refresh", "off"])
 
     assert worker.exit_code == 0, worker.output
@@ -502,8 +502,8 @@ def test_failed_refresh_preserves_success_state_and_attempt_start(
     attempt_started_at = previous_success + 1_000
     attempt_completed_at = attempt_started_at + 500
     now_values = iter([attempt_started_at, attempt_completed_at])
-    monkeypatch.setattr("ocint.ctx.cli._now_ms", lambda: next(now_values, attempt_completed_at + 1_000))
-    monkeypatch.setattr("ocint.ctx.cli.OpenCodeRepository", lambda _path: FailingOpenCodeRepository())
+    monkeypatch.setattr("ocint.ctx.refresh.run._now_ms", lambda: next(now_values, attempt_completed_at + 1_000))
+    monkeypatch.setattr("ocint.ctx.refresh.run.OpenCodeRepository", lambda _path: FailingOpenCodeRepository())
 
     failed = runner.invoke(main, ["ctx", "import"])
     status = runner.invoke(main, ["ctx", "status", "--json"])
@@ -534,8 +534,8 @@ def test_interrupted_foreground_refresh_reports_clean_error_and_records_failure(
     now_values = iter([attempt_started_at, attempt_completed_at])
     monkeypatch.setenv("OPENCODE_DB", str(source_db))
     monkeypatch.setenv("OCINT_CTX_DB", str(ctx_db))
-    monkeypatch.setattr("ocint.ctx.cli._now_ms", lambda: next(now_values, attempt_completed_at + 1_000))
-    monkeypatch.setattr("ocint.ctx.cli.OpenCodeRepository", lambda _path: InterruptingOpenCodeRepository())
+    monkeypatch.setattr("ocint.ctx.refresh.run._now_ms", lambda: next(now_values, attempt_completed_at + 1_000))
+    monkeypatch.setattr("ocint.ctx.refresh.run.OpenCodeRepository", lambda _path: InterruptingOpenCodeRepository())
     runner = CliRunner()
 
     interrupted = runner.invoke(main, ["ctx", "import"])

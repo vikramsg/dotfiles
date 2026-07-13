@@ -9,6 +9,8 @@ CTX_DB_NAME = "ctx.sqlite"
 DEFAULT_CTX_REFRESH_TTL = "1h"
 CTX_DB_BUSY_TIMEOUT_MS = 5_000
 
+# FIXME: Replace function-based configuration with BaseSettings inputs and BaseModel runtime configuration.
+
 
 def resolve_ctx_db_path(
     *,

@@ -1,7 +1,17 @@
 from pathlib import Path
 
 from ocint._errors import OcintError
-from ocint.ctx.models import CtxRefreshConfig, CtxRefreshState, CtxSource, CtxSourceRefreshStatus, CtxStatus
+from ocint.ctx.models import (
+    CtxRefreshConfig,
+    CtxRefreshLogs,
+    CtxRefreshLogsAvailable,
+    CtxRefreshLogsUnavailable,
+    CtxRefreshState,
+    CtxRefreshStructuredLogEntry,
+    CtxSource,
+    CtxSourceRefreshStatus,
+    CtxStatus,
+)
 from ocint.ctx.refresh.service import calculate_freshness
 from ocint.ctx.sql.models import CtxSqlConfig
 from ocint.ctx.status.repository import CtxStatusRepository
@@ -61,6 +71,32 @@ def get_status(
 def list_sources(repository: CtxStatusRepository, config: CtxSqlConfig, expected_revision: str) -> list[CtxSource]:
     require_ctx_index_ready(repository, config, expected_revision)
     return repository.sources()
+
+
+def select_latest_actual_import_logs(logs: CtxRefreshLogs) -> CtxRefreshLogs:
+    """Select the newest actual import and retain every diagnostic after its scheduling event."""
+    if isinstance(logs, CtxRefreshLogsUnavailable):
+        return logs
+    actual_import_found = False
+    for import_index in range(len(logs.entries) - 1, -1, -1):
+        import_entry = logs.entries[import_index]
+        if not isinstance(import_entry, CtxRefreshStructuredLogEntry) or import_entry.event != "refresh_import_started":
+            continue
+        actual_import_found = True
+        for start_index in range(import_index, -1, -1):
+            entry = logs.entries[start_index]
+            if (
+                isinstance(entry, CtxRefreshStructuredLogEntry)
+                and entry.event == "refresh_worker_scheduled"
+                and entry.run_id == import_entry.run_id
+            ):
+                return CtxRefreshLogsAvailable(path=logs.path, entries=logs.entries[start_index:])
+    message = (
+        "No refresh import attempt with a matching scheduled event was found."
+        if actual_import_found
+        else "No actual refresh import attempt was found."
+    )
+    return CtxRefreshLogsUnavailable(path=logs.path, message=message)
 
 
 def _source_statuses_with_freshness(

@@ -17,22 +17,18 @@ from ocint.ctx.config import (
     resolve_ctx_refresh_config,
     resolve_ctx_source_db_path,
 )
-from ocint.ctx.db import ctx_session, current_ctx_head_revision, migrate_ctx_db
+from ocint.ctx.db import ctx_session, current_ctx_head_revision
 from ocint.ctx.docs import render_doc_topics, search_docs, show_doc
-from ocint.ctx.importing import CtxImportRepository, import_history_events
-from ocint.ctx.importing.service import PROVIDER, SOURCE_NAME, SOURCE_TYPE
 from ocint.ctx.locate import CtxLocateRepository
 from ocint.ctx.locate import locate_event as locate_event_result
 from ocint.ctx.locate import locate_session as locate_session_result
 from ocint.ctx.models import (
     CtxImportProgress,
-    CtxImportRequest,
     CtxImportResult,
     CtxRefreshAction,
     CtxRefreshConfig,
-    CtxRefreshDecision,
-    CtxRefreshPolicyInput,
-    CtxRefreshState,
+    CtxRefreshRunRequest,
+    CtxRefreshWorkerRequest,
     CtxSearchRequest,
     CtxSearchResult,
     CtxShowMode,
@@ -45,14 +41,13 @@ from ocint.ctx.models import (
 )
 from ocint.ctx.refresh import (
     CtxRefreshRepository,
-    acquire_refresh_lock,
-    begin_refresh_attempt,
-    decide_refresh_action,
-    record_refresh_attempt_failure,
+    decide_auto_refresh,
+    read_refresh_logs,
     refresh_lock_in_progress,
+    run_refresh_import,
+    run_refresh_worker,
     schedule_refresh_worker,
 )
-from ocint.ctx.refresh.jsonlog import log_refresh_event
 from ocint.ctx.render import (
     render_event_context,
     render_import_result,
@@ -60,16 +55,22 @@ from ocint.ctx.render import (
     render_recent_sessions,
     render_search_results,
     render_sources,
-    render_status,
     render_transcript,
 )
 from ocint.ctx.search import CtxSearchRepository, search_history
 from ocint.ctx.show import CtxShowRepository, show_event_history, show_session_request
 from ocint.ctx.sql import CtxSqlRepository, run_ctx_sql
 from ocint.ctx.sql.models import CtxSqlConfig, default_ctx_sql_config
-from ocint.ctx.status import CtxStatusRepository, get_status, list_sources, require_ctx_index_ready
-from ocint.opencode.repository import OpenCodeRepository
-from ocint.presentation import plain_table, render_csv, render_json, render_raw
+from ocint.ctx.status import (
+    CtxStatusRepository,
+    get_status,
+    list_sources,
+    render_refresh_logs,
+    render_status,
+    require_ctx_index_ready,
+    select_latest_actual_import_logs,
+)
+from ocint.presentation import Group, Text, plain_table, render_csv, render_json, render_raw
 
 
 @click.group(
@@ -100,16 +101,33 @@ def import_command(app: CliContext, source_db: Path | None, as_json: bool) -> No
 
 
 @ctx.command(name="refresh-worker", hidden=True)
-def refresh_worker() -> None:
+@click.option("--run-id", required=True, hidden=True)
+@click.option("--log-jsonl", is_flag=True, hidden=True)
+def refresh_worker(run_id: str, log_jsonl: bool) -> None:
     """Hidden detached refresh entrypoint used by stale-while-revalidate search."""
-    _run_refresh_worker()
+    ctx_db = _ctx_db_path()
+    request = CtxRefreshWorkerRequest(
+        ctx_db_path=ctx_db,
+        source_db_path=_source_db_path(),
+        refresh_config=_ctx_refresh_config(ctx_db),
+        run_id=run_id,
+        log_jsonl=log_jsonl,
+    )
+    sql_config, expected_revision = _ctx_readiness_contract()
+    try:
+        run_refresh_worker(request, sql_config, expected_revision)
+    except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
+        raise click.ClickException(str(error)) from error
 
 
 @ctx.command()
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+@click.option("--logs", "show_logs", is_flag=True, help="Show logs for the latest actual background import.")
 @click.pass_obj
-def status(app: CliContext, as_json: bool) -> None:
+def status(app: CliContext, as_json: bool, show_logs: bool) -> None:
     """Show imported ctx index availability and counts."""
+    if show_logs and as_json:
+        raise click.UsageError("--logs cannot be used with --json")
     ctx_db = _ctx_db_path()
     refresh_config = _ctx_refresh_config(ctx_db)
     source_db = _source_db_path_or_none()
@@ -133,7 +151,12 @@ def status(app: CliContext, as_json: bool) -> None:
     if as_json:
         app.output.write(render_json(result))
     else:
-        app.output.display(render_status(result))
+        status_renderable = render_status(result)
+        if show_logs:
+            logs = select_latest_actual_import_logs(read_refresh_logs(refresh_config.log_path))
+            app.output.display(Group(status_renderable, Text(""), render_refresh_logs(logs)))
+        else:
+            app.output.display(status_renderable)
 
 
 @ctx.command()
@@ -235,7 +258,16 @@ def search(
         case RefreshMode.AUTO:
             refresh_config = _ctx_refresh_config(ctx_db)
             source_db = _source_db_path()
-            decision = _auto_refresh_decision(ctx_db=ctx_db, source_path=source_db, refresh_config=refresh_config)
+            sql_config, expected_revision = _ctx_readiness_contract()
+            decision = decide_auto_refresh(
+                CtxRefreshRunRequest(
+                    ctx_db_path=ctx_db,
+                    source_db_path=source_db,
+                    refresh_config=refresh_config,
+                ),
+                sql_config,
+                expected_revision,
+            )
             match decision.action:
                 case CtxRefreshAction.FOREGROUND_REFRESH:
                     app.output.write(
@@ -477,39 +509,6 @@ def sql_command(app: CliContext, sql: str, output_format: str) -> None:
     app.output.write(rendered)
 
 
-def _auto_refresh_decision(*, ctx_db: Path, source_path: Path, refresh_config: CtxRefreshConfig) -> CtxRefreshDecision:
-    index_ready, refresh_state = _ctx_index_ready_state(ctx_db=ctx_db, source_path=source_path)
-    return decide_refresh_action(
-        CtxRefreshPolicyInput(
-            mode=RefreshMode.AUTO,
-            ttl_ms=refresh_config.ttl_ms,
-            index_ready=index_ready,
-            source_state=refresh_state,
-            now_ms=_now_ms(),
-        )
-    )
-
-
-def _ctx_index_ready_state(*, ctx_db: Path, source_path: Path) -> tuple[bool, CtxRefreshState | None]:
-    _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
-    if not ctx_db.exists():
-        return False, None
-    try:
-        sql_config, expected_revision = _ctx_readiness_contract()
-        with ctx_session(ctx_db, commit=False) as session:
-            status_repository = CtxStatusRepository(session, db_path=ctx_db)
-            if not status_repository.index_ready(sql_config, expected_revision):
-                return False, None
-            refresh_repository = CtxRefreshRepository(session, db_path=ctx_db)
-            return True, refresh_repository.state_for_source_identity(
-                provider=PROVIDER,
-                source_type=SOURCE_TYPE,
-                source_path=str(source_path),
-            )
-    except FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError:
-        return False, None
-
-
 def _schedule_refresh_after_search(
     app: CliContext,
     *,
@@ -536,221 +535,36 @@ def _schedule_refresh_after_search(
 
 
 def _consume_import_events(app: CliContext, *, source_db: Path | None, progress_enabled: bool) -> CtxImportResult:
-    result: CtxImportResult | None = None
-    with app.output.progress("Importing OpenCode history into ocint ctx index", enabled=progress_enabled) as progress:
-        for event in _import_ctx_events(source_db=source_db):
-            match event:
-                case CtxImportProgress():
-                    progress.update(event.message, current=event.current, total=event.total)
-                case CtxImportResult():
-                    result = event
-                    progress.update(
-                        "Imported OpenCode history",
-                        current=event.events_written,
-                        total=event.events_seen,
-                    )
-    if result is None:
-        raise click.ClickException("ctx import did not produce a result")
-    return result
-
-
-def _import_ctx_events(*, source_db: Path | None) -> Iterator[CtxImportProgress | CtxImportResult]:
     source_path = _source_db_path(source_db)
     ctx_db = _ctx_db_path()
-    refresh_config = _ctx_refresh_config(ctx_db)
-    _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
+    request = CtxRefreshRunRequest(
+        ctx_db_path=ctx_db,
+        source_db_path=source_path,
+        refresh_config=_ctx_refresh_config(ctx_db),
+    )
+    result: CtxImportResult | None = None
     try:
-        with _refresh_lock(ctx_db=ctx_db, refresh_config=refresh_config, foreground=True) as lock_acquired:
-            if not lock_acquired:
-                return
-            migrate_ctx_db(ctx_db)
-            yield from _run_refresh_after_lock(ctx_db=ctx_db, source_path=source_path)
-    except click.ClickException:
-        raise
+        with app.output.progress(
+            "Importing OpenCode history into ocint ctx index", enabled=progress_enabled
+        ) as progress:
+            for event in run_refresh_import(request):
+                match event:
+                    case CtxImportProgress():
+                        progress.update(event.message, current=event.current, total=event.total)
+                    case CtxImportResult():
+                        result = event
+                        progress.update(
+                            "Imported OpenCode history",
+                            current=event.events_written,
+                            total=event.events_seen,
+                        )
     except KeyboardInterrupt as error:
         raise click.ClickException("ctx refresh interrupted") from error
     except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
         raise click.ClickException(str(error)) from error
-
-
-def _run_refresh_after_lock(*, ctx_db: Path, source_path: Path) -> Iterator[CtxImportProgress | CtxImportResult]:
-    started_at = _now_ms()
-    source_id: int | None = None
-    try:
-        with ctx_session(ctx_db, commit=True) as session:
-            source_id = begin_refresh_attempt(
-                import_repository=CtxImportRepository(session, db_path=ctx_db),
-                refresh_repository=CtxRefreshRepository(session, db_path=ctx_db),
-                provider=PROVIDER,
-                source_type=SOURCE_TYPE,
-                name=SOURCE_NAME,
-                source_path=source_path,
-                started_at=started_at,
-            )
-        yield from _run_unlocked_import(ctx_db=ctx_db, source_path=source_path, attempt_started_at=started_at)
-    except KeyboardInterrupt as error:
-        _record_refresh_failure_if_started(ctx_db=ctx_db, source_id=source_id, started_at=started_at, error=error)
-        raise
-    except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
-        _record_refresh_failure_if_started(ctx_db=ctx_db, source_id=source_id, started_at=started_at, error=error)
-        raise
-
-
-def _record_refresh_failure_if_started(
-    *, ctx_db: Path, source_id: int | None, started_at: int, error: BaseException
-) -> None:
-    if source_id is None:
-        return
-    with ctx_session(ctx_db, commit=True) as session:
-        record_refresh_attempt_failure(
-            refresh_repository=CtxRefreshRepository(session, db_path=ctx_db),
-            source_id=source_id,
-            started_at=started_at,
-            completed_at=_now_ms(),
-            error=error,
-        )
-
-
-def _run_unlocked_import(
-    *, ctx_db: Path, source_path: Path, attempt_started_at: int
-) -> Iterator[CtxImportProgress | CtxImportResult]:
-    with ctx_session(ctx_db, commit=True) as session:
-        repository = CtxImportRepository(session, db_path=ctx_db)
-        refresh_repository = CtxRefreshRepository(session, db_path=ctx_db)
-        source = OpenCodeRepository(source_path)
-        yield from import_history_events(
-            CtxImportRequest(source_db_path=source_path, attempt_started_at=attempt_started_at),
-            repository,
-            refresh_repository,
-            source,
-        )
-
-
-def _run_refresh_worker() -> None:
-    started_at = _now_ms()
-    outcome = "started"
-    ctx_db: Path | None = None
-    source_path: Path | None = None
-    log_enabled = os.environ.get("OCINT_CTX_REFRESH_LOG_JSONL") == "1"
-    log_refresh_event("refresh_worker_started", enabled=log_enabled)
-    try:
-        source_path = _source_db_path()
-        ctx_db = _ctx_db_path()
-        refresh_config = _ctx_refresh_config(ctx_db)
-        log_refresh_event(
-            "refresh_worker_configured",
-            enabled=log_enabled,
-            ctx_db=ctx_db,
-            source_db=source_path,
-            ttl_ms=refresh_config.ttl_ms,
-            lock_path=refresh_config.lock_path,
-        )
-        _reject_ctx_source_alias(ctx_db=ctx_db, source_path=source_path)
-        with _refresh_lock(ctx_db=ctx_db, refresh_config=refresh_config, foreground=False) as lock_acquired:
-            if not lock_acquired:
-                outcome = "skipped"
-                log_refresh_event(
-                    "refresh_skipped",
-                    enabled=log_enabled,
-                    reason="lock_held",
-                    ctx_db=ctx_db,
-                    source_db=source_path,
-                    lock_path=refresh_config.lock_path,
-                )
-                return
-            log_refresh_event(
-                "refresh_lock_acquired",
-                enabled=log_enabled,
-                ctx_db=ctx_db,
-                source_db=source_path,
-                lock_path=refresh_config.lock_path,
-            )
-            log_refresh_event("migration_started", enabled=log_enabled, ctx_db=ctx_db, source_db=source_path)
-            migrate_ctx_db(ctx_db)
-            log_refresh_event("migration_completed", enabled=log_enabled, ctx_db=ctx_db, source_db=source_path)
-            decision = _auto_refresh_decision(ctx_db=ctx_db, source_path=source_path, refresh_config=refresh_config)
-            log_refresh_event(
-                "refresh_decision",
-                enabled=log_enabled,
-                ctx_db=ctx_db,
-                source_db=source_path,
-                action=decision.action,
-                freshness=decision.freshness,
-                ttl_ms=refresh_config.ttl_ms,
-            )
-            if decision.action == CtxRefreshAction.SEARCH_ONLY:
-                outcome = "skipped"
-                log_refresh_event(
-                    "refresh_skipped",
-                    enabled=log_enabled,
-                    reason="fresh_after_lock_recheck",
-                    ctx_db=ctx_db,
-                    source_db=source_path,
-                    freshness=decision.freshness,
-                )
-                return
-            for event in _run_refresh_after_lock(ctx_db=ctx_db, source_path=source_path):
-                match event:
-                    case CtxImportProgress():
-                        log_refresh_event(
-                            "import_progress",
-                            enabled=log_enabled,
-                            ctx_db=ctx_db,
-                            source_db=source_path,
-                            message=event.message,
-                            current=event.current,
-                            total=event.total,
-                        )
-                    case CtxImportResult():
-                        outcome = "succeeded"
-                        log_refresh_event(
-                            "refresh_succeeded",
-                            enabled=log_enabled,
-                            ctx_db=ctx_db,
-                            source_db=source_path,
-                            sessions_seen=event.sessions_seen,
-                            sessions_written=event.sessions_written,
-                            events_seen=event.events_seen,
-                            events_written=event.events_written,
-                            files_written=event.files_written,
-                            checkpoint_updated=event.checkpoint_updated,
-                            duration_ms=_now_ms() - started_at,
-                        )
-    except (FileNotFoundError, ValueError, OcintError, sqlite3.Error, SQLAlchemyError) as error:
-        outcome = "failed"
-        log_refresh_event(
-            "refresh_failed",
-            level="error",
-            enabled=log_enabled,
-            ctx_db=ctx_db,
-            source_db=source_path,
-            error_type=type(error).__name__,
-            error=error,
-            duration_ms=_now_ms() - started_at,
-        )
-        raise click.ClickException(str(error)) from error
-    finally:
-        log_refresh_event(
-            "refresh_worker_finished",
-            enabled=log_enabled,
-            ctx_db=ctx_db,
-            source_db=source_path,
-            outcome=outcome,
-            duration_ms=_now_ms() - started_at,
-        )
-
-
-@contextmanager
-def _refresh_lock(*, ctx_db: Path, refresh_config: CtxRefreshConfig, foreground: bool) -> Iterator[bool]:
-    with acquire_refresh_lock(refresh_config.lock_path, blocking=False) as lock:
-        if not lock.acquired:
-            if foreground:
-                raise click.ClickException(
-                    f"ocint ctx refresh is already running for {ctx_db}; try again after it completes"
-                )
-            yield False
-            return
-        yield True
+    if result is None:
+        raise click.ClickException("ctx import did not produce a result")
+    return result
 
 
 def _reject_ctx_source_alias(*, ctx_db: Path, source_path: Path) -> None:

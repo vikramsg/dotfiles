@@ -339,6 +339,58 @@ def test_status_service_requires_non_nullable_repository() -> None:
     assert "repository is None" not in service_source
 
 
+def test_status_rendering_and_refresh_log_boundaries_are_feature_owned() -> None:
+    status_render = CTX_ROOT / "status" / "render.py"
+    root_render = CTX_ROOT / "render.py"
+
+    assert status_render.is_file()
+    assert "def render_status(" in status_render.read_text()
+    assert "def render_refresh_logs(" in status_render.read_text()
+    assert "def render_status(" not in root_render.read_text()
+    assert (CTX_ROOT / "refresh" / "logging.py").is_file()
+    assert not (CTX_ROOT / "refresh" / "jsonlog.py").exists()
+    logging_source = (CTX_ROOT / "refresh" / "logging.py").read_text()
+    assert "def create_refresh_logger(" in logging_source
+    assert "def log_refresh_event(" not in logging_source
+    assert "def append_refresh_event(" not in logging_source
+    assert "CtxRefreshStructuredLogEntry" in _top_level_symbols(CTX_ROOT / "models.py")
+
+
+def test_refresh_run_owns_workflow_without_cli_presentation_or_environment_access() -> None:
+    run_path = CTX_ROOT / "refresh" / "run.py"
+    cli_path = CTX_ROOT / "cli.py"
+
+    assert run_path.is_file()
+    assert {"decide_auto_refresh", "run_refresh_import", "run_refresh_worker"} <= _top_level_symbols(run_path)
+    run_imports = _imports(run_path)
+    assert "click" not in run_imports
+    assert not any(name == "ocint.presentation" or name.startswith("ocint.presentation.") for name in run_imports)
+    assert "os" not in run_imports
+    assert "environ" not in run_path.read_text()
+    assert "ocint.ctx.refresh.logging" not in _imports(cli_path)
+    assert "def _run_refresh_worker(" not in cli_path.read_text()
+    assert "def _auto_refresh_decision(" not in cli_path.read_text()
+
+
+def test_refresh_facade_exports_orchestration_but_not_logger_factories() -> None:
+    package_source = (CTX_ROOT / "refresh" / "__init__.py").read_text()
+
+    for operation in ["decide_auto_refresh", "run_refresh_import", "run_refresh_worker"]:
+        assert operation in package_source
+    for private_adapter in ["create_refresh_logger", "open_refresh_logger", "_add_pid"]:
+        assert private_adapter not in package_source
+
+
+def test_production_modules_outside_refresh_do_not_import_private_refresh_logging() -> None:
+    offenders = [
+        str(path.relative_to(CTX_ROOT))
+        for path in iter_python_files(CTX_ROOT)
+        if not path.is_relative_to(CTX_ROOT / "refresh") and "ocint.ctx.refresh.logging" in _imports(path)
+    ]
+
+    assert offenders == []
+
+
 def test_cli_and_render_use_typed_command_modes_without_callback_repository_helpers() -> None:
     cli_source = (CTX_ROOT / "cli.py").read_text()
     render_source = (CTX_ROOT / "render.py").read_text()
@@ -367,8 +419,8 @@ def test_refresh_attempt_lifecycle_transitions_are_service_owned() -> None:
     assert "CtxRefreshFailure(" not in cli_source
 
 
-def test_only_cli_imports_ctx_db_lifecycle_helpers() -> None:
-    allowed = {"cli.py", "db/__init__.py"}
+def test_only_cli_and_refresh_run_import_ctx_db_lifecycle_helpers() -> None:
+    allowed = {"cli.py", "db/__init__.py", "refresh/run.py"}
     lifecycle_names = {"create_ctx_engine", "ctx_session", "migrate_ctx_db"}
     offenders: list[str] = []
     for path in iter_python_files(CTX_ROOT):
@@ -469,10 +521,10 @@ def test_only_importing_service_uses_opencode_source_rows() -> None:
     assert offenders == []
 
 
-def test_only_cli_instantiates_repositories_and_opencode_source_adapter() -> None:
+def test_only_cli_and_refresh_run_instantiate_repositories_and_opencode_source_adapter() -> None:
     offenders: list[str] = []
     for path in iter_python_files(CTX_ROOT):
-        if path.relative_to(CTX_ROOT).as_posix() == "cli.py":
+        if path.relative_to(CTX_ROOT).as_posix() in {"cli.py", "refresh/run.py"}:
             continue
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
@@ -482,14 +534,15 @@ def test_only_cli_instantiates_repositories_and_opencode_source_adapter() -> Non
     assert offenders == []
 
 
-def test_only_cli_imports_opencode_repository() -> None:
+def test_refresh_run_imports_opencode_repository_through_facade() -> None:
     offenders = []
     for path in iter_python_files(CTX_ROOT):
         imported = _from_imports(path)
         if ("ocint.opencode.repository", "OpenCodeRepository") in imported:
             offenders.append(str(path.relative_to(CTX_ROOT)))
 
-    assert offenders == ["cli.py"]
+    assert offenders == []
+    assert ("ocint.opencode", "OpenCodeRepository") in _from_imports(CTX_ROOT / "refresh" / "run.py")
 
 
 def test_sqlalchemy_statement_access_stays_in_repository() -> None:

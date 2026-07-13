@@ -9,6 +9,7 @@ dependencies = [
     "pydantic",
     "rich",
     "sqlalchemy",
+    "structlog>=26.1.0",
 ]
 
 [dependency-groups]
