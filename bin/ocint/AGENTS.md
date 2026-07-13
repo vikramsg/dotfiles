@@ -27,8 +27,6 @@ These instructions apply to `bin/ocint/`.
 - Parse at the boundary. Example: convert Click strings/env values into typed objects before calling application code.
 - Missing required ctx index is an error. Example: `status` fails if ctx DB is required and absent.
 - CLI commands must be discoverable without pre-known IDs. Example: `ocint ctx show session` lists recent sessions when no session ID is supplied.
-- Do not use nullable dependencies as control flow. Example: no `get_status(None, ...)`.
-- Do not branch on raw strings or `None`. Example: use typed modes and `match`, not `if refresh != "off"`.
 - Do not store behavior data at module scope. Example: no module-level policy, config, schema contracts, security rules, command modes, or behavioral constants.
 - Feature config stays with the feature. Example: SQL config belongs under `ctx/sql/`; app config stays in `ctx/config.py`.
 - Backend-independent models do not import backend libraries. Example: SQL config models should not import `sqlite3`.
@@ -48,12 +46,25 @@ These instructions apply to `bin/ocint/`.
 - Use root workspace `uv` execution. Example: `uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest ...`.
 - Follow justfile shell variable rules. Example: use `$VAR`, use `$(...)`, do not use `$$VAR`.
 
+### Python conventions
+
+- Do not use nullable dependencies as control flow. Example: no `get_status(None, ...)`.
+- Do not branch on raw strings or `None`. Example: use typed modes and `match`, not `if refresh != "off"`.
+- **Do not** bypass static checks using `ty: ignore` or `type: ingore` flags. Properly fix issues, not introduce hacks.
+- Strictly **NO** module constants in either tests or production code. Introducing them indicates that modeling of the problem has not been done correctly. For example in tests, data should be represented via fixtures. In Python code, it probably means config/settings have not been modeled correctly and instead replaced by module constants.
+
 ### Python testing conventions
 
 - Always prefer having tests work on fake data rather than mocking or patching.
-- Tests should not need helper functions. Construction of helper functions indicates wrong patterns
+- Test paths mirror production paths within each test layer.
+- Keep one canonical test module per production module per test layer.
+- Do not split scenarios into suffix modules such as `_safety`, `_errors`, `_edge_cases`, `_failures`, or `_happy_path`.
+- Unit and E2E test modules may share a basename because they are in different test layers.
+- General test helper functions and support modules are prohibited.
+- Keep a fixture inline when one module owns it; put a genuinely shared fixture in the nearest common `conftest.py`.
+- `conftest.py` contains pytest fixtures only, not helper functions or general setup helpers.
 - Fixtures are for data, not for creating functions.
-- Always follow the GIVEN/WHEN/THEN structure in tests 
+- Always follow the GIVEN/WHEN/THEN structure in tests.
 - Model one test for one behaviour. If multiple similar cases have to be tested, parameterize rather than putting all in one test.
 
 ### Typing
@@ -66,20 +77,10 @@ These instructions apply to `bin/ocint/`.
 Use the package justfile explicitly:
 
 ```sh
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile test
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile check
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile smoke
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile smoke-ctx
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile smoke-state
-```
-
-Use root workspace `uv` execution when running tools directly:
-
-```sh
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/tests
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen ruff check /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/ocint /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/tests
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen ruff format --check /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/ocint /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/tests
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen ty check /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/ocint /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/tests
+just --justfile bin/ocint/justfile test
+just --justfile bin/ocint/justfile check
+# May require longer timeout, so prefer only during final verification checks
+just --justfile bin/ocint/justfile smoke
 ```
 
 ## Tree
@@ -92,6 +93,11 @@ bin/ocint/
 ├── implementation_notes.md
 ├── docs/
 ├── tests/
+│   ├── architecture/
+│   ├── e2e/
+│   ├── integration/
+│   ├── unit/
+│   └── support/  # FIXME: Remove; test helper modules and functions are prohibited.
 └── ocint/
     ├── cli/
     │   └── __init__.py
@@ -145,6 +151,11 @@ bin/ocint/
         ├── models.py
         └── repository.py
 ```
+
+## References
+
+- Presentation ownership and output boundaries: `docs/architecture/presentation.md`
+- PR-only release process: `docs/releases.md`
 
 ## Justfile Guardrail
 

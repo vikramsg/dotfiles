@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_ctx_show_event_uses_normalized_message_part_event_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

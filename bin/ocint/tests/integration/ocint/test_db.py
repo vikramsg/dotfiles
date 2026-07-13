@@ -3,8 +3,7 @@ from pathlib import Path
 
 import pytest
 from ocint._db import open_readonly_connection
-
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_open_readonly_connection_allows_reads_and_rejects_writes(tmp_path: Path) -> None:

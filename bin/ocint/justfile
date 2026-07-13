@@ -19,13 +19,21 @@ test:
 
 # Run ocint static checks
 check:
-    {{uv_ocint}} ruff check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
-    {{uv_ocint}} ruff format --check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
-    {{uv_ocint}} ty check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/tests"
+    {{uv_ocint}} ruff check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
+    {{uv_ocint}} ruff format --check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
+    {{uv_ocint}} ty check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
 
 # Install the OpenCode intelligence CLI
 install:
     uv tool install "{{justfile_directory()}}" --force --no-cache
+
+# Prepare release files on an explicit release branch
+release-prepare version:
+    uv run --directory "{{workspace_root}}" python "{{justfile_directory()}}/scripts/ocint_release.py" prepare "{{version}}"
+
+# Read-only validation for a committed release branch
+release-validate base title:
+    uv run --directory "{{workspace_root}}" python "{{justfile_directory()}}/scripts/ocint_release.py" validate-pr --base "{{base}}" --base-ref main --title "{{title}}" --branch "$(git branch --show-current)"
 
 # Smoke-test ocint state commands against the configured OpenCode DB when present
 smoke-state:
@@ -50,7 +58,7 @@ smoke-ctx:
     {{uv_ocint}} ocint ctx docs search "stable views"
     @set -e; \
         TMPDIR="$(mktemp -d /tmp/ocint-smoke-ctx.XXXXXX)"; \
-        OPENCODE_DB="$TMPDIR/opencode.db" {{uv_ocint}} python3 -c 'import os; from pathlib import Path; from tests.fixtures.opencode_db import create_opencode_db; create_opencode_db(Path(os.environ["OPENCODE_DB"]))'; \
+        OPENCODE_DB="$TMPDIR/opencode.db" {{uv_ocint}} python3 -c 'import os; from pathlib import Path; from tests.support.opencode_db import create_opencode_db; create_opencode_db(Path(os.environ["OPENCODE_DB"]))'; \
         export OCINT_CTX_DB="$TMPDIR/ctx.sqlite"; \
         export OPENCODE_DB="$TMPDIR/opencode.db"; \
         {{uv_ocint}} ocint ctx import; \

@@ -7,7 +7,7 @@ import pytest
 from ocint._timeutil import make_window
 from ocint.opencode.repository import OpenCodeRepository
 from ocint.state.service import StateService
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_state_summary_uses_authoritative_session_aggregates_and_counts_messages(tmp_path: Path) -> None:
@@ -234,7 +234,7 @@ def test_detailed_rejects_invalid_historical_agent_identity(tmp_path: Path, agen
 
 def test_state_status_documentation_records_summary_and_detailed_accounting() -> None:
     # GIVEN the state accounting documentation
-    status_doc = (Path(__file__).parents[2] / "docs" / "spec" / "status.md").read_text()
+    status_doc = (Path(__file__).parents[3] / "docs" / "spec" / "status.md").read_text()
 
     # WHEN its accounting contract is read
     # THEN it distinguishes source data, cutoffs, and the observed divergence

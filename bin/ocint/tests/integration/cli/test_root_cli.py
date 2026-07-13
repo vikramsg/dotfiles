@@ -1,5 +1,6 @@
 import json
 import tomllib
+from importlib.metadata import version
 from io import StringIO
 from pathlib import Path
 
@@ -15,8 +16,7 @@ from ocint.state.models import (
 )
 from ocint.state.render import render_detailed
 from rich.console import Console
-
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_root_help_lists_only_state_and_ctx_groups() -> None:
@@ -29,7 +29,7 @@ def test_root_help_lists_only_state_and_ctx_groups() -> None:
 
 
 def test_pyproject_defines_only_ocint_script() -> None:
-    package_root = Path(__file__).parents[1]
+    package_root = Path(__file__).parents[3]
     data = tomllib.loads((package_root / "pyproject.toml").read_text())
 
     assert data["project"]["scripts"] == {"ocint": "ocint.cli:main"}
@@ -235,3 +235,24 @@ def test_state_query_human_output_has_explicit_empty_state(tmp_path: Path) -> No
     assert result.exit_code == 0, result.output
     assert "OpenCode query results" in result.output
     assert "No rows" in result.output
+
+
+def test_root_version_uses_distribution_metadata() -> None:
+    # GIVEN the installed workspace distribution metadata
+    expected = version("ocint")
+
+    # WHEN the long version option is invoked
+    result = CliRunner().invoke(main, ["--version"])
+
+    # THEN Click reports the authoritative project version exactly
+    assert result.exit_code == 0
+    assert result.output == f"ocint {expected}\n"
+
+
+def test_root_has_no_short_version_option() -> None:
+    # GIVEN the root CLI
+    # WHEN the unsupported short option is invoked
+    result = CliRunner().invoke(main, ["-v"])
+
+    # THEN it is rejected
+    assert result.exit_code != 0

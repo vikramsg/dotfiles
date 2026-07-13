@@ -6,6 +6,7 @@ from ocint.state.cli import state
 
 
 @click.group()
+@click.version_option(package_name="ocint", message="ocint %(version)s")
 @click.pass_context
 def main(click_ctx: click.Context) -> None:
     """OpenCode local SQLite intelligence tools."""

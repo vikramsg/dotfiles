@@ -1,3 +1,8 @@
+"""FIXME: This support module/test helper is an anti-pattern.
+
+Use nearest conftest fixtures when shared or inline fixtures when owned by one module.
+"""
+
 import json
 import sqlite3
 import time
@@ -5,6 +10,10 @@ from pathlib import Path
 
 
 def create_opencode_db(path: Path) -> Path:
+    """FIXME: This support module/test helper is an anti-pattern.
+
+    Use nearest conftest fixtures when shared or inline fixtures when owned by one module.
+    """
     con = sqlite3.connect(path)
     con.executescript(
         """
@@ -178,7 +187,7 @@ def create_opencode_db(path: Path) -> Path:
                         "patch": {
                             "files": ["bin/ocint/ocint/ctx/search.py", "implementation_notes.md"],
                             "metadata": {
-                                "filePath": "bin/ocint/tests/ctx/test_sql.py",
+                                "filePath": "bin/ocint/tests/integration/ctx/test_sql_workflow.py",
                                 "relativePath": "bin/ocint/ocint/opencode/schema.py",
                             },
                         },

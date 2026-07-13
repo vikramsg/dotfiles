@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_ctx_sql_queries_imported_views(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -201,7 +201,7 @@ def test_ctx_sql_views_include_files_touched(tmp_path: Path, monkeypatch: pytest
     assert rows == [
         {"path": "bin/ocint/ocint/ctx/search.py"},
         {"path": "bin/ocint/ocint/opencode/schema.py"},
-        {"path": "bin/ocint/tests/ctx/test_sql.py"},
+        {"path": "bin/ocint/tests/integration/ctx/test_sql_workflow.py"},
         {"path": "implementation_notes.md"},
     ]
 

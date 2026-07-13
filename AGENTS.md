@@ -23,3 +23,24 @@ When editing `justfile` recipes in this repo:
 - Do **not** use `$$VAR` for variable references.
 - `$$` expands to the shell PID and can corrupt values/paths (for example `721854CONFIG_FILE`).
 - Use `{{...}}` only for `just`-level interpolation (for example `{{justfile_directory()}}`).
+
+## Pull Request Titles
+
+Pull request titles must use `scope: summary` with one of these explicit scopes:
+
+- `chore`
+- `ghostty`
+- `git`
+- `lch`
+- `nvim`
+- `ocint`
+- `opencode`
+- `screenshot`
+- `terraform`
+- `tmux`
+- `zed`
+
+The summary must be non-empty and the title must not contain leading, trailing, or multiline whitespace.
+
+All changes, including releases, must go through a pull request. Never commit or push directly to
+`main`.

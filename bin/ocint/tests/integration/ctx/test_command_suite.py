@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner, Result
 from ocint.cli import main
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
-def test_skill_command_suite_reads_imported_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ctx_command_suite_reads_imported_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
     source_db = create_opencode_db(tmp_path / "opencode.db")
     monkeypatch.setenv("OPENCODE_DB", str(source_db))

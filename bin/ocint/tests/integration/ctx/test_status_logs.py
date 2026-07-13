@@ -15,7 +15,7 @@ from ocint.ctx.models import (
 from ocint.ctx.refresh.logging import read_refresh_logs
 from ocint.ctx.refresh.scheduler import schedule_refresh_worker
 from ocint.ctx.status import select_latest_actual_import_logs
-from tests.fixtures.opencode_db import create_opencode_db
+from tests.support.opencode_db import create_opencode_db
 
 
 def test_ctx_status_logs_shows_latest_actual_run_and_every_subsequent_line(

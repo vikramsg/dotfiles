@@ -19,4 +19,4 @@ dev = [
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 pythonpath = ["bin/screenshot", "bin/lch"]
-testpaths = ["bin/ghostty_workspace/tests", "bin/screenshot/tests", "bin/lch/tests", "bin/ocint/tests"]
+testpaths = ["bin/ghostty_workspace/tests", "bin/screenshot/tests", "bin/lch/tests", "bin/ocint/tests", "tests/unit/scripts"]
