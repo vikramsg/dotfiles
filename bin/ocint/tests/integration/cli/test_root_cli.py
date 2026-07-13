@@ -16,7 +16,6 @@ from ocint.state.models import (
 )
 from ocint.state.render import render_detailed
 from rich.console import Console
-
 from tests.support.opencode_db import create_opencode_db
 
 
