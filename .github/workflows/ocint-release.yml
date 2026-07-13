@@ -1,0 +1,88 @@
+name: ocint release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      baseline_confirmation:
+        description: Type "create ocint-v0.1.0 baseline tag" to confirm
+        required: true
+        type: string
+
+jobs:
+  release-validation:
+    name: Release validation
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Validate release PR when applicable
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          validator="$RUNNER_TEMP/ocint_release.py"
+          git show "$BASE_SHA:bin/ocint/scripts/ocint_release.py" > "$validator"
+          python "$validator" --root "$GITHUB_WORKSPACE" validate-pr \
+            --base "$BASE_SHA" --base-ref "$BASE_REF" --title "$PR_TITLE" --branch "$PR_HEAD_REF"
+
+  tag-merged-release:
+    name: Tag merged release
+    if: github.event_name == 'push'
+    concurrency:
+      group: ocint-release-tags
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Run trusted merged-release tagger when applicable
+        run: |
+          set -euo pipefail
+          subject="$(git log -1 --format=%s)"
+          if [[ "$subject" =~ ^ocint:\ Release\ v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\ \(#[1-9][0-9]*\))?$ ]]; then
+            parent="$(git rev-parse HEAD^)"
+            validator="$RUNNER_TEMP/ocint_release.py"
+            git show "$parent:bin/ocint/scripts/ocint_release.py" > "$validator"
+            python "$validator" --root "$GITHUB_WORKSPACE" ci-tag
+            exit 0
+          fi
+          shopt -s nocasematch
+          if [[ "$subject" =~ ^ocint:[[:space:]]*release([[:space:]]*$|[[:space:]]+v|[[:space:]]+[0-9]) ]]; then
+            echo "Malformed ocint release commit subject: $subject" >&2
+            exit 1
+          fi
+          echo "Current main commit is not an ocint release; no tag needed"
+
+  baseline-tag:
+    name: Create historical baseline tag
+    if: github.event_name == 'workflow_dispatch' && inputs.baseline_confirmation == 'create ocint-v0.1.0 baseline tag'
+    concurrency:
+      group: ocint-release-tags
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Create guarded baseline tag
+        env:
+          BASELINE_CONFIRMATION: ${{ inputs.baseline_confirmation }}
+        run: python bin/ocint/scripts/ocint_release.py bootstrap-baseline --confirmation "$BASELINE_CONFIRMATION"

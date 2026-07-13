@@ -12,8 +12,8 @@ from scripts.ocint_release import (
     parse_release_title,
     prepared_release_date,
     project_version,
-    release_policy,
     release_candidate,
+    release_policy,
     updated_changelog,
 )
 

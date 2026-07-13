@@ -106,7 +106,7 @@ def test_prepare_rolls_back_when_checks_fail(release_workspace: ReleaseWorkspace
 @pytest.mark.parametrize(
     ("title", "branch", "message"),
     [
-        ("ocint: release v0.2.0", "ocint-release/v0.2.0", "title must be exactly"),
+        ("ocint: release v0.2.0", "ocint-release/v0.2.0", "Expected release title"),
         ("ocint: Release v0.2.0", "release/0.2.0", "branch must be exactly"),
     ],
 )
@@ -158,14 +158,30 @@ def test_validate_pr_rejects_malformed_identity(
     )
 
 
-@pytest.mark.parametrize("change", ["partial", "unexpected"])
-def test_validate_pr_rejects_non_exact_release_files(release_workspace: ReleaseWorkspace, change: str) -> None:
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ("version", "branch must be exactly"),
+        ("changelog", "branch must be exactly"),
+        ("branch", "exactly the three release files"),
+    ],
+)
+def test_strong_release_signals_enforce_release_policy(
+    release_workspace: ReleaseWorkspace, change: str, message: str
+) -> None:
     # GIVEN a clean PR head with a partial or unexpected file set
     root = release_workspace.root
-    if change == "partial":
+    if change in {"version", "changelog"}:
+        subprocess.run(
+            ["git", "switch", "-c", f"chore/{change}", "origin/main"], cwd=root, check=True, capture_output=True
+        )
+    if change == "version":
         pyproject = root / "bin/ocint/pyproject.toml"
         pyproject.write_text(pyproject.read_text().replace('version = "0.1.0"', 'version = "0.2.0"'))
         subprocess.run(["git", "add", "bin/ocint/pyproject.toml"], cwd=root, check=True)
+    elif change == "changelog":
+        (root / "bin/ocint/CHANGELOG.md").write_text("# Changelog\n")
+        subprocess.run(["git", "add", "bin/ocint/CHANGELOG.md"], cwd=root, check=True)
     else:
         (root / "unexpected.txt").write_text("unexpected\n")
         subprocess.run(["git", "add", "unexpected.txt"], cwd=root, check=True)
@@ -184,7 +200,7 @@ def test_validate_pr_rejects_non_exact_release_files(release_workspace: ReleaseW
             "--title",
             "ocint: Release v0.2.0",
             "--branch",
-            "ocint-release/v0.2.0",
+            "ocint-release/v0.2.0" if change == "branch" else f"chore/{change}",
         ],
         cwd=root,
         env=release_workspace.environment,
@@ -192,9 +208,9 @@ def test_validate_pr_rejects_non_exact_release_files(release_workspace: ReleaseW
         capture_output=True,
     )
 
-    # THEN exact-file policy rejects it without further mutation
+    # THEN the strong signal activates release identity and exact-file policy
     assert result.returncode == 1
-    assert "exactly the three release files" in result.stderr
+    assert message in result.stderr
     assert (
         subprocess.run(["git", "status", "--porcelain"], cwd=root, check=True, text=True, capture_output=True).stdout
         == ""
@@ -286,7 +302,7 @@ def test_ci_tag_rejects_missing_ci_guards(release_workspace: ReleaseWorkspace) -
 
     # THEN it refuses before changing history or the remote
     assert result.returncode == 1
-    assert "restricted to GitHub Actions" in result.stderr
+    assert "GITHUB_ACTIONS=true" in result.stderr
     assert (
         subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=release_workspace.root, check=True, text=True, capture_output=True
@@ -346,9 +362,10 @@ def test_validate_pr_treats_weak_ordinary_changes_as_not_applicable(
     # THEN it succeeds read-only as not applicable
     assert result.returncode == 0, result.stderr
     assert "not applicable" in result.stdout
-    assert subprocess.run(
-        ["git", "status", "--porcelain"], cwd=root, check=True, text=True, capture_output=True
-    ).stdout == ""
+    assert (
+        subprocess.run(["git", "status", "--porcelain"], cwd=root, check=True, text=True, capture_output=True).stdout
+        == ""
+    )
 
 
 def test_validate_pr_rejects_non_main_base_ref(release_workspace: ReleaseWorkspace) -> None:
@@ -407,15 +424,20 @@ def test_ci_tag_rejects_ordinary_subject_without_mutation(release_workspace: Rel
     # THEN it rejects the subject and creates no tag
     assert result.returncode == 1
     assert "Expected release title" in result.stderr
-    assert subprocess.run(
-        ["git", "tag", "--list", "ocint-v0.2.0"], cwd=root, check=True, text=True, capture_output=True
-    ).stdout == ""
+    assert (
+        subprocess.run(
+            ["git", "tag", "--list", "ocint-v0.2.0"], cwd=root, check=True, text=True, capture_output=True
+        ).stdout
+        == ""
+    )
 
 
 def test_ci_tag_rejects_malformed_release_subject(release_workspace: ReleaseWorkspace) -> None:
     # GIVEN a malformed release-like commit under otherwise valid push guards
     root = release_workspace.root
-    subprocess.run(["git", "commit", "--allow-empty", "-m", "ocint: release v0.2"], cwd=root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "ocint: release v0.2"], cwd=root, check=True, capture_output=True
+    )
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=root, check=True, text=True, capture_output=True
     ).stdout.strip()
@@ -439,9 +461,12 @@ def test_ci_tag_rejects_malformed_release_subject(release_workspace: ReleaseWork
     # THEN malformed release syntax fails without a target tag
     assert result.returncode == 1
     assert "Expected release title" in result.stderr
-    assert subprocess.run(
-        ["git", "tag", "--list", "ocint-v0.2.0"], cwd=root, check=True, text=True, capture_output=True
-    ).stdout == ""
+    assert (
+        subprocess.run(
+            ["git", "tag", "--list", "ocint-v0.2.0"], cwd=root, check=True, text=True, capture_output=True
+        ).stdout
+        == ""
+    )
 
 
 @pytest.mark.parametrize("guard", ["event", "ref", "sha"])
@@ -470,16 +495,17 @@ def test_ci_tag_rejects_incorrect_github_push_identity(release_workspace: Releas
 
     # THEN it fails before tag mutation
     assert result.returncode == 1
-    assert "GitHub Actions" in result.stderr or "GITHUB_SHA" in result.stderr
-    assert subprocess.run(
-        ["git", "tag", "--list", "ocint-v0.2.0"], cwd=root, check=True, text=True, capture_output=True
-    ).stdout == ""
+    assert "GITHUB_EVENT_NAME" in result.stderr or "GITHUB_REF" in result.stderr or "GITHUB_SHA" in result.stderr
+    assert (
+        subprocess.run(
+            ["git", "tag", "--list", "ocint-v0.2.0"], cwd=root, check=True, text=True, capture_output=True
+        ).stdout
+        == ""
+    )
 
 
 @pytest.mark.parametrize("invalid", ["event", "confirmation"])
-def test_baseline_rejects_wrong_command_boundary(
-    release_workspace: ReleaseWorkspace, invalid: str
-) -> None:
+def test_baseline_rejects_wrong_command_boundary(release_workspace: ReleaseWorkspace, invalid: str) -> None:
     # GIVEN typed baseline policy and one invalid workflow-dispatch boundary value
     root = release_workspace.root
     target = subprocess.run(
@@ -503,13 +529,16 @@ def test_baseline_rejects_wrong_command_boundary(
     confirmation = "wrong" if invalid == "confirmation" else policy.baseline_confirmation
 
     # WHEN baseline creation is requested
-    with pytest.raises(ReleaseError, match="GitHub Actions|confirmation"):
+    with pytest.raises(ReleaseError, match=r"GITHUB_EVENT_NAME|confirmation"):
         bootstrap_baseline(root, policy, context, confirmation)
 
     # THEN the existing fixture baseline remains unchanged
-    assert subprocess.run(
-        ["git", "rev-list", "-n", "1", "ocint-v0.1.0"], cwd=root, check=True, text=True, capture_output=True
-    ).stdout.strip() == target
+    assert (
+        subprocess.run(
+            ["git", "rev-list", "-n", "1", "ocint-v0.1.0"], cwd=root, check=True, text=True, capture_output=True
+        ).stdout.strip()
+        == target
+    )
 
 
 def test_baseline_creates_and_idempotently_pushes_fixture_introduction_tag(
@@ -541,15 +570,21 @@ def test_baseline_creates_and_idempotently_pushes_fixture_introduction_tag(
     bootstrap_baseline(root, policy, context, policy.baseline_confirmation)
 
     # THEN both local and remote annotated tags target the introduction commit
-    assert subprocess.run(
-        ["git", "cat-file", "-t", "ocint-v0.1.0"], cwd=root, check=True, text=True, capture_output=True
-    ).stdout.strip() == "tag"
-    assert subprocess.run(
-        ["git", "--git-dir", str(release_workspace.remote), "rev-list", "-n", "1", "ocint-v0.1.0"],
-        check=True,
-        text=True,
-        capture_output=True,
-    ).stdout.strip() == target
+    assert (
+        subprocess.run(
+            ["git", "cat-file", "-t", "ocint-v0.1.0"], cwd=root, check=True, text=True, capture_output=True
+        ).stdout.strip()
+        == "tag"
+    )
+    assert (
+        subprocess.run(
+            ["git", "--git-dir", str(release_workspace.remote), "rev-list", "-n", "1", "ocint-v0.1.0"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        == target
+    )
 
 
 def test_baseline_rejects_conflicting_fixture_tag(release_workspace: ReleaseWorkspace) -> None:
@@ -576,12 +611,18 @@ def test_baseline_rejects_conflicting_fixture_tag(release_workspace: ReleaseWork
         bootstrap_baseline(root, policy, context, policy.baseline_confirmation)
 
     # THEN the conflict remains local and the disposable remote baseline remains correct
-    assert subprocess.run(
-        ["git", "rev-list", "-n", "1", "ocint-v0.1.0"], cwd=root, check=True, text=True, capture_output=True
-    ).stdout.strip() == head
-    assert subprocess.run(
-        ["git", "--git-dir", str(release_workspace.remote), "rev-list", "-n", "1", "ocint-v0.1.0"],
-        check=True,
-        text=True,
-        capture_output=True,
-    ).stdout.strip() == target
+    assert (
+        subprocess.run(
+            ["git", "rev-list", "-n", "1", "ocint-v0.1.0"], cwd=root, check=True, text=True, capture_output=True
+        ).stdout.strip()
+        == head
+    )
+    assert (
+        subprocess.run(
+            ["git", "--git-dir", str(release_workspace.remote), "rev-list", "-n", "1", "ocint-v0.1.0"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        == target
+    )

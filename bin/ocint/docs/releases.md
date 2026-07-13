@@ -32,9 +32,11 @@ It runs lock, package test, check, and smoke verification and restores all three
 It never commits, tags, pushes, or installs. A valid prepared rerun is idempotent.
 
 Review the files, commit and push the release branch through the normal development process, and
-open a PR titled exactly `ocint: Release vX.Y.Z`. Required CI must include the normal **Validate PR
+open a PR targeting `main` and titled exactly `ocint: Release vX.Y.Z`. Required CI must include the normal **Validate PR
 title** check and **Release validation**. The latter is not applicable and succeeds for ordinary
-PRs; any release-file change requires all three files and the exact release branch and title.
+PRs, including shared-lock changes and same-version package configuration changes. A release branch,
+release-like title, changelog change, or package-version change activates release policy and requires
+all three files plus the exact release branch and title.
 
 Squash-merge the approved release PR. The resulting main subject may include GitHub's ` (#123)`
 suffix. The main-push workflow validates the squash commit against its first parent and creates and
@@ -58,5 +60,6 @@ with a direct commit, branch push, force-push, or local release command.
 Commit `8e13c509ec1b31a6f97501ef3f0215a4bdb58a8e` is the historical baseline because it introduced
 `bin/ocint/pyproject.toml` with package version `0.1.0`. To create `ocint-v0.1.0` once, run the
 **ocint release** workflow manually on `main` and enter the exact baseline confirmation requested
-by `workflow_dispatch`. The guarded CI operation verifies that commit and version before pushing an
+by `workflow_dispatch`. The command rechecks the workflow-dispatch event and exact confirmation at
+its own boundary. The guarded CI operation verifies that commit and version before pushing an
 annotated tag. Conflicting tags fail; an existing annotated tag on that commit is idempotent.

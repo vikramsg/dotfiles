@@ -384,8 +384,12 @@ def validate_pr(
 
 
 def require_ci(root: Path, context: CiContext, event_name: str) -> str:
-    if context.actions != "true" or context.event_name != event_name or context.ref != "refs/heads/main":
-        raise ReleaseError("Tag creation is restricted to GitHub Actions on refs/heads/main")
+    if context.actions != "true":
+        raise ReleaseError("Tag creation requires GITHUB_ACTIONS=true")
+    if context.event_name != event_name:
+        raise ReleaseError(f"Tag creation requires GITHUB_EVENT_NAME={event_name}")
+    if context.ref != "refs/heads/main":
+        raise ReleaseError("Tag creation requires GITHUB_REF=refs/heads/main")
     head = git(root, "rev-parse", "HEAD")
     if context.sha != head:
         raise ReleaseError("GITHUB_SHA must equal the checked-out HEAD")
