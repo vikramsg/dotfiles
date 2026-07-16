@@ -93,6 +93,9 @@ The control service:
 - Persists jobs before scheduling them.
 - Enforces the global running-session limit.
 - Creates, resumes, monitors, and cancels OpenCode sessions.
+- Validates completed worktree changes against configured checks.
+- Commits approved changes, pushes job branches, and creates or discovers pull
+  requests idempotently.
 - Maps external conversations to jobs and OpenCode sessions.
 - Exposes an authenticated API for the frontend.
 - Publishes progress and terminal results through channel adapters.
@@ -104,6 +107,7 @@ OpenCode:
 - Persists sessions, messages, and parts in its own database.
 - Executes prompts and tools.
 - Streams session events.
+- Leaves commit, push, and pull request publication to the control service.
 
 The two databases are independent. The control service must not depend on
 OpenCode's internal database schema.
@@ -175,10 +179,10 @@ The control database records:
 The core job lifecycle is:
 
 ```text
-queued -> preparing -> running -> publishing -> completed
-                         |              |
-                         +-> failed <---+
-                         +-> cancelled
+queued -> preparing -> running -> validating -> publishing -> completed
+                         |           |             |
+                         +---------> failed <-------+
+                         +---------> cancelled
 ```
 
 Claims and state transitions must use short atomic transactions. A worker may
@@ -212,6 +216,33 @@ and reconciles incomplete attempts after OpenCode reconnects.
 
 OpenCode does not enforce the configured capacity. All automated session
 creation must pass through the control service scheduler.
+
+## Publication And Permission Policy
+
+OpenCode may edit files and run explicitly permitted development commands only
+inside its assigned worktree. It does not commit, push, call `gh`, or create a
+pull request. The control service validates the resulting changes and owns all
+publication operations.
+
+The OpenCode execution environment must not contain GitHub publishing
+credentials. Production deployment uses separate execution and publication
+credentials or OS-level identities so the OpenCode process cannot read the
+publisher credential. The control service supplies publishing credentials only
+to its publication component.
+
+Headless execution uses explicit allow and deny rules rather than blanket
+`--auto` approval. The initial policy:
+
+- Allows file operations within the assigned worktree.
+- Allows configured repository validation commands.
+- Denies paths outside managed roots.
+- Denies destructive Git operations, `git push`, `gh`, and unapproved network
+  access.
+- Rejects or escalates any permission request not explicitly allowed.
+
+OpenCode permission rules are policy controls, not a security sandbox. Jobs
+that process untrusted input require OS-level isolation in addition to these
+rules.
 
 ## Channel Protocol And Adapters
 
@@ -308,6 +339,7 @@ The control service should provide:
 - Secret redaction in logs and stored errors.
 - Graceful shutdown that stops new claims before cancelling active work.
 - Per-job timeouts and cancellation of descendant processes.
+- Separation of OpenCode execution credentials from publication credentials.
 - CPU, memory, process, and file-descriptor limits.
 - Structured logs and health checks.
 
@@ -322,7 +354,8 @@ SQLite state. They cover normalization, deduplication, state transitions,
 capacity enforcement, lease expiry, retries, cancellation, and restart
 reconciliation without Slack, GitHub, or OpenCode. They also cover XDG and
 environment path resolution, configuration validation, atomic reload failure,
-and activation of valid reloads.
+activation of valid reloads, publication idempotency, and denial of publication
+operations to the agent runtime.
 
 Integration tests run the control service against a fake OpenCode HTTP server
 and verify event streaming, reconnect behavior, and API authorization.
@@ -362,13 +395,39 @@ The fake servers run over real localhost HTTP and WebSocket transports. They
 support duplicate deliveries, invalid signatures, rate limits, API failures,
 and dropped connections without contacting GitHub or Slack.
 
+## Bootstrap Acceptance
+
+The first real acceptance run uses a manual fake-channel request, the real
+control database and scheduler, and a real shared OpenCode server. OpenCode
+makes a small deterministic documentation change in a managed worktree. The
+control service validates, commits, pushes, and creates the pull request in
+`vikramsg/dotfiles` using the existing local `gh` authentication.
+
+```text
+manual fake-channel request
+          |
+          v
+real SQLite queue and scheduler
+          |
+          v
+real OpenCode session in managed worktree
+          |
+          v
+control-service validation and publication
+          |
+          v
+real GitHub pull request
+```
+
+This use of ambient `gh` authentication is limited to bootstrap acceptance.
+Production publication uses isolated credentials as described above.
+
 ## Open Decisions
 
 - Slack Socket Mode versus signed HTTP event ingress.
 - FIFO scheduling versus priorities and per-channel fairness.
 - Retry limits and which failures are retryable.
 - Worktree retention for follow-up conversations.
-- Whether publication is performed by OpenCode or by the control service.
 - When local worktrees require stronger sandbox isolation.
 
 ## References
