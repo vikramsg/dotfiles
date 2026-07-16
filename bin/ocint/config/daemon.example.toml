@@ -1,0 +1,46 @@
+database_path = "/var/lib/ocint-control/control.sqlite"
+mirror_root = "/var/lib/ocint-control/mirrors"
+worktree_root = "/var/lib/ocint-worktrees"
+retention_seconds = 86400
+
+[[repositories]]
+name = "dotfiles"
+remote_url = "git@github.com:vikramsg/dotfiles.git"
+default_branch = "main"
+github_repository = "vikramsg/dotfiles"
+actors = ["vikram_orbio_earth"]
+checks = [["just", "--justfile", "bin/ocint/justfile", "check"], ["just", "--justfile", "bin/ocint/justfile", "test"]]
+
+[scheduler]
+capacity = 2
+lease_seconds = 120
+heartbeat_seconds = 30
+max_attempts = 2
+poll_seconds = 1.0
+job_timeout_seconds = 3600
+
+[opencode]
+server_url = "http://127.0.0.1:4096"
+username = "opencode"
+request_timeout_seconds = 30
+expected_version = "1.17.20"
+
+[api]
+host = "127.0.0.1"
+port = 8732
+
+[providers]
+github_api_url = "https://api.github.com"
+slack_api_url = "https://slack.com/api"
+slack_socket_url = "https://slack.com/api/apps.connections.open"
+
+[channels.slack]
+enabled = false
+socket_mode = true
+channel_repositories = {}
+
+[[channels.github]]
+repository = "dotfiles"
+github_repository = "vikramsg/dotfiles"
+label = "ocint"
+poll_seconds = 30

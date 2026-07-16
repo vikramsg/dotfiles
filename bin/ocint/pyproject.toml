@@ -4,17 +4,23 @@ version = "0.1.0"
 description = "OpenCode local SQLite intelligence tools"
 requires-python = ">=3.14"
 dependencies = [
+    "aiohttp>=3.12",
     "alembic",
     "click",
+    "fastapi",
     "pydantic",
+    "pydantic-settings",
     "rich",
     "sqlalchemy",
     "structlog>=26.1.0",
+    "uvicorn",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx",
     "pytest",
+    "pytest-asyncio",
     "ruff",
     "ty",
 ]

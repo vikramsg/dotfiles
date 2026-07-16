@@ -93,4 +93,12 @@ smoke-ctx:
         {{uv_ocint}} ocint ctx locate event "p-primary-step" --json
 
 # Run all ocint smoke checks
-smoke: smoke-state smoke-ctx
+smoke: smoke-state smoke-ctx smoke-daemon
+
+# Smoke-test daemon config discovery and the independent control DB migration
+smoke-daemon:
+    @set -e; \
+        TMPDIR="$(mktemp -d /tmp/ocint-smoke-daemon.XXXXXX)"; \
+        sed -e "s#/var/lib/ocint-control#$TMPDIR/control#g" -e "s#/var/lib/ocint-worktrees#$TMPDIR/worktrees#g" "{{justfile_directory()}}/config/daemon.example.toml" > "$TMPDIR/daemon.toml"; \
+        OCINT_DAEMON_CONFIG="$TMPDIR/daemon.toml" {{uv_ocint}} ocint daemon config --path; \
+        OCINT_DAEMON_CONFIG="$TMPDIR/daemon.toml" {{uv_ocint}} ocint daemon migrate

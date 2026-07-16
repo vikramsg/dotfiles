@@ -1,0 +1,38 @@
+[Unit]
+Description=OpenCode execution plane for ocint
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ocint-agent
+Group=ocint-agent
+SupplementaryGroups=ocint-shared
+UMask=0007
+Environment=OPENCODE_CONFIG=/etc/ocint/opencode.daemon.json
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/var/lib/ocint-agent
+LoadCredential=server-password:/etc/ocint/credentials/opencode-password
+StateDirectory=ocint-agent
+StateDirectoryMode=0700
+ExecStart=/bin/sh -c 'export OPENCODE_SERVER_PASSWORD="$(cat "$CREDENTIALS_DIRECTORY/server-password")"; exec /usr/bin/env opencode serve --hostname 127.0.0.1 --port 4096'
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=30
+KillMode=mixed
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/ocint-worktrees /var/lib/ocint-agent
+MemoryMax=4G
+TasksMax=512
+LimitNOFILE=16384
+
+[Install]
+WantedBy=multi-user.target
