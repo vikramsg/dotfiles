@@ -12,10 +12,10 @@ permission:
   websearch: deny
   skill: deny
   task:
+    "*": deny
     rigor-planner: allow
     implementer: allow
     rigor-reviewer: allow
-    *: deny
 ---
 # Orchestrator
 
