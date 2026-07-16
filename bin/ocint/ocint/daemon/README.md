@@ -17,30 +17,31 @@ owns jobs, scheduling, channel mappings, authorization, and recovery.
 ## Architecture And Flow Diagrams
 
 ```text
- GitHub poller       Slack adapter       Web frontend
-       |                  |                   |
-       +------------------+-------------------+
-                          |
-                          v
+ GitHub poller       Slack adapter       Web frontend       daemon.toml
+       |                  |                   |                 |
+       +------------------+-------------------+-----------------+
+                                  |
+                                  v
                 +-------------------+
                 |  control service  |
                 | API + scheduler   |
                 +---------+---------+
-                          |
-                +---------+---------+
-                | control SQLite DB |
-                | jobs + leases     |
-                +---------+---------+
-                          |
-                configured capacity
-                          |
-                          v
+                     /          \
+                    v            v
+       +-------------------+  +--------------------+
+       | control SQLite DB |  | repository manager |
+       | jobs + leases     |  +---------+----------+
+       +---------+---------+            |
+                 |             managed mirrors and worktrees
+        configured capacity             |
+                 |                      |
+                 +----------+-----------+
+                            |
+                            v
                 +-------------------+
                 |  opencode serve   |
                 | sessions + events |
-                +---------+---------+
-                          |
-                 project worktrees
+                +-------------------+
 ```
 
 ```text
@@ -60,6 +61,15 @@ owns jobs, scheduling, channel mappings, authorization, and recovery.
                 no          yes
                  |           |
                wait          v
+                     resolve configured repo
+                              |
+                              v
+                    clone/fetch managed mirror
+                              |
+                              v
+                       create worktree
+                              |
+                              v
                     create/resume session
                               |
                               v
@@ -77,7 +87,9 @@ owns jobs, scheduling, channel mappings, authorization, and recovery.
 The control service:
 
 - Normalizes channel events into channel-independent work requests.
+- Loads and atomically reloads validated daemon configuration.
 - Authorizes actors and repositories before accepting work.
+- Provisions managed repository mirrors and job worktrees.
 - Persists jobs before scheduling them.
 - Enforces the global running-session limit.
 - Creates, resumes, monitors, and cancels OpenCode sessions.
@@ -95,6 +107,58 @@ OpenCode:
 
 The two databases are independent. The control service must not depend on
 OpenCode's internal database schema.
+
+## Configuration And Repository Provisioning
+
+The daemon reads TOML configuration from `$XDG_CONFIG_HOME/ocint/daemon.toml`,
+falling back to `~/.config/ocint/daemon.toml`. `OCINT_DAEMON_CONFIG` overrides
+the resolved path.
+
+Configuration defines:
+
+- Repository names, remote URLs, and default branches.
+- Managed mirror and worktree roots.
+- Scheduler capacity.
+- OpenCode server connection details.
+- Slack channel-to-repository mappings.
+- Repository and actor allowlists.
+- Retry, timeout, and retention policies.
+- Provider base URLs used by production and fake adapters.
+
+Secrets do not belong in the TOML file. They are supplied through the
+environment or systemd credentials.
+
+The CLI makes configuration discovery and reload explicit:
+
+```bash
+ocint daemon config
+ocint daemon config --path
+ocint daemon reload
+```
+
+`ocint daemon config` displays the resolved paths and effective non-secret
+settings. `--path` prints only the resolved configuration path for scripts.
+`ocint daemon reload`, or `SIGHUP`, parses and validates the complete file
+before atomically activating it. A failed reload leaves the previous
+configuration active. Running attempts retain their configuration snapshot;
+new work uses the newly activated configuration.
+
+OpenCode requires the session directory to exist. Before creating a session,
+the repository manager:
+
+- Resolves the requested repository through the configured registry.
+- Rejects repositories and paths outside configured allowlists and managed
+  roots.
+- Lazily clones a managed local mirror or fetches an existing mirror.
+- Creates a unique branch and worktree for the job.
+- Persists the resolved repository, revision, branch, and worktree path.
+- Passes the existing worktree path when creating the OpenCode session.
+- Retains the worktree while follow-up interaction is allowed, then removes it
+  according to the configured retention policy.
+
+GitHub requests carry their repository identity. Slack requests resolve it from
+an explicit request or a configured channel mapping. The agent is not
+responsible for cloning its own repository.
 
 ## Job Queue And SQLite State
 
@@ -240,6 +304,7 @@ with a generated server password known only to the control service.
 The control service should provide:
 
 - Repository, organization, Slack workspace, channel, and actor allowlists.
+- Enforcement that repository mirrors and worktrees stay under managed roots.
 - Secret redaction in logs and stored errors.
 - Graceful shutdown that stops new claims before cancelling active work.
 - Per-job timeouts and cancellation of descendant processes.
@@ -255,7 +320,9 @@ equivalent OS-level isolation.
 Unit tests use fake channel and agent-runtime implementations with temporary
 SQLite state. They cover normalization, deduplication, state transitions,
 capacity enforcement, lease expiry, retries, cancellation, and restart
-reconciliation without Slack, GitHub, or OpenCode.
+reconciliation without Slack, GitHub, or OpenCode. They also cover XDG and
+environment path resolution, configuration validation, atomic reload failure,
+and activation of valid reloads.
 
 Integration tests run the control service against a fake OpenCode HTTP server
 and verify event streaming, reconnect behavior, and API authorization.
@@ -268,6 +335,8 @@ functions:
 - A fake Slack server stores users, channels, threads, and messages, then sends
   correctly signed HTTP events or Socket Mode envelopes.
 - A local bare Git repository acts as the remote repository.
+- The real repository manager lazily clones or fetches that remote and creates
+  disposable worktrees.
 - Provider base URLs and signing secrets are injected through normal service
   configuration.
 - Control endpoints seed provider state, inject failures, and expose resulting
