@@ -29,11 +29,14 @@ dev = [
 ocint = "ocint.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.9.26,<0.10.0"]
-build-backend = "uv_build"
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
 
-[tool.uv.build-backend]
-module-root = "."
+[tool.hatch.build.targets.wheel]
+packages = ["ocint"]
+
+[tool.hatch.build.targets.sdist]
+include = ["ocint", "config/opencode.daemon.json", "README.md", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]

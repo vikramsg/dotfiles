@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,7 +46,7 @@ class OpenCodeConfig(BaseModel):
     server_url: HttpUrl = HttpUrl("http://127.0.0.1:4097")
     username: str = "opencode"
     request_timeout_seconds: int = Field(default=30, ge=1)
-    expected_version: str = "1.17.20"
+    expected_version: Literal["1.17.20"] = "1.17.20"
     executable: Path = Path("/usr/bin/opencode")
     config_file: Path
     xdg_config_home: Path
@@ -71,7 +72,7 @@ class GitHubConfig(BaseModel):
 
     api_url: HttpUrl = HttpUrl("https://api.github.com")
     issue_label: str = "ocint"
-    agent_actor: str = "vikramsg"
+    agent_actor: str
 
 
 class GitConfig(BaseModel):
@@ -93,7 +94,7 @@ class DaemonConfig(BaseModel):
     database_path: Path
     mirror_root: Path
     worktree_root: Path
-    repositories: tuple[RepositoryConfig, ...]
+    repositories: tuple[RepositoryConfig, ...] = Field(min_length=1)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)

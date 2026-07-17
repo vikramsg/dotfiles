@@ -168,7 +168,7 @@ class GitHubService:
         else:
             pull = await self.client.find_pull_request(repository, branch, base)
             if pull is None:
-                pull = await self.client.create_pull_request(repository, branch, base, title, body)
+                pull = await self.client.create_pull_request(repository, branch, base, issue.title, body)
             self.repository.set_pull_request(issue.id, pull.number, pull.html_url)
         await self._respond(
             issue,

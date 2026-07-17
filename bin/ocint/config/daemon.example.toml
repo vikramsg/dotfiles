@@ -4,13 +4,13 @@ worktree_root = "~/.local/share/ocint/worktrees"
 idle_timeout_seconds = 60
 
 [[repositories]]
-name = "dotfiles"
-remote_url = "git@github.com:vikramsg/dotfiles.git"
+name = "repository"
+remote_url = "git@github.com:OWNER/REPOSITORY.git"
 default_branch = "main"
-github_repository = "vikramsg/dotfiles"
+github_repository = "OWNER/REPOSITORY"
 author_name = "ocint daemon"
 author_email = "ocint@example.invalid"
-actors = ["vikramsg"]
+actors = ["GITHUB_LOGIN"]
 checks = [["just", "--justfile", "bin/ocint/justfile", "check"], ["just", "--justfile", "bin/ocint/justfile", "test"]]
 
 [scheduler]
@@ -36,7 +36,7 @@ port = 8732
 [github]
 api_url = "https://api.github.com"
 issue_label = "ocint"
-agent_actor = "vikramsg"
+agent_actor = "GITHUB_LOGIN"
 
 [git]
 ssh_executable = "/usr/bin/ssh"

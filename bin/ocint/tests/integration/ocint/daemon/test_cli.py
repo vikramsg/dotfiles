@@ -25,6 +25,8 @@ xdg_data_home = "{tmp_path / "data"}"
 ssh_executable = "/usr/bin/ssh"
 identity_file = "{tmp_path / "identity"}"
 known_hosts_file = "{tmp_path / "known_hosts"}"
+[github]
+agent_actor = "maintainer"
 ''')
 
     # WHEN / THEN

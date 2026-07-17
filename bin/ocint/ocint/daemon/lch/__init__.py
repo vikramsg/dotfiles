@@ -1,4 +1,15 @@
-from ocint.daemon.lch.cli import lch
-from ocint.daemon.lch.systemd import SystemdLifecycle, SystemdPaths, service_text, timer_text
+from ocint.daemon.lch.cli import lch, lifecycle
+from ocint.daemon.lch.doctor import DoctorReport, diagnose
+from ocint.daemon.lch.systemd import SubprocessRunner, SystemdLifecycle, SystemdPaths, service_text, timer_text
 
-__all__ = ["SystemdLifecycle", "SystemdPaths", "lch", "service_text", "timer_text"]
+__all__ = [
+    "DoctorReport",
+    "SubprocessRunner",
+    "SystemdLifecycle",
+    "SystemdPaths",
+    "diagnose",
+    "lch",
+    "lifecycle",
+    "service_text",
+    "timer_text",
+]

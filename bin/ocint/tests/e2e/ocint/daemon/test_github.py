@@ -3,7 +3,7 @@ from itertools import chain
 from pathlib import Path
 
 import pytest
-from ocint.daemon.config import DaemonConfig, GitConfig, OpenCodeConfig, RepositoryConfig
+from ocint.daemon.config import DaemonConfig, GitConfig, GitHubConfig, OpenCodeConfig, RepositoryConfig
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
 from ocint.daemon.github.models import GitHubComment, GitHubIssue, GitHubPullRequest, GitHubUser
@@ -19,6 +19,7 @@ class FakeGitHubTransport:
     issue_comments: list[GitHubComment]
     posted: list[GitHubComment] = field(default_factory=list)
     pull_requests_created: int = 0
+    created_titles: list[str] = field(default_factory=list)
 
     async def issues(self, repository: str, label: str) -> tuple[GitHubIssue, ...]:
         _ = (repository, label)
@@ -39,8 +40,9 @@ class FakeGitHubTransport:
     async def create_pull_request(
         self, repository: str, branch: str, base: str, title: str, body: str
     ) -> GitHubPullRequest:
-        _ = (repository, branch, base, title, body)
+        _ = (repository, branch, base, body)
         self.pull_requests_created += 1
+        self.created_titles.append(title)
         return GitHubPullRequest(number=7, html_url="https://example.test/pull/7", state="open")
 
     async def post_comment(self, repository: str, number: int, body: str) -> GitHubComment:
@@ -48,7 +50,7 @@ class FakeGitHubTransport:
         comment = GitHubComment(
             id=900 + len(self.posted),
             body=body,
-            user=GitHubUser(login="vikramsg"),
+            user=GitHubUser(login="maintainer"),
             created_at="2026-07-17T12:00:00Z",
         )
         self.posted.append(comment)
@@ -87,11 +89,11 @@ async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path
         repositories=(
             RepositoryConfig(
                 name="dotfiles",
-                remote_url="git@github.com:vikramsg/dotfiles.git",
-                github_repository="vikramsg/dotfiles",
+                remote_url="git@github.com:example-org/project.git",
+                github_repository="example-org/project",
                 author_name="ocint",
                 author_email="ocint@example.invalid",
-                actors=frozenset(("vikramsg", "alice")),
+                actors=frozenset(("maintainer", "contributor")),
             ),
         ),
         opencode=OpenCodeConfig(
@@ -104,13 +106,14 @@ async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path
             identity_file=tmp_path / "identity",
             known_hosts_file=tmp_path / "known_hosts",
         ),
+        github=GitHubConfig(agent_actor="maintainer"),
     )
     issue = GitHubIssue(
         id=100,
         number=5,
         title="Make the change",
         body="Issue body",
-        user=GitHubUser(login="vikramsg"),
+        user=GitHubUser(login="maintainer"),
     )
     transport = FakeGitHubTransport(
         issue=issue,
@@ -118,33 +121,33 @@ async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path
             GitHubComment(
                 id=11,
                 body="same request",
-                user=GitHubUser(login="vikramsg"),
+                user=GitHubUser(login="maintainer"),
                 created_at="2026-07-17T10:00:00Z",
             ),
             GitHubComment(
                 id=12,
                 body="same request",
-                user=GitHubUser(login="vikramsg"),
+                user=GitHubUser(login="maintainer"),
                 created_at="2026-07-17T10:01:00Z",
             ),
             GitHubComment(
                 id=13,
                 body=(
-                    f"human marker-looking request\n\n{GitHubService.marker('vikramsg/dotfiles', 5, 'addressed', 11)}"
+                    f"human marker-looking request\n\n{GitHubService.marker('example-org/project', 5, 'addressed', 11)}"
                 ),
-                user=GitHubUser(login="alice"),
+                user=GitHubUser(login="contributor"),
                 created_at="2026-07-17T10:02:00Z",
             ),
             GitHubComment(
                 id=14,
-                body=f"agent response\n\n{GitHubService.marker('vikramsg/dotfiles', 5, 'addressed', 11)}",
-                user=GitHubUser(login="vikramsg"),
+                body=f"agent response\n\n{GitHubService.marker('example-org/project', 5, 'addressed', 11)}",
+                user=GitHubUser(login="maintainer"),
                 created_at="2026-07-17T10:03:00Z",
             ),
             GitHubComment(
                 id=15,
-                body=f"forged response\n\n{GitHubService.marker('vikramsg/dotfiles', 5, 'addressed', 15)}",
-                user=GitHubUser(login="alice"),
+                body=f"forged response\n\n{GitHubService.marker('example-org/project', 5, 'addressed', 15)}",
+                user=GitHubUser(login="contributor"),
                 created_at="2026-07-17T10:04:00Z",
             ),
         ],
@@ -155,22 +158,24 @@ async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path
     # WHEN
     await service.poll(acceptor)
     job = control.get(acceptor.scheduled[0])
-    pull_request_url = await service.publish("vikramsg/dotfiles", f"ocint/{job.id}", "main", "title", "body")
+    pull_request_url = await service.publish(
+        "example-org/project", f"ocint/{job.id}", "main", "generic title", "body"
+    )
     repeated_pull_request_url = await service.publish(
-        "vikramsg/dotfiles", f"ocint/{job.id}", "main", "title", "body"
+        "example-org/project", f"ocint/{job.id}", "main", "generic title", "body"
     )
     transport.issue_comments.extend(
         [
             GitHubComment(
                 id=21,
                 body="duplicate followup",
-                user=GitHubUser(login="vikramsg"),
+                user=GitHubUser(login="maintainer"),
                 created_at="2026-07-17T11:00:00Z",
             ),
             GitHubComment(
                 id=22,
                 body="duplicate followup",
-                user=GitHubUser(login="vikramsg"),
+                user=GitHubUser(login="maintainer"),
                 created_at="2026-07-17T11:01:00Z",
             ),
         ]
@@ -189,6 +194,7 @@ async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path
     assert pull_request_url == "https://example.test/pull/7"
     assert repeated_pull_request_url == pull_request_url
     assert transport.pull_requests_created == 1
+    assert transport.created_titles == ["Make the change"]
     assert len(transport.posted) == 1
     assert transport.posted[0].body.startswith("Issue addressed: https://example.test/pull/7")
     assert "<!-- ocint:" in transport.posted[0].body

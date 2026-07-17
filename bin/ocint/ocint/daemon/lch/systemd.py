@@ -3,7 +3,7 @@ import platform
 import shutil
 import stat
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -13,19 +13,54 @@ from pydantic import BaseModel, ConfigDict
 class CommandResult(BaseModel):
     model_config = ConfigDict(frozen=True)
     stdout: str = ""
+    stderr: str = ""
 
 
 class CommandRunner(Protocol):
     def run(self, arguments: Sequence[str]) -> CommandResult: ...
+    def run_isolated(self, arguments: Sequence[str], environment: Mapping[str, str]) -> CommandResult: ...
 
 
 class SubprocessRunner:
+    def __init__(self, timeout_seconds: int = 30) -> None:
+        self.timeout_seconds = timeout_seconds
+
     def run(self, arguments: Sequence[str]) -> CommandResult:
+        environment = dict(os.environ)
+        for name in ("GH_TOKEN", "GITHUB_TOKEN", "OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN"):
+            environment.pop(name, None)
+        environment.update(self._noninteractive_environment())
         if "--follow" in arguments:
-            subprocess.run(arguments, check=True)
+            subprocess.run(arguments, check=True, env=environment, stdin=subprocess.DEVNULL)
             return CommandResult()
-        result = subprocess.run(arguments, check=True, capture_output=True, text=True)
-        return CommandResult(stdout=result.stdout)
+        return self._run(arguments, environment)
+
+    def run_isolated(self, arguments: Sequence[str], environment: Mapping[str, str]) -> CommandResult:
+        isolated = dict(environment)
+        isolated.update(self._noninteractive_environment())
+        return self._run(arguments, isolated)
+
+    @staticmethod
+    def _noninteractive_environment() -> dict[str, str]:
+        return {
+            "PAGER": "cat",
+            "GIT_PAGER": "cat",
+            "GH_PAGER": "cat",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GH_PROMPT_DISABLED": "1",
+        }
+
+    def _run(self, arguments: Sequence[str], environment: Mapping[str, str]) -> CommandResult:
+        result = subprocess.run(
+            arguments,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            timeout=self.timeout_seconds,
+        )
+        return CommandResult(stdout=result.stdout, stderr=result.stderr)
 
 
 class SystemdPaths(BaseModel):
@@ -105,12 +140,8 @@ class SystemdLifecycle:
         executable = self.validate_executable(executable)
         self._validate_environment()
         self.validate_lingering()
+        self.validate_install_paths()
         self.paths.directory.mkdir(parents=True, exist_ok=True)
-        if self.paths.directory.is_symlink():
-            raise RuntimeError(f"systemd user directory must not be a symlink: {self.paths.directory}")
-        for path in (self.paths.timer, self.paths.service):
-            if path.is_symlink() or (path.exists() and not path.is_file()):
-                raise RuntimeError(f"generated unit path must be a regular file: {path}")
         self.paths.timer.write_text(timer_text())
         self.paths.timer.chmod(0o644)
         self.paths.service.write_text(
@@ -170,8 +201,8 @@ class SystemdLifecycle:
         daemon_commands = {
             line.strip().split(maxsplit=1)[0] for line in daemon_help.splitlines() if line.startswith("  ")
         }
-        if not {"run", "lch"}.issubset(daemon_commands):
-            raise RuntimeError(f"ocint executable does not expose daemon run and lch: {resolved}")
+        if not {"run", "doctor", "lch"}.issubset(daemon_commands):
+            raise RuntimeError(f"ocint executable does not expose daemon run, doctor, and lch: {resolved}")
         lch_help = self.runner.run((str(resolved), "daemon", "lch", "--help")).stdout
         lch_commands = {line.strip().split(maxsplit=1)[0] for line in lch_help.splitlines() if line.startswith("  ")}
         required = {"provision", "install", "uninstall", "status", "logs"}
@@ -188,6 +219,13 @@ class SystemdLifecycle:
         lingering = self.runner.run(("loginctl", "show-user", user, "--property=Linger", "--value")).stdout.strip()
         if lingering != "yes":
             raise RuntimeError('user lingering is disabled; run loginctl enable-linger "$USER"')
+
+    def validate_install_paths(self) -> None:
+        if self.paths.directory.is_symlink() or (self.paths.directory.exists() and not self.paths.directory.is_dir()):
+            raise RuntimeError(f"systemd user directory must be a regular directory: {self.paths.directory}")
+        for path in (self.paths.timer, self.paths.service):
+            if path.is_symlink() or (path.exists() and (not path.is_file() or path.stat().st_uid != os.getuid())):
+                raise RuntimeError(f"generated unit path must be a regular file: {path}")
 
 
 def installed_ocint() -> Path:

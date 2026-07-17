@@ -1,10 +1,13 @@
+import json
 import stat
-from collections.abc import Sequence
+import subprocess
+import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-from ocint.daemon.lch import SystemdLifecycle, SystemdPaths, service_text, timer_text
+from ocint.daemon.lch import SubprocessRunner, SystemdLifecycle, SystemdPaths, service_text, timer_text
 from ocint.daemon.lch.systemd import CommandResult
 
 
@@ -17,13 +20,17 @@ class FakeRunner:
         command = list(arguments)
         self.calls.append(command)
         if command[-2:] == ["daemon", "--help"]:
-            commands = "  run\n  lch\n" if self.compatible else "  config\n"
+            commands = "  run\n  doctor\n  lch\n" if self.compatible else "  config\n"
             return CommandResult(stdout=f"Commands:\n{commands}")
         if command[-3:] == ["daemon", "lch", "--help"]:
             return CommandResult(stdout="Commands:\n  provision\n  install\n  uninstall\n  status\n  logs\n")
         if command[0] == "loginctl":
             return CommandResult(stdout="yes\n")
         return CommandResult()
+
+    def run_isolated(self, arguments: Sequence[str], environment: Mapping[str, str]) -> CommandResult:
+        _ = environment
+        return self.run(arguments)
 
 
 def test_generated_timer_has_bounded_schedule() -> None:
@@ -118,6 +125,38 @@ def test_incompatible_path_executable_fails_before_unit_writes(tmp_path: Path) -
     lifecycle = SystemdLifecycle(paths, FakeRunner(compatible=False))
 
     # WHEN / THEN
-    with pytest.raises(RuntimeError, match="does not expose daemon run and lch"):
+    with pytest.raises(RuntimeError, match="does not expose daemon run, doctor, and lch"):
         lifecycle.install(executable)
     assert not paths.directory.exists()
+
+
+def test_subprocess_runner_is_bounded_noninteractive_and_pager_free() -> None:
+    # GIVEN
+    runner = SubprocessRunner(timeout_seconds=1)
+    command = (
+        sys.executable,
+        "-c",
+        "import json, os, sys; print(json.dumps({'stdin': sys.stdin.read(), 'env': dict(os.environ)}))",
+    )
+
+    # WHEN
+    result = runner.run_isolated(command, {"PATH": "/usr/bin", "RECOGNIZABLE": "present"})
+    payload = json.loads(result.stdout)
+
+    # THEN
+    assert payload["stdin"] == ""
+    assert payload["env"]["PAGER"] == "cat"
+    assert payload["env"]["GH_PAGER"] == "cat"
+    assert payload["env"]["GIT_PAGER"] == "cat"
+    assert payload["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    assert payload["env"]["GH_PROMPT_DISABLED"] == "1"
+    assert payload["env"]["RECOGNIZABLE"] == "present"
+
+
+def test_subprocess_runner_enforces_timeout() -> None:
+    # GIVEN
+    runner = SubprocessRunner(timeout_seconds=1)
+
+    # WHEN / THEN
+    with pytest.raises(subprocess.TimeoutExpired):
+        runner.run_isolated((sys.executable, "-c", "import time; time.sleep(2)"), {"PATH": "/usr/bin"})

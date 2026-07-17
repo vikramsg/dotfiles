@@ -19,7 +19,7 @@ from ocint.daemon.config import DaemonConfig, DaemonSettings
 from ocint.daemon.db import create_daemon_engine, current_daemon_head_revision, migrate_daemon_db
 from ocint.daemon.git import GitManager
 from ocint.daemon.github import GitHubClient, GitHubRepository, GitHubService
-from ocint.daemon.lch import lch
+from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle
 from ocint.daemon.opencode import OpenCodeClient
 from ocint.daemon.repository import ControlRepository
 from ocint.daemon.run import serve_bounded, wait_for_idle
@@ -72,6 +72,17 @@ def migrate_command(context: CliContext) -> None:
     loaded = load_daemon_config(DaemonSettings(), Path.home())
     migrate_daemon_db(loaded.config.database_path)
     context.output.write(current_daemon_head_revision(), nl=True)
+
+
+@daemon.command("doctor")
+@click.option("json_output", "--json", is_flag=True)
+@click.pass_context
+def doctor_command(click_context: click.Context, json_output: bool) -> None:
+    context = click_context.ensure_object(CliContext)
+    report = diagnose(Path.home(), SubprocessRunner(), lifecycle(Path.home()))
+    context.output.write(report.json_text() if json_output else report.human_text(), nl=False)
+    if not report.healthy:
+        click_context.exit(1)
 
 
 @daemon.command("run")

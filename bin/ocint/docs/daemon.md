@@ -1,6 +1,23 @@
 # ocint Daemon
 
 ```text
+ user systemd manager
+   |
+   | OnStartupSec=1m, then OnUnitInactiveSec=15m
+   v
+ ocint-daemon.service (one bounded invocation)
+   |
+   +-- private OpenCode server 127.0.0.1:4097
+   |
+   `-- authenticated FastAPI server 127.0.0.1:8732
+          |
+          +-- poll GitHub once
+          +-- drain accepted issue/API work
+          +-- wait for 60 seconds of unchanged idle state
+          `-- stop both servers and exit
+```
+
+```text
  operator
     |
     | ocint daemon submit
@@ -49,7 +66,7 @@
     +--> close OpenCode and SQLite resources
 ```
 
-The ocint daemon is a local FastAPI service that turns an authenticated work
+The ocint daemon is a bounded local FastAPI service that turns an authenticated work
 request into an isolated OpenCode session and, after validation, a GitHub pull
 request. Uvicorn owns the HTTP server and process signals. FastAPI lifespan owns
 application startup and shutdown.
@@ -62,16 +79,20 @@ The daemon currently supports:
 - A durable, idempotent SQLite job queue.
 - Configurable process-local execution capacity.
 - Managed Git mirrors, branches, and worktrees.
-- One shared OpenCode 1.17.20 server.
+- One invocation-owned private OpenCode 1.17.20 server. Provisioning rejects
+  every other installed version before writing managed files.
 - Configured validation commands.
 - Control-owned commit, SSH push, and GitHub pull-request creation.
 - Stage checkpoints and single-process restart recovery.
-- Graceful Uvicorn and FastAPI lifespan shutdown.
+- One GitHub issue poll per invocation, durable comment batching, and permanent
+  issue-to-session/worktree/branch/pull-request ownership.
+- A generated systemd user timer and one-shot service.
+- Graceful Uvicorn, FastAPI, and OpenCode lifespan shutdown after unchanged idle.
 
 The daemon deliberately does not implement distributed workers, database
-leases, retries, cancellation, follow-up prompts, workspace cleanup, Slack,
-browser UI, or systemd installation. Future systemd work is tracked in
-[`ROADMAP.md`](../ROADMAP.md).
+leases, generic channels/providers, an outbox, replacement pull requests,
+workspace deletion, Slack, or a browser UI. There are no credential or
+configuration compatibility fallbacks.
 
 ## Modules
 
@@ -86,7 +107,10 @@ The implementation uses a small set of deep modules:
 | `service.py` | Job models, narrow dependency protocols, capacity, execution stages, and shutdown draining |
 | `opencode.py` | OpenCode health, sessions, prompts, status, and global SSE events |
 | `git.py` | Managed mirrors/worktrees, validation processes, commits, and SSH pushes |
-| `github.py` | Idempotent pull-request lookup and creation |
+| `github/` | Issue polling, comment persistence/batching, exact issue-title PR creation, and responses |
+| `lch/provision.py` | Typed checkout, GitHub, Git, SSH, and OpenCode discovery; validated writes |
+| `lch/doctor.py` | Typed, redacted human/JSON diagnostics |
+| `lch/systemd.py` | Exact user unit generation and lifecycle commands |
 | `db/` | SQLAlchemy schema, SQLite engine policy, Alembic environment, and initial revision |
 
 The CLI is the composition root. Services depend on narrow protocols declared
@@ -95,37 +119,34 @@ clients.
 
 ## Startup
 
-Run the daemon with:
+Provision from the root of the target Git checkout:
 
 ```bash
-export OCINT_DAEMON_CONFIG="$HOME/.config/ocint/daemon.toml"
-export OCINT_DAEMON_API_TOKEN="<generated-control-token>"
-export OCINT_DAEMON_OPENCODE_PASSWORD="<OpenCode-server-password>"
-export OCINT_DAEMON_GITHUB_TOKEN="<GitHub-REST-token>"
-export SSH_AUTH_SOCK="<control-only-ssh-agent-socket>"
-
-ocint daemon run
+ocint daemon lch provision
+ocint daemon doctor
 ```
 
-`ocint daemon run` constructs the FastAPI application and calls `uvicorn.run()`.
-There is no custom server implementation or signal supervisor.
+Provision performs every discovery and validation before its first write. It
+does not call `gh auth refresh` and never starts OAuth/device flow. The timer
+later executes `ocint daemon run`, which owns both servers. There is no custom
+server implementation or signal supervisor.
 
 Before Uvicorn starts, application construction:
 
 1. Resolves and validates `daemon.toml`.
-2. Requires the API, OpenCode, and GitHub tokens.
-3. Requires `SSH_AUTH_SOCK`.
-4. Rejects repositories that do not use SSH remotes.
-5. Constructs the repository, OpenCode, Git, GitHub, and executor objects.
+2. Requires the API and GitHub tokens loaded from the mode-0600 environment file.
+3. Rejects repositories that do not use SSH remotes.
+4. Constructs the repository, private OpenCode child, Git, GitHub, and executor objects.
 
 During FastAPI lifespan startup:
 
 1. Alembic upgrades the control database to the daemon head revision.
-2. The OpenCode client starts and verifies `/global/health`.
+2. The private OpenCode child starts and the client verifies `/global/health`.
 3. The expected OpenCode version is checked exactly.
 4. Interrupted `running` jobs are returned to `queued` without losing stages.
 5. Persisted queued jobs are scheduled once.
-6. FastAPI reports lifespan startup complete, allowing Uvicorn to serve HTTP.
+6. GitHub is polled exactly once.
+7. FastAPI reports lifespan startup complete, allowing Uvicorn to serve HTTP.
 
 If migration or OpenCode health fails, lifespan startup fails and Uvicorn does
 not expose a ready API.
@@ -138,18 +159,18 @@ back to `~/.config/ocint/daemon.toml`. `OCINT_DAEMON_CONFIG` overrides it.
 The tracked example is [`config/daemon.example.toml`](../config/daemon.example.toml):
 
 ```toml
-database_path = "/var/lib/ocint-control/control.sqlite"
-mirror_root = "/var/lib/ocint-control/mirrors"
-worktree_root = "/var/lib/ocint-worktrees"
+database_path = "~/.local/state/ocint/daemon.sqlite"
+mirror_root = "~/.local/share/ocint/mirrors"
+worktree_root = "~/.local/share/ocint/worktrees"
 
 [[repositories]]
-name = "dotfiles"
-remote_url = "git@github.com:vikramsg/dotfiles.git"
+name = "repository"
+remote_url = "git@github.com:OWNER/REPOSITORY.git"
 default_branch = "main"
-github_repository = "vikramsg/dotfiles"
+github_repository = "OWNER/REPOSITORY"
 author_name = "ocint daemon"
 author_email = "ocint@example.invalid"
-actors = ["vikram_orbio_earth"]
+actors = ["GITHUB_LOGIN"]
 checks = [
   ["just", "--justfile", "bin/ocint/justfile", "check"],
   ["just", "--justfile", "bin/ocint/justfile", "test"],
@@ -163,10 +184,14 @@ command_timeout_seconds = 900
 command_output_bytes = 65536
 
 [opencode]
-server_url = "http://127.0.0.1:4096"
+server_url = "http://127.0.0.1:4097"
 username = "opencode"
 request_timeout_seconds = 30
 expected_version = "1.17.20"
+executable = "/usr/local/bin/opencode"
+config_file = "~/.config/ocint/opencode-xdg/opencode/opencode.json"
+xdg_config_home = "~/.config/ocint/opencode-xdg"
+xdg_data_home = "~/.local/share/ocint/opencode-data"
 
 [api]
 host = "127.0.0.1"
@@ -174,6 +199,13 @@ port = 8732
 
 [github]
 api_url = "https://api.github.com"
+issue_label = "ocint"
+agent_actor = "GITHUB_LOGIN"
+
+[git]
+ssh_executable = "/usr/bin/ssh"
+identity_file = "~/.ssh/project-key"
+known_hosts_file = "~/.ssh/known_hosts"
 ```
 
 ### Root Settings
@@ -192,7 +224,7 @@ Mirror and worktree roots must differ.
 | Setting | Meaning |
 | --- | --- |
 | `name` | Stable name accepted by API submissions |
-| `remote_url` | SSH remote in `git@host:path` or `ssh://host/path` form |
+| `remote_url` | SSH remote in `user@host:path` or `ssh://user@host:port/path` form |
 | `default_branch` | Base branch used for provisioning and pull requests |
 | `github_repository` | GitHub `owner/repository` used by the REST client |
 | `author_name` | Commit author name applied through `git -c user.name=...` |
@@ -223,19 +255,49 @@ lifespan startup schedules persisted incomplete jobs once.
 | --- | --- | --- |
 | `OCINT_DAEMON_CONFIG` | CLI and daemon | Explicit TOML path |
 | `OCINT_DAEMON_API_TOKEN` | API and CLI | Bearer authentication |
-| `OCINT_DAEMON_OPENCODE_PASSWORD` | OpenCode client | HTTP Basic authentication |
 | `OCINT_DAEMON_GITHUB_TOKEN` | GitHub client | Pull-request lookup and creation |
-| `SSH_AUTH_SOCK` | Network Git commands | Clone, fetch, and push authentication |
 | `PATH` | Validation and Git subprocesses | Executable discovery |
 | `LANG` or `LC_ALL` | Validation and Git subprocesses | Locale |
 
-Secrets do not belong in TOML.
+Secrets do not belong in TOML. The OpenCode password is generated per
+invocation. SSH uses the configured identity directly; `SSH_AUTH_SOCK` is not
+forwarded.
+
+Provisioning discovers configuration in this order and writes nothing until
+all checks pass:
+
+```text
+ target checkout
+   +-- isolated effective Git config --------> one push URL + owner/repository
+   +-- gh api --hostname github.com user ----> login
+   +-- gh repo view OWNER/REPOSITORY --------> canonical repo + default branch
+   +-- gh auth token --hostname github.com --> token presence/value for env only
+   +-- effective Git author -----------------> name/email
+   +-- safe core.sshCommand + ssh -G --------> executable/key/known-hosts
+   `-- XDG OpenCode config/auth -------------> model/provider + auth source
+             |
+             v
+ validate remote equality, credentials, policy, ports, paths, linger, units
+             |
+             v
+ atomically write managed files; auth remains a symlink
+```
+
+No compatibility source, default identity filename, personal login, repository,
+home path, provider, model, or provider endpoint is built into provisioning.
+All discovery subprocesses are bounded, receive closed stdin, disable prompts
+and pagers, and omit ambient Git/GitHub repository-selection overrides.
+SSH discovery carries the remote user and optional port into `ssh -G` as
+`-l <user>` and `-p <port>`, so OpenSSH `Match` rules resolve against the same
+destination Git will use.
 
 Inspect resolved non-secret configuration with:
 
 ```bash
 ocint daemon config
 ocint daemon config --path
+ocint daemon doctor
+ocint daemon doctor --json
 ```
 
 Run migration explicitly when diagnosing database setup:
@@ -279,8 +341,8 @@ Content-Type: application/json
 ```json
 {
   "idempotency_key": "daemon-bootstrap-v2-final",
-  "actor": "vikram_orbio_earth",
-  "repository": "dotfiles",
+  "actor": "maintainer",
+  "repository": "repository",
   "prompt": "Create the requested documentation file only."
 }
 ```
@@ -306,12 +368,12 @@ Status responses contain:
   "id": "77acceaee050427395b2498ec248d2b9",
   "state": "completed",
   "stage": "complete",
-  "repository": "dotfiles",
+  "repository": "project",
   "session_id": "ses_example",
-  "worktree_path": "/var/lib/ocint-worktrees/77ac...",
-  "attach_command": "opencode attach http://127.0.0.1:4096 --dir /var/lib/ocint-worktrees/77ac... --session ses_example",
+  "worktree_path": "$HOME/.local/share/ocint/worktrees/77ac...",
+  "attach_command": "opencode attach http://127.0.0.1:4097 --dir $HOME/.local/share/ocint/worktrees/77ac... --session ses_example",
   "commit_sha": "237e22e...",
-  "pull_request_url": "https://github.com/vikramsg/dotfiles/pull/185",
+  "pull_request_url": "https://github.com/OWNER/REPOSITORY/pull/PR_NUMBER",
   "error": ""
 }
 ```
@@ -320,8 +382,8 @@ The equivalent CLI commands are:
 
 ```bash
 ocint daemon health
-ocint daemon submit dotfiles "<prompt>" \
-  --actor vikram_orbio_earth \
+ocint daemon submit repository "<prompt>" \
+  --actor maintainer \
   --idempotency-key stable-key
 ocint daemon list
 ocint daemon status <job-id>
@@ -332,16 +394,18 @@ ocint daemon status <job-id>
 The control database is independent from OpenCode's database. The daemon does
 not read OpenCode's SQLite schema.
 
-Alembic owns daemon schema creation. Because the daemon schema remains
-unreleased, its complete current shape is squashed into the initial revision:
+Alembic owns daemon schema creation. The second revision preserves all existing
+job rows while adding issue tracking:
 
 ```text
 20260716_create_daemon_control
+        |
+        v
+20260717_add_github_issues
 ```
 
-Do not add a new migration until deployed databases require upgrades.
-
-The application schema contains one `job` table:
+The application schema contains the existing `job` table plus
+`github_issue` and `github_issue_comment`:
 
 | Column group | Fields |
 | --- | --- |
@@ -354,6 +418,22 @@ The application schema contains one `job` table:
 
 `ix_job_queue` indexes state and creation time. SQLite connections enable
 foreign keys, WAL mode, and a busy timeout through the daemon engine policy.
+
+```text
+ github_issue 1 ---- * github_issue_comment
+      |
+      `---- 1 permanent job
+                |
+                +-- one OpenCode session
+                +-- one worktree and branch
+                `-- at most one owned pull request
+```
+
+Human comment states are `pending`, `batched`, `addressed`, `rejected`, or
+`errored`; marker-identified daemon comments are `agent`/`ignored`. The newest
+comment in an active batch is its durable anchor. Earlier comments become
+`batched`; the complete batch becomes `addressed` only after publication and
+response persistence succeed.
 
 ## States And Stages
 
@@ -383,6 +463,17 @@ pull_request
    |
    v
 complete
+```
+
+```text
+pending comments -> persist immutable prompt -> active anchor
+       |                                      |
+       | process restart ---------------------+
+       v
+execution -> validation -> commit -> push -> PR verify/create -> response
+                                                            |
+                                                            v
+                                                 batch addressed
 ```
 
 The state and stage are intentionally separate. A restarted job can return to
@@ -426,15 +517,18 @@ git push --no-verify --set-upstream origin ocint/<job-id>
 ```
 
 Validation commands receive only `PATH`, `LANG`, and `CI=1`. Local Git commands
-receive `GIT_TERMINAL_PROMPT=0` but no publication credential. Only network Git
-clone, fetch, and push receive the explicit `SSH_AUTH_SOCK`. GitHub REST tokens
-are never placed in any subprocess environment.
+receive `GIT_TERMINAL_PROMPT=0`. Network Git uses `BatchMode=yes`,
+`IdentitiesOnly=yes`, the discovered identity, the discovered known-hosts file,
+and strict host-key checking. GitHub REST tokens are never placed in any
+subprocess environment, and no SSH agent fallback exists.
 
 ## OpenCode Integration
 
-OpenCode runs as a separate loopback service with
-`OPENCODE_SERVER_PASSWORD`. The daemon authenticates with HTTP Basic auth using
-the configured username and `OCINT_DAEMON_OPENCODE_PASSWORD`.
+Each invocation starts OpenCode on private loopback port 4097 with an ephemeral
+`OPENCODE_SERVER_PASSWORD`. The password is never persisted. Its allowlisted
+environment points at isolated XDG config/data directories. The original
+mode-0600 OpenCode auth file remains the source of truth and is symlinked into
+the isolated data directory; it is never copied.
 
 The daemon uses these OpenCode 1.17.20 operations:
 
@@ -463,7 +557,13 @@ while the session remains busy reconnects until the request timeout; it never
 advances the job as completed.
 
 OpenCode configuration must deny shell and publication network tools. The
-tracked policy is [`config/opencode.daemon.json`](../config/opencode.daemon.json).
+tracked policy is [`config/opencode.daemon.json`](../config/opencode.daemon.json),
+the sole authoritative static policy. A tracked package symlink points to that
+source; Hatchling dereferences it into the wheel as byte-identical
+`ocint/daemon/opencode.daemon.json`, and runtime loads only that
+`importlib.resources` resource. Provision preserves that policy and adds only the
+selected model/provider's safe typed fields and the resolved worktree allow
+rule. Provider secrets are not copied.
 OpenCode must not receive `SSH_AUTH_SOCK`, the GitHub token, or the daemon API
 token.
 
@@ -488,10 +588,15 @@ POST /repos/<owner>/<repository>/pulls
 {
   "head": "ocint/<job-id>",
   "base": "main",
-  "title": "ocint: complete job <job-id>",
+  "title": "<persisted GitHub issue title, byte-for-byte>",
   "body": "Automated by ocint daemon."
 }
 ```
+
+The initial pull request title is exactly the persisted issue title. Generic
+executor titles are ignored for issue-owned publication. Follow-ups push the
+same branch and reuse the same open PR; a closed or merged PR is reported on
+the issue and is never replaced.
 
 `OCINT_DAEMON_GITHUB_TOKEN` requires pull-request read/write access to configured
 repositories. It is used only by the GitHub HTTP client. SSH authenticates Git
@@ -502,12 +607,20 @@ clone, fetch, and push.
 | Credential | API | OpenCode | Validation | Git | GitHub REST |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Daemon API token | yes | no | no | no | no |
-| OpenCode password | client only | server counterpart | no | no | no |
-| SSH agent socket | no | no | no | yes | no |
+| Ephemeral OpenCode password | client only | server counterpart | no | no | no |
+| SSH identity file | no | no | no | network Git only | no |
 | GitHub token | no | no | no | no | yes |
 
 The daemon is an orchestration boundary, not an operating-system sandbox.
 Worktrees isolate concurrent Git changes but do not isolate untrusted code.
+
+```text
+ daemon.env: API token --------> FastAPI only
+ daemon.env: GitHub token -----> GitHub HTTP client only
+ auth.json symlink ------------> isolated OpenCode only
+ SSH identity + known_hosts ---> network Git only
+ ephemeral password -----------> daemon <-> child OpenCode
+```
 
 ## Failure Handling
 
@@ -547,8 +660,10 @@ multiple daemon processes sharing one database.
 
 ## Shutdown
 
-Shutdown occurs when Uvicorn receives `Ctrl-C`, `SIGTERM`, or a process-manager
-stop. It does not occur after a request, after a job, or when the daemon is idle.
+Shutdown occurs after the executor is idle for 60 seconds without an activity
+generation change, or when Uvicorn receives `SIGTERM`/a process-manager stop.
+Accepted API or GitHub work changes the generation; health, list, and status
+reads do not.
 
 The sequence is:
 
@@ -558,8 +673,20 @@ The sequence is:
 4. Active jobs may finish for `shutdown_timeout_seconds`.
 5. Remaining asyncio tasks are cancelled.
 6. Cancelled running jobs are returned to `queued` at their current stage.
-7. The OpenCode HTTP session closes.
-8. The SQLAlchemy engine is disposed.
+7. The OpenCode HTTP session closes and the child receives terminate.
+8. The child is killed only if its shutdown timeout expires.
+9. The SQLAlchemy engine is disposed.
+
+```text
+wait executor idle -> snapshot generation -> sleep 60s
+       ^                                      |
+       | accepted work changed generation? ---+
+       |
+       ` no change and still idle -> request Uvicorn shutdown
+                                      |
+                                      v
+                         drain -> close clients -> stop OpenCode
+```
 
 A hard process kill cannot run lifespan cleanup. The next startup still
 reconciles any job left in `running`.
@@ -595,45 +722,59 @@ just --justfile bin/ocint/justfile test
 just --justfile bin/ocint/justfile smoke
 ```
 
-## Real Acceptance
+## systemd Lifecycle And Cleanup
 
-The V2 acceptance run used the committed daemon implementation, a new retained
-SQLite database, a real OpenCode 1.17.20 server, the configured SSH remote, and
-the GitHub API.
+`ocint daemon lch provision` generates exactly one timer and one service. The
+timer's `OnStartupSec=1m` is relative to the user manager start, not wall-clock
+boot. `OnUnitInactiveSec=15m` starts the next invocation after the previous
+service becomes inactive. `enable --now` means reinstalling the timer can cause
+an immediate trigger when the startup deadline has already elapsed.
 
-```text
-Implementation commit: c8367b4
-Job:                  77acceaee050427395b2498ec248d2b9
-Session:              ses_090b5db38ffe7uEGQ5tanMJ4mC
-Commit:               237e22e017da19a21112a0e4c46a243c83c2647a
-Pull request:          https://github.com/vikramsg/dotfiles/pull/185
-Evidence database:    /tmp/opencode/ocint-daemon-acceptance-v2-c8367b4/control/control.sqlite
-```
-
-The pull request targeted `main`, changed only
-`bin/ocint/DAEMON_ACCEPTANCE_V2.md`, and contained exactly:
+`ocint daemon lch uninstall` disables/stops the units, removes only the two unit
+files, and reloads systemd. It preserves configuration, environment, auth link,
+database, mirrors, and worktrees. Full manual cleanup may remove managed config,
+mirrors, and worktrees after inspection, but the database must be preserved
+unless an operator separately backs it up and deliberately manages retention.
 
 ```text
-daemon-bootstrap-v2: accepted
+bin/ocint/config/opencode.daemon.json -> packaged static policy
+bin/ocint/config/daemon.example.toml  -> generic schema example
+bin/ocint/docs/daemon.md              -> architecture/reference
+bin/ocint/docs/daemon/workflow.md     -> from-scratch operations
+ocint/daemon/lch/provision.py         -> discovery + writes
+ocint/daemon/lch/doctor.py            -> redacted diagnostics
 ```
-
-Submitting the same idempotency key again returned the same job, session,
-commit, and pull request. Uvicorn was then stopped with `Ctrl-C`, which invoked
-FastAPI lifespan shutdown; the API and OpenCode test ports closed and the
-database remained available for inspection.
 
 ## Troubleshooting
 
 ### API does not become ready
 
-Check OpenCode health and version:
+Run the complete diagnostic and inspect service logs:
 
 ```bash
-curl --fail --user "opencode:$OPENCODE_SERVER_PASSWORD" \
-  http://127.0.0.1:4096/global/health
+ocint daemon doctor
+ocint daemon lch logs --lines 200
 ```
 
-Confirm all required environment variables and `SSH_AUTH_SOCK` are present.
+The private password is ephemeral and intentionally unavailable to shell
+diagnostics. Startup allows 120 seconds for OpenCode health/version readiness.
+
+### Provision asks for OAuth or device login
+
+Stop. Provision must call only `gh auth token --hostname github.com`; it must
+never refresh auth. Authenticate `gh` separately before retrying.
+
+### Port conflict
+
+The interactive OpenCode default often occupies 4096; that is independent.
+The daemon requires private 4097 and API 8732. Stop the unexpected listener or
+change the typed daemon API setting before provisioning. Doctor reports both.
+
+### OpenCode reports a database lock
+
+Confirm the service uses its isolated `xdg_data_home` and that the managed
+`auth.json` is a symlink to the source auth file. It must not use the interactive
+OpenCode database directory.
 
 ### Submission returns 403
 
@@ -647,12 +788,20 @@ validation fails.
 
 ### Git authentication fails
 
-Confirm the agent contains an identity and the remote is reachable:
+Inspect the effective SSH values with `ocint daemon doctor`. Provision derives
+them from safe Git configuration and `ssh -G`; exactly one existing user-owned
+mode-0600 identity and one readable known-hosts file must survive filtering.
 
 ```bash
-ssh-add -l
-git ls-remote git@github.com:vikramsg/dotfiles.git refs/heads/main
+GIT_SSH_COMMAND='/usr/bin/ssh -o BatchMode=yes' \
+  git ls-remote git@github.com:OWNER/REPOSITORY.git refs/heads/main
 ```
+
+### Journald cannot be read
+
+Use `ocint daemon lch logs` as the same user that owns the user manager. Check
+user journal permissions and that `systemctl --user` reaches that manager; do
+not switch the service to a system unit as a workaround.
 
 ### Job remains queued after restart
 

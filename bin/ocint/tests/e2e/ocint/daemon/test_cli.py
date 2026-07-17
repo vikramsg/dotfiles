@@ -181,6 +181,7 @@ host = "127.0.0.1"
 port = {api_port}
 [github]
 api_url = "http://127.0.0.1:{github_port}"
+agent_actor = "automation-bot"
 '''
     )
     settings = DaemonSettings(
@@ -275,5 +276,5 @@ def test_provision_rejects_incompatible_path_binary_before_writes(
     # THEN
     assert result.exit_code != 0
     assert isinstance(result.exception, RuntimeError)
-    assert "does not expose daemon run and lch" in str(result.exception)
+    assert "does not expose daemon run, doctor, and lch" in str(result.exception)
     assert not (config_home / "ocint").exists()
