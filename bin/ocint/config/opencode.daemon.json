@@ -1,6 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled",
+  "instructions": [],
+  "plugin": [],
+  "agent": {},
+  "lsp": false,
+  "formatter": false,
   "permission": {
     "read": "allow",
     "edit": "allow",
@@ -8,8 +13,7 @@
     "grep": "allow",
     "list": "allow",
     "external_directory": {
-      "*": "deny",
-      "/var/lib/ocint-worktrees/**": "allow"
+      "*": "deny"
     },
     "webfetch": "deny",
     "websearch": "deny",

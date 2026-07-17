@@ -14,7 +14,7 @@ traceability.
 - Local checkout used for source reads:
   `/tmp/research-opencode-anomalyco-20260702`
 - Local database queried read-only:
-  `/home/vikram_orbio_earth/.local/share/opencode/opencode.db`
+  `$HOME/.local/share/opencode/opencode.db`
 
 ## Fork Flow
 

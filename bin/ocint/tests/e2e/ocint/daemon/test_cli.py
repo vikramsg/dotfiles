@@ -10,6 +10,8 @@ import aiohttp
 import pytest
 import uvicorn
 from aiohttp import web
+from click.testing import CliRunner
+from ocint.cli import main
 from ocint.daemon.cli import create_daemon_app
 from ocint.daemon.config import DaemonSettings
 from pydantic import SecretStr
@@ -91,7 +93,12 @@ async def test_production_composition_completes_job_through_api(
         if request.method == "GET":
             return web.json_response([])
         state.pull_requests_created += 1
-        return web.json_response({"html_url": "https://example.test/pull/1"})
+        return web.json_response(
+            {"number": 1, "html_url": "https://example.test/pull/1", "state": "open", "merged": False}
+        )
+
+    async def github_issues(_request: web.Request) -> web.Response:
+        return web.json_response([])
 
     opencode_app = web.Application()
     opencode_app.router.add_get("/global/health", opencode_health)
@@ -106,6 +113,7 @@ async def test_production_composition_completes_job_through_api(
     await web.TCPSite(opencode_runner, "127.0.0.1", opencode_port).start()
 
     github_app = web.Application()
+    github_app.router.add_get("/repos/owner/repo/issues", github_issues)
     github_app.router.add_get("/repos/owner/repo/pulls", github_pulls)
     github_app.router.add_post("/repos/owner/repo/pulls", github_pulls)
     github_runner = web.AppRunner(github_app)
@@ -131,6 +139,14 @@ async def test_production_composition_completes_job_through_api(
     ssh = transport / "ssh"
     ssh.write_text('#!/bin/sh\nfor argument do command="$argument"; done\nexec sh -c "$command"\n')
     ssh.chmod(0o755)
+    opencode = transport / "opencode"
+    opencode.write_text("#!/bin/sh\nexec /bin/sleep 30\n")
+    opencode.chmod(0o755)
+    identity = tmp_path / "identity"
+    identity.write_text("test identity\n")
+    identity.chmod(0o600)
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("example test-key\n")
     config = tmp_path / "daemon.toml"
     config.write_text(
         f'''database_path = "{tmp_path / "control.sqlite"}"
@@ -152,21 +168,28 @@ server_url = "http://127.0.0.1:{opencode_port}"
 username = "opencode"
 request_timeout_seconds = 2
 expected_version = "1.17.20"
+executable = "{opencode}"
+config_file = "{tmp_path / "opencode.json"}"
+xdg_config_home = "{tmp_path / "opencode-xdg"}"
+xdg_data_home = "{tmp_path / "opencode-data"}"
+[git]
+ssh_executable = "{ssh}"
+identity_file = "{identity}"
+known_hosts_file = "{known_hosts}"
 [api]
 host = "127.0.0.1"
 port = {api_port}
 [github]
 api_url = "http://127.0.0.1:{github_port}"
+agent_actor = "automation-bot"
 '''
     )
     settings = DaemonSettings(
         config=config,
         api_token=SecretStr("api-token"),
-        opencode_password=SecretStr("opencode-password"),
         github_token=SecretStr("github-token"),
         execution_path=f"{transport}:{os.environ['PATH']}",
         execution_lang="C.UTF-8",
-        ssh_auth_sock="/tmp/test-agent",
     )
     app, _loaded = create_daemon_app(settings, tmp_path)
     server = SignalFreeServer(
@@ -218,3 +241,40 @@ api_url = "http://127.0.0.1:{github_port}"
     assert remote_commit == completed["commit_sha"]
     await github_runner.cleanup()
     await opencode_runner.cleanup()
+
+
+def test_lch_provision_is_discoverable() -> None:
+    # GIVEN
+    runner = CliRunner()
+
+    # WHEN
+    result = runner.invoke(main, ["daemon", "lch", "--help"])
+
+    # THEN
+    assert result.exit_code == 0
+    assert "provision" in result.output
+    assert "install" in result.output
+
+
+def test_provision_rejects_incompatible_path_binary_before_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GIVEN
+    binary_directory = tmp_path / "bin"
+    binary_directory.mkdir()
+    executable = binary_directory / "ocint"
+    executable.write_text("#!/bin/sh\nprintf 'Commands:\\n  config\\n'\n")
+    executable.chmod(0o755)
+    config_home = tmp_path / "xdg-config"
+    monkeypatch.setenv("PATH", str(binary_directory))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    runner = CliRunner()
+
+    # WHEN
+    result = runner.invoke(main, ["daemon", "lch", "provision"])
+
+    # THEN
+    assert result.exit_code != 0
+    assert isinstance(result.exception, RuntimeError)
+    assert "does not expose daemon run, doctor, and lch" in str(result.exception)
+    assert not (config_home / "ocint").exists()

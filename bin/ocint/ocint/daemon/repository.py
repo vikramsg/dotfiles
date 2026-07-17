@@ -97,8 +97,8 @@ class ControlRepository:
                 columns["stage"] = stage.value
             case CommitCheckpoint(sha=sha):
                 columns.update(commit_sha=sha, stage=JobStage.PUSH.value)
-            case PushCheckpoint():
-                columns.update(pushed=1, stage=JobStage.PULL_REQUEST.value)
+            case PushCheckpoint(revision=revision):
+                columns.update(pushed=1, stage=JobStage.PULL_REQUEST.value, base_revision=revision)
             case PullRequestCheckpoint(url=url):
                 columns["pull_request_url"] = url
         with self.engine.begin() as connection:
@@ -139,6 +139,25 @@ class ControlRepository:
                 .values(state=JobState.QUEUED.value, updated_at=datetime.now(UTC).isoformat())
             )
             return result.rowcount
+
+    def reset(self, job_id: str, prompt: str) -> Job:
+        with self.engine.begin() as connection:
+            connection.execute(
+                update(job)
+                .where(job.c.id == job_id)
+                .values(
+                    prompt=prompt,
+                    state=JobState.QUEUED.value,
+                    stage=JobStage.EXECUTION.value,
+                    prompt_intended=0,
+                    prompt_submitted=0,
+                    commit_sha="",
+                    pushed=0,
+                    error="",
+                    updated_at=datetime.now(UTC).isoformat(),
+                )
+            )
+        return self.get(job_id)
 
     def get(self, job_id: str) -> Job:
         with self.engine.connect() as connection:

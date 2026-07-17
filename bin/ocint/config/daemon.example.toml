@@ -1,15 +1,16 @@
-database_path = "/var/lib/ocint-control/control.sqlite"
-mirror_root = "/var/lib/ocint-control/mirrors"
-worktree_root = "/var/lib/ocint-worktrees"
+database_path = "~/.local/state/ocint/daemon.sqlite"
+mirror_root = "~/.local/share/ocint/mirrors"
+worktree_root = "~/.local/share/ocint/worktrees"
+idle_timeout_seconds = 60
 
 [[repositories]]
-name = "dotfiles"
-remote_url = "git@github.com:vikramsg/dotfiles.git"
+name = "repository"
+remote_url = "git@github.com:OWNER/REPOSITORY.git"
 default_branch = "main"
-github_repository = "vikramsg/dotfiles"
+github_repository = "OWNER/REPOSITORY"
 author_name = "ocint daemon"
 author_email = "ocint@example.invalid"
-actors = ["vikram_orbio_earth"]
+actors = ["GITHUB_LOGIN"]
 checks = [["just", "--justfile", "bin/ocint/justfile", "check"], ["just", "--justfile", "bin/ocint/justfile", "test"]]
 
 [scheduler]
@@ -17,10 +18,16 @@ capacity = 2
 job_timeout_seconds = 3600
 
 [opencode]
-server_url = "http://127.0.0.1:4096"
+server_url = "http://127.0.0.1:4097"
 username = "opencode"
 request_timeout_seconds = 30
 expected_version = "1.17.20"
+executable = "/usr/bin/opencode"
+config_file = "~/.config/ocint/opencode-xdg/opencode/opencode.json"
+xdg_config_home = "~/.config/ocint/opencode-xdg"
+xdg_data_home = "~/.local/share/ocint/opencode-data"
+startup_timeout_seconds = 120
+shutdown_timeout_seconds = 10
 
 [api]
 host = "127.0.0.1"
@@ -28,3 +35,10 @@ port = 8732
 
 [github]
 api_url = "https://api.github.com"
+issue_label = "ocint"
+agent_actor = "GITHUB_LOGIN"
+
+[git]
+ssh_executable = "/usr/bin/ssh"
+identity_file = "~/.ssh/id_ed25519"
+known_hosts_file = "~/.ssh/known_hosts"

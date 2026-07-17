@@ -101,8 +101,10 @@ class StatefulJobStore:
                 updated = job.model_copy(update={"stage": stage})
             case CommitCheckpoint(sha=sha):
                 updated = job.model_copy(update={"stage": JobStage.PUSH, "commit_sha": sha})
-            case PushCheckpoint():
-                updated = job.model_copy(update={"stage": JobStage.PULL_REQUEST, "pushed": True})
+            case PushCheckpoint(revision=revision):
+                updated = job.model_copy(
+                    update={"stage": JobStage.PULL_REQUEST, "pushed": True, "base_revision": revision}
+                )
             case PullRequestCheckpoint(url=url):
                 updated = job.model_copy(update={"stage": JobStage.COMPLETE, "pull_request_url": url})
         self.save(updated)
@@ -129,6 +131,13 @@ class StatefulJobStore:
                 reconciled += 1
         self.reconciled += reconciled
         return reconciled
+
+    def reset(self, job_id: str, prompt: str) -> Job:
+        job = self.get(job_id).model_copy(
+            update={"prompt": prompt, "state": JobState.QUEUED, "stage": JobStage.EXECUTION}
+        )
+        self.save(job)
+        return job
 
     def save(self, updated: Job) -> None:
         for index, job in enumerate(self.jobs):
@@ -159,8 +168,8 @@ class StatefulOpenCode:
         _ = (directory, session_id, text)
         self.calls.append("prompt")
 
-    async def wait_idle(self, directory: Path, session_id: str) -> None:
-        _ = (directory, session_id)
+    async def wait_for_completion(self, directory: Path, session_id: str, text: str) -> None:
+        _ = (directory, session_id, text)
         self.calls.append("wait")
         if self.block_wait:
             await self.wait_gate.wait()
@@ -240,6 +249,17 @@ def daemon_config(tmp_path: Path) -> DaemonConfig:
                 }
             ],
             "scheduler": {"capacity": 2, "job_timeout_seconds": 1, "shutdown_timeout_seconds": 1},
+            "opencode": {
+                "config_file": tmp_path / "opencode-xdg" / "opencode" / "opencode.json",
+                "xdg_config_home": tmp_path / "opencode-xdg",
+                "xdg_data_home": tmp_path / "data",
+            },
+            "git": {
+                "ssh_executable": tmp_path / "ssh",
+                "identity_file": tmp_path / "identity",
+                "known_hosts_file": tmp_path / "known_hosts",
+            },
+            "github": {"agent_actor": "maintainer"},
         }
     )
 
@@ -326,6 +346,7 @@ async def test_executor_runs_every_stage_and_persists_result(
     assert completed.worktree_path == tmp_path / "worktrees" / job.id
     assert isinstance(completed.worktree_path, Path)
     assert completed.commit_sha == "commit-sha"
+    assert completed.base_revision == "commit-sha"
     assert completed.pull_request_url == "https://example.test/pull/1"
 
 

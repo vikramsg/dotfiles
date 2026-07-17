@@ -63,30 +63,116 @@ class StatusPayload(BaseModel):
 
 class OpenCodeClient:
     def __init__(
-        self, server_url: str, username: str, password: str, timeout_seconds: int, expected_version: str
+        self,
+        server_url: str,
+        username: str,
+        password: str,
+        request_timeout_seconds: int,
+        execution_timeout_seconds: int,
+        expected_version: str,
+        executable: Path,
+        config_file: Path,
+        xdg_config_home: Path,
+        xdg_data_home: Path,
+        startup_timeout_seconds: int,
+        shutdown_timeout_seconds: int,
+        process_path: str,
+        process_lang: str,
     ) -> None:
         self.server_url = server_url.rstrip("/")
+        self.username = username
+        self.password = password
         token = base64.b64encode(f"{username}:{password}".encode()).decode()
         self.headers = {"Authorization": f"Basic {token}"}
-        self.timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        self.timeout_seconds = timeout_seconds
+        self.request_timeout = aiohttp.ClientTimeout(total=request_timeout_seconds)
+        self.request_timeout_seconds = request_timeout_seconds
+        self.execution_timeout_seconds = execution_timeout_seconds
         self.expected_version = expected_version
+        self.executable = executable
+        self.config_file = config_file
+        self.xdg_config_home = xdg_config_home
+        self.xdg_data_home = xdg_data_home
+        self.startup_timeout_seconds = startup_timeout_seconds
+        self.shutdown_timeout_seconds = shutdown_timeout_seconds
+        self.process_path = process_path
+        self.process_lang = process_lang
         self.client: aiohttp.ClientSession | None = None
-        self.prompt_texts: dict[tuple[str, str], str] = {}
+        self.process: asyncio.subprocess.Process | None = None
 
     async def start(self) -> None:
-        self.client = aiohttp.ClientSession(headers=self.headers, timeout=self.timeout)
-        async with self.client.get(f"{self.server_url}/global/health") as response:
-            await self._raise(response)
-            health = HealthPayload.model_validate(await response.json())
+        port = self.server_url.rsplit(":", maxsplit=1)[-1]
+        isolated_home = self.xdg_config_home / "home"
+        isolated_state = self.xdg_config_home / "state"
+        isolated_cache = self.xdg_config_home / "cache"
+        for path in (isolated_home, isolated_state, isolated_cache):
+            path.mkdir(parents=True, exist_ok=True)
+            path.chmod(0o700)
+        self.process = await asyncio.create_subprocess_exec(
+            *self.serve_arguments(port),
+            env=self.child_environment(),
+            stdin=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        self.client = aiohttp.ClientSession(headers=self.headers, timeout=self.request_timeout)
+        try:
+            async with asyncio.timeout(self.startup_timeout_seconds):
+                while True:
+                    if self.process.returncode is not None:
+                        raise RuntimeError(f"OpenCode exited during startup ({self.process.returncode})")
+                    try:
+                        async with self.client.get(f"{self.server_url}/global/health") as response:
+                            await self._raise(response)
+                            health = HealthPayload.model_validate(await response.json())
+                        break
+                    except aiohttp.ClientError, RuntimeError, TimeoutError:
+                        await asyncio.sleep(0.1)
+        except TimeoutError:
+            await self.close()
+            raise RuntimeError("OpenCode did not become healthy before startup timeout") from None
         if not health.healthy or health.version != self.expected_version:
+            await self.close()
             raise RuntimeError(
                 f"OpenCode version mismatch: expected {self.expected_version}, received {health.version}"
             )
 
+    def child_environment(self) -> Mapping[str, str]:
+        config_home = self.xdg_config_home.expanduser().resolve()
+        return {
+            "HOME": str(config_home / "home"),
+            "PATH": self.process_path,
+            "LANG": self.process_lang,
+            "OPENCODE_CONFIG": str(self.config_file.expanduser().resolve()),
+            "XDG_CONFIG_HOME": str(config_home),
+            "XDG_DATA_HOME": str(self.xdg_data_home.expanduser().resolve()),
+            "XDG_STATE_HOME": str(config_home / "state"),
+            "XDG_CACHE_HOME": str(config_home / "cache"),
+            "OPENCODE_SERVER_PASSWORD": self.password,
+            "OPENCODE_SERVER_USERNAME": self.username,
+        }
+
+    def serve_arguments(self, port: str) -> list[str]:
+        return [
+            str(self.executable),
+            "serve",
+            "--hostname",
+            "127.0.0.1",
+            "--port",
+            port,
+            "--print-logs",
+            "--pure",
+        ]
+
     async def close(self) -> None:
         if self.client is not None:
             await self.client.close()
+        if self.process is not None and self.process.returncode is None:
+            self.process.terminate()
+            try:
+                async with asyncio.timeout(self.shutdown_timeout_seconds):
+                    await self.process.wait()
+            except TimeoutError:
+                self.process.kill()
+                await self.process.wait()
 
     async def create(self, directory: Path, identity: str) -> str:
         async with self._client().get(f"{self.server_url}/session", headers=self._directory(directory)) as response:
@@ -102,7 +188,6 @@ class OpenCodeClient:
             return SessionPayload.model_validate(await response.json()).id
 
     async def observe_prompt(self, directory: Path, session_id: str, text: str) -> PromptObservation:
-        self.prompt_texts[self._prompt_key(directory, session_id)] = text
         messages = await self._messages(directory, session_id)
         found_at = self._managed_prompt_index(messages, text)
         assistant_completed = found_at is not None and self._terminal_assistant_after(messages, found_at)
@@ -111,7 +196,6 @@ class OpenCodeClient:
         return PromptObservation(found=found_at is not None, completed=completed)
 
     async def prompt(self, directory: Path, session_id: str, text: str) -> None:
-        self.prompt_texts[self._prompt_key(directory, session_id)] = text
         async with self._client().post(
             f"{self.server_url}/session/{quote(session_id, safe='')}/prompt_async",
             headers=self._directory(directory),
@@ -119,36 +203,33 @@ class OpenCodeClient:
         ) as response:
             await self._raise(response)
 
-    async def wait_idle(self, directory: Path, session_id: str) -> None:
-        self._bound_prompt(directory, session_id)
+    async def wait_for_completion(self, directory: Path, session_id: str, text: str) -> None:
         try:
-            async with asyncio.timeout(self.timeout_seconds):
-                if await self._confirmed_idle(directory, session_id):
-                    return
+            async with asyncio.timeout(self.execution_timeout_seconds):
                 while True:
-                    async for event_type, event_session, status in self._events(directory, session_id):
+                    if (await self.observe_prompt(directory, session_id, text)).completed:
+                        return
+                    async for event_type, event_session, status in self._events(directory, session_id, text):
                         if event_session and event_session != session_id:
                             continue
                         if event_type.startswith("permission"):
                             raise PermissionError("OpenCode requested an unapproved permission")
                         if event_type == "session.idle" or (event_type == "session.status" and status == "idle"):
-                            if await self._bound_prompt_completed(directory, session_id):
-                                return
                             break
-                    if await self._confirmed_idle(directory, session_id):
+                    if (await self.observe_prompt(directory, session_id, text)).completed:
                         return
                     await asyncio.sleep(0.1)
         except TimeoutError:
-            raise RuntimeError(f"OpenCode session {session_id} did not become idle") from None
+            raise RuntimeError(f"OpenCode session {session_id} did not complete the submitted prompt") from None
 
-    async def _events(self, directory: Path, session_id: str) -> AsyncIterator[tuple[str, str, str]]:
-        timeout = aiohttp.ClientTimeout(total=None, sock_connect=self.timeout.total, sock_read=None)
+    async def _events(self, directory: Path, session_id: str, text: str) -> AsyncIterator[tuple[str, str, str]]:
+        timeout = aiohttp.ClientTimeout(total=None, sock_connect=self.request_timeout_seconds, sock_read=None)
         expected_directory = str(directory.resolve())
         async with self._client().get(
             f"{self.server_url}/global/event", headers={"Accept": "text/event-stream"}, timeout=timeout
         ) as response:
             await self._raise(response)
-            if await self._confirmed_idle(directory, session_id):
+            if (await self.observe_prompt(directory, session_id, text)).completed:
                 yield ("session.idle", session_id, "idle")
                 return
             async for raw in response.content:
@@ -183,25 +264,12 @@ class OpenCodeClient:
         status = statuses.get(session_id)
         return status.type if status is not None else None
 
-    async def _confirmed_idle(self, directory: Path, session_id: str) -> bool:
-        status = await self._status(directory, session_id)
-        if status not in {None, "idle"}:
-            return False
-        return await self._bound_prompt_completed(directory, session_id)
-
-    async def _bound_prompt_completed(self, directory: Path, session_id: str) -> bool:
-        return await self._prompt_completed(directory, session_id, self._bound_prompt(directory, session_id))
-
-    def _bound_prompt(self, directory: Path, session_id: str) -> str:
-        text = self.prompt_texts.get(self._prompt_key(directory, session_id))
-        if text is None:
-            raise RuntimeError(f"managed prompt is not bound for OpenCode session {session_id}")
-        return text
-
-    async def _prompt_completed(self, directory: Path, session_id: str, text: str) -> bool:
-        messages = await self._messages(directory, session_id)
-        found_at = self._managed_prompt_index(messages, text)
-        return found_at is not None and self._terminal_assistant_after(messages, found_at)
+    async def _messages(self, directory: Path, session_id: str) -> tuple[MessagePayload, ...]:
+        async with self._client().get(
+            f"{self.server_url}/session/{quote(session_id, safe='')}/message", headers=self._directory(directory)
+        ) as response:
+            await self._raise(response)
+            return TypeAdapter(tuple[MessagePayload, ...]).validate_python(await response.json())
 
     def _managed_prompt_index(self, messages: tuple[MessagePayload, ...], text: str) -> int | None:
         latest_user = next(
@@ -225,16 +293,6 @@ class OpenCodeClient:
             and message.info.error is None
             for message in messages[found_at + 1 :]
         )
-
-    async def _messages(self, directory: Path, session_id: str) -> tuple[MessagePayload, ...]:
-        async with self._client().get(
-            f"{self.server_url}/session/{quote(session_id, safe='')}/message", headers=self._directory(directory)
-        ) as response:
-            await self._raise(response)
-            return TypeAdapter(tuple[MessagePayload, ...]).validate_python(await response.json())
-
-    def _prompt_key(self, directory: Path, session_id: str) -> tuple[str, str]:
-        return (str(directory.resolve()), session_id)
 
     def _directory(self, directory: Path) -> dict[str, str]:
         return {"x-opencode-directory": str(directory.resolve()), "Content-Type": "application/json"}

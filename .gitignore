@@ -17,5 +17,8 @@ __pycache__
 # Local Harlequin database client config may contain secrets.
 harlequin/config.toml
 
+# Daemon tokens are local; keep the documented example.
+bin/ocint/config/daemon.env
+
 # Vite
 .vite

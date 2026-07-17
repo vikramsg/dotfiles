@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,10 +43,21 @@ class SchedulerConfig(BaseModel):
 class OpenCodeConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    server_url: HttpUrl = HttpUrl("http://127.0.0.1:4096")
+    server_url: HttpUrl = HttpUrl("http://127.0.0.1:4097")
     username: str = "opencode"
     request_timeout_seconds: int = Field(default=30, ge=1)
-    expected_version: str = "1.17.20"
+    expected_version: Literal["1.17.20"] = "1.17.20"
+    executable: Path = Path("/usr/bin/opencode")
+    config_file: Path
+    xdg_config_home: Path
+    xdg_data_home: Path
+    startup_timeout_seconds: int = Field(default=120, ge=1)
+    shutdown_timeout_seconds: int = Field(default=10, ge=1)
+
+    @field_validator("executable", "config_file", "xdg_config_home", "xdg_data_home")
+    @classmethod
+    def expand_path(cls, value: Path) -> Path:
+        return value.expanduser().resolve()
 
 
 class ApiConfig(BaseModel):
@@ -59,6 +71,21 @@ class GitHubConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     api_url: HttpUrl = HttpUrl("https://api.github.com")
+    issue_label: str = "ocint"
+    agent_actor: str
+
+
+class GitConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    ssh_executable: Path
+    identity_file: Path
+    known_hosts_file: Path
+
+    @field_validator("ssh_executable", "identity_file", "known_hosts_file")
+    @classmethod
+    def expand_path(cls, value: Path) -> Path:
+        return value.expanduser().resolve()
 
 
 class DaemonConfig(BaseModel):
@@ -67,11 +94,18 @@ class DaemonConfig(BaseModel):
     database_path: Path
     mirror_root: Path
     worktree_root: Path
-    repositories: tuple[RepositoryConfig, ...]
+    repositories: tuple[RepositoryConfig, ...] = Field(min_length=1)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     github: GitHubConfig = Field(default_factory=GitHubConfig)
+    git: GitConfig
+    idle_timeout_seconds: int = Field(default=60, ge=1)
+
+    @field_validator("database_path", "mirror_root", "worktree_root")
+    @classmethod
+    def expand_path(cls, value: Path) -> Path:
+        return value.expanduser().resolve()
 
     @model_validator(mode="after")
     def validate_registry_and_roots(self) -> DaemonConfig:
@@ -94,14 +128,12 @@ class DaemonSettings(BaseSettings):
 
     config: Path | None = Field(default=None, validation_alias="OCINT_DAEMON_CONFIG")
     api_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_API_TOKEN")
-    opencode_password: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_OPENCODE_PASSWORD")
     github_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_GITHUB_TOKEN")
     xdg_config_home: Path | None = Field(
         default=None, validation_alias=AliasChoices("XDG_CONFIG_HOME", "OCINT_DAEMON_XDG_CONFIG_HOME")
     )
     execution_path: str = Field(default="/usr/local/bin:/usr/bin:/bin", validation_alias="PATH")
     execution_lang: str = Field(default="C.UTF-8", validation_alias=AliasChoices("LANG", "LC_ALL"))
-    ssh_auth_sock: str = Field(default="", validation_alias="SSH_AUTH_SOCK")
 
     def config_path(self, home: Path) -> Path:
         if self.config is not None:

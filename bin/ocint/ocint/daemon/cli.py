@@ -1,6 +1,7 @@
 import asyncio
 import getpass
 import json
+import secrets
 import tomllib
 import uuid
 from collections.abc import AsyncIterator, Mapping
@@ -9,7 +10,6 @@ from pathlib import Path
 
 import aiohttp
 import click
-import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
 
@@ -18,9 +18,11 @@ from ocint.daemon.api import create_api_router
 from ocint.daemon.config import DaemonConfig, DaemonSettings
 from ocint.daemon.db import create_daemon_engine, current_daemon_head_revision, migrate_daemon_db
 from ocint.daemon.git import GitManager
-from ocint.daemon.github import GitHubClient
+from ocint.daemon.github import GitHubClient, GitHubRepository, GitHubService
+from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle
 from ocint.daemon.opencode import OpenCodeClient
 from ocint.daemon.repository import ControlRepository
+from ocint.daemon.run import serve_bounded, wait_for_idle
 from ocint.daemon.service import JobExecutor, WorkRequest
 
 
@@ -43,6 +45,9 @@ def load_daemon_config(settings: DaemonSettings, home: Path) -> LoadedDaemonConf
 @click.group()
 def daemon() -> None:
     """Run and control the durable OpenCode orchestration daemon."""
+
+
+daemon.add_command(lch)
 
 
 @daemon.command("config")
@@ -69,15 +74,27 @@ def migrate_command(context: CliContext) -> None:
     context.output.write(current_daemon_head_revision(), nl=True)
 
 
+@daemon.command("doctor")
+@click.option("json_output", "--json", is_flag=True)
+@click.pass_context
+def doctor_command(click_context: click.Context, json_output: bool) -> None:
+    context = click_context.ensure_object(CliContext)
+    report = diagnose(Path.home(), SubprocessRunner(), lifecycle(Path.home()))
+    context.output.write(report.json_text() if json_output else report.human_text(), nl=False)
+    if not report.healthy:
+        click_context.exit(1)
+
+
 @daemon.command("run")
 def run_command() -> None:
     app, loaded = create_daemon_app(DaemonSettings(), Path.home())
-    uvicorn.run(
-        app,
-        host=loaded.config.api.host,
-        port=loaded.config.api.port,
-        log_config=None,
-        access_log=False,
+    asyncio.run(
+        serve_bounded(
+            app,
+            loaded.config.api.host,
+            loaded.config.api.port,
+            app.state.shutdown_event,
+        )
     )
 
 
@@ -119,17 +136,12 @@ def status_command(context: CliContext, job_id: str) -> None:
 def create_daemon_app(settings: DaemonSettings, home: Path) -> tuple[FastAPI, LoadedDaemonConfig]:
     loaded = load_daemon_config(settings, home)
     api_token = settings.api_token.get_secret_value()
-    opencode_password = settings.opencode_password.get_secret_value()
     github_token = settings.github_token.get_secret_value()
     if not api_token:
         raise ValueError("OCINT_DAEMON_API_TOKEN is required")
-    if not opencode_password:
-        raise ValueError("OCINT_DAEMON_OPENCODE_PASSWORD is required")
     if not github_token:
         raise ValueError("OCINT_DAEMON_GITHUB_TOKEN is required")
-    if not settings.ssh_auth_sock:
-        raise ValueError("SSH_AUTH_SOCK is required")
-
+    migrate_daemon_db(loaded.config.database_path)
     engine = create_daemon_engine(loaded.config.database_path)
     repository = ControlRepository(engine)
     validation_environment = {"PATH": settings.execution_path, "LANG": settings.execution_lang, "CI": "1"}
@@ -143,34 +155,61 @@ def create_daemon_app(settings: DaemonSettings, home: Path) -> tuple[FastAPI, Lo
         loaded.config.worktree_root,
         validation_environment,
         git_environment,
-        settings.ssh_auth_sock,
+        loaded.config.git.ssh_executable,
+        loaded.config.git.identity_file,
+        loaded.config.git.known_hosts_file,
         loaded.config.scheduler.command_timeout_seconds,
         loaded.config.scheduler.command_output_bytes,
     )
     opencode = OpenCodeClient(
         str(loaded.config.opencode.server_url),
         loaded.config.opencode.username,
-        opencode_password,
+        secrets.token_urlsafe(32),
         loaded.config.opencode.request_timeout_seconds,
+        loaded.config.scheduler.job_timeout_seconds,
         loaded.config.opencode.expected_version,
+        loaded.config.opencode.executable,
+        loaded.config.opencode.config_file,
+        loaded.config.opencode.xdg_config_home,
+        loaded.config.opencode.xdg_data_home,
+        loaded.config.opencode.startup_timeout_seconds,
+        loaded.config.opencode.shutdown_timeout_seconds,
+        settings.execution_path,
+        settings.execution_lang,
     )
-    github = GitHubClient(str(loaded.config.github.api_url), github_token)
+    github_client = GitHubClient(str(loaded.config.github.api_url), github_token)
+    github = GitHubService(loaded.config, github_client, GitHubRepository(engine))
     executor = JobExecutor(loaded.config, repository, opencode, git, github)
+    shutdown_event = asyncio.Event()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        await opencode.start()
         try:
-            migrate_daemon_db(loaded.config.database_path)
-            await opencode.start()
-            await executor.start()
-            yield
+            await github_client.start()
+            try:
+                try:
+                    await github.poll(executor)
+                    await executor.start()
+                    idle_task = asyncio.create_task(
+                        wait_for_idle(executor, loaded.config.idle_timeout_seconds, shutdown_event)
+                    )
+                    try:
+                        yield
+                    finally:
+                        idle_task.cancel()
+                        await asyncio.gather(idle_task, return_exceptions=True)
+                finally:
+                    await executor.close()
+            finally:
+                await github_client.close()
         finally:
-            await executor.close()
             await opencode.close()
             engine.dispose()
 
     app = FastAPI(title="ocint daemon", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.include_router(create_api_router(repository, executor.submit, api_token))
+    app.state.shutdown_event = shutdown_event
     return app, loaded
 
 

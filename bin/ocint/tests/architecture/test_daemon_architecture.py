@@ -1,4 +1,7 @@
 import ast
+import json
+import re
+import tomllib
 from pathlib import Path
 
 
@@ -11,9 +14,9 @@ def test_daemon_has_only_intended_modules() -> None:
         "cli.py",
         "config.py",
         "git.py",
-        "github.py",
         "opencode.py",
         "repository.py",
+        "run.py",
         "service.py",
     }
 
@@ -60,7 +63,7 @@ def test_daemon_core_import_direction_points_from_service_to_config() -> None:
 def test_prohibited_legacy_daemon_modules_are_absent() -> None:
     # GIVEN
     daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-    prohibited = {"channels.py", "models.py", "run.py", "runtime.py", "composition.py"}
+    prohibited = {"channels.py", "models.py", "runtime.py", "composition.py"}
 
     # WHEN
     existing = {path.name for path in daemon.glob("*.py")}
@@ -82,5 +85,96 @@ def test_initial_daemon_migration_is_single_and_independent_of_live_metadata() -
     imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None}
 
     # THEN
-    assert [path.name for path in revisions] == ["20260716_create_daemon_control.py"]
+    assert {path.name for path in revisions} == {
+        "20260716_create_daemon_control.py",
+        "20260717_add_github_issues.py",
+    }
     assert "ocint.daemon.db.schema" not in imports
+
+
+def test_production_uses_the_github_facade() -> None:
+    # GIVEN
+    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
+    private = {
+        "ocint.daemon.github.client",
+        "ocint.daemon.github.models",
+        "ocint.daemon.github.repository",
+        "ocint.daemon.github.service",
+    }
+
+    # WHEN
+    imported: set[str] = set()
+    for module in daemon.rglob("*.py"):
+        if (daemon / "github") in module.parents:
+            continue
+        tree = ast.parse(module.read_text())
+        imported.update(
+            node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None
+        )
+
+    # THEN
+    assert imported.isdisjoint(private)
+    assert not (daemon / "github.py").exists()
+
+
+def test_daemon_artifacts_use_structural_pii_free_provisioning_examples() -> None:
+    # GIVEN
+    package = Path(__file__).parents[2]
+    paths = [
+        *(package / "ocint" / "daemon").rglob("*.py"),
+        package / "config" / "daemon.example.toml",
+        package / "config" / "opencode.daemon.json",
+        package / "docs" / "daemon.md",
+        package / "docs" / "daemon" / "workflow.md",
+    ]
+    example = tomllib.loads((package / "config" / "daemon.example.toml").read_text())
+    policy = json.loads((package / "config" / "opencode.daemon.json").read_text())
+    config_tree = ast.parse((package / "ocint" / "daemon" / "config.py").read_text())
+
+    # WHEN
+    absolute_homes = [str(path) for path in paths if re.search(r"/home/[A-Za-z0-9._-]+", path.read_text())]
+    agent_defaults = [
+        node
+        for node in ast.walk(config_tree)
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "agent_actor"
+        and node.value is not None
+    ]
+
+    # THEN
+    assert absolute_homes == []
+    assert example["repositories"][0]["github_repository"] == "OWNER/REPOSITORY"
+    assert example["repositories"][0]["remote_url"] == "git@github.com:OWNER/REPOSITORY.git"
+    assert agent_defaults == []
+    assert "model" not in policy
+    assert "provider" not in policy
+    assert policy["permission"]["external_directory"] == {"*": "deny"}
+
+
+def test_policy_resource_is_one_canonical_symlinked_source() -> None:
+    # GIVEN
+    package = Path(__file__).parents[2]
+    resource = package / "ocint" / "daemon" / "opencode.daemon.json"
+    source = package / "config" / "opencode.daemon.json"
+
+    # WHEN / THEN
+    assert resource.is_symlink()
+    assert resource.resolve() == source.resolve()
+    assert resource.read_bytes() == source.read_bytes()
+
+
+def test_root_daemon_cli_uses_only_the_lch_facade() -> None:
+    # GIVEN
+    cli = Path(__file__).parents[2] / "ocint" / "daemon" / "cli.py"
+
+    # WHEN
+    tree = ast.parse(cli.read_text())
+    lch_imports = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module is not None and node.module.startswith("ocint.daemon.lch")
+    }
+
+    # THEN
+    assert lch_imports == {"ocint.daemon.lch"}

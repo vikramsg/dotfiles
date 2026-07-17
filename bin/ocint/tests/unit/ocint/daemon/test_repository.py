@@ -75,6 +75,24 @@ def test_requeue_retains_stage_for_shutdown_resume(repository: ControlRepository
     assert current.stage is JobStage.COMMIT
 
 
+def test_push_checkpoint_recovers_stage_and_baseline_atomically(repository: ControlRepository) -> None:
+    # GIVEN
+    submitted = repository.submit(WorkRequest(idempotency_key="one", actor="actor", repository="repo", prompt="work"))
+    repository.checkpoint(
+        submitted.id, WorktreeCheckpoint(path=Path("/worktree"), branch="ocint/job", base_revision="base")
+    )
+    repository.checkpoint(submitted.id, CommitCheckpoint(sha="new-commit"))
+
+    # WHEN
+    repository.checkpoint(submitted.id, PushCheckpoint(revision="new-commit"))
+    recovered = repository.get(submitted.id)
+
+    # THEN
+    assert recovered.stage is JobStage.PULL_REQUEST
+    assert recovered.pushed
+    assert recovered.base_revision == "new-commit"
+
+
 def test_typed_checkpoints_preserve_paths_and_explicit_terminal_states(
     repository: ControlRepository, tmp_path: Path
 ) -> None:
@@ -92,7 +110,7 @@ def test_typed_checkpoints_preserve_paths_and_explicit_terminal_states(
     repository.checkpoint(submitted.id, PromptSubmittedCheckpoint())
     repository.checkpoint(submitted.id, StageCheckpoint(stage=JobStage.COMMIT))
     repository.checkpoint(submitted.id, CommitCheckpoint(sha="commit"))
-    repository.checkpoint(submitted.id, PushCheckpoint())
+    pushed = repository.checkpoint(submitted.id, PushCheckpoint(revision="commit"))
     repository.checkpoint(submitted.id, PullRequestCheckpoint(url="https://example.test/pull/1"))
     completed = repository.complete(submitted.id)
 
@@ -108,7 +126,10 @@ def test_typed_checkpoints_preserve_paths_and_explicit_terminal_states(
     assert completed.prompt_intended
     assert completed.prompt_submitted
     assert completed.commit_sha == "commit"
+    assert completed.base_revision == "commit"
     assert completed.pushed
+    assert pushed.stage is JobStage.PULL_REQUEST
+    assert pushed.base_revision == "commit"
     assert completed.pull_request_url == "https://example.test/pull/1"
     assert completed.state is JobState.COMPLETED
     assert completed.stage is JobStage.COMPLETE

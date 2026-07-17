@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from ocint.daemon.config import DaemonConfig, DaemonSettings, RepositoryConfig
+from ocint.daemon.config import DaemonConfig, DaemonSettings, OpenCodeConfig, RepositoryConfig
 from pydantic import ValidationError
 
 
@@ -22,6 +22,17 @@ def test_config_resolves_repository_and_rejects_duplicate_names(tmp_path: Path) 
                 "checks": [["just", "check"]],
             }
         ],
+        "opencode": {
+            "config_file": tmp_path / "opencode-xdg" / "opencode" / "opencode.json",
+            "xdg_config_home": tmp_path / "opencode-xdg",
+            "xdg_data_home": tmp_path / "data",
+        },
+        "git": {
+            "ssh_executable": tmp_path / "ssh",
+            "identity_file": tmp_path / "identity",
+            "known_hosts_file": tmp_path / "known_hosts",
+        },
+        "github": {"agent_actor": "maintainer"},
     }
 
     # WHEN
@@ -83,3 +94,16 @@ def test_settings_are_constructible_without_credentials(tmp_path: Path) -> None:
 
     # THEN
     assert settings.config_path(home) == home / "config" / "ocint" / "daemon.toml"
+
+
+def test_opencode_expected_version_rejects_every_other_literal(tmp_path: Path) -> None:
+    # GIVEN / WHEN / THEN
+    with pytest.raises(ValidationError, match=r"1\.17\.20"):
+        OpenCodeConfig.model_validate(
+            {
+                "expected_version": "2.0.0",
+                "config_file": tmp_path / "opencode.json",
+                "xdg_config_home": tmp_path / "config",
+                "xdg_data_home": tmp_path / "data",
+            }
+        )
