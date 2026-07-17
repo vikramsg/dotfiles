@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,7 +19,9 @@ class OpenCodeServer:
     prompt: str = ""
     event_connections: int = 0
     status_checks: int = 0
-    idle_after_status_checks: int | None = None
+    completion_delay_seconds: float | None = None
+    completion_event: asyncio.Event = field(default_factory=asyncio.Event)
+    completion_task: asyncio.Task[None] | None = None
     runner: web.AppRunner | None = None
 
     async def start(self, port: int) -> None:
@@ -37,19 +40,41 @@ class OpenCodeServer:
 
         async def prompt(request: web.Request) -> web.Response:
             self.prompt = (await request.json())["parts"][0]["text"]
+            if self.completion_delay_seconds is not None:
+                self.messages = [{"info": {"role": "user"}, "parts": [{"type": "text", "text": self.prompt}]}]
+
+                async def complete() -> None:
+                    await asyncio.sleep(self.completion_delay_seconds or 0)
+                    (self.directory / "result.txt").write_text("completed\n")
+                    self.messages.append(
+                        {
+                            "info": {"role": "assistant", "finish": "stop"},
+                            "parts": [{"type": "text", "text": "done"}],
+                        }
+                    )
+                    self.completion_event.set()
+
+                self.completion_task = asyncio.create_task(complete())
+            else:
+                self.messages = [
+                    {"info": {"role": "user"}, "parts": [{"type": "text", "text": self.prompt}]},
+                    {
+                        "info": {"role": "assistant", "finish": "stop"},
+                        "parts": [{"type": "text", "text": "done"}],
+                    },
+                ]
             return web.json_response({})
 
         async def status(_request: web.Request) -> web.Response:
             self.status_checks += 1
-            idle = self.status == "idle" or (
-                self.idle_after_status_checks is not None and self.status_checks >= self.idle_after_status_checks
-            )
-            return web.json_response({} if idle else {"session": {"type": self.status}})
+            return web.json_response({} if self.status == "idle" else {"session": {"type": self.status}})
 
         async def events(request: web.Request) -> web.StreamResponse:
             self.event_connections += 1
             response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
             await response.prepare(request)
+            if self.completion_delay_seconds is not None:
+                await self.completion_event.wait()
             if self.event_connections == self.idle_event_connection:
                 payload = f'data: {{"directory":"{self.directory}","payload":{{"type":"session.idle","properties":{{"sessionID":"session"}}}}}}\n\n'
                 await response.write(payload.encode())
@@ -104,6 +129,7 @@ async def test_premature_sse_eof_while_busy_fails_bounded_wait(tmp_path: Path, u
     await server.start(unused_tcp_port)
     client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
     await client.start()
+    await client.observe_prompt(tmp_path, "session", "work")
 
     # WHEN / THEN
     with pytest.raises(RuntimeError, match="did not become idle"):
@@ -116,15 +142,31 @@ async def test_premature_sse_eof_while_busy_fails_bounded_wait(tmp_path: Path, u
 @pytest.mark.asyncio
 async def test_sse_reconnect_waits_for_idle_event(tmp_path: Path, unused_tcp_port: int) -> None:
     # GIVEN
-    server = OpenCodeServer(tmp_path, idle_event_connection=2)
+    server = OpenCodeServer(
+        tmp_path,
+        idle_event_connection=2,
+        messages=[
+            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
+            {
+                "info": {"role": "assistant", "finish": "tool-calls"},
+                "parts": [{"type": "tool", "text": ""}],
+            },
+            {
+                "info": {"role": "assistant", "finish": "stop"},
+                "parts": [{"type": "text", "text": "done"}],
+            },
+        ],
+    )
     await server.start(unused_tcp_port)
     client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 2, "1.17.20")
     await client.start()
+    observation = await client.observe_prompt(tmp_path, "session", "work")
 
     # WHEN
     await client.wait_idle(tmp_path, "session")
 
     # THEN
+    assert not observation.completed
     assert server.event_connections == 2
     await client.close()
     await server.close()
@@ -135,6 +177,7 @@ async def test_assistant_parts_do_not_complete_a_busy_session(tmp_path: Path, un
     # GIVEN
     server = OpenCodeServer(
         tmp_path,
+        status="idle",
         messages=[
             {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
             {"info": {"role": "assistant"}, "parts": [{"type": "text", "text": "working"}]},
@@ -154,39 +197,153 @@ async def test_assistant_parts_do_not_complete_a_busy_session(tmp_path: Path, un
     await server.close()
 
 
+@pytest.mark.parametrize(
+    ("assistant_info", "completed"),
+    [
+        ({"role": "assistant", "finish": "tool-calls"}, False),
+        ({"role": "assistant", "finish": "unknown"}, False),
+        (
+            {
+                "role": "assistant",
+                "finish": "stop",
+                "error": {
+                    "name": "APIError",
+                    "data": {"message": "provider failed", "isRetryable": False},
+                },
+            },
+            False,
+        ),
+        ({"role": "assistant", "finish": "stop"}, True),
+        ({"role": "assistant", "finish": "length"}, True),
+    ],
+)
 @pytest.mark.asyncio
-async def test_absent_idle_status_completes_before_sse_subscription(tmp_path: Path, unused_tcp_port: int) -> None:
+async def test_absent_status_requires_terminal_non_error_assistant_finish(
+    tmp_path: Path, unused_tcp_port: int, assistant_info: dict[str, object], completed: bool
+) -> None:
     # GIVEN
-    server = OpenCodeServer(tmp_path, status="idle", idle_event_connection=1000)
+    server = OpenCodeServer(
+        tmp_path,
+        status="idle",
+        messages=[
+            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
+            {"info": assistant_info, "parts": [{"type": "text", "text": "response"}]},
+        ],
+    )
     await server.start(unused_tcp_port)
     client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
     await client.start()
 
     # WHEN
+    observation = await client.observe_prompt(tmp_path, "session", "work")
+
+    # THEN
+    assert observation.completed is completed
+    await client.close()
+    await server.close()
+
+
+@pytest.mark.asyncio
+async def test_later_unmatched_user_turn_prevents_managed_prompt_completion(
+    tmp_path: Path, unused_tcp_port: int
+) -> None:
+    # GIVEN
+    server = OpenCodeServer(
+        tmp_path,
+        status="idle",
+        messages=[
+            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
+            {
+                "info": {"role": "assistant", "finish": "stop"},
+                "parts": [{"type": "text", "text": "done"}],
+            },
+            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "unmanaged follow-up"}]},
+        ],
+    )
+    await server.start(unused_tcp_port)
+    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
+    await client.start()
+
+    # WHEN
+    observation = await client.observe_prompt(tmp_path, "session", "work")
+
+    # THEN
+    assert not observation.found
+    assert not observation.completed
+    await client.close()
+    await server.close()
+
+
+@pytest.mark.asyncio
+async def test_wait_idle_requires_bound_managed_prompt(tmp_path: Path, unused_tcp_port: int) -> None:
+    # GIVEN
+    server = OpenCodeServer(tmp_path, status="idle")
+    await server.start(unused_tcp_port)
+    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
+    await client.start()
+
+    # WHEN / THEN
+    with pytest.raises(RuntimeError, match="managed prompt is not bound"):
+        await client.wait_idle(tmp_path, "session")
+    await client.close()
+    await server.close()
+
+
+@pytest.mark.asyncio
+async def test_restart_absent_idle_status_with_assistant_evidence_skips_sse(
+    tmp_path: Path, unused_tcp_port: int
+) -> None:
+    # GIVEN
+    server = OpenCodeServer(
+        tmp_path,
+        status="idle",
+        idle_event_connection=1000,
+        messages=[
+            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
+            {
+                "info": {"role": "assistant", "finish": "stop"},
+                "parts": [{"type": "text", "text": "done"}],
+            },
+        ],
+    )
+    await server.start(unused_tcp_port)
+    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
+    await client.start()
+    observation = await client.observe_prompt(tmp_path, "session", "work")
+
+    # WHEN
     await client.wait_idle(tmp_path, "session")
 
     # THEN
+    assert observation.completed
     assert server.event_connections == 0
     await client.close()
     await server.close()
 
 
 @pytest.mark.asyncio
-async def test_completion_between_status_check_and_sse_subscription_is_observed(
+async def test_absent_status_after_prompt_waits_for_assistant_edit_and_idle_event(
     tmp_path: Path, unused_tcp_port: int
 ) -> None:
     # GIVEN
-    server = OpenCodeServer(tmp_path, idle_event_connection=1000, idle_after_status_checks=2)
+    server = OpenCodeServer(tmp_path, status="idle", completion_delay_seconds=0.05)
     await server.start(unused_tcp_port)
     client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
     await client.start()
+    await client.prompt(tmp_path, "session", "work")
+    assert not (tmp_path / "result.txt").exists()
+    assert len(server.messages) == 1
 
     # WHEN
     await client.wait_idle(tmp_path, "session")
 
     # THEN
-    assert server.status_checks == 2
+    assert (tmp_path / "result.txt").read_text() == "completed\n"
+    assert len(server.messages) == 2
+    assert server.status_checks >= 1
     assert server.event_connections == 1
+    assert server.completion_task is not None
+    await server.completion_task
     await client.close()
     await server.close()
 
@@ -201,7 +358,10 @@ async def test_restart_observes_completed_prompt_when_idle_status_is_absent(
         status="idle",
         messages=[
             {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
-            {"info": {"role": "assistant"}, "parts": [{"type": "text", "text": "done"}]},
+            {
+                "info": {"role": "assistant", "finish": "stop"},
+                "parts": [{"type": "text", "text": "done"}],
+            },
         ],
     )
     await server.start(unused_tcp_port)

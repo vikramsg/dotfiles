@@ -3,7 +3,7 @@ import os
 import subprocess
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import aiohttp
@@ -19,6 +19,11 @@ from pydantic import SecretStr
 class ProductionState:
     pull_requests_created: int = 0
     edited_worktree: Path | None = None
+    messages: list[dict[str, object]] = field(default_factory=list)
+    completion: asyncio.Event = field(default_factory=asyncio.Event)
+    completion_task: asyncio.Task[None] | None = None
+    prompt_returned: bool = False
+    edit_after_prompt_return: bool = False
 
 
 class SignalFreeServer(uvicorn.Server):
@@ -46,16 +51,41 @@ async def test_production_composition_completes_job_through_api(
         return web.json_response({"id": "session", "title": (await request.json())["title"]})
 
     async def opencode_messages(_request: web.Request) -> web.Response:
-        return web.json_response([])
+        return web.json_response(state.messages)
 
     async def opencode_prompt(request: web.Request) -> web.Response:
         worktree = Path(request.headers["x-opencode-directory"])
-        (worktree / "result.txt").write_text("completed\n")
-        state.edited_worktree = worktree
+        prompt = (await request.json())["parts"][0]["text"]
+        state.messages = [{"info": {"role": "user"}, "parts": [{"type": "text", "text": prompt}]}]
+
+        async def complete() -> None:
+            await asyncio.sleep(0.05)
+            state.edit_after_prompt_return = state.prompt_returned
+            (worktree / "result.txt").write_text("completed\n")
+            state.edited_worktree = worktree
+            state.messages.append(
+                {
+                    "info": {"role": "assistant", "finish": "stop"},
+                    "parts": [{"type": "text", "text": "completed"}],
+                }
+            )
+            state.completion.set()
+
+        state.completion_task = asyncio.create_task(complete())
+        state.prompt_returned = True
         return web.json_response({})
 
     async def opencode_status(_request: web.Request) -> web.Response:
         return web.json_response({})
+
+    async def opencode_events(request: web.Request) -> web.StreamResponse:
+        response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
+        await response.prepare(request)
+        await state.completion.wait()
+        payload = f'data: {{"directory":"{state.edited_worktree}","payload":{{"type":"session.idle","properties":{{"sessionID":"session"}}}}}}\n\n'
+        await response.write(payload.encode())
+        await response.write_eof()
+        return response
 
     async def github_pulls(request: web.Request) -> web.Response:
         if request.method == "GET":
@@ -70,6 +100,7 @@ async def test_production_composition_completes_job_through_api(
     opencode_app.router.add_get("/session/{identifier}/message", opencode_messages)
     opencode_app.router.add_post("/session/{identifier}/prompt_async", opencode_prompt)
     opencode_app.router.add_get("/session/status", opencode_status)
+    opencode_app.router.add_get("/global/event", opencode_events)
     opencode_runner = web.AppRunner(opencode_app)
     await opencode_runner.setup()
     await web.TCPSite(opencode_runner, "127.0.0.1", opencode_port).start()
@@ -175,6 +206,9 @@ api_url = "http://127.0.0.1:{github_port}"
     assert completed["pull_request_url"] == "https://example.test/pull/1"
     assert state.pull_requests_created == 1
     assert state.edited_worktree is not None
+    assert state.edit_after_prompt_return
+    assert state.completion_task is not None
+    await state.completion_task
     remote_commit = subprocess.run(
         ["git", "--git-dir", str(remote), "rev-parse", f"refs/heads/ocint/{submitted['id']}"],
         check=True,
