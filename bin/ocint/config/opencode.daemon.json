@@ -1,6 +1,33 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "model": "azure-cognitive-services/gpt-5.6-sol",
+  "provider": {
+    "azure-cognitive-services": {
+      "options": {
+        "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1"
+      },
+      "models": {
+        "gpt-5.6-sol": {
+          "id": "gpt-5.6-sol",
+          "name": "gpt-5.6-sol",
+          "options": {
+            "reasoningEffort": "medium",
+            "reasoningSummary": "auto"
+          },
+          "modalities": {
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        }
+      }
+    }
+  },
   "share": "disabled",
+  "instructions": [],
+  "plugin": [],
+  "agent": {},
+  "lsp": false,
+  "formatter": false,
   "permission": {
     "read": "allow",
     "edit": "allow",
@@ -9,7 +36,7 @@
     "list": "allow",
     "external_directory": {
       "*": "deny",
-      "/var/lib/ocint-worktrees/**": "allow"
+      "/home/vikram_orbio_earth/.local/share/ocint/worktrees/**": "allow"
     },
     "webfetch": "deny",
     "websearch": "deny",

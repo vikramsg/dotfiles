@@ -11,9 +11,9 @@ def test_daemon_has_only_intended_modules() -> None:
         "cli.py",
         "config.py",
         "git.py",
-        "github.py",
         "opencode.py",
         "repository.py",
+        "run.py",
         "service.py",
     }
 
@@ -60,7 +60,7 @@ def test_daemon_core_import_direction_points_from_service_to_config() -> None:
 def test_prohibited_legacy_daemon_modules_are_absent() -> None:
     # GIVEN
     daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-    prohibited = {"channels.py", "models.py", "run.py", "runtime.py", "composition.py"}
+    prohibited = {"channels.py", "models.py", "runtime.py", "composition.py"}
 
     # WHEN
     existing = {path.name for path in daemon.glob("*.py")}
@@ -82,5 +82,33 @@ def test_initial_daemon_migration_is_single_and_independent_of_live_metadata() -
     imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None}
 
     # THEN
-    assert [path.name for path in revisions] == ["20260716_create_daemon_control.py"]
+    assert {path.name for path in revisions} == {
+        "20260716_create_daemon_control.py",
+        "20260717_add_github_issues.py",
+    }
     assert "ocint.daemon.db.schema" not in imports
+
+
+def test_production_uses_the_github_facade() -> None:
+    # GIVEN
+    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
+    private = {
+        "ocint.daemon.github.client",
+        "ocint.daemon.github.models",
+        "ocint.daemon.github.repository",
+        "ocint.daemon.github.service",
+    }
+
+    # WHEN
+    imported: set[str] = set()
+    for module in daemon.rglob("*.py"):
+        if (daemon / "github") in module.parents:
+            continue
+        tree = ast.parse(module.read_text())
+        imported.update(
+            node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None
+        )
+
+    # THEN
+    assert imported.isdisjoint(private)
+    assert not (daemon / "github.py").exists()

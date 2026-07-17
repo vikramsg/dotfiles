@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from ocint.daemon.config import RepositoryConfig
 from ocint.daemon.git import GitManager
+from ocint.daemon.service import Worktree
 
 
 @pytest.mark.asyncio
@@ -37,7 +38,7 @@ async def test_concurrent_cold_provisioning_serializes_mirror_and_preserves_leas
         f"""#!{sys.executable}
 import json, os, subprocess, sys
 with open({str(events)!r}, "a") as stream:
-    stream.write(json.dumps({{"arguments": sys.argv[1:], "ssh_auth_sock": os.environ.get("SSH_AUTH_SOCK")}}) + "\\n")
+    stream.write(json.dumps({{"arguments": sys.argv[1:], "git_ssh_command": os.environ.get("GIT_SSH_COMMAND")}}) + "\\n")
 raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
 """
     )
@@ -46,12 +47,19 @@ raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
     ssh.write_text('#!/bin/sh\nfor argument do command="$argument"; done\nexec sh -c "$command"\n')
     ssh.chmod(0o755)
     path = f"{transport}:{os.environ['PATH']}"
+    identity = tmp_path / "identity"
+    identity.write_text("private")
+    identity.chmod(0o600)
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("example key")
     manager = GitManager(
         tmp_path / "mirrors",
         tmp_path / "worktrees",
         {"PATH": path, "LANG": "C.UTF-8", "CI": "1"},
         {"PATH": path, "LANG": "C.UTF-8", "GIT_TERMINAL_PROMPT": "0"},
-        "/tmp/test-agent",
+        ssh,
+        identity,
+        known_hosts,
         30,
         65536,
     )
@@ -72,6 +80,7 @@ raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
     await manager.validate(worktree, ((sys.executable, "-c", "import os; assert 'SSH_AUTH_SOCK' not in os.environ"),))
     commit = await manager.commit(worktree, "result", repository.author_name, repository.author_email)
     await manager.push(worktree)
+    advanced_baseline = Worktree(path=worktree.path, branch=worktree.branch, base_revision=commit)
     author = subprocess.run(
         ["git", "-C", str(worktree.path), "show", "-s", "--format=%an <%ae>", commit],
         check=True,
@@ -96,6 +105,8 @@ raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
     assert author == "Daemon Agent <daemon@example.test>"
     assert branch == commit
     assert second_revision == worktree.base_revision
+    with pytest.raises(ValueError, match="OpenCode produced no changes"):
+        await manager.validate(advanced_baseline, ())
     assert sum(event["arguments"][0] == "clone" for event in git_events) == 1
     assert (tmp_path / "mirrors" / "repo.git").is_dir()
     assert worktree.path.is_dir()
@@ -104,9 +115,9 @@ raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
     for event in git_events:
         command = event["arguments"][0]
         if command in {"clone", "fetch", "push"}:
-            assert event["ssh_auth_sock"] == "/tmp/test-agent"
+            assert "IdentitiesOnly=yes" in event["git_ssh_command"]
         else:
-            assert event["ssh_auth_sock"] is None
+            assert event["git_ssh_command"] is None
 
 
 @pytest.mark.asyncio
@@ -131,12 +142,19 @@ async def test_reprovision_preserves_uncheckpointed_worktree_after_remote_advanc
     ssh.write_text('#!/bin/sh\nfor argument do command="$argument"; done\nexec sh -c "$command"\n')
     ssh.chmod(0o755)
     path = f"{transport}:{os.environ['PATH']}"
+    identity = tmp_path / "identity"
+    identity.write_text("private")
+    identity.chmod(0o600)
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("example key")
     manager = GitManager(
         tmp_path / "mirrors",
         tmp_path / "worktrees",
         {"PATH": path, "LANG": "C.UTF-8", "CI": "1"},
         {"PATH": path, "LANG": "C.UTF-8", "GIT_TERMINAL_PROMPT": "0"},
-        "/tmp/test-agent",
+        ssh,
+        identity,
+        known_hosts,
         30,
         65536,
     )

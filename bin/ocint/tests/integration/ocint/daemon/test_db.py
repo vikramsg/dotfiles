@@ -1,3 +1,4 @@
+import stat
 from pathlib import Path
 
 from ocint.daemon.db import create_daemon_engine, downgrade_daemon_db, migrate_daemon_db
@@ -12,7 +13,12 @@ def test_upgrade_downgrade_upgrade_matches_complete_metadata(tmp_path: Path) -> 
     # WHEN
     migrate_daemon_db(database)
     engine = create_daemon_engine(database)
-    assert set(inspect(engine).get_table_names()) == {"alembic_version", "job"}
+    assert set(inspect(engine).get_table_names()) == {
+        "alembic_version",
+        "github_issue",
+        "github_issue_comment",
+        "job",
+    }
     engine.dispose()
     downgrade_daemon_db(database)
     engine = create_daemon_engine(database)
@@ -23,7 +29,12 @@ def test_upgrade_downgrade_upgrade_matches_complete_metadata(tmp_path: Path) -> 
     inspector = inspect(engine)
 
     # THEN
-    assert set(inspector.get_table_names()) == {"alembic_version", "job"}
+    assert set(inspector.get_table_names()) == {
+        "alembic_version",
+        "github_issue",
+        "github_issue_comment",
+        "job",
+    }
     for table in metadata.sorted_tables:
         primary_key_columns = set(inspector.get_pk_constraint(table.name)["constrained_columns"])
         actual_columns = {
@@ -79,3 +90,18 @@ def test_upgrade_downgrade_upgrade_matches_complete_metadata(tmp_path: Path) -> 
         }
         assert actual_indexes == expected_indexes
     engine.dispose()
+
+
+def test_migration_secures_existing_database_without_recreating_it(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    migrate_daemon_db(database)
+    inode = database.stat().st_ino
+    database.chmod(0o644)
+
+    # WHEN
+    migrate_daemon_db(database)
+
+    # THEN
+    assert database.stat().st_ino == inode
+    assert stat.S_IMODE(database.stat().st_mode) == 0o600

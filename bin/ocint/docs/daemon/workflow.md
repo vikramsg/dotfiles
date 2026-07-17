@@ -1,54 +1,22 @@
 # Daemon Pull Request Workflow
 
 ```text
-ocint daemon run
-        |
-        v
-Uvicorn -> FastAPI lifespan
-        |
-        +-- Alembic migration
-        +-- OpenCode health check
-        +-- schedule persisted incomplete jobs once
-        |
-        v
-bearer-authenticated manual API
-        |
-        | persist, then schedule task
-        v
-SQLite job table -> capacity semaphore
-        |
-        v
-managed mirror and worktree
-        |
-        v
-OpenCode 1.17.20 HTTP/SSE
-        |
-        v
-validation -> explicit-author commit -> SSH push
-        |
-        v
-find matching PR or create one -> terminal checkpoint
+systemd timer -> one daemon invocation -> one GitHub poll
+                                      |
+labelled issue -> authorize -> persist comments/prompt -> permanent job
+                                      |
+private OpenCode session -> validate -> commit -> explicit SSH push
+                                      |
+create/reuse owned PR -> marker-protected response -> address batch
+                                      |
+unchanged idle generation for 60s -> normal two-server shutdown
 ```
 
-The database has one `job` application table. A restart requeues nonterminal
-running jobs while preserving their stage and external-effect checkpoints.
-Reusing an idempotency key returns the original job.
-
-The API exposes authenticated `GET /health`, `POST /api/jobs`, `GET /api/jobs`,
-and `GET /api/jobs/{job_id}`. Status includes the OpenCode session, worktree,
-attach command, commit, and pull request URL.
-
-OpenCode cannot access SSH or GitHub credentials. Validation also receives no
-publication credentials. Git network operations use an SSH remote and explicit
-`SSH_AUTH_SOCK`; local commits use explicit author name/email without the
-socket. The GitHub token is used only for REST pull-request lookup and creation.
-
-## Shutdown
-
-Shutdown happens only when Uvicorn is asked to stop, such as `Ctrl-C`,
-`SIGTERM`, or a process-manager stop. Uvicorn first stops accepting HTTP work,
-then invokes FastAPI lifespan shutdown. The executor stops scheduling new jobs
-and waits up to `shutdown_timeout_seconds` for active jobs. Tasks still running
-after that deadline are cancelled and their jobs are returned to `queued` with
-the current stage intact. OpenCode and SQLite resources close after executor
-shutdown.
+Initial work includes title, body, and chronological authorized comments.
+Follow-ups batch new chronological actor-attributed comments, retain the newest
+as the durable anchor, and reuse the original session, worktree, branch, and PR.
+Each prompt includes GitHub comment IDs, and each successful push advances the
+durable Git baseline before publication.
+Push state, pull-request stage, and the new baseline form one durable checkpoint.
+Comments arriving during an active batch wait for the next invocation. A closed
+or merged owned PR errors the batch before execution and is never replaced.

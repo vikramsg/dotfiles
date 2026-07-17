@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import shlex
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -15,7 +16,9 @@ class GitManager:
         worktree_root: Path,
         validation_environment: Mapping[str, str],
         git_environment: Mapping[str, str],
-        ssh_auth_sock: str,
+        ssh_executable: Path,
+        identity_file: Path,
+        known_hosts_file: Path,
         timeout_seconds: int,
         output_bytes: int,
     ) -> None:
@@ -23,7 +26,29 @@ class GitManager:
         self.worktree_root = worktree_root.resolve()
         self.validation_environment = dict(validation_environment)
         self.git_environment = dict(git_environment)
-        self.network_git_environment = {**self.git_environment, "SSH_AUTH_SOCK": ssh_auth_sock}
+        expanded_identity = identity_file.expanduser()
+        if expanded_identity.is_symlink():
+            raise ValueError(f"SSH identity must be a regular mode-0600 file: {expanded_identity}")
+        identity = expanded_identity.resolve()
+        known_hosts = known_hosts_file.expanduser().resolve()
+        executable = ssh_executable.expanduser().resolve()
+        if not executable.is_file() or not os.access(executable, os.X_OK):
+            raise ValueError(f"SSH executable must be executable: {executable}")
+        if not identity.is_file() or identity.stat().st_mode & 0o777 != 0o600:
+            raise ValueError(f"SSH identity must be a regular mode-0600 file: {identity}")
+        if not known_hosts.is_file() or not os.access(known_hosts, os.R_OK):
+            raise ValueError(f"SSH known-hosts file must be readable: {known_hosts}")
+        command = " ".join(
+            (
+                shlex.quote(str(executable)),
+                "-o BatchMode=yes",
+                "-o IdentitiesOnly=yes",
+                f"-i {shlex.quote(str(identity))}",
+                f"-o UserKnownHostsFile={shlex.quote(str(known_hosts))}",
+                "-o StrictHostKeyChecking=yes",
+            )
+        )
+        self.network_git_environment = {**self.git_environment, "GIT_SSH_COMMAND": command}
         self.timeout_seconds = timeout_seconds
         self.output_bytes = output_bytes
         self.repository_locks: dict[str, asyncio.Lock] = {}

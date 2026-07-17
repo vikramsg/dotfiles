@@ -1,378 +1,283 @@
 import asyncio
-import base64
-from dataclasses import dataclass, field
+import time
+from collections.abc import AsyncIterator
 from pathlib import Path
 
+import aiohttp
 import pytest
+import pytest_asyncio
 from aiohttp import web
 from ocint.daemon.opencode import OpenCodeClient
+from pydantic import BaseModel, ConfigDict
 
 
-@dataclass
-class OpenCodeServer:
-    directory: Path
-    status: str = "busy"
-    idle_event_connection: int = 1
-    messages: list[dict[str, object]] = field(default_factory=list)
-    authorization: str = ""
-    directories: list[str] = field(default_factory=list)
-    prompt: str = ""
-    event_connections: int = 0
-    status_checks: int = 0
-    completion_delay_seconds: float | None = None
-    completion_event: asyncio.Event = field(default_factory=asyncio.Event)
-    completion_task: asyncio.Task[None] | None = None
-    runner: web.AppRunner | None = None
+class WirePart(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    type: str
+    text: str
+
+
+class WireInfo(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    role: str
+    finish: str | None = None
+
+
+class WireMessage(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    info: WireInfo
+    parts: list[WirePart]
+
+
+class WireStatus(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    type: str
+
+
+class WireStatuses(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    session: WireStatus
+
+
+class OpenCodeHttpFake:
+    def __init__(self) -> None:
+        self.messages = [WireMessage(info=WireInfo(role="user"), parts=[WirePart(type="text", text="perform work")])]
+        self.app = web.Application()
+        self.app.router.add_get("/session/session/message", self.message_list)
+        self.app.router.add_get("/session/status", self.status)
+        self.app.router.add_get("/global/event", self.events)
+        self.runner = web.AppRunner(self.app)
+        self.port = 0
 
     async def start(self, port: int) -> None:
-        async def health(request: web.Request) -> web.Response:
-            self.authorization = request.headers.get("Authorization", "")
-            return web.json_response({"healthy": True, "version": "1.17.20"})
-
-        async def sessions(request: web.Request) -> web.Response:
-            self.directories.append(request.headers.get("x-opencode-directory", ""))
-            if request.method == "GET":
-                return web.json_response([])
-            return web.json_response({"id": "session", "title": (await request.json())["title"]})
-
-        async def messages(_request: web.Request) -> web.Response:
-            return web.json_response(self.messages)
-
-        async def prompt(request: web.Request) -> web.Response:
-            self.prompt = (await request.json())["parts"][0]["text"]
-            if self.completion_delay_seconds is not None:
-                self.messages = [{"info": {"role": "user"}, "parts": [{"type": "text", "text": self.prompt}]}]
-
-                async def complete() -> None:
-                    await asyncio.sleep(self.completion_delay_seconds or 0)
-                    (self.directory / "result.txt").write_text("completed\n")
-                    self.messages.append(
-                        {
-                            "info": {"role": "assistant", "finish": "stop"},
-                            "parts": [{"type": "text", "text": "done"}],
-                        }
-                    )
-                    self.completion_event.set()
-
-                self.completion_task = asyncio.create_task(complete())
-            else:
-                self.messages = [
-                    {"info": {"role": "user"}, "parts": [{"type": "text", "text": self.prompt}]},
-                    {
-                        "info": {"role": "assistant", "finish": "stop"},
-                        "parts": [{"type": "text", "text": "done"}],
-                    },
-                ]
-            return web.json_response({})
-
-        async def status(_request: web.Request) -> web.Response:
-            self.status_checks += 1
-            return web.json_response({} if self.status == "idle" else {"session": {"type": self.status}})
-
-        async def events(request: web.Request) -> web.StreamResponse:
-            self.event_connections += 1
-            response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
-            await response.prepare(request)
-            if self.completion_delay_seconds is not None:
-                await self.completion_event.wait()
-            if self.event_connections == self.idle_event_connection:
-                payload = f'data: {{"directory":"{self.directory}","payload":{{"type":"session.idle","properties":{{"sessionID":"session"}}}}}}\n\n'
-                await response.write(payload.encode())
-            await response.write_eof()
-            return response
-
-        app = web.Application()
-        app.router.add_get("/global/health", health)
-        app.router.add_get("/session", sessions)
-        app.router.add_post("/session", sessions)
-        app.router.add_get("/session/{identifier}/message", messages)
-        app.router.add_post("/session/{identifier}/prompt_async", prompt)
-        app.router.add_get("/session/status", status)
-        app.router.add_get("/global/event", events)
-        self.runner = web.AppRunner(app)
+        self.port = port
         await self.runner.setup()
         await web.TCPSite(self.runner, "127.0.0.1", port).start()
 
     async def close(self) -> None:
-        if self.runner is not None:
-            await self.runner.cleanup()
+        await self.runner.cleanup()
+
+    def complete(self) -> None:
+        self.messages.append(
+            WireMessage(
+                info=WireInfo(role="assistant", finish="stop"),
+                parts=[WirePart(type="text", text="completed")],
+            )
+        )
+
+    async def message_list(self, _request: web.Request) -> web.Response:
+        return web.json_response([message.model_dump(mode="json") for message in self.messages])
+
+    async def status(self, _request: web.Request) -> web.Response:
+        payload = WireStatuses(session=WireStatus(type="idle"))
+        return web.json_response(payload.model_dump(mode="json"))
+
+    async def events(self, _request: web.Request) -> web.Response:
+        return web.Response(text="")
 
 
-@pytest.mark.asyncio
-async def test_http_and_sse_match_opencode_contract(tmp_path: Path, unused_tcp_port: int) -> None:
-    # GIVEN
-    server = OpenCodeServer(tmp_path)
+@pytest_asyncio.fixture
+async def opencode_server(unused_tcp_port: int) -> AsyncIterator[OpenCodeHttpFake]:
+    server = OpenCodeHttpFake()
     await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 5, "1.17.20")
-
-    # WHEN
-    await client.start()
-    session = await client.create(tmp_path, "ocint:job")
-    observation = await client.observe_prompt(tmp_path, session, "work")
-    await client.prompt(tmp_path, session, "work")
-    await client.wait_idle(tmp_path, session)
-
-    # THEN
-    expected = base64.b64encode(b"opencode:password").decode()
-    assert server.authorization == f"Basic {expected}"
-    assert server.directories == [str(tmp_path.resolve()), str(tmp_path.resolve())]
-    assert not observation.found
-    assert server.prompt == "work"
-    await client.close()
+    yield server
     await server.close()
 
 
 @pytest.mark.asyncio
-async def test_premature_sse_eof_while_busy_fails_bounded_wait(tmp_path: Path, unused_tcp_port: int) -> None:
-    # GIVEN
-    server = OpenCodeServer(tmp_path, idle_event_connection=1000)
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
-    await client.start()
-    await client.observe_prompt(tmp_path, "session", "work")
-
-    # WHEN / THEN
-    with pytest.raises(RuntimeError, match="did not become idle"):
-        await client.wait_idle(tmp_path, "session")
-    assert server.event_connections > 1
-    await client.close()
-    await server.close()
-
-
-@pytest.mark.asyncio
-async def test_sse_reconnect_waits_for_idle_event(tmp_path: Path, unused_tcp_port: int) -> None:
-    # GIVEN
-    server = OpenCodeServer(
-        tmp_path,
-        idle_event_connection=2,
-        messages=[
-            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
-            {
-                "info": {"role": "assistant", "finish": "tool-calls"},
-                "parts": [{"type": "tool", "text": ""}],
-            },
-            {
-                "info": {"role": "assistant", "finish": "stop"},
-                "parts": [{"type": "text", "text": "done"}],
-            },
-        ],
-    )
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 2, "1.17.20")
-    await client.start()
-    observation = await client.observe_prompt(tmp_path, "session", "work")
-
-    # WHEN
-    await client.wait_idle(tmp_path, "session")
-
-    # THEN
-    assert not observation.completed
-    assert server.event_connections == 2
-    await client.close()
-    await server.close()
-
-
-@pytest.mark.asyncio
-async def test_assistant_parts_do_not_complete_a_busy_session(tmp_path: Path, unused_tcp_port: int) -> None:
-    # GIVEN
-    server = OpenCodeServer(
-        tmp_path,
-        status="idle",
-        messages=[
-            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
-            {"info": {"role": "assistant"}, "parts": [{"type": "text", "text": "working"}]},
-        ],
-    )
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 2, "1.17.20")
-    await client.start()
-
-    # WHEN
-    observation = await client.observe_prompt(tmp_path, "session", "work")
-
-    # THEN
-    assert observation.found
-    assert not observation.completed
-    await client.close()
-    await server.close()
-
-
-@pytest.mark.parametrize(
-    ("assistant_info", "completed"),
-    [
-        ({"role": "assistant", "finish": "tool-calls"}, False),
-        ({"role": "assistant", "finish": "unknown"}, False),
-        (
-            {
-                "role": "assistant",
-                "finish": "stop",
-                "error": {
-                    "name": "APIError",
-                    "data": {"message": "provider failed", "isRetryable": False},
-                },
-            },
-            False,
-        ),
-        ({"role": "assistant", "finish": "stop"}, True),
-        ({"role": "assistant", "finish": "length"}, True),
-    ],
-)
-@pytest.mark.asyncio
-async def test_absent_status_requires_terminal_non_error_assistant_finish(
-    tmp_path: Path, unused_tcp_port: int, assistant_info: dict[str, object], completed: bool
+async def test_immediate_idle_requires_completed_assistant_evidence(
+    tmp_path: Path, opencode_server: OpenCodeHttpFake
 ) -> None:
     # GIVEN
-    server = OpenCodeServer(
-        tmp_path,
-        status="idle",
-        messages=[
-            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
-            {"info": assistant_info, "parts": [{"type": "text", "text": "response"}]},
-        ],
+    client = OpenCodeClient(
+        f"http://127.0.0.1:{opencode_server.port}",
+        "opencode",
+        "ephemeral",
+        1,
+        3,
+        "1.17.20",
+        tmp_path / "opencode",
+        tmp_path / "config.json",
+        tmp_path / "isolated-config",
+        tmp_path / "existing-data",
+        1,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
     )
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
-    await client.start()
+    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
 
     # WHEN
-    observation = await client.observe_prompt(tmp_path, "session", "work")
+    waiting = asyncio.create_task(client.wait_for_completion(tmp_path, "session", "perform work"))
+    await asyncio.sleep(0.2)
 
     # THEN
-    assert observation.completed is completed
+    assert not waiting.done()
+    opencode_server.complete()
+    await asyncio.wait_for(waiting, 1)
     await client.close()
-    await server.close()
 
 
 @pytest.mark.asyncio
-async def test_later_unmatched_user_turn_prevents_managed_prompt_completion(
-    tmp_path: Path, unused_tcp_port: int
+async def test_agent_execution_can_exceed_individual_request_timeout(
+    tmp_path: Path, opencode_server: OpenCodeHttpFake
 ) -> None:
     # GIVEN
-    server = OpenCodeServer(
-        tmp_path,
-        status="idle",
-        messages=[
-            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
-            {
-                "info": {"role": "assistant", "finish": "stop"},
-                "parts": [{"type": "text", "text": "done"}],
-            },
-            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "unmanaged follow-up"}]},
-        ],
+    client = OpenCodeClient(
+        f"http://127.0.0.1:{opencode_server.port}",
+        "opencode",
+        "ephemeral",
+        1,
+        3,
+        "1.17.20",
+        tmp_path / "opencode",
+        tmp_path / "config.json",
+        tmp_path / "isolated-config",
+        tmp_path / "existing-data",
+        1,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
     )
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
-    await client.start()
+    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
+    waiting = asyncio.create_task(client.wait_for_completion(tmp_path, "session", "perform work"))
 
     # WHEN
-    observation = await client.observe_prompt(tmp_path, "session", "work")
+    await asyncio.sleep(1.2)
+    opencode_server.complete()
+    await asyncio.wait_for(waiting, 1)
+
+    # THEN
+    assert not client.client.closed
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_completion_requires_the_managed_prompt_to_be_the_latest_user_turn(
+    tmp_path: Path, opencode_server: OpenCodeHttpFake
+) -> None:
+    # GIVEN
+    opencode_server.complete()
+    opencode_server.messages.append(
+        WireMessage(info=WireInfo(role="user"), parts=[WirePart(type="text", text="different work")])
+    )
+    client = OpenCodeClient(
+        f"http://127.0.0.1:{opencode_server.port}",
+        "opencode",
+        "ephemeral",
+        1,
+        3,
+        "1.17.20",
+        tmp_path / "opencode",
+        tmp_path / "config.json",
+        tmp_path / "isolated-config",
+        tmp_path / "existing-data",
+        1,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
+    )
+    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
+
+    # WHEN
+    observation = await client.observe_prompt(tmp_path, "session", "perform work")
 
     # THEN
     assert not observation.found
     assert not observation.completed
     await client.close()
-    await server.close()
 
 
-@pytest.mark.asyncio
-async def test_wait_idle_requires_bound_managed_prompt(tmp_path: Path, unused_tcp_port: int) -> None:
+def test_child_process_uses_isolated_config_and_existing_auth_data_home(tmp_path: Path) -> None:
     # GIVEN
-    server = OpenCodeServer(tmp_path, status="idle")
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
-    await client.start()
-
-    # WHEN / THEN
-    with pytest.raises(RuntimeError, match="managed prompt is not bound"):
-        await client.wait_idle(tmp_path, "session")
-    await client.close()
-    await server.close()
-
-
-@pytest.mark.asyncio
-async def test_restart_absent_idle_status_with_assistant_evidence_skips_sse(
-    tmp_path: Path, unused_tcp_port: int
-) -> None:
-    # GIVEN
-    server = OpenCodeServer(
-        tmp_path,
-        status="idle",
-        idle_event_connection=1000,
-        messages=[
-            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
-            {
-                "info": {"role": "assistant", "finish": "stop"},
-                "parts": [{"type": "text", "text": "done"}],
-            },
-        ],
+    client = OpenCodeClient(
+        "http://127.0.0.1:4096",
+        "opencode",
+        "ephemeral",
+        1,
+        3,
+        "1.17.20",
+        tmp_path / "opencode",
+        tmp_path / "isolated-config" / "opencode" / "opencode.json",
+        tmp_path / "isolated-config",
+        tmp_path / "existing-data",
+        1,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
     )
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
-    await client.start()
-    observation = await client.observe_prompt(tmp_path, "session", "work")
 
     # WHEN
-    await client.wait_idle(tmp_path, "session")
+    environment = client.child_environment()
+    arguments = client.serve_arguments("4096")
 
     # THEN
-    assert observation.completed
-    assert server.event_connections == 0
-    await client.close()
-    await server.close()
+    assert environment["HOME"] == str(tmp_path / "isolated-config" / "home")
+    assert environment["XDG_CONFIG_HOME"] == str(tmp_path / "isolated-config")
+    assert environment["XDG_DATA_HOME"] == str(tmp_path / "existing-data")
+    assert environment["OPENCODE_CONFIG"] == str(tmp_path / "isolated-config" / "opencode" / "opencode.json")
+    assert "--pure" in arguments
+    assert "plugin" not in environment
+    assert "instructions" not in environment
 
 
 @pytest.mark.asyncio
-async def test_absent_status_after_prompt_waits_for_assistant_edit_and_idle_event(
-    tmp_path: Path, unused_tcp_port: int
-) -> None:
+async def test_startup_retries_an_individual_health_request_timeout(tmp_path: Path, unused_tcp_port: int) -> None:
     # GIVEN
-    server = OpenCodeServer(tmp_path, status="idle", completion_delay_seconds=0.05)
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
-    await client.start()
-    await client.prompt(tmp_path, "session", "work")
-    assert not (tmp_path / "result.txt").exists()
-    assert len(server.messages) == 1
+    executable = tmp_path / "delayed-health"
+    executable.write_text(
+        """#!/usr/bin/env python3
+import sys
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-    # WHEN
-    await client.wait_idle(tmp_path, "session")
+port = int(sys.argv[sys.argv.index("--port") + 1])
 
-    # THEN
-    assert (tmp_path / "result.txt").read_text() == "completed\n"
-    assert len(server.messages) == 2
-    assert server.status_checks >= 1
-    assert server.event_connections == 1
-    assert server.completion_task is not None
-    await server.completion_task
-    await client.close()
-    await server.close()
+class Handler(BaseHTTPRequestHandler):
+    requests = 0
 
+    def do_GET(self):
+        Handler.requests += 1
+        if Handler.requests == 1:
+            time.sleep(1.2)
+        body = b'{"healthy": true, "version": "1.17.20"}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
 
-@pytest.mark.asyncio
-async def test_restart_observes_completed_prompt_when_idle_status_is_absent(
-    tmp_path: Path, unused_tcp_port: int
-) -> None:
-    # GIVEN
-    server = OpenCodeServer(
-        tmp_path,
-        status="idle",
-        messages=[
-            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "work"}]},
-            {
-                "info": {"role": "assistant", "finish": "stop"},
-                "parts": [{"type": "text", "text": "done"}],
-            },
-        ],
+    def log_message(self, format, *args):
+        pass
+
+HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+"""
     )
-    await server.start(unused_tcp_port)
-    client = OpenCodeClient(f"http://127.0.0.1:{unused_tcp_port}", "opencode", "password", 1, "1.17.20")
-    await client.start()
+    executable.chmod(0o755)
+    client = OpenCodeClient(
+        f"http://127.0.0.1:{unused_tcp_port}",
+        "opencode",
+        "ephemeral",
+        1,
+        3,
+        "1.17.20",
+        executable,
+        tmp_path / "isolated-config" / "opencode" / "opencode.json",
+        tmp_path / "isolated-config",
+        tmp_path / "isolated-data",
+        5,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
+    )
 
     # WHEN
-    observation = await client.observe_prompt(tmp_path, "session", "work")
+    started_at = time.monotonic()
+    await client.start()
 
     # THEN
-    assert observation.found
-    assert observation.completed
+    assert time.monotonic() - started_at >= 1
     await client.close()
-    await server.close()

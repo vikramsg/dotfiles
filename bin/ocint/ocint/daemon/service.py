@@ -129,6 +129,7 @@ class PushCheckpoint(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     kind: Literal["push"] = "push"
+    revision: str
 
 
 class PullRequestCheckpoint(BaseModel):
@@ -160,6 +161,7 @@ class JobStore(Protocol):
     def fail(self, job_id: str, error: str) -> Job: ...
     def requeue(self, job_id: str) -> None: ...
     def reconcile(self) -> int: ...
+    def reset(self, job_id: str, prompt: str) -> Job: ...
 
 
 class OpenCode(Protocol):
@@ -168,7 +170,7 @@ class OpenCode(Protocol):
     async def create(self, directory: Path, identity: str) -> str: ...
     async def observe_prompt(self, directory: Path, session_id: str, text: str) -> PromptObservation: ...
     async def prompt(self, directory: Path, session_id: str, text: str) -> None: ...
-    async def wait_idle(self, directory: Path, session_id: str) -> None: ...
+    async def wait_for_completion(self, directory: Path, session_id: str, text: str) -> None: ...
 
 
 class Git(Protocol):
@@ -212,6 +214,7 @@ class JobExecutor:
         self.capacity = asyncio.Semaphore(config.scheduler.capacity)
         self.tasks: dict[str, asyncio.Task[None]] = {}
         self.closing = False
+        self.activity_generation = 0
 
     async def start(self) -> None:
         self.store.reconcile()
@@ -219,10 +222,32 @@ class JobExecutor:
             self.schedule(job_id)
 
     def submit(self, request: WorkRequest) -> Job:
+        job = self.accept(request)
+        self.schedule_accepted(job.id)
+        return job
+
+    def accept(self, request: WorkRequest) -> Job:
         authorize(request, self.config)
         job = self.store.submit(request)
-        self.schedule(job.id)
+        self.activity_generation += 1
         return job
+
+    def schedule_accepted(self, job_id: str) -> None:
+        self.schedule(job_id)
+
+    def resume(self, job_id: str, prompt: str) -> Job:
+        job = self.store.reset(job_id, prompt)
+        self.schedule(job.id)
+        self.activity_generation += 1
+        return job
+
+    @property
+    def is_idle(self) -> bool:
+        return not self.tasks
+
+    async def wait_until_idle(self) -> None:
+        while self.tasks:
+            await asyncio.gather(*list(self.tasks.values()))
 
     def schedule(self, job_id: str) -> None:
         if self.closing or job_id in self.tasks:
@@ -287,7 +312,7 @@ class JobExecutor:
                 await self.opencode.prompt(worktree.path, job.session_id, job.prompt)
                 job = self.store.checkpoint(job.id, PromptSubmittedCheckpoint())
             if action is not PromptDecision.ADVANCE:
-                await self.opencode.wait_idle(worktree.path, job.session_id)
+                await self.opencode.wait_for_completion(worktree.path, job.session_id, job.prompt)
             job = self.store.checkpoint(job.id, StageCheckpoint(stage=JobStage.VALIDATION))
         if job.stage is JobStage.VALIDATION:
             await self.git.validate(worktree, repository.checks)
@@ -299,7 +324,7 @@ class JobExecutor:
             job = self.store.checkpoint(job.id, CommitCheckpoint(sha=commit))
         if job.stage is JobStage.PUSH:
             await self.git.push(worktree)
-            job = self.store.checkpoint(job.id, PushCheckpoint())
+            job = self.store.checkpoint(job.id, PushCheckpoint(revision=job.commit_sha))
         if job.stage is JobStage.PULL_REQUEST:
             url = await self.github.publish(
                 repository.github_repository,

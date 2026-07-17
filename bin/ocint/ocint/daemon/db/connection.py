@@ -22,6 +22,8 @@ def create_daemon_engine(path: Path, busy_timeout_ms: int = 5000) -> Engine:
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
+        if path.exists():
+            path.chmod(0o600)
 
     return engine
 
@@ -38,6 +40,7 @@ def alembic_config(path: Path | None = None) -> Config:
 def migrate_daemon_db(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     command.upgrade(alembic_config(path), "head")
+    path.chmod(0o600)
 
 
 def downgrade_daemon_db(path: Path) -> None:

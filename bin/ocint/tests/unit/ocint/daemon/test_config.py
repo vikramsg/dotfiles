@@ -22,6 +22,16 @@ def test_config_resolves_repository_and_rejects_duplicate_names(tmp_path: Path) 
                 "checks": [["just", "check"]],
             }
         ],
+        "opencode": {
+            "config_file": tmp_path / "opencode-xdg" / "opencode" / "opencode.json",
+            "xdg_config_home": tmp_path / "opencode-xdg",
+            "xdg_data_home": tmp_path / "data",
+        },
+        "git": {
+            "ssh_executable": tmp_path / "ssh",
+            "identity_file": tmp_path / "identity",
+            "known_hosts_file": tmp_path / "known_hosts",
+        },
     }
 
     # WHEN
