@@ -39,9 +39,9 @@ and `GET /api/jobs/{job_id}`. Status includes the OpenCode session, worktree,
 attach command, commit, and pull request URL.
 
 OpenCode cannot access SSH or GitHub credentials. Validation also receives no
-publication credentials. Git is configured with an SSH remote, explicit
-`SSH_AUTH_SOCK`, and explicit author name/email; the GitHub token is used only
-for REST pull-request lookup and creation.
+publication credentials. Git network operations use an SSH remote and explicit
+`SSH_AUTH_SOCK`; local commits use explicit author name/email without the
+socket. The GitHub token is used only for REST pull-request lookup and creation.
 
 ## Shutdown
 
