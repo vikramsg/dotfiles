@@ -72,6 +72,12 @@ These instructions apply to `bin/ocint/`.
 - Prefer concrete types. Construct them wherever appropriate. 
 - Do not use `tuple` or `dict` or `object` or `Any`. Create or convert to concrete types.
 
+### Documentation and Code Comments
+
+- ASCII diagrams are preferred for communicating concepts
+- Write code comments and docs in the style of a blog post. Clear, simple, complete.
+- When editing docs, do not remove sections unless they are stale. Prefer editing the stale section than completely removing them, including ASCII diagrams. 
+
 ## Commands
 
 Use the package justfile explicitly:
