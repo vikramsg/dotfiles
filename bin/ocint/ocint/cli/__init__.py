@@ -1,6 +1,7 @@
 import click
 
 from ocint.ctx.cli import ctx
+from ocint.daemon.cli import daemon
 from ocint.presentation import default_cli_context
 from ocint.state.cli import state
 
@@ -16,3 +17,4 @@ def main(click_ctx: click.Context) -> None:
 
 main.add_command(state)
 main.add_command(ctx)
+main.add_command(daemon)
