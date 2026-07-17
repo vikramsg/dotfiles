@@ -57,9 +57,8 @@ with a direct commit, branch push, force-push, or local release command.
 
 ## Historical baseline
 
-Commit `8e13c509ec1b31a6f97501ef3f0215a4bdb58a8e` is the historical baseline because it introduced
-`bin/ocint/pyproject.toml` with package version `0.1.0`. To create `ocint-v0.1.0` once, run the
-**ocint release** workflow manually on `main` and enter the exact baseline confirmation requested
-by `workflow_dispatch`. The command rechecks the workflow-dispatch event and exact confirmation at
-its own boundary. The guarded CI operation verifies that commit and version before pushing an
-annotated tag. Conflicting tags fail; an existing annotated tag on that commit is idempotent.
+Annotated tag `ocint-v0.1.0` marks commit
+`8e13c509ec1b31a6f97501ef3f0215a4bdb58a8e`, which introduced
+`bin/ocint/pyproject.toml` with package version `0.1.0`. Release preparation uses that tag as the
+starting point for the first generated changelog. The one-time baseline automation was removed
+after the tag was created and verified.

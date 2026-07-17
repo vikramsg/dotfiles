@@ -37,9 +37,6 @@ class SemVer:
 @dataclass(frozen=True)
 class ReleasePolicy:
     files: tuple[str, str, str]
-    baseline_version: SemVer
-    baseline_commit: str
-    baseline_confirmation: str
 
     def branch(self, version: SemVer) -> str:
         return f"ocint-release/v{version}"
@@ -78,12 +75,7 @@ class CiContext:
 
 
 def release_policy() -> ReleasePolicy:
-    return ReleasePolicy(
-        files=("bin/ocint/pyproject.toml", "bin/ocint/CHANGELOG.md", "uv.lock"),
-        baseline_version=SemVer(0, 1, 0),
-        baseline_commit="8e13c509ec1b31a6f97501ef3f0215a4bdb58a8e",
-        baseline_confirmation="create ocint-v0.1.0 baseline tag",
-    )
+    return ReleasePolicy(files=("bin/ocint/pyproject.toml", "bin/ocint/CHANGELOG.md", "uv.lock"))
 
 
 def ci_context() -> CiContext:
@@ -447,28 +439,6 @@ def ci_tag(root: Path, policy: ReleasePolicy, context: CiContext) -> None:
     print(f"Ensured annotated tag {tag} targets {head}")
 
 
-def bootstrap_baseline(root: Path, policy: ReleasePolicy, context: CiContext, confirmation: str) -> None:
-    paths = ReleasePaths(root, policy)
-    validate_root(paths)
-    require_ci(root, context, "workflow_dispatch")
-    if confirmation != policy.baseline_confirmation:
-        raise ReleaseError(f"Baseline confirmation must be exactly: {policy.baseline_confirmation}")
-    target = git(root, "rev-parse", f"{policy.baseline_commit}^{{commit}}")
-    source = git(root, "show", f"{target}:{policy.files[0]}")
-    if project_version(source) != policy.baseline_version:
-        raise ReleaseError(f"Historical commit {target} did not introduce ocint {policy.baseline_version}")
-    target_with_parents = git(root, "rev-list", "--parents", "-n", "1", target).split()
-    if len(target_with_parents) > 2:
-        raise ReleaseError(f"Historical commit {target} must not be a merge commit")
-    if len(target_with_parents) == 2 and git_path_exists(root, target_with_parents[1], policy.files[0]):
-        raise ReleaseError(f"Historical commit {target} did not introduce {policy.files[0]}")
-    tag = policy.tag(policy.baseline_version)
-    if ensure_tag(root, tag, target):
-        create_ci_tag(root, tag, target, f"ocint v{policy.baseline_version}")
-    run(["git", "push", "origin", f"refs/tags/{tag}:refs/tags/{tag}"], cwd=root, capture=False)
-    print(f"Ensured historical baseline tag {tag} targets {target}")
-
-
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description="Prepare and validate PR-only ocint releases")
     result.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[3], help=argparse.SUPPRESS)
@@ -481,8 +451,6 @@ def parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--title", required=True)
     validate_parser.add_argument("--branch", default=os.environ.get("GITHUB_HEAD_REF", ""))
     commands.add_parser("ci-tag")
-    baseline_parser = commands.add_parser("bootstrap-baseline")
-    baseline_parser.add_argument("--confirmation", required=True)
     return result
 
 
@@ -498,8 +466,6 @@ def main(arguments: list[str] | None = None) -> int:
                 validate_pr(root, args.base, args.base_ref, args.title, args.branch, policy)
             case "ci-tag":
                 ci_tag(root, policy, ci_context())
-            case "bootstrap-baseline":
-                bootstrap_baseline(root, policy, ci_context(), args.confirmation)
     except ReleaseError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

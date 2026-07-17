@@ -6,12 +6,6 @@ on:
     types: [opened, synchronize, reopened, edited, ready_for_review]
   push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      baseline_confirmation:
-        description: Type "create ocint-v0.1.0 baseline tag" to confirm
-        required: true
-        type: string
 
 jobs:
   release-validation:
@@ -88,21 +82,3 @@ jobs:
             exit 1
           fi
           echo "Current main commit is not an ocint release; no tag needed"
-
-  baseline-tag:
-    name: Create historical baseline tag
-    if: github.event_name == 'workflow_dispatch' && inputs.baseline_confirmation == 'create ocint-v0.1.0 baseline tag'
-    concurrency:
-      group: ocint-release-tags
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          fetch-depth: 0
-      - name: Create guarded baseline tag
-        env:
-          BASELINE_CONFIRMATION: ${{ inputs.baseline_confirmation }}
-        run: python bin/ocint/scripts/ocint_release.py bootstrap-baseline --confirmation "$BASELINE_CONFIRMATION"
