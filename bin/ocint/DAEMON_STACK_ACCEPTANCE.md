@@ -1,0 +1,1 @@
+daemon-stack-acceptance: accepted
