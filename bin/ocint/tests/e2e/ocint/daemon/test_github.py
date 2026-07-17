@@ -158,9 +158,7 @@ async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path
     # WHEN
     await service.poll(acceptor)
     job = control.get(acceptor.scheduled[0])
-    pull_request_url = await service.publish(
-        "example-org/project", f"ocint/{job.id}", "main", "generic title", "body"
-    )
+    pull_request_url = await service.publish("example-org/project", f"ocint/{job.id}", "main", "generic title", "body")
     repeated_pull_request_url = await service.publish(
         "example-org/project", f"ocint/{job.id}", "main", "generic title", "body"
     )

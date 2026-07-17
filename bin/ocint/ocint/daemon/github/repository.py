@@ -78,9 +78,7 @@ class GitHubRepository:
     def find_issue_for_job(self, job_id: str) -> StoredIssue | None:
         with self.engine.connect() as connection:
             row = (
-                connection.execute(select(github_issue).where(github_issue.c.job_id == job_id))
-                .mappings()
-                .one_or_none()
+                connection.execute(select(github_issue).where(github_issue.c.job_id == job_id)).mappings().one_or_none()
             )
         return self._issue(row) if row is not None else None
 
