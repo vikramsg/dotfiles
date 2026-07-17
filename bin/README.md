@@ -11,6 +11,7 @@ uv tool install ./bin/ghostty_workspace --force
 uv tool install ./bin/screenshot --force
 uv tool install ./bin/lch --force
 uv tool install ./bin/ocint --force
+uv tool install ./bin/gh_stats --force
 ```
 
 Upgrade an installed local tool after changes:
@@ -20,6 +21,7 @@ uv tool install ./bin/ghostty_workspace --force --no-cache
 uv tool install ./bin/screenshot --force --no-cache
 uv tool install ./bin/lch --force --no-cache
 uv tool install ./bin/ocint --force --no-cache
+uv tool install ./bin/gh_stats --force --no-cache
 ```
 
 Each tool keeps its own package-local tests under `bin/<tool>/tests`.
@@ -64,6 +66,14 @@ Read-only local OpenCode SQLite usage analytics and history search.
 - Test: from repo root, run `uv run --package ocint pytest`
 - Docs: `bin/ocint/README.md`
 - Safety: commands open the SQLite database with `mode=ro`; use `OPENCODE_DB` or `--db` to point at a temporary DB for verification.
+
+## gh-stats
+
+Summarize merged pull requests by week, repository, or both using the authenticated GitHub CLI.
+
+- Install: `just gh-stats`
+- Test: from repo root, run `uv run --package gh-stats pytest bin/gh_stats/tests`
+- Docs: `bin/gh_stats/README.md`
 
 ## marxual
 

@@ -132,6 +132,10 @@ opencode-sandbox +args:
 ocint:
     uv tool install "{{justfile_directory()}}/bin/ocint" --force --no-cache
 
+# Install GitHub pull request statistics tool
+gh-stats:
+    uv tool install "{{justfile_directory()}}/bin/gh_stats" --force --no-cache
+
 # Set up Ghostty symlink
 ghostty:
     @echo "Setting up Ghostty symlink..."
@@ -317,7 +321,7 @@ harlequin:
     @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux opencode ghostty zed screenshot lch ocint bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
