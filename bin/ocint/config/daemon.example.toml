@@ -1,0 +1,30 @@
+database_path = "/var/lib/ocint-control/control.sqlite"
+mirror_root = "/var/lib/ocint-control/mirrors"
+worktree_root = "/var/lib/ocint-worktrees"
+
+[[repositories]]
+name = "dotfiles"
+remote_url = "git@github.com:vikramsg/dotfiles.git"
+default_branch = "main"
+github_repository = "vikramsg/dotfiles"
+author_name = "ocint daemon"
+author_email = "ocint@example.invalid"
+actors = ["vikram_orbio_earth"]
+checks = [["just", "--justfile", "bin/ocint/justfile", "check"], ["just", "--justfile", "bin/ocint/justfile", "test"]]
+
+[scheduler]
+capacity = 2
+job_timeout_seconds = 3600
+
+[opencode]
+server_url = "http://127.0.0.1:4096"
+username = "opencode"
+request_timeout_seconds = 30
+expected_version = "1.17.20"
+
+[api]
+host = "127.0.0.1"
+port = 8732
+
+[github]
+api_url = "https://api.github.com"
