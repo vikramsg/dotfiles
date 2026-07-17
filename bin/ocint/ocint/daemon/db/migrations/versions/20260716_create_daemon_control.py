@@ -1,4 +1,4 @@
-"""Create the independent daemon control database."""
+"""Create the final single-process daemon job schema."""
 
 from alembic import op
 from ocint.daemon.db.schema import metadata

@@ -1,53 +1,68 @@
 from pathlib import Path
 
 import pytest
-from ocint.daemon.config import DaemonSettings, load_daemon_config
+from ocint.daemon.config import DaemonConfig, RepositoryConfig
+from pydantic import ValidationError
 
 
-def test_config_resolves_explicit_path_and_validates_typed_values(tmp_path: Path) -> None:
-    # GIVEN a complete daemon TOML file selected through typed settings
-    config_path = tmp_path / "daemon.toml"
-    config_path.write_text(
-        f'database_path = "{tmp_path / "control.sqlite"}"\n'
-        f'mirror_root = "{tmp_path / "mirrors"}"\n'
-        f'worktree_root = "{tmp_path / "worktrees"}"\n'
-        'repositories = [{ name = "repo", remote_url = "file:///remote" }]\n'
-        "[scheduler]\ncapacity = 3\n"
-    )
-    settings = DaemonSettings(config=config_path)
+def test_config_resolves_repository_and_rejects_duplicate_names(tmp_path: Path) -> None:
+    # GIVEN
+    raw = {
+        "database_path": tmp_path / "control.sqlite",
+        "mirror_root": tmp_path / "mirrors",
+        "worktree_root": tmp_path / "worktrees",
+        "repositories": [
+            {
+                "name": "repo",
+                "remote_url": "git@example:repo.git",
+                "github_repository": "owner/repo",
+                "author_name": "Agent",
+                "author_email": "agent@example.test",
+            }
+        ],
+    }
 
-    # WHEN configuration is loaded
-    loaded = load_daemon_config(settings, tmp_path)
+    # WHEN
+    config = DaemonConfig.model_validate(raw)
 
-    # THEN paths and scheduler policy are concrete validated values
-    assert loaded.path == config_path
-    assert loaded.config.scheduler.capacity == 3
-    assert loaded.config.repository("repo").default_branch == "main"
-
-
-def test_config_uses_xdg_fallback(tmp_path: Path) -> None:
-    # GIVEN no explicit daemon path and an XDG root
-    settings = DaemonSettings(xdg_config_home=tmp_path)
-
-    # WHEN its path is resolved
-    path = settings.config_path(Path("/unused"))
-
-    # THEN the documented XDG path is selected
-    assert path == (tmp_path / "ocint" / "daemon.toml").resolve()
+    # THEN
+    assert config.repository("repo").author_name == "Agent"
+    with pytest.raises(ValidationError, match="unique"):
+        DaemonConfig.model_validate({**raw, "repositories": [*raw["repositories"], *raw["repositories"]]})
 
 
-def test_scheduler_rejects_heartbeat_that_cannot_renew_before_expiry(tmp_path: Path) -> None:
-    # GIVEN a configuration whose heartbeat is not shorter than its lease
-    config_path = tmp_path / "daemon.toml"
-    config_path.write_text(
-        f'database_path = "{tmp_path / "control.sqlite"}"\n'
-        f'mirror_root = "{tmp_path / "mirrors"}"\n'
-        f'worktree_root = "{tmp_path / "worktrees"}"\n'
-        'repositories = [{ name = "repo", remote_url = "file:///remote" }]\n'
-        "[scheduler]\nlease_seconds = 10\nheartbeat_seconds = 10\n"
+@pytest.mark.parametrize("remote", ["git@example.test:owner/repo.git", "ssh://git@example.test/owner/repo.git"])
+def test_repository_accepts_ssh_remotes(remote: str) -> None:
+    # GIVEN / WHEN
+    repository = RepositoryConfig(
+        name="repo",
+        remote_url=remote,
+        github_repository="owner/repo",
+        author_name="Agent",
+        author_email="agent@example.test",
     )
 
-    # WHEN typed configuration is loaded
-    # THEN unsafe lease timing is rejected before daemon startup
-    with pytest.raises(ValueError, match="heartbeat_seconds"):
-        load_daemon_config(DaemonSettings(config=config_path), tmp_path)
+    # THEN
+    assert repository.remote_url == remote
+
+
+@pytest.mark.parametrize(
+    "remote",
+    [
+        "https://example.test/owner/repo.git",
+        "http://example.test/owner/repo.git",
+        "file:///tmp/repo.git",
+        "/tmp/repo.git",
+        "../repo.git",
+    ],
+)
+def test_repository_rejects_non_ssh_remotes(remote: str) -> None:
+    # GIVEN / WHEN / THEN
+    with pytest.raises(ValidationError, match="must use SSH"):
+        RepositoryConfig(
+            name="repo",
+            remote_url=remote,
+            github_repository="owner/repo",
+            author_name="Agent",
+            author_email="agent@example.test",
+        )
