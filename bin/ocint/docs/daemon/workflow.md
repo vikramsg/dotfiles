@@ -29,11 +29,15 @@ systemd timer -> poll GitHub for open issues labelled "ocint"
 
 The target repository must be checked out over SSH. Git author settings, SSH,
 `gh`, and OpenCode must already be configured. The host also needs a systemd
-user manager with lingering enabled.
+user manager. If user lingering is disabled, enable it first:
 
 ```bash
 loginctl enable-linger "$USER"
+```
 
+Then install and provision ocint:
+
+```bash
 uv tool install ./bin/ocint
 ocint daemon lch provision
 ocint daemon doctor
