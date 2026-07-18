@@ -16,6 +16,16 @@ from urllib.parse import urlparse
 import click
 from pydantic import BaseModel, ConfigDict, Field
 
+from ocint.daemon.config import (
+    DaemonConfig,
+    DaemonContext,
+    GitConfig,
+    GitHubConfig,
+    LifecycleConfig,
+    LoggingConfig,
+    OpenCodeConfig,
+    RepositoryConfig,
+)
 from ocint.daemon.lch.systemd import CommandRunner, SystemdLifecycle, installed_ocint
 
 
@@ -272,11 +282,14 @@ def ensure_auth_symlink(source: Path, isolated_data_home: Path) -> Path:
     return target
 
 
-def discover(runner: CommandRunner, lifecycle: SystemdLifecycle, checkout: Path, home: Path) -> ProvisionDiscovery:
-    if os.environ.get("GIT_SSH_COMMAND") or os.environ.get("GIT_SSH"):
+def discover(
+    runner: CommandRunner, lifecycle: SystemdLifecycle, checkout: Path, context: DaemonContext
+) -> ProvisionDiscovery:
+    home = context.home
+    if context.environment.get("GIT_SSH_COMMAND") or context.environment.get("GIT_SSH"):
         raise click.ClickException("unset GIT_SSH_COMMAND and GIT_SSH before provisioning")
-    git_environment = discovery_environment(home, False)
-    gh_environment = discovery_environment(home, True)
+    git_environment = discovery_environment(context, False)
+    gh_environment = discovery_environment(context, True)
     root = Path(
         runner.run_isolated(
             ("git", "-C", str(checkout), "rev-parse", "--show-toplevel"), git_environment
@@ -322,7 +335,7 @@ def discover(runner: CommandRunner, lifecycle: SystemdLifecycle, checkout: Path,
         runner.run_isolated(("git", "-C", str(root), "var", "GIT_AUTHOR_IDENT"), git_environment).stdout
     )
     ssh = _discover_ssh(runner, root, git_environment, remote_url, home)
-    paths = _paths(home)
+    paths = _paths(context)
     source_config = paths.config_home / "opencode" / "opencode.json"
     auth_source = paths.data_home / "opencode" / "auth.json"
     if not source_config.is_file():
@@ -375,8 +388,9 @@ def discover(runner: CommandRunner, lifecycle: SystemdLifecycle, checkout: Path,
     )
 
 
-def provision(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> None:
+def provision(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle, context: DaemonContext) -> None:
     paths = discovery.paths
+    config = discovered_daemon_config(discovery, _existing_policy(context))
     for directory in (
         paths.config_home / "ocint",
         paths.data_home / "ocint",
@@ -396,24 +410,21 @@ def provision(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> Non
         paths.effective_opencode_config,
         discovery.effective_opencode_payload,
     )
-    write_private_file(paths.configuration, daemon_toml(discovery))
-    lifecycle.install(discovery.ocint_executable)
+    write_private_file(paths.configuration, daemon_toml(config))
+    lifecycle.install(discovery.ocint_executable, config.lifecycle)
 
 
-def _paths(home: Path) -> ProvisionPaths:
-    config_home = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")).resolve()
-    data_home = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share")).resolve()
-    state_home = Path(os.environ.get("XDG_STATE_HOME", home / ".local" / "state")).resolve()
-    managed = config_home / "ocint"
+def _paths(context: DaemonContext) -> ProvisionPaths:
+    managed = context.config_home / "ocint"
     isolated_config_home = managed / "opencode-xdg"
     return ProvisionPaths(
-        home=home.resolve(),
-        config_home=config_home,
-        data_home=data_home,
-        state_home=state_home,
-        worktree_root=data_home / "ocint" / "worktrees",
+        home=context.home,
+        config_home=context.config_home,
+        data_home=context.data_home,
+        state_home=context.state_home,
+        worktree_root=context.data_home / "ocint" / "worktrees",
         isolated_config_home=isolated_config_home,
-        isolated_data_home=data_home / "ocint" / "opencode-data",
+        isolated_data_home=context.data_home / "ocint" / "opencode-data",
         environment=managed / "daemon.env",
         configuration=managed / "daemon.toml",
         effective_opencode_config=isolated_config_home / "opencode" / "opencode.json",
@@ -520,14 +531,14 @@ def _user_file(path: Path, mode: int) -> bool:
     return path.is_file() and path.stat().st_uid == os.getuid() and stat.S_IMODE(path.stat().st_mode) == mode
 
 
-def discovery_environment(home: Path, github: bool) -> dict[str, str]:
+def discovery_environment(context: DaemonContext, github: bool) -> dict[str, str]:
     names = ("PATH", "LANG", "LC_ALL", "USER", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")
-    environment = {name: os.environ[name] for name in names if name in os.environ}
-    environment["HOME"] = str(home)
+    environment = {name: context.environment[name] for name in names if name in context.environment}
+    environment["HOME"] = str(context.home)
     if github:
         for name in ("GH_CONFIG_DIR", "GH_TOKEN", "GITHUB_TOKEN"):
-            if name in os.environ:
-                environment[name] = os.environ[name]
+            if name in context.environment:
+                environment[name] = context.environment[name]
     return environment
 
 
@@ -567,41 +578,95 @@ def _existing_api_token(path: Path) -> str:
     return ""
 
 
-def daemon_toml(discovery: ProvisionDiscovery) -> str:
+def _existing_policy(context: DaemonContext) -> tuple[LifecycleConfig, LoggingConfig]:
+    if not context.config_path.exists():
+        return (LifecycleConfig(), LoggingConfig())
+    try:
+        config = context.config()
+        return (config.lifecycle, config.logging)
+    except (OSError, ValueError) as error:
+        raise click.ClickException(f"existing daemon lifecycle/logging config is invalid: {error}") from error
+
+
+def discovered_daemon_config(
+    discovery: ProvisionDiscovery, policy: tuple[LifecycleConfig, LoggingConfig]
+) -> DaemonConfig:
+    lifecycle, logging = policy
     paths = discovery.paths
-    repository_name = discovery.github_repository.partition("/")[2]
+    return DaemonConfig(
+        database_path=paths.state_home / "ocint" / "daemon.sqlite",
+        mirror_root=paths.data_home / "ocint" / "mirrors",
+        worktree_root=paths.worktree_root,
+        repositories=(
+            RepositoryConfig(
+                name=discovery.github_repository.partition("/")[2],
+                remote_url=discovery.remote_url,
+                default_branch=discovery.default_branch,
+                github_repository=discovery.github_repository,
+                author_name=discovery.author.name,
+                author_email=discovery.author.email,
+                actors=frozenset((discovery.login,)),
+            ),
+        ),
+        lifecycle=lifecycle,
+        logging=logging,
+        opencode=OpenCodeConfig(
+            executable=discovery.opencode.executable,
+            config_file=paths.effective_opencode_config,
+            xdg_config_home=paths.isolated_config_home,
+            xdg_data_home=paths.isolated_data_home,
+        ),
+        github=GitHubConfig(agent_actor=discovery.login),
+        git=GitConfig(
+            ssh_executable=discovery.ssh.executable,
+            identity_file=discovery.ssh.identity_file,
+            known_hosts_file=discovery.ssh.known_hosts_file,
+        ),
+    )
+
+
+def daemon_toml(config: DaemonConfig) -> str:
+    repository = config.repositories[0]
     quote = json.dumps
-    return f"""database_path = {quote(str(paths.state_home / "ocint" / "daemon.sqlite"))}
-mirror_root = {quote(str(paths.data_home / "ocint" / "mirrors"))}
-worktree_root = {quote(str(paths.worktree_root))}
-idle_timeout_seconds = 60
+    return f"""database_path = {quote(str(config.database_path))}
+mirror_root = {quote(str(config.mirror_root))}
+worktree_root = {quote(str(config.worktree_root))}
+idle_timeout_seconds = {config.idle_timeout_seconds}
 
 [[repositories]]
-name = {quote(repository_name)}
-remote_url = {quote(discovery.remote_url)}
-default_branch = {quote(discovery.default_branch)}
-github_repository = {quote(discovery.github_repository)}
-author_name = {quote(discovery.author.name)}
-author_email = {quote(discovery.author.email)}
-actors = [{quote(discovery.login)}]
+name = {quote(repository.name)}
+remote_url = {quote(repository.remote_url)}
+default_branch = {quote(repository.default_branch)}
+github_repository = {quote(repository.github_repository)}
+author_name = {quote(repository.author_name)}
+author_email = {quote(repository.author_email)}
+actors = [{quote(next(iter(repository.actors)))}]
 checks = []
 
+[lifecycle]
+startup_delay_seconds = {config.lifecycle.startup_delay_seconds}
+inactive_interval_seconds = {config.lifecycle.inactive_interval_seconds}
+
+[logging]
+max_bytes = {config.logging.max_bytes}
+backup_count = {config.logging.backup_count}
+
 [opencode]
-server_url = "http://127.0.0.1:4097"
-username = "opencode"
-expected_version = "1.17.20"
-executable = {quote(str(discovery.opencode.executable))}
-config_file = {quote(str(paths.effective_opencode_config))}
-xdg_config_home = {quote(str(paths.isolated_config_home))}
-xdg_data_home = {quote(str(paths.isolated_data_home))}
-startup_timeout_seconds = 120
+server_url = {quote(str(config.opencode.server_url))}
+username = {quote(config.opencode.username)}
+expected_version = {quote(config.opencode.expected_version)}
+executable = {quote(str(config.opencode.executable))}
+config_file = {quote(str(config.opencode.config_file))}
+xdg_config_home = {quote(str(config.opencode.xdg_config_home))}
+xdg_data_home = {quote(str(config.opencode.xdg_data_home))}
+startup_timeout_seconds = {config.opencode.startup_timeout_seconds}
 
 [github]
-issue_label = "ocint"
-agent_actor = {quote(discovery.login)}
+issue_label = {quote(config.github.issue_label)}
+agent_actor = {quote(config.github.agent_actor)}
 
 [git]
-ssh_executable = {quote(str(discovery.ssh.executable))}
-identity_file = {quote(str(discovery.ssh.identity_file))}
-known_hosts_file = {quote(str(discovery.ssh.known_hosts_file))}
+ssh_executable = {quote(str(config.git.ssh_executable))}
+identity_file = {quote(str(config.git.identity_file))}
+known_hosts_file = {quote(str(config.git.known_hosts_file))}
 """

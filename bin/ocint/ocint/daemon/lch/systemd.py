@@ -1,19 +1,42 @@
+import json
 import os
 import platform
 import shutil
 import stat
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
+
+from ocint.daemon.config import LifecycleConfig
+from ocint.daemon.logging import DaemonLogSettings, follow_log, read_log_tail
 
 
 class CommandResult(BaseModel):
     model_config = ConfigDict(frozen=True)
     stdout: str = ""
     stderr: str = ""
+
+
+class LifecycleStatus(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    installed: bool
+    timer_state: str = "inactive"
+    timer_substate: str = "dead"
+    last_trigger: str = "unavailable"
+    next_trigger: str = "unavailable"
+    service_state: str = "inactive"
+    service_substate: str = "dead"
+    last_result: str = "unknown"
+    last_exit_status: str = "unknown"
+    last_started: str = "unavailable"
+    last_completed: str = "unavailable"
+    log_path: Path
+    home: Path
 
 
 class CommandRunner(Protocol):
@@ -69,8 +92,10 @@ class SystemdPaths(BaseModel):
     environment_file: Path
     config_home: Path
     data_home: Path
+    state_home: Path
     daemon_config: Path
     home: Path
+    user: str = ""
 
     @property
     def service(self) -> Path:
@@ -94,13 +119,13 @@ class SystemdPaths(BaseModel):
         return f"%h/{relative.as_posix()}"
 
 
-def timer_text() -> str:
-    return """[Unit]
+def timer_text(config: LifecycleConfig) -> str:
+    return f"""[Unit]
 Description=Schedule ocint daemon
 
 [Timer]
-OnStartupSec=1m
-OnUnitInactiveSec=15m
+OnStartupSec={systemd_duration(config.startup_delay_seconds)}
+OnUnitInactiveSec={systemd_duration(config.inactive_interval_seconds)}
 Unit=ocint-daemon.service
 
 [Install]
@@ -113,6 +138,7 @@ def service_text(
     environment_file: str,
     config_home: str,
     data_home: str,
+    state_home: str,
     daemon_config: str,
 ) -> str:
     return f"""[Unit]
@@ -124,6 +150,7 @@ UMask=0077
 EnvironmentFile={environment_file}
 Environment=XDG_CONFIG_HOME={config_home}
 Environment=XDG_DATA_HOME={data_home}
+Environment=XDG_STATE_HOME={state_home}
 Environment=OCINT_DAEMON_CONFIG={daemon_config}
 ExecStart={executable} daemon run
 TimeoutStartSec=infinity
@@ -135,14 +162,14 @@ class SystemdLifecycle:
         self.paths = paths
         self.runner = runner
 
-    def install(self, executable: Path) -> None:
+    def install(self, executable: Path, config: LifecycleConfig) -> None:
         self.validate_host()
         executable = self.validate_executable(executable)
         self._validate_environment()
         self.validate_lingering()
         self.validate_install_paths()
         self.paths.directory.mkdir(parents=True, exist_ok=True)
-        self.paths.timer.write_text(timer_text())
+        self.paths.timer.write_text(timer_text(config))
         self.paths.timer.chmod(0o644)
         self.paths.service.write_text(
             service_text(
@@ -150,6 +177,7 @@ class SystemdLifecycle:
                 self.paths.environment_reference,
                 self.paths.reference(self.paths.config_home),
                 self.paths.reference(self.paths.data_home),
+                self.paths.reference(self.paths.state_home),
                 self.paths.reference(self.paths.daemon_config),
             )
         )
@@ -164,29 +192,88 @@ class SystemdLifecycle:
         self.paths.service.unlink(missing_ok=True)
         self.runner.run(("systemctl", "--user", "daemon-reload"))
 
-    def status(self) -> str:
+    def status(self, log_path: Path) -> LifecycleStatus:
         installed = self.paths.timer.is_file() and self.paths.service.is_file()
-        active = (
-            self.runner.run(
-                ("systemctl", "--user", "show", "ocint-daemon.timer", "--property=ActiveState", "--value")
-            ).stdout.strip()
-            if installed
-            else "inactive"
+        if not installed:
+            return LifecycleStatus(installed=False, log_path=log_path, home=self.paths.home)
+        timer = self._unit_properties("ocint-daemon.timer", ("ActiveState", "SubState", "LastTriggerUSec"))
+        service = self._unit_properties(
+            "ocint-daemon.service",
+            (
+                "ActiveState",
+                "SubState",
+                "Result",
+                "ExecMainStatus",
+                "ExecMainStartTimestamp",
+                "ExecMainExitTimestamp",
+            ),
         )
-        return f"installed: {'yes' if installed else 'no'}\nactive: {active}"
+        schedule = json.loads(
+            self.runner.run(
+                (
+                    "systemctl",
+                    "--user",
+                    "list-timers",
+                    "--all",
+                    "ocint-daemon.timer",
+                    "--output=json",
+                    "--no-pager",
+                )
+            ).stdout
+            or "[]"
+        )
+        next_trigger = "unavailable"
+        last_trigger = timer.get("LastTriggerUSec", "unavailable") or "unavailable"
+        if schedule:
+            next_value = schedule[0].get("next")
+            last_value = schedule[0].get("last")
+            if isinstance(next_value, int):
+                next_trigger = self._timestamp(next_value)
+            elif service.get("ActiveState") == "active":
+                next_trigger = "pending service completion"
+            if isinstance(last_value, int):
+                last_trigger = self._timestamp(last_value)
+        return LifecycleStatus(
+            installed=True,
+            timer_state=timer.get("ActiveState", "unknown"),
+            timer_substate=timer.get("SubState", "unknown"),
+            last_trigger=last_trigger,
+            next_trigger=next_trigger,
+            service_state=service.get("ActiveState", "unknown"),
+            service_substate=service.get("SubState", "unknown"),
+            last_result=service.get("Result", "unknown") or "unknown",
+            last_exit_status=service.get("ExecMainStatus", "unknown") or "unknown",
+            last_started=self._systemd_timestamp(service.get("ExecMainStartTimestamp", "")),
+            last_completed=self._systemd_timestamp(service.get("ExecMainExitTimestamp", "")),
+            log_path=log_path,
+            home=self.paths.home,
+        )
 
-    def logs(self, lines: int, follow: bool) -> str:
-        arguments = [
-            "journalctl",
-            "--user",
-            "--unit=ocint-daemon.timer",
-            "--unit=ocint-daemon.service",
-            "--lines",
-            str(lines),
-        ]
-        if follow:
-            arguments.append("--follow")
-        return self.runner.run(arguments).stdout
+    def logs(self, settings: DaemonLogSettings, lines: int) -> str:
+        return read_log_tail(settings, lines)
+
+    def follow_logs(self, settings: DaemonLogSettings, lines: int) -> Iterator[str]:
+        return follow_log(settings, lines)
+
+    def _unit_properties(self, unit: str, names: tuple[str, ...]) -> dict[str, str]:
+        result = self.runner.run(
+            ("systemctl", "--user", "show", unit, *(f"--property={name}" for name in names))
+        ).stdout
+        return dict(line.partition("=")[::2] for line in result.splitlines() if "=" in line)
+
+    @staticmethod
+    def _timestamp(microseconds: int) -> str:
+        return datetime.fromtimestamp(microseconds / 1_000_000, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    @staticmethod
+    def _systemd_timestamp(value: str) -> str:
+        if not value:
+            return "unavailable"
+        try:
+            parsed = datetime.strptime(value, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=UTC)
+        except ValueError:
+            return value
+        return parsed.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     def _validate_environment(self) -> None:
         path = self.paths.environment_file
@@ -215,8 +302,9 @@ class SystemdLifecycle:
             raise RuntimeError("ocint daemon lch requires Linux")
 
     def validate_lingering(self) -> None:
-        user = os.environ.get("USER", "")
-        lingering = self.runner.run(("loginctl", "show-user", user, "--property=Linger", "--value")).stdout.strip()
+        lingering = self.runner.run(
+            ("loginctl", "show-user", self.paths.user, "--property=Linger", "--value")
+        ).stdout.strip()
         if lingering != "yes":
             raise RuntimeError('user lingering is disabled; run loginctl enable-linger "$USER"')
 
@@ -233,3 +321,7 @@ def installed_ocint() -> Path:
     if executable is None:
         raise RuntimeError("ocint executable is not installed on PATH")
     return Path(executable).resolve()
+
+
+def systemd_duration(seconds: int) -> str:
+    return f"{seconds // 60}m" if seconds % 60 == 0 else f"{seconds}s"

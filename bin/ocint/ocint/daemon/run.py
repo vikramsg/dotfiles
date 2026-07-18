@@ -4,6 +4,10 @@ from typing import Protocol
 import uvicorn
 from fastapi import FastAPI
 
+from ocint.daemon.logging import get_logger
+
+logger = get_logger("run")
+
 
 class IdleExecutor(Protocol):
     activity_generation: int
@@ -18,13 +22,17 @@ async def wait_for_idle(executor: IdleExecutor, idle_seconds: int, shutdown_even
     while True:
         await executor.wait_until_idle()
         observed_generation = executor.activity_generation
+        logger.info("idle grace started", seconds=idle_seconds, activity_generation=observed_generation)
         await asyncio.sleep(idle_seconds)
         if executor.is_idle and executor.activity_generation == observed_generation:
+            logger.info("idle grace completed", seconds=idle_seconds)
             shutdown_event.set()
             return
+        logger.info("idle grace reset", activity_generation=executor.activity_generation)
 
 
 async def serve_bounded(app: FastAPI, host: str, port: int, shutdown_event: asyncio.Event) -> None:
+    logger.info("API server starting", host=host, port=port)
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_config=None, access_log=False))
     serving = asyncio.create_task(server.serve())
     waiting = asyncio.create_task(shutdown_event.wait())
@@ -32,5 +40,6 @@ async def serve_bounded(app: FastAPI, host: str, port: int, shutdown_event: asyn
     if waiting in done:
         server.should_exit = True
     await serving
+    logger.info("API server stopped", host=host, port=port)
     waiting.cancel()
     await asyncio.gather(waiting, return_exceptions=True)

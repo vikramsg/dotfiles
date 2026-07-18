@@ -8,7 +8,10 @@ from urllib.parse import quote
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
+from ocint.daemon.logging import get_logger
 from ocint.daemon.service import PromptObservation
+
+logger = get_logger("opencode")
 
 
 class SessionPayload(BaseModel):
@@ -113,6 +116,7 @@ class OpenCodeClient:
             stdin=asyncio.subprocess.DEVNULL,
             start_new_session=True,
         )
+        logger.info("OpenCode process started", pid=self.process.pid, server=self.server_url)
         self.client = aiohttp.ClientSession(headers=self.headers, timeout=self.request_timeout)
         try:
             async with asyncio.timeout(self.startup_timeout_seconds):
@@ -134,6 +138,7 @@ class OpenCodeClient:
             raise RuntimeError(
                 f"OpenCode version mismatch: expected {self.expected_version}, received {health.version}"
             )
+        logger.info("OpenCode process ready", pid=self.process.pid, version=health.version)
 
     def child_environment(self) -> Mapping[str, str]:
         config_home = self.xdg_config_home.expanduser().resolve()
@@ -173,6 +178,8 @@ class OpenCodeClient:
             except TimeoutError:
                 self.process.kill()
                 await self.process.wait()
+        if self.process is not None:
+            logger.info("OpenCode process stopped", pid=self.process.pid, status=self.process.returncode)
 
     async def create(self, directory: Path, identity: str) -> str:
         async with self._client().get(f"{self.server_url}/session", headers=self._directory(directory)) as response:
@@ -180,12 +187,15 @@ class OpenCodeClient:
             sessions = TypeAdapter(tuple[SessionPayload, ...]).validate_python(await response.json())
         existing = next((item for item in sessions if item.title == identity), None)
         if existing is not None:
+            logger.info("OpenCode session reused", session=existing.id)
             return existing.id
         async with self._client().post(
             f"{self.server_url}/session", headers=self._directory(directory), json={"title": identity}
         ) as response:
             await self._raise(response)
-            return SessionPayload.model_validate(await response.json()).id
+            session = SessionPayload.model_validate(await response.json()).id
+        logger.info("OpenCode session created", session=session)
+        return session
 
     async def observe_prompt(self, directory: Path, session_id: str, text: str) -> PromptObservation:
         messages = await self._messages(directory, session_id)
@@ -202,12 +212,14 @@ class OpenCodeClient:
             json={"parts": [{"type": "text", "text": text}]},
         ) as response:
             await self._raise(response)
+        logger.info("OpenCode prompt submitted", session=session_id)
 
     async def wait_for_completion(self, directory: Path, session_id: str, text: str) -> None:
         try:
             async with asyncio.timeout(self.execution_timeout_seconds):
                 while True:
                     if (await self.observe_prompt(directory, session_id, text)).completed:
+                        logger.info("OpenCode prompt completed", session=session_id)
                         return
                     async for event_type, event_session, status in self._events(directory, session_id, text):
                         if event_session and event_session != session_id:
@@ -217,6 +229,7 @@ class OpenCodeClient:
                         if event_type == "session.idle" or (event_type == "session.status" and status == "idle"):
                             break
                     if (await self.observe_prompt(directory, session_id, text)).completed:
+                        logger.info("OpenCode prompt completed", session=session_id)
                         return
                     await asyncio.sleep(0.1)
         except TimeoutError:

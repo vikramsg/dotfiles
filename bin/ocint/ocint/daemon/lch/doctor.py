@@ -1,16 +1,17 @@
+import json
 import os
 import shutil
 import socket
 import sqlite3
 import stat
 import subprocess
-import tomllib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
 from pydantic import BaseModel, ConfigDict
 
-from ocint.daemon.config import DaemonConfig, DaemonSettings
+from ocint.daemon.config import DaemonConfig, DaemonContext, LifecycleConfig
 from ocint.daemon.db import current_daemon_head_revision
 from ocint.daemon.lch.provision import (
     RestrictedOpenCodeConfig,
@@ -20,6 +21,7 @@ from ocint.daemon.lch.provision import (
     policy_resource_path,
 )
 from ocint.daemon.lch.systemd import CommandRunner, SystemdLifecycle, service_text, timer_text
+from ocint.daemon.logging import daemon_log_settings
 
 
 class Diagnostic(BaseModel):
@@ -63,20 +65,18 @@ class CommandObservation(BaseModel):
     error: str = ""
 
 
-def diagnose(home: Path, runner: CommandRunner, lifecycle: SystemdLifecycle) -> DoctorReport:
+def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLifecycle) -> DoctorReport:
     diagnostics: list[Diagnostic] = []
-    settings = DaemonSettings()
-    config_path = settings.config_path(home)
+    config_path = context.config_path
     diagnostics.append(_private_file_diagnostic("config.path", config_path))
     config: DaemonConfig | None = None
     try:
         if not _owned_regular(config_path, 0o600):
             raise ValueError("daemon config must be a user-owned regular non-symlink mode-0600 file")
-        with config_path.open("rb") as stream:
-            config = DaemonConfig.model_validate(tomllib.load(stream))
+        config = context.config()
         effective = config.model_dump_json(exclude_none=True)
         diagnostics.append(Diagnostic(name="config.effective", required=True, ok=True, value=effective))
-    except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
+    except (OSError, ValueError) as error:
         diagnostics.append(
             Diagnostic(name="config.effective", required=True, ok=False, value="unavailable", detail=str(error))
         )
@@ -122,6 +122,7 @@ def diagnose(home: Path, runner: CommandRunner, lifecycle: SystemdLifecycle) -> 
             "opencode.isolated_directories",
             "opencode.auth",
             "database",
+            "daemon.log",
             "mirror_root",
             "worktree_root",
             "database.migration",
@@ -133,22 +134,33 @@ def diagnose(home: Path, runner: CommandRunner, lifecycle: SystemdLifecycle) -> 
                 Diagnostic(name=name, required=True, ok=False, value="unavailable", detail="config invalid")
             )
     else:
-        diagnostics.extend(_opencode_diagnostics(config, runner, home, policy))
-        diagnostics.extend(_storage_diagnostics(config))
+        diagnostics.extend(_opencode_diagnostics(config, runner, context, policy))
+        diagnostics.extend(_storage_diagnostics(config, daemon_log_settings(context.state_home, config.logging).path))
         diagnostics.extend(_git_diagnostics(config))
-        diagnostics.append(_port_diagnostic("ports.private_opencode", config.opencode.server_url.port or 80))
-        diagnostics.append(_port_diagnostic("ports.api", config.api.port))
+        service_active = (
+            _observe(
+                runner,
+                ("systemctl", "--user", "show", "ocint-daemon.service", "--property=ActiveState", "--value"),
+            ).value
+            == "active"
+        )
+        diagnostics.append(
+            _port_diagnostic(
+                "ports.private_opencode", config.opencode.server_url.port or 80, occupied_allowed=service_active
+            )
+        )
+        diagnostics.append(_port_diagnostic("ports.api", config.api.port, occupied_allowed=service_active))
 
     repository = config.repositories[0].github_repository if config is not None else ""
-    diagnostics.extend(_github_diagnostics(runner, home, repository))
-    diagnostics.extend(_systemd_diagnostics(lifecycle, runner))
+    diagnostics.extend(_github_diagnostics(runner, context, repository))
+    diagnostics.extend(_systemd_diagnostics(lifecycle, runner, config.lifecycle if config is not None else None))
     return DoctorReport(diagnostics=tuple(diagnostics))
 
 
 def _opencode_diagnostics(
     config: DaemonConfig,
     runner: CommandRunner,
-    home: Path,
+    context: DaemonContext,
     policy: StaticOpenCodePolicy | None,
 ) -> list[Diagnostic]:
     result: list[Diagnostic] = []
@@ -187,7 +199,7 @@ def _opencode_diagnostics(
     version_observation = _observe_isolated(
         runner,
         (str(config.opencode.executable), "--version"),
-        discovery_environment(home, False),
+        discovery_environment(context, False),
     )
     version = version_observation.value
     result.append(
@@ -199,8 +211,8 @@ def _opencode_diagnostics(
             detail=version_observation.error or "required and configured version must both be 1.17.20",
         )
     )
-    source = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share")) / "opencode" / "auth.json"
-    source_config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")) / "opencode" / "opencode.json"
+    source = context.data_home / "opencode" / "auth.json"
+    source_config = context.config_home / "opencode" / "opencode.json"
     result.append(
         Diagnostic(
             name="opencode.config_paths",
@@ -251,11 +263,12 @@ def _opencode_diagnostics(
     return result
 
 
-def _storage_diagnostics(config: DaemonConfig) -> list[Diagnostic]:
+def _storage_diagnostics(config: DaemonConfig, log_path: Path) -> list[Diagnostic]:
     result = [
         _private_file_diagnostic("database", config.database_path),
         _directory_diagnostic("mirror_root", config.mirror_root),
         _directory_diagnostic("worktree_root", config.worktree_root),
+        _log_diagnostic(log_path, config.logging.backup_count),
     ]
     revision = "missing"
     if _owned_regular(config.database_path, 0o600):
@@ -294,7 +307,7 @@ def _git_diagnostics(config: DaemonConfig) -> list[Diagnostic]:
     ]
 
 
-def _github_diagnostics(runner: CommandRunner, home: Path, repository: str) -> list[Diagnostic]:
+def _github_diagnostics(runner: CommandRunner, context: DaemonContext, repository: str) -> list[Diagnostic]:
     commands = (
         ("github.login", ("gh", "api", "--hostname", "github.com", "user")),
         (
@@ -304,7 +317,7 @@ def _github_diagnostics(runner: CommandRunner, home: Path, repository: str) -> l
         ("github.token", ("gh", "auth", "token", "--hostname", "github.com")),
     )
     result: list[Diagnostic] = []
-    environment = discovery_environment(home, True)
+    environment = discovery_environment(context, True)
     for name, command in commands:
         if name == "github.repository_default_branch" and not repository:
             result.append(
@@ -327,7 +340,9 @@ def _github_diagnostics(runner: CommandRunner, home: Path, repository: str) -> l
     return result
 
 
-def _systemd_diagnostics(lifecycle: SystemdLifecycle, runner: CommandRunner) -> list[Diagnostic]:
+def _systemd_diagnostics(
+    lifecycle: SystemdLifecycle, runner: CommandRunner, config: LifecycleConfig | None
+) -> list[Diagnostic]:
     paths = lifecycle.paths
     service_content = _read(paths.service)
     timer_content = _read(paths.timer)
@@ -336,13 +351,21 @@ def _systemd_diagnostics(lifecycle: SystemdLifecycle, runner: CommandRunner) -> 
     )
     schedule_observation = _observe(
         runner,
-        ("systemctl", "--user", "show", "ocint-daemon.timer", "--property=NextElapseUSecRealtime", "--value"),
+        (
+            "systemctl",
+            "--user",
+            "list-timers",
+            "--all",
+            "ocint-daemon.timer",
+            "--output=json",
+            "--no-pager",
+        ),
     )
     linger_observation = _observe(
-        runner, ("loginctl", "show-user", os.environ.get("USER", ""), "--property=Linger", "--value")
+        runner, ("loginctl", "show-user", lifecycle.paths.user, "--property=Linger", "--value")
     )
     active = active_observation.value
-    schedule = schedule_observation.value
+    schedule = _timer_schedule(schedule_observation.value)
     linger = linger_observation.value
     executable = shutil.which("ocint")
     expected_service = (
@@ -351,6 +374,7 @@ def _systemd_diagnostics(lifecycle: SystemdLifecycle, runner: CommandRunner) -> 
             paths.environment_reference,
             paths.reference(paths.config_home),
             paths.reference(paths.data_home),
+            paths.reference(paths.state_home),
             paths.reference(paths.daemon_config),
         )
         if executable is not None
@@ -373,11 +397,11 @@ def _systemd_diagnostics(lifecycle: SystemdLifecycle, runner: CommandRunner) -> 
         Diagnostic(
             name="systemd.timer",
             required=True,
-            ok=timer_safe and timer_content == timer_text(),
+            ok=timer_safe and config is not None and timer_content == timer_text(config),
             value=f"{paths.timer}\n{timer_content}",
             detail=(
                 f"mode={_mode(paths.timer)}; owner_ok={_owned(paths.timer)}; "
-                f"payload_exact={timer_content == timer_text()}"
+                f"payload_exact={config is not None and timer_content == timer_text(config)}"
             ),
         ),
         Diagnostic(
@@ -404,6 +428,27 @@ def _systemd_diagnostics(lifecycle: SystemdLifecycle, runner: CommandRunner) -> 
     ]
 
 
+def _timer_schedule(payload: str) -> str:
+    try:
+        timers = json.loads(payload)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(timers, list) or not timers or not isinstance(timers[0], dict):
+        return ""
+    timer = timers[0]
+    last = timer.get("last")
+    next_trigger = timer.get("next")
+    if not isinstance(last, int):
+        return ""
+    rendered_last = datetime.fromtimestamp(last / 1_000_000, UTC).isoformat().replace("+00:00", "Z")
+    rendered_next = (
+        datetime.fromtimestamp(next_trigger / 1_000_000, UTC).isoformat().replace("+00:00", "Z")
+        if isinstance(next_trigger, int)
+        else "pending service completion"
+    )
+    return f"last={rendered_last}; next={rendered_next}"
+
+
 def _environment_presence(path: Path, names: tuple[str, ...]) -> frozenset[str]:
     if not _owned_regular(path, 0o600):
         return frozenset()
@@ -426,10 +471,25 @@ def _directory_diagnostic(name: str, path: Path) -> Diagnostic:
     safe = _private_directory(path)
     return Diagnostic(
         name=name,
-        required=True,
+        required=path.exists(),
         ok=safe,
         value=f"{path} (mode={_mode(path)})",
         detail=f"owner_ok={_owned(path)}; directory_non_symlink={path.is_dir() and not path.is_symlink()}",
+    )
+
+
+def _log_diagnostic(path: Path, backup_count: int) -> Diagnostic:
+    safe = _owned_regular(path, 0o600)
+    rotated = len(tuple(path.parent.glob(f"{path.name}.[1-{backup_count}]"))) if path.parent.is_dir() else 0
+    return Diagnostic(
+        name="daemon.log",
+        required=path.exists(),
+        ok=safe,
+        value=f"{path} (mode={_mode(path)})",
+        detail=(
+            f"owner_ok={_owned(path)}; size={path.stat().st_size if safe else 0}; "
+            f"rotated={rotated}; backup_count={backup_count}"
+        ),
     )
 
 
@@ -437,14 +497,20 @@ def _mode(path: Path) -> str:
     return f"{stat.S_IMODE(path.stat().st_mode):04o}" if path.exists() else "missing"
 
 
-def _port_diagnostic(name: str, port: int) -> Diagnostic:
+def _port_diagnostic(name: str, port: int, occupied_allowed: bool = False) -> Diagnostic:
     available = True
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
             listener.bind(("127.0.0.1", port))
     except OSError:
         available = False
-    return Diagnostic(name=name, required=True, ok=available, value=f"127.0.0.1:{port} available={available}")
+    return Diagnostic(
+        name=name,
+        required=True,
+        ok=available or occupied_allowed,
+        value=f"127.0.0.1:{port} available={available}",
+        detail="occupied by active daemon service" if not available and occupied_allowed else "",
+    )
 
 
 def _observe(runner: CommandRunner, arguments: tuple[str, ...]) -> CommandObservation:

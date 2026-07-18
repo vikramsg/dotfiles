@@ -1,7 +1,16 @@
 from pathlib import Path
 
 import pytest
-from ocint.daemon.config import DaemonConfig, DaemonSettings, OpenCodeConfig, RepositoryConfig
+from ocint.daemon.config import (
+    DaemonConfig,
+    DaemonContext,
+    DaemonSettings,
+    LifecycleConfig,
+    LoggingConfig,
+    OpenCodeConfig,
+    RepositoryConfig,
+)
+from ocint.presentation import default_cli_context
 from pydantic import ValidationError
 
 
@@ -107,3 +116,96 @@ def test_opencode_expected_version_rejects_every_other_literal(tmp_path: Path) -
                 "xdg_data_home": tmp_path / "data",
             }
         )
+
+
+def test_lifecycle_and_logging_defaults_are_typed_and_overridable(tmp_path: Path) -> None:
+    # GIVEN
+    raw = {
+        "database_path": tmp_path / "control.sqlite",
+        "mirror_root": tmp_path / "mirrors",
+        "worktree_root": tmp_path / "worktrees",
+        "repositories": [
+            {
+                "name": "repo",
+                "remote_url": "git@example.test:owner/repo.git",
+                "github_repository": "owner/repo",
+                "author_name": "Agent",
+                "author_email": "agent@example.test",
+            }
+        ],
+        "opencode": {
+            "config_file": tmp_path / "opencode.json",
+            "xdg_config_home": tmp_path / "config",
+            "xdg_data_home": tmp_path / "data",
+        },
+        "github": {"agent_actor": "maintainer"},
+        "git": {
+            "ssh_executable": tmp_path / "ssh",
+            "identity_file": tmp_path / "identity",
+            "known_hosts_file": tmp_path / "known_hosts",
+        },
+    }
+
+    # WHEN
+    defaulted = DaemonConfig.model_validate(raw)
+    overridden = DaemonConfig.model_validate(
+        {
+            **raw,
+            "lifecycle": {"startup_delay_seconds": 75, "inactive_interval_seconds": 901},
+            "logging": {"max_bytes": 2048, "backup_count": 2},
+        }
+    )
+
+    # THEN
+    assert defaulted.lifecycle == LifecycleConfig()
+    assert defaulted.logging == LoggingConfig()
+    assert overridden.lifecycle.startup_delay_seconds == 75
+    assert overridden.lifecycle.inactive_interval_seconds == 901
+    assert overridden.logging.max_bytes == 2048
+    assert overridden.logging.backup_count == 2
+    with pytest.raises(ValidationError):
+        LifecycleConfig(startup_delay_seconds=0)
+    with pytest.raises(ValidationError):
+        LoggingConfig(backup_count=0)
+
+
+def test_daemon_context_loads_configuration_once_per_command(tmp_path: Path) -> None:
+    # GIVEN
+    config = tmp_path / "daemon.toml"
+    config.write_text(
+        f'''database_path = "{tmp_path / "control.sqlite"}"
+mirror_root = "{tmp_path / "mirrors"}"
+worktree_root = "{tmp_path / "worktrees"}"
+[[repositories]]
+name = "repo"
+remote_url = "git@example.test:owner/repo.git"
+github_repository = "owner/repo"
+author_name = "Agent"
+author_email = "agent@example.test"
+[opencode]
+config_file = "{tmp_path / "opencode.json"}"
+xdg_config_home = "{tmp_path / "config"}"
+xdg_data_home = "{tmp_path / "data"}"
+[github]
+agent_actor = "maintainer"
+[git]
+ssh_executable = "{tmp_path / "ssh"}"
+identity_file = "{tmp_path / "identity"}"
+known_hosts_file = "{tmp_path / "known_hosts"}"
+'''
+    )
+    context = DaemonContext.create(
+        default_cli_context().output,
+        tmp_path,
+        {"XDG_STATE_HOME": str(tmp_path / "state")},
+        DaemonSettings(config=config),
+    )
+
+    # WHEN
+    first = context.config()
+    config.write_text("not = [valid")
+    second = context.config()
+
+    # THEN
+    assert first is second
+    assert first.lifecycle == LifecycleConfig()

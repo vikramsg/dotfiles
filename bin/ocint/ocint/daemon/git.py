@@ -6,7 +6,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from ocint.daemon.config import RepositoryConfig
+from ocint.daemon.logging import get_logger
 from ocint.daemon.service import Worktree
+
+logger = get_logger("git")
 
 
 class GitManager:
@@ -69,19 +72,25 @@ class GitManager:
         worktree = self.worktree_root / job_id
         branch = f"ocint/{job_id}"
         if worktree.exists() or worktree.is_symlink():
+            logger.info("managed worktree reused", repository=repository.name, job=job_id, branch=branch)
             return await self._existing_worktree(mirror, worktree, branch)
         if not mirror.exists():
+            logger.info("repository mirror clone started", repository=repository.name)
             await self._network_git(self.mirror_root, "clone", "--mirror", repository.remote_url, str(mirror))
             revision_ref = f"refs/heads/{repository.default_branch}"
+            logger.info("repository mirror clone completed", repository=repository.name)
         else:
+            logger.info("repository mirror fetch started", repository=repository.name)
             await self._git(mirror, "remote", "set-url", "origin", repository.remote_url)
             revision_ref = f"refs/remotes/origin/{repository.default_branch}"
             await self._network_git(
                 mirror, "fetch", "origin", f"+refs/heads/{repository.default_branch}:{revision_ref}"
             )
+            logger.info("repository mirror fetch completed", repository=repository.name)
         await self._git(mirror, "config", "remote.origin.mirror", "false")
         revision = (await self._git(mirror, "rev-parse", revision_ref)).strip()
         await self._git(mirror, "worktree", "add", str(worktree), "-b", branch, revision)
+        logger.info("managed worktree created", repository=repository.name, job=job_id, branch=branch)
         return Worktree(path=worktree, branch=branch, base_revision=revision)
 
     async def _existing_worktree(self, mirror: Path, worktree: Path, branch: str) -> Worktree:
@@ -108,6 +117,7 @@ class GitManager:
         return Worktree(path=worktree, branch=actual_branch, base_revision=revision)
 
     async def validate(self, worktree: Worktree, checks: tuple[tuple[str, ...], ...]) -> None:
+        logger.info("validation started", branch=worktree.branch, checks=len(checks))
         for command in checks:
             if not command:
                 raise ValueError("validation commands cannot be empty")
@@ -115,6 +125,7 @@ class GitManager:
         status = (await self._git(worktree.path, "status", "--porcelain")).strip()
         if not status and (await self._git(worktree.path, "rev-parse", "HEAD")).strip() == worktree.base_revision:
             raise ValueError("OpenCode produced no changes")
+        logger.info("validation completed", branch=worktree.branch)
 
     async def commit(self, worktree: Worktree, message: str, author_name: str, author_email: str) -> str:
         status = (await self._git(worktree.path, "status", "--porcelain")).strip()
@@ -132,10 +143,13 @@ class GitManager:
             "-m",
             message,
         )
-        return (await self._git(worktree.path, "rev-parse", "HEAD")).strip()
+        commit = (await self._git(worktree.path, "rev-parse", "HEAD")).strip()
+        logger.info("commit created", branch=worktree.branch, commit=commit)
+        return commit
 
     async def push(self, worktree: Worktree) -> None:
         await self._network_git(worktree.path, "push", "--no-verify", "--set-upstream", "origin", worktree.branch)
+        logger.info("branch pushed", branch=worktree.branch)
 
     async def _git(self, cwd: Path, *arguments: str) -> str:
         return await self._run(["git", *arguments], cwd, self.git_environment)

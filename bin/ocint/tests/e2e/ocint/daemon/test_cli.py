@@ -13,7 +13,9 @@ from aiohttp import web
 from click.testing import CliRunner
 from ocint.cli import main
 from ocint.daemon.cli import create_daemon_app
-from ocint.daemon.config import DaemonSettings
+from ocint.daemon.config import DaemonContext, DaemonSettings
+from ocint.daemon.logging import get_logger
+from ocint.presentation import default_cli_context
 from pydantic import SecretStr
 
 
@@ -191,7 +193,7 @@ agent_actor = "automation-bot"
         execution_path=f"{transport}:{os.environ['PATH']}",
         execution_lang="C.UTF-8",
     )
-    app, _loaded = create_daemon_app(settings, tmp_path)
+    app, _config = create_daemon_app(DaemonContext.create(default_cli_context().output, tmp_path, os.environ, settings))
     server = SignalFreeServer(
         uvicorn.Config(app, host="127.0.0.1", port=api_port, log_config=None, access_log=False, lifespan="on")
     )
@@ -241,6 +243,116 @@ agent_actor = "automation-bot"
     assert remote_commit == completed["commit_sha"]
     await github_runner.cleanup()
     await opencode_runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_daemon_run_applies_toml_log_rotation(tmp_path: Path, unused_tcp_port_factory: Callable[[], int]) -> None:
+    # GIVEN
+    api_port = unused_tcp_port_factory()
+    opencode_port = unused_tcp_port_factory()
+    github_port = unused_tcp_port_factory()
+
+    async def opencode_health(_request: web.Request) -> web.Response:
+        return web.json_response({"healthy": True, "version": "1.17.20"})
+
+    async def github_issues(_request: web.Request) -> web.Response:
+        return web.json_response([])
+
+    opencode_app = web.Application()
+    opencode_app.router.add_get("/global/health", opencode_health)
+    opencode_runner = web.AppRunner(opencode_app)
+    await opencode_runner.setup()
+    await web.TCPSite(opencode_runner, "127.0.0.1", opencode_port).start()
+
+    github_app = web.Application()
+    github_app.router.add_get("/repos/owner/repo/issues", github_issues)
+    github_runner = web.AppRunner(github_app)
+    await github_runner.setup()
+    await web.TCPSite(github_runner, "127.0.0.1", github_port).start()
+
+    executable = tmp_path / "opencode"
+    executable.write_text("#!/bin/sh\nexec sleep 30\n")
+    executable.chmod(0o755)
+    ssh = tmp_path / "ssh"
+    ssh.write_text("#!/bin/sh\nexit 0\n")
+    ssh.chmod(0o755)
+    identity = tmp_path / "identity"
+    identity.write_text("test identity\n")
+    identity.chmod(0o600)
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("example.test test-key\n")
+    config = tmp_path / "daemon.toml"
+    state_home = tmp_path / "state"
+    config.write_text(
+        f'''database_path = "{tmp_path / "control.sqlite"}"
+mirror_root = "{tmp_path / "mirrors"}"
+worktree_root = "{tmp_path / "worktrees"}"
+idle_timeout_seconds = 3
+[[repositories]]
+name = "repo"
+remote_url = "git@example.test:owner/repo.git"
+github_repository = "owner/repo"
+author_name = "Daemon Agent"
+author_email = "daemon@example.test"
+[logging]
+max_bytes = 1024
+backup_count = 1
+[opencode]
+server_url = "http://127.0.0.1:{opencode_port}"
+executable = "{executable}"
+config_file = "{tmp_path / "opencode.json"}"
+xdg_config_home = "{tmp_path / "opencode-config"}"
+xdg_data_home = "{tmp_path / "opencode-data"}"
+[git]
+ssh_executable = "{ssh}"
+identity_file = "{identity}"
+known_hosts_file = "{known_hosts}"
+[api]
+port = {api_port}
+[github]
+api_url = "http://127.0.0.1:{github_port}"
+agent_actor = "automation-bot"
+'''
+    )
+    runner = CliRunner()
+    log_path = state_home / "ocint" / "daemon.log"
+
+    try:
+        # WHEN
+        running = asyncio.create_task(
+            asyncio.to_thread(
+                runner.invoke,
+                main,
+                ["daemon", "run"],
+                env={
+                    "OCINT_DAEMON_CONFIG": str(config),
+                    "OCINT_DAEMON_API_TOKEN": "api-token",
+                    "OCINT_DAEMON_GITHUB_TOKEN": "github-token",
+                    "XDG_STATE_HOME": str(state_home),
+                },
+            )
+        )
+        for _attempt in range(250):
+            if log_path.is_file() and "daemon ready" in log_path.read_text():
+                break
+            if running.done():
+                break
+            await asyncio.sleep(0.02)
+        assert not running.done()
+        assert "daemon ready" in log_path.read_text()
+        logger = get_logger("e2e")
+        for sequence in range(6):
+            logger.info("log rotation verification", sequence=sequence, marker="x" * 300)
+        result = await running
+
+        # THEN
+        assert result.exit_code == 0, result.output
+        assert log_path.is_file()
+        assert log_path.with_name("daemon.log.1").is_file()
+        assert not log_path.with_name("daemon.log.2").exists()
+    finally:
+        await github_runner.cleanup()
+        await opencode_runner.cleanup()
 
 
 def test_lch_provision_is_discoverable() -> None:

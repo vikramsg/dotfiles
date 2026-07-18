@@ -12,7 +12,10 @@ from ocint.daemon.github.models import (
     StoredIssue,
 )
 from ocint.daemon.github.repository import GitHubRepository
+from ocint.daemon.logging import get_logger
 from ocint.daemon.service import Job, WorkRequest
+
+logger = get_logger("github")
 
 
 class WorkAcceptor(Protocol):
@@ -40,9 +43,22 @@ class GitHubService:
 
     async def poll(self, acceptor: WorkAcceptor) -> None:
         for configured in self.config.repositories:
-            for issue in await self.client.issues(configured.github_repository, self.config.github.issue_label):
+            issues = await self.client.issues(configured.github_repository, self.config.github.issue_label)
+            logger.info(
+                "repository issues polled",
+                repository=configured.github_repository,
+                label=self.config.github.issue_label,
+                issues=len(issues),
+            )
+            for issue in issues:
                 existing = self.repository.find_issue(configured.name, issue.id)
                 if existing is None and not self._authorized(issue.user.login, configured):
+                    logger.warning(
+                        "issue rejected",
+                        repository=configured.github_repository,
+                        issue=issue.number,
+                        actor=issue.user.login,
+                    )
                     continue
                 comments = await self.client.comments(configured.github_repository, issue.number)
                 stored = existing
@@ -64,6 +80,13 @@ class GitHubService:
                         stored.id, comment, ActorType.AGENT if agent else ActorType.HUMAN, state, marker
                     )
                     if state is CommentState.REJECTED:
+                        logger.warning(
+                            "issue comment rejected",
+                            repository=configured.github_repository,
+                            issue=issue.number,
+                            comment=comment.id,
+                            actor=comment.user.login,
+                        )
                         await self._respond(
                             stored, "unauthorized", comment.id, f"Actor @{comment.user.login} is not authorized."
                         )
@@ -86,6 +109,12 @@ class GitHubService:
                     )
                     job = acceptor.accept(request)
                     stored = self.repository.issue(configured.name, configured.github_repository, issue, job.id)
+                    logger.info(
+                        "issue accepted",
+                        repository=configured.github_repository,
+                        issue=issue.number,
+                        job=job.id,
+                    )
                     for comment in comments:
                         marker = self._marker_from_body(comment.body)
                         agent = self._is_agent_comment(comment, configured.github_repository, issue.number, comments)
@@ -102,6 +131,13 @@ class GitHubService:
                             stored.id, comment, ActorType.AGENT if agent else ActorType.HUMAN, state, marker
                         )
                         if state is CommentState.REJECTED:
+                            logger.warning(
+                                "issue comment rejected",
+                                repository=configured.github_repository,
+                                issue=issue.number,
+                                comment=comment.id,
+                                actor=comment.user.login,
+                            )
                             await self._respond(
                                 stored, "unauthorized", comment.id, f"Actor @{comment.user.login} is not authorized."
                             )
@@ -118,6 +154,12 @@ class GitHubService:
                                 configured.github_repository, stored.pull_request_number
                             )
                             if pull.state != "open" or pull.merged:
+                                logger.error(
+                                    "issue follow-up blocked",
+                                    repository=configured.github_repository,
+                                    issue=issue.number,
+                                    pull_request=stored.pull_request_url,
+                                )
                                 self.repository.set_error(stored.id, "owned pull request is closed or merged")
                                 self.repository.finalize(stored.id, CommentState.ERRORED)
                                 await self._respond(
@@ -127,6 +169,13 @@ class GitHubService:
                                     "The owned pull request is closed or merged; no replacement will be created.",
                                 )
                                 continue
+                        logger.info(
+                            "issue follow-up accepted",
+                            repository=configured.github_repository,
+                            issue=issue.number,
+                            job=stored.job_id,
+                            comments=len(pending),
+                        )
                         acceptor.resume(stored.job_id, self.followup_prompt(pending))
                     elif stored.initial_state == CommentState.PENDING.value:
                         acceptor.resume(stored.job_id, self.initial_prompt(stored.title, stored.body, ()))
@@ -146,6 +195,9 @@ class GitHubService:
             pull = await self.client.find_pull_request(repository, branch, base)
             if pull is None:
                 pull = await self.client.create_pull_request(repository, branch, base, title, body)
+                logger.info("pull request created", repository=repository, branch=branch, pull_request=pull.html_url)
+            else:
+                logger.info("pull request reused", repository=repository, branch=branch, pull_request=pull.html_url)
             return pull.html_url
         if (
             issue.pull_request_number
@@ -169,6 +221,21 @@ class GitHubService:
             pull = await self.client.find_pull_request(repository, branch, base)
             if pull is None:
                 pull = await self.client.create_pull_request(repository, branch, base, issue.title, body)
+                logger.info(
+                    "issue pull request created",
+                    repository=repository,
+                    issue=issue.issue_number,
+                    branch=branch,
+                    pull_request=pull.html_url,
+                )
+            else:
+                logger.info(
+                    "issue pull request reused",
+                    repository=repository,
+                    issue=issue.issue_number,
+                    branch=branch,
+                    pull_request=pull.html_url,
+                )
             self.repository.set_pull_request(issue.id, pull.number, pull.html_url)
         await self._respond(
             issue,
@@ -177,6 +244,13 @@ class GitHubService:
             f"Issue addressed: {pull.html_url}\n\nTo make further changes, add a comment.",
         )
         self.repository.finalize(issue.id, CommentState.ADDRESSED)
+        logger.info(
+            "issue addressed",
+            repository=repository,
+            issue=issue.issue_number,
+            job=job_id,
+            pull_request=pull.html_url,
+        )
         return pull.html_url
 
     @staticmethod

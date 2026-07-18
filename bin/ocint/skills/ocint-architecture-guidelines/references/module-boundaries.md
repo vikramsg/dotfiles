@@ -1,0 +1,1 @@
+../../../docs/architecture/module-boundaries.md

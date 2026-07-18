@@ -3,7 +3,7 @@
 ```text
  user systemd manager
    |
-   | OnStartupSec=1m, then OnUnitInactiveSec=15m
+   | configured startup delay, then configured inactive interval
    v
  ocint-daemon.service (one bounded invocation)
    |
@@ -101,7 +101,7 @@ The implementation uses a small set of deep modules:
 | Module | Responsibility |
 | --- | --- |
 | `cli.py` | Click commands, concrete dependency wiring, FastAPI lifespan, and `uvicorn.run()` |
-| `config.py` | Typed settings, repository registry, path resolution, and validation |
+| `config.py` | Typed daemon policy, resolved command context, path resolution, and validation |
 | `api.py` | Bearer authentication and the four HTTP routes |
 | `repository.py` | SQLite transactions, idempotent submission, checkpoints, queries, and reconciliation |
 | `service.py` | Job models, narrow dependency protocols, capacity, execution stages, and shutdown draining |
@@ -163,6 +163,14 @@ database_path = "~/.local/state/ocint/daemon.sqlite"
 mirror_root = "~/.local/share/ocint/mirrors"
 worktree_root = "~/.local/share/ocint/worktrees"
 
+[lifecycle]
+startup_delay_seconds = 60
+inactive_interval_seconds = 900
+
+[logging]
+max_bytes = 10485760
+backup_count = 5
+
 [[repositories]]
 name = "repository"
 remote_url = "git@github.com:OWNER/REPOSITORY.git"
@@ -218,6 +226,28 @@ known_hosts_file = "~/.ssh/known_hosts"
 | `repositories` | Allowed repository registry |
 
 Mirror and worktree roots must differ.
+
+### Lifecycle Settings
+
+| Setting | Default | Meaning |
+| --- | ---: | --- |
+| `startup_delay_seconds` | `60` | Delay after the user manager starts before the first daemon invocation |
+| `inactive_interval_seconds` | `900` | Delay after a completed invocation before systemd starts the next one |
+
+`ocint daemon lch install` renders these values into the user timer. After
+editing `[lifecycle]`, run that command to reload and enable the regenerated
+unit. LCH renders this policy but does not define or load it.
+
+### Logging Settings
+
+| Setting | Default | Meaning |
+| --- | ---: | --- |
+| `max_bytes` | `10485760` | Active log size at which Python rotates the file |
+| `backup_count` | `5` | Number of private rotated files retained |
+
+The daemon derives `$XDG_STATE_HOME/ocint/daemon.log` from its resolved command
+context. It loads `[logging]` at every invocation, so logging policy changes
+apply on the next cycle without changing the systemd unit.
 
 ### Repository Settings
 
@@ -725,10 +755,18 @@ just --justfile bin/ocint/justfile smoke
 ## systemd Lifecycle And Cleanup
 
 `ocint daemon lch provision` generates exactly one timer and one service. The
-timer's `OnStartupSec=1m` is relative to the user manager start, not wall-clock
-boot. `OnUnitInactiveSec=15m` starts the next invocation after the previous
-service becomes inactive. `enable --now` means reinstalling the timer can cause
-an immediate trigger when the startup deadline has already elapsed.
+timer's `OnStartupSec` and `OnUnitInactiveSec` derive from `[lifecycle]`. The
+startup delay is relative to user-manager start, not wall-clock boot. The
+inactive interval starts after the previous service becomes inactive.
+`enable --now` means reinstalling the timer can cause an immediate trigger when
+the startup deadline has already elapsed.
+
+The generated service passes `XDG_STATE_HOME` explicitly. Each invocation
+appends one-line human-readable events to the private
+`$XDG_STATE_HOME/ocint/daemon.log`. Python's rotating file handler rolls the
+file at the configured `logging.max_bytes` limit and retains configured
+`logging.backup_count` backups. `lch logs` reads this artifact directly and
+follows it across rotation; it does not depend on journald access.
 
 `ocint daemon lch uninstall` disables/stops the units, removes only the two unit
 files, and reloads systemd. It preserves configuration, environment, auth link,
@@ -797,11 +835,11 @@ GIT_SSH_COMMAND='/usr/bin/ssh -o BatchMode=yes' \
   git ls-remote git@github.com:OWNER/REPOSITORY.git refs/heads/main
 ```
 
-### Journald cannot be read
+### Daemon log cannot be read
 
-Use `ocint daemon lch logs` as the same user that owns the user manager. Check
-user journal permissions and that `systemctl --user` reaches that manager; do
-not switch the service to a system unit as a workaround.
+Run `ocint daemon lch status` and confirm its log path matches the generated
+service's `XDG_STATE_HOME`. The log directory must be user-owned mode 0700 and
+the active and rotated files must be regular user-owned mode-0600 files.
 
 ### Job remains queued after restart
 
