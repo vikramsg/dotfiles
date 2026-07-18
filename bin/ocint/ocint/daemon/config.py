@@ -41,7 +41,7 @@ class SchedulerConfig(BaseModel):
     capacity: int = Field(default=1, ge=1)
     job_timeout_seconds: int = Field(default=3600, ge=1)
     shutdown_timeout_seconds: int = Field(default=30, ge=1)
-    command_timeout_seconds: int = Field(default=900, ge=1)
+    command_timeout_seconds: int = Field(default=600, ge=1)
     command_output_bytes: int = Field(default=65536, ge=1024)
 
 
