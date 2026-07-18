@@ -214,13 +214,16 @@ def test_status_reports_timer_schedule_service_result_and_log_path(tmp_path: Pat
     lifecycle = SystemdLifecycle(paths, StatusRunner())
 
     # WHEN
-    rendered = lifecycle.status()
+    status = lifecycle.status()
 
     # THEN
-    assert "timer: active waiting" in rendered
-    assert "last trigger: 2026-07-17T18:08:28Z" in rendered
-    assert "next trigger: 2026-07-17T18:25:02Z" in rendered
-    assert "service: inactive dead" in rendered
-    assert "last result: success" in rendered
-    assert "last exit status: 0" in rendered
-    assert f"log: {paths.daemon_log}" in rendered
+    assert status.installed
+    assert status.timer_state == "active"
+    assert status.timer_substate == "waiting"
+    assert status.last_trigger == "2026-07-17 18:08:28 UTC"
+    assert status.next_trigger == "2026-07-17 18:25:02 UTC"
+    assert status.service_state == "inactive"
+    assert status.service_substate == "dead"
+    assert status.last_result == "success"
+    assert status.last_exit_status == "0"
+    assert status.log_path == paths.daemon_log

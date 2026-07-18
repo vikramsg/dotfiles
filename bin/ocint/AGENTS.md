@@ -78,6 +78,12 @@ These instructions apply to `bin/ocint/`.
 - Write code comments and docs in the style of a blog post. Clear, simple, complete.
 - When editing docs, do not remove sections unless they are stale. Prefer editing the stale section than completely removing them, including ASCII diagrams. 
 
+### Rendering
+
+- For all CLI output, prefer using Rich to render in a structured manner
+- Prefer separate colous for headings
+- Use the existing style of creating a `render.py` for rendering by reusing components from `ocint.presentation`.
+
 ## Commands
 
 Use the package justfile explicitly:

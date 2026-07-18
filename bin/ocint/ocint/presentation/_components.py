@@ -19,7 +19,8 @@ def key_value_section(title: str, rows: Sequence[tuple[str, object]]) -> Present
     table.add_column(style="bold", no_wrap=True)
     table.add_column(overflow="fold")
     for label, value in rows:
-        table.add_row(Text(f"{label}:"), Text("" if value is None else str(value)))
+        rendered = value if isinstance(value, Text) else Text("" if value is None else str(value))
+        table.add_row(Text(f"{label}:"), rendered)
     return Group(Rule(title, style="cyan", align="left"), Text(""), table, Text(""))
 
 

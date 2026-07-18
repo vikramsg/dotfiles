@@ -5,6 +5,7 @@ import click
 
 from ocint._models import CliContext
 from ocint.daemon.lch.provision import discover, provision
+from ocint.daemon.lch.render import render_status
 from ocint.daemon.lch.systemd import SubprocessRunner, SystemdLifecycle, SystemdPaths, installed_ocint
 
 
@@ -56,7 +57,7 @@ def uninstall_command() -> None:
 @lch.command("status")
 @click.pass_obj
 def status_command(context: CliContext) -> None:
-    context.output.write(lifecycle(Path.home()).status(), nl=True)
+    context.output.display(render_status(lifecycle(Path.home()).status()))
 
 
 @lch.command("logs")

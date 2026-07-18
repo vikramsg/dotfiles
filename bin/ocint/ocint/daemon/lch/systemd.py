@@ -20,6 +20,24 @@ class CommandResult(BaseModel):
     stderr: str = ""
 
 
+class LifecycleStatus(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    installed: bool
+    timer_state: str = "inactive"
+    timer_substate: str = "dead"
+    last_trigger: str = "unavailable"
+    next_trigger: str = "unavailable"
+    service_state: str = "inactive"
+    service_substate: str = "dead"
+    last_result: str = "unknown"
+    last_exit_status: str = "unknown"
+    last_started: str = "unavailable"
+    last_completed: str = "unavailable"
+    log_path: Path
+    home: Path
+
+
 class CommandRunner(Protocol):
     def run(self, arguments: Sequence[str]) -> CommandResult: ...
     def run_isolated(self, arguments: Sequence[str], environment: Mapping[str, str]) -> CommandResult: ...
@@ -176,10 +194,10 @@ class SystemdLifecycle:
         self.paths.service.unlink(missing_ok=True)
         self.runner.run(("systemctl", "--user", "daemon-reload"))
 
-    def status(self) -> str:
+    def status(self) -> LifecycleStatus:
         installed = self.paths.timer.is_file() and self.paths.service.is_file()
         if not installed:
-            return f"installed: no\nlog: {self.paths.daemon_log}"
+            return LifecycleStatus(installed=False, log_path=self.paths.daemon_log, home=self.paths.home)
         timer = self._unit_properties("ocint-daemon.timer", ("ActiveState", "SubState", "LastTriggerUSec"))
         service = self._unit_properties(
             "ocint-daemon.service",
@@ -206,8 +224,6 @@ class SystemdLifecycle:
             ).stdout
             or "[]"
         )
-        timer_state = " ".join(filter(None, (timer.get("ActiveState", "unknown"), timer.get("SubState", ""))))
-        service_state = " ".join(filter(None, (service.get("ActiveState", "unknown"), service.get("SubState", ""))))
         next_trigger = "unavailable"
         last_trigger = timer.get("LastTriggerUSec", "unavailable") or "unavailable"
         if schedule:
@@ -219,19 +235,20 @@ class SystemdLifecycle:
                 next_trigger = "pending service completion"
             if isinstance(last_value, int):
                 last_trigger = self._timestamp(last_value)
-        return "\n".join(
-            (
-                "installed: yes",
-                f"timer: {timer_state}",
-                f"last trigger: {last_trigger}",
-                f"next trigger: {next_trigger}",
-                f"service: {service_state}",
-                f"last result: {service.get('Result', 'unknown') or 'unknown'}",
-                f"last exit status: {service.get('ExecMainStatus', 'unknown') or 'unknown'}",
-                f"last started: {service.get('ExecMainStartTimestamp', 'unavailable') or 'unavailable'}",
-                f"last completed: {service.get('ExecMainExitTimestamp', 'unavailable') or 'unavailable'}",
-                f"log: {self.paths.daemon_log}",
-            )
+        return LifecycleStatus(
+            installed=True,
+            timer_state=timer.get("ActiveState", "unknown"),
+            timer_substate=timer.get("SubState", "unknown"),
+            last_trigger=last_trigger,
+            next_trigger=next_trigger,
+            service_state=service.get("ActiveState", "unknown"),
+            service_substate=service.get("SubState", "unknown"),
+            last_result=service.get("Result", "unknown") or "unknown",
+            last_exit_status=service.get("ExecMainStatus", "unknown") or "unknown",
+            last_started=self._systemd_timestamp(service.get("ExecMainStartTimestamp", "")),
+            last_completed=self._systemd_timestamp(service.get("ExecMainExitTimestamp", "")),
+            log_path=self.paths.daemon_log,
+            home=self.paths.home,
         )
 
     def logs(self, lines: int) -> str:
@@ -248,7 +265,17 @@ class SystemdLifecycle:
 
     @staticmethod
     def _timestamp(microseconds: int) -> str:
-        return datetime.fromtimestamp(microseconds / 1_000_000, UTC).isoformat().replace("+00:00", "Z")
+        return datetime.fromtimestamp(microseconds / 1_000_000, UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    @staticmethod
+    def _systemd_timestamp(value: str) -> str:
+        if not value:
+            return "unavailable"
+        try:
+            parsed = datetime.strptime(value, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=UTC)
+        except ValueError:
+            return value
+        return parsed.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     def _validate_environment(self) -> None:
         path = self.paths.environment_file
