@@ -3,7 +3,7 @@ import os
 import stat
 import time
 from collections import deque
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from structlog.stdlib import BoundLogger, ProcessorFormatter
 from structlog.typing import EventDict, WrappedLogger
 
+from ocint.daemon.models import LogRotation
+
 logging.getLogger("ocint.daemon").addHandler(logging.NullHandler())
 
 
@@ -19,8 +21,8 @@ class DaemonLogSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     path: Path
-    max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
-    backups: int = Field(default=5, ge=1)
+    max_bytes: int = Field(ge=1024)
+    backups: int = Field(ge=1)
 
 
 class PrivateRotatingFileHandler(RotatingFileHandler):
@@ -29,9 +31,12 @@ class PrivateRotatingFileHandler(RotatingFileHandler):
         Path(self.baseFilename).chmod(0o600)
 
 
-def daemon_log_settings(home: Path, environment: Mapping[str, str]) -> DaemonLogSettings:
-    state_home = Path(environment.get("XDG_STATE_HOME", home / ".local" / "state")).expanduser().resolve()
-    return DaemonLogSettings(path=state_home / "ocint" / "daemon.log")
+def daemon_log_settings(state_home: Path, config: LogRotation) -> DaemonLogSettings:
+    return DaemonLogSettings(
+        path=state_home / "ocint" / "daemon.log",
+        max_bytes=config.max_bytes,
+        backups=config.backup_count,
+    )
 
 
 def configure(settings: DaemonLogSettings) -> None:

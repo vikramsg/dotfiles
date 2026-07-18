@@ -15,6 +15,7 @@ def test_daemon_has_only_intended_modules() -> None:
         "config.py",
         "git.py",
         "logging.py",
+        "models.py",
         "opencode.py",
         "repository.py",
         "run.py",
@@ -67,7 +68,7 @@ def test_daemon_core_import_direction_points_from_service_to_config() -> None:
 def test_prohibited_legacy_daemon_modules_are_absent() -> None:
     # GIVEN
     daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-    prohibited = {"channels.py", "models.py", "runtime.py", "composition.py"}
+    prohibited = {"channels.py", "runtime.py", "composition.py"}
 
     # WHEN
     existing = {path.name for path in daemon.glob("*.py")}
@@ -77,6 +78,21 @@ def test_prohibited_legacy_daemon_modules_are_absent() -> None:
 
     package = daemon.parents[1]
     assert not (package / "systemd").exists()
+
+
+def test_daemon_logging_depends_on_the_log_rotation_contract() -> None:
+    # GIVEN
+    logging_module = Path(__file__).parents[2] / "ocint" / "daemon" / "logging.py"
+
+    # WHEN
+    tree = ast.parse(logging_module.read_text())
+    imports = {
+        node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None
+    }
+
+    # THEN
+    assert "ocint.daemon.models" in imports
+    assert "ocint.daemon.config" not in imports
 
 
 def test_initial_daemon_migration_is_single_and_independent_of_live_metadata() -> None:
@@ -204,3 +220,42 @@ def test_daemon_log_events_do_not_include_secret_or_prompt_fields() -> None:
 
     # THEN
     assert fields.isdisjoint(prohibited)
+
+
+def test_daemon_context_is_the_only_configuration_load_boundary() -> None:
+    # GIVEN
+    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
+
+    # WHEN
+    tomllib_importers = []
+    settings_constructors = []
+    for module in daemon.rglob("*.py"):
+        tree = ast.parse(module.read_text())
+        if any(
+            isinstance(node, ast.Import) and any(alias.name == "tomllib" for alias in node.names)
+            or isinstance(node, ast.ImportFrom) and node.module == "tomllib"
+            for node in ast.walk(tree)
+        ):
+            tomllib_importers.append(module.name)
+        if any(
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "DaemonSettings"
+            for node in ast.walk(tree)
+        ):
+            settings_constructors.append(module.name)
+
+    # THEN
+    assert tomllib_importers == ["config.py"]
+    assert settings_constructors == ["config.py"]
+
+
+def test_lch_receives_policy_without_owning_defaults() -> None:
+    # GIVEN
+    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
+    systemd = (daemon / "lch" / "systemd.py").read_text()
+    logging = (daemon / "logging.py").read_text()
+
+    # THEN
+    assert "OnStartupSec=1m" not in systemd
+    assert "OnUnitInactiveSec=15m" not in systemd
+    assert "default=10 * 1024 * 1024" not in logging
+    assert "default=5" not in logging
