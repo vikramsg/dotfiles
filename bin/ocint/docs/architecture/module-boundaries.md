@@ -38,11 +38,31 @@ adapter unless they become first-class application data.
 ## Shared types
 
 - Keep a type in its owning file while only that file uses it.
-- Move a type used by multiple files into `models.py` in their closest common
-  package.
+- Move a type only when it is a stable contract owned by its closest common
+  package. Import count alone does not justify promotion.
 - A `models.py` contains type declarations only: models, enums, protocols, and
   type aliases.
 - Do not put functions, services, I/O, or behavior helpers in `models.py`.
+
+Choose the narrowest owner:
+
+| Use | Location |
+| --- | --- |
+| One module | Keep the type in that module |
+| Sibling modules in one subfeature | The subfeature's `models.py` |
+| Sibling subfeatures with the same vocabulary and lifecycle | The parent feature's `models.py` |
+| Unrelated application features | A deliberately narrow application contract, not a root dumping ground |
+
+A parent `models.py` is reserved for its package's core vocabulary. Types belong
+together only when they share meaning, lifecycle, and reasons to change with
+that package. If a models module mixes unrelated transport, persistence,
+rendering, configuration, and infrastructure concerns, move each group down to
+its closest owner.
+
+Keep adapter and workflow details local even when several implementation files
+use them. Examples include external API payloads, database row representations,
+renderer view data, infrastructure diagnostics, derived filesystem settings,
+and request or result types used by one workflow.
 
 ## Configuration
 
@@ -55,6 +75,11 @@ Configuration is typed data, not a collection of functions.
 - Application code receives resolved configuration explicitly.
 - Do not read `os.environ` outside a `Settings` class.
 - Do not place standalone parsing or resolution functions in `config.py`.
+
+External boundaries construct typed values. CLI, HTTP, configuration, database,
+and external API adapters validate raw input and map it into immutable models.
+Inner workflows and services receive those values explicitly; they do not read
+environment variables, load configuration, or assemble policy from raw values.
 
 ## Dependency direction
 
@@ -99,7 +124,15 @@ Business decisions remain in `refresh/service.py`.
 ### Pattern: shared feature types
 
 Types used by a feature's service, repository, and renderer live in that
-feature's `models.py`. Types used by only one of those files remain local.
+feature's `models.py` when they express the same feature vocabulary. Types used
+by only one file remain local. Types shared only within a narrower subfeature
+belong in that subfeature's `models.py`.
+
+For example, `daemon/models.py` may own daemon-wide job and policy contracts
+used across execution, persistence, API, and integrations. LCH status, GitHub
+transport payloads, OpenCode transport payloads, logging internals, and renderer
+values remain with their owning subfeatures or adapters. Their presence under
+the daemon package does not make them daemon-wide domain models.
 
 ### Pattern: typed settings and configuration
 
@@ -143,6 +176,13 @@ or framework implementation.
 
 A type used by multiple files remains declared inside one consumer instead of
 their closest common `models.py`.
+
+### Anti-pattern: dumping-ground models module
+
+A parent `models.py` collects unrelated types merely because several files
+import them. Import count is being used as ownership. Keep each type local or
+move it to the narrowest package whose vocabulary, lifecycle, and change reasons
+it represents.
 
 ### Anti-pattern: unnecessary file or repository
 
