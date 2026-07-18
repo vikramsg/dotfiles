@@ -1,10 +1,11 @@
 from pathlib import Path
 
+from ocint.daemon.config import DaemonConfig
 from ocint.daemon.lch.systemd import LifecycleStatus
 from ocint.presentation import Presentation, Text, document, key_value_section
 
 
-def render_status(status: LifecycleStatus) -> Presentation:
+def render_status(status: LifecycleStatus, config: DaemonConfig) -> Presentation:
     healthy = status.installed and status.timer_state == "active" and status.last_result in {"success", "unknown"}
     return document(
         "Daemon lifecycle status",
@@ -31,6 +32,21 @@ def render_status(status: LifecycleStatus) -> Presentation:
                 ("Exit status", status.last_exit_status),
                 ("Started", status.last_started),
                 ("Completed", status.last_completed),
+            ],
+        ),
+        key_value_section(
+            "Lifecycle",
+            [
+                ("Startup delay", _duration(config.lifecycle.startup_delay_seconds)),
+                ("Inactive interval", _duration(config.lifecycle.inactive_interval_seconds)),
+                ("Idle shutdown", _duration(config.idle_timeout_seconds)),
+            ],
+        ),
+        key_value_section(
+            "Logging",
+            [
+                ("Rotation", _bytes(config.logging.max_bytes)),
+                ("Backups retained", config.logging.backup_count),
             ],
         ),
         key_value_section("Files", [("Log", _home_relative(status.log_path, status.home))]),
@@ -63,3 +79,11 @@ def _home_relative(path: Path, home: Path) -> str:
         return f"~/{path.resolve().relative_to(home.resolve()).as_posix()}"
     except ValueError:
         return str(path)
+
+
+def _duration(seconds: int) -> str:
+    return f"{seconds // 60}m" if seconds % 60 == 0 else f"{seconds}s"
+
+
+def _bytes(value: int) -> str:
+    return f"{value // (1024 * 1024)} MiB" if value % (1024 * 1024) == 0 else f"{value} bytes"

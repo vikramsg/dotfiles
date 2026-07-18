@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
+from ocint.daemon.config import DaemonContext, DaemonSettings
 from ocint.daemon.db import current_daemon_head_revision, migrate_daemon_db
 from ocint.daemon.lch.doctor import Diagnostic, DoctorReport, diagnose
 from ocint.daemon.lch.provision import OpenCodeSourceConfig, load_policy, restricted_opencode_config
@@ -19,6 +20,7 @@ from ocint.daemon.lch.systemd import (
     service_text,
     timer_text,
 )
+from ocint.presentation import default_cli_context
 
 
 @dataclass
@@ -80,6 +82,7 @@ class DoctorFixture:
     database: Path
     runner: DoctorRunner
     lifecycle: SystemdLifecycle
+    context: DaemonContext
 
 
 @pytest.fixture
@@ -181,6 +184,19 @@ known_hosts_file = "{known_hosts}"
         state_home=state_home,
         daemon_config=config,
         home=home,
+        user="example-user",
+    )
+    context = DaemonContext.create(
+        default_cli_context().output,
+        home,
+        {
+            "XDG_CONFIG_HOME": str(config_home),
+            "XDG_DATA_HOME": str(data_home),
+            "XDG_STATE_HOME": str(state_home),
+            "PATH": f"{binary_home}:/usr/bin:/bin",
+            "USER": "example-user",
+        },
+        DaemonSettings(config=config),
     )
     paths.directory.mkdir(parents=True)
     paths.service.write_text(
@@ -193,7 +209,7 @@ known_hosts_file = "{known_hosts}"
             paths.reference(config),
         )
     )
-    paths.timer.write_text(timer_text())
+    paths.timer.write_text(timer_text(context.config().lifecycle))
     paths.service.chmod(0o644)
     paths.timer.chmod(0o644)
     monkeypatch.setenv("HOME", str(home))
@@ -216,12 +232,13 @@ known_hosts_file = "{known_hosts}"
         database,
         runner,
         lifecycle,
+        context,
     )
 
 
 def test_diagnose_reports_healthy_complete_configuration(doctor_fixture: DoctorFixture) -> None:
     # GIVEN / WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
     assert report.healthy, [(item.name, item.detail) for item in report.diagnostics if item.required and not item.ok]
@@ -249,7 +266,7 @@ def test_diagnose_accepts_system_ssh_and_readable_symlinked_discovery_files(
     doctor_fixture.known_hosts.symlink_to(known_target)
 
     # WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
     assert report.healthy
@@ -266,7 +283,13 @@ def test_diagnose_renders_invalid_toml_before_failing(doctor_fixture: DoctorFixt
     doctor_fixture.config.chmod(0o600)
 
     # WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    context = DaemonContext.create(
+        doctor_fixture.context.output,
+        doctor_fixture.home,
+        doctor_fixture.context.environment,
+        doctor_fixture.context.settings,
+    )
+    report = diagnose(context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
     assert not report.healthy
@@ -284,7 +307,7 @@ def test_diagnose_rejects_unsafe_managed_files(doctor_fixture: DoctorFixture) ->
     doctor_fixture.identity.chmod(0o644)
 
     # WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
     assert not report.healthy
@@ -298,7 +321,7 @@ def test_diagnose_reports_missing_managed_files(doctor_fixture: DoctorFixture) -
     doctor_fixture.auth_source.unlink()
 
     # WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
     failed = {item.name for item in report.diagnostics if item.required and not item.ok}
@@ -311,7 +334,7 @@ def test_diagnose_rejects_nonexact_or_unsafe_systemd_units(doctor_fixture: Docto
     doctor_fixture.lifecycle.paths.timer.chmod(0o600)
 
     # WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
     service = next(item for item in report.diagnostics if item.name == "systemd.service")
@@ -327,7 +350,7 @@ def test_diagnose_preserves_actionable_command_failures(doctor_fixture: DoctorFi
     doctor_fixture.runner.fail_commands = True
 
     # WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
     assert not report.healthy
@@ -343,7 +366,7 @@ def test_diagnose_reports_migration_failure_without_writing_database(doctor_fixt
         connection.execute("UPDATE alembic_version SET version_num = ?", ("outdated_revision",))
 
     # WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
     migration = next(item for item in report.diagnostics if item.name == "database.migration")
@@ -360,7 +383,7 @@ def test_diagnose_human_json_parity_redacts_all_secret_material(doctor_fixture: 
     doctor_fixture.effective.chmod(0o600)
 
     # WHEN
-    report = diagnose(doctor_fixture.home, doctor_fixture.runner, doctor_fixture.lifecycle)
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
     human = report.human_text()
     machine = report.json_text()
     decoded = json.loads(machine)

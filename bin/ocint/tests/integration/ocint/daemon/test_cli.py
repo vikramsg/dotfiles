@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 from ocint.daemon.cli import create_daemon_app
-from ocint.daemon.config import DaemonSettings
+from ocint.daemon.config import DaemonContext, DaemonSettings
+from ocint.presentation import default_cli_context
 
 
 def test_app_factory_requires_api_token_before_state_creation(tmp_path: Path) -> None:
@@ -31,4 +32,6 @@ agent_actor = "maintainer"
 
     # WHEN / THEN
     with pytest.raises(ValueError, match="API_TOKEN"):
-        create_daemon_app(DaemonSettings(config=config), tmp_path)
+        create_daemon_app(
+            DaemonContext.create(default_cli_context().output, tmp_path, {}, DaemonSettings(config=config))
+        )

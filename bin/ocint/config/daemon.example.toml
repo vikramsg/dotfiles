@@ -3,6 +3,14 @@ mirror_root = "~/.local/share/ocint/mirrors"
 worktree_root = "~/.local/share/ocint/worktrees"
 idle_timeout_seconds = 60
 
+[lifecycle]
+startup_delay_seconds = 60
+inactive_interval_seconds = 900
+
+[logging]
+max_bytes = 10485760
+backup_count = 5
+
 [[repositories]]
 name = "repository"
 remote_url = "git@github.com:OWNER/REPOSITORY.git"

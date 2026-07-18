@@ -1,3 +1,4 @@
+import os
 import socket
 import stat
 from collections.abc import Mapping, Sequence
@@ -6,11 +7,13 @@ from pathlib import Path
 
 import click
 import pytest
+from ocint.daemon.config import DaemonContext, DaemonSettings, LifecycleConfig, LoggingConfig
 from ocint.daemon.lch.provision import (
     OpenCodeSourceConfig,
     RestrictedOpenCodeConfig,
     daemon_toml,
     discover,
+    discovered_daemon_config,
     ensure_auth_symlink,
     existing_github_token,
     load_policy,
@@ -21,6 +24,7 @@ from ocint.daemon.lch.provision import (
     write_private_file,
 )
 from ocint.daemon.lch.systemd import CommandResult, SystemdLifecycle, SystemdPaths
+from ocint.presentation import default_cli_context
 
 
 @dataclass
@@ -117,6 +121,7 @@ class DiscoveryFixture:
     checkout: Path
     home: Path
     managed_config: Path
+    context: DaemonContext
 
 
 @pytest.fixture
@@ -157,6 +162,7 @@ def discovery_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Discov
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
     monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
     monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    monkeypatch.setattr("ocint.daemon.lch.provision.require_available_loopback_port", lambda _port: None)
     paths = SystemdPaths(
         directory=config_home / "systemd" / "user",
         environment_file=config_home / "ocint" / "daemon.env",
@@ -167,7 +173,13 @@ def discovery_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Discov
         home=home,
     )
     runner = DiscoveryRunner(checkout, ssh.resolve(), (identity,), known_hosts)
-    return DiscoveryFixture(runner, SystemdLifecycle(paths, runner), checkout, home, config_home / "ocint")
+    context = DaemonContext.create(
+        default_cli_context().output,
+        home,
+        dict(os.environ),
+        DaemonSettings(config=config_home / "ocint" / "daemon.toml"),
+    )
+    return DiscoveryFixture(runner, SystemdLifecycle(paths, runner), checkout, home, config_home / "ocint", context)
 
 
 def test_discovery_resolves_checkout_github_git_ssh_and_opencode(discovery_fixture: DiscoveryFixture) -> None:
@@ -176,7 +188,7 @@ def test_discovery_resolves_checkout_github_git_ssh_and_opencode(discovery_fixtu
         discovery_fixture.runner,
         discovery_fixture.lifecycle,
         discovery_fixture.checkout,
-        discovery_fixture.home,
+        discovery_fixture.context,
     )
 
     # THEN
@@ -188,7 +200,9 @@ def test_discovery_resolves_checkout_github_git_ssh_and_opencode(discovery_fixtu
     assert result.opencode.model == "example-provider/example-model"
     assert result.github_token == "github-secret"
     assert result.opencode.version == "1.17.20"
-    assert 'expected_version = "1.17.20"' in daemon_toml(result)
+    assert 'expected_version = "1.17.20"' in daemon_toml(
+        discovered_daemon_config(result, (LifecycleConfig(), LoggingConfig()))
+    )
     gh_commands = [command for command, _environment in discovery_fixture.runner.isolated_calls if command[0] == "gh"]
     assert gh_commands == [
         ("gh", "api", "--hostname", "github.com", "user"),
@@ -212,7 +226,7 @@ def test_discovery_passes_explicit_ssh_url_user_and_port_to_ssh_config(
         discovery_fixture.runner,
         discovery_fixture.lifecycle,
         discovery_fixture.checkout,
-        discovery_fixture.home,
+        discovery_fixture.context,
     )
 
     # THEN
@@ -232,13 +246,22 @@ def test_discovery_ignores_ambient_github_and_git_config_overrides(
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "remote.pushDefault")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "ambient")
+    discovery_fixture.context.environment.update(
+        {
+            "GH_REPO": "ambient/repository",
+            "GH_HOST": "example.invalid",
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "remote.pushDefault",
+            "GIT_CONFIG_VALUE_0": "ambient",
+        }
+    )
 
     # WHEN
     result = discover(
         discovery_fixture.runner,
         discovery_fixture.lifecycle,
         discovery_fixture.checkout,
-        discovery_fixture.home,
+        discovery_fixture.context,
     )
 
     # THEN
@@ -257,6 +280,7 @@ def test_discovery_rejects_ambient_git_ssh_precedence_override(
 ) -> None:
     # GIVEN
     monkeypatch.setenv(variable, "ssh -i /tmp/ambient-key")
+    discovery_fixture.context.environment[variable] = "ssh -i /tmp/ambient-key"
 
     # WHEN / THEN
     with pytest.raises(click.ClickException, match="unset GIT_SSH_COMMAND and GIT_SSH"):
@@ -264,7 +288,7 @@ def test_discovery_rejects_ambient_git_ssh_precedence_override(
             discovery_fixture.runner,
             discovery_fixture.lifecycle,
             discovery_fixture.checkout,
-            discovery_fixture.home,
+            discovery_fixture.context,
         )
     assert not discovery_fixture.managed_config.exists()
 
@@ -280,7 +304,7 @@ def test_discovery_uses_safe_core_ssh_command_after_rejecting_environment_preced
         discovery_fixture.runner,
         discovery_fixture.lifecycle,
         discovery_fixture.checkout,
-        discovery_fixture.home,
+        discovery_fixture.context,
     )
 
     # THEN
@@ -309,7 +333,7 @@ def test_discovery_rejects_multiple_push_urls_before_github(discovery_fixture: D
             discovery_fixture.runner,
             discovery_fixture.lifecycle,
             discovery_fixture.checkout,
-            discovery_fixture.home,
+            discovery_fixture.context,
         )
     assert not any(command[0] == "gh" for command, _environment in discovery_fixture.runner.isolated_calls)
 
@@ -324,7 +348,7 @@ def test_discovery_rejects_wrong_opencode_version_before_writes(discovery_fixtur
             discovery_fixture.runner,
             discovery_fixture.lifecycle,
             discovery_fixture.checkout,
-            discovery_fixture.home,
+            discovery_fixture.context,
         )
     assert not discovery_fixture.managed_config.exists()
 
@@ -337,7 +361,7 @@ def test_provision_uses_only_the_validated_policy_and_provider_snapshot(
         discovery_fixture.runner,
         discovery_fixture.lifecycle,
         discovery_fixture.checkout,
-        discovery_fixture.home,
+        discovery_fixture.context,
     )
     discovered.opencode.source_config.write_text(
         '{"model":"changed-provider/changed-model","provider":{"changed-provider":'
@@ -346,7 +370,7 @@ def test_provision_uses_only_the_validated_policy_and_provider_snapshot(
     )
 
     # WHEN
-    provision(discovered, discovery_fixture.lifecycle)
+    provision(discovered, discovery_fixture.lifecycle, discovery_fixture.context)
 
     # THEN
     effective = discovered.paths.effective_opencode_config.read_text()
@@ -354,6 +378,49 @@ def test_provision_uses_only_the_validated_policy_and_provider_snapshot(
     assert "changed-provider" not in effective
     assert "late-secret" not in effective
     assert 'expected_version = "1.17.20"' in discovered.paths.configuration.read_text()
+
+
+def test_reprovision_preserves_existing_lifecycle_and_logging_policy(
+    discovery_fixture: DiscoveryFixture,
+) -> None:
+    # GIVEN
+    initial = discover(
+        discovery_fixture.runner,
+        discovery_fixture.lifecycle,
+        discovery_fixture.checkout,
+        discovery_fixture.context,
+    )
+    discovery_fixture.context.config_path.parent.mkdir()
+    discovery_fixture.context.config_path.write_text(
+        daemon_toml(
+            discovered_daemon_config(
+                initial,
+                (
+                    LifecycleConfig(startup_delay_seconds=75, inactive_interval_seconds=901),
+                    LoggingConfig(max_bytes=2048, backup_count=2),
+                ),
+            )
+        )
+    )
+    discovery_fixture.context.config_path.chmod(0o600)
+    discovered = discover(
+        discovery_fixture.runner,
+        discovery_fixture.lifecycle,
+        discovery_fixture.checkout,
+        discovery_fixture.context,
+    )
+
+    # WHEN
+    provision(discovered, discovery_fixture.lifecycle, discovery_fixture.context)
+
+    # THEN
+    rendered = discovered.paths.configuration.read_text()
+    assert "startup_delay_seconds = 75" in rendered
+    assert "inactive_interval_seconds = 901" in rendered
+    assert "max_bytes = 2048" in rendered
+    assert "backup_count = 2" in rendered
+    assert "OnStartupSec=75s" in discovery_fixture.lifecycle.paths.timer.read_text()
+    assert "OnUnitInactiveSec=901s" in discovery_fixture.lifecycle.paths.timer.read_text()
 
 
 def test_discovery_fails_before_writes_when_git_remote_does_not_match_gh(
@@ -368,7 +435,7 @@ def test_discovery_fails_before_writes_when_git_remote_does_not_match_gh(
             discovery_fixture.runner,
             discovery_fixture.lifecycle,
             discovery_fixture.checkout,
-            discovery_fixture.home,
+            discovery_fixture.context,
         )
     assert not discovery_fixture.managed_config.exists()
 
@@ -386,7 +453,7 @@ def test_discovery_rejects_ambiguous_effective_ssh_identities(discovery_fixture:
             discovery_fixture.runner,
             discovery_fixture.lifecycle,
             discovery_fixture.checkout,
-            discovery_fixture.home,
+            discovery_fixture.context,
         )
     assert not discovery_fixture.managed_config.exists()
 

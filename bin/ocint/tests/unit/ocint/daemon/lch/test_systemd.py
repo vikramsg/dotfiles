@@ -7,8 +7,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
+from ocint.daemon.config import LifecycleConfig, LoggingConfig
 from ocint.daemon.lch import SubprocessRunner, SystemdLifecycle, SystemdPaths, service_text, timer_text
 from ocint.daemon.lch.systemd import CommandResult
+from ocint.daemon.logging import daemon_log_settings
 
 
 @dataclass
@@ -63,12 +65,24 @@ class StatusRunner:
 
 def test_generated_timer_has_bounded_schedule() -> None:
     # GIVEN / WHEN
-    rendered = timer_text()
+    rendered = timer_text(LifecycleConfig())
 
     # THEN
     assert "OnStartupSec=1m" in rendered
     assert "OnUnitInactiveSec=15m" in rendered
     assert "Unit=ocint-daemon.service" in rendered
+
+
+def test_generated_timer_uses_supplied_lifecycle_policy() -> None:
+    # GIVEN
+    config = LifecycleConfig(startup_delay_seconds=75, inactive_interval_seconds=901)
+
+    # WHEN
+    rendered = timer_text(config)
+
+    # THEN
+    assert "OnStartupSec=75s" in rendered
+    assert "OnUnitInactiveSec=901s" in rendered
 
 
 def test_generated_service_is_one_oneshot_cycle() -> None:
@@ -121,7 +135,7 @@ def test_install_validates_exact_executable_and_wires_custom_xdg_environment(tmp
     lifecycle = SystemdLifecycle(paths, runner)
 
     # WHEN
-    lifecycle.install(executable)
+    lifecycle.install(executable, LifecycleConfig())
 
     # THEN
     assert runner.calls[0] == [str(executable.resolve()), "daemon", "--help"]
@@ -136,7 +150,7 @@ def test_install_validates_exact_executable_and_wires_custom_xdg_environment(tmp
     assert "Environment=XDG_STATE_HOME=%h/state" in paths.service.read_text()
     assert "Environment=OCINT_DAEMON_CONFIG=%h/xdg/ocint/daemon.toml" in paths.service.read_text()
     assert f"ExecStart={executable.resolve()} daemon run" in paths.service.read_text()
-    assert paths.timer.read_text() == timer_text()
+    assert paths.timer.read_text() == timer_text(LifecycleConfig())
     assert stat.S_IMODE(paths.service.stat().st_mode) == 0o644
     assert stat.S_IMODE(paths.timer.stat().st_mode) == 0o644
 
@@ -160,7 +174,7 @@ def test_incompatible_path_executable_fails_before_unit_writes(tmp_path: Path) -
 
     # WHEN / THEN
     with pytest.raises(RuntimeError, match="does not expose daemon run, doctor, and lch"):
-        lifecycle.install(executable)
+        lifecycle.install(executable, LifecycleConfig())
     assert not paths.directory.exists()
 
 
@@ -214,7 +228,7 @@ def test_status_reports_timer_schedule_service_result_and_log_path(tmp_path: Pat
     lifecycle = SystemdLifecycle(paths, StatusRunner())
 
     # WHEN
-    status = lifecycle.status()
+    status = lifecycle.status(daemon_log_settings(paths.state_home, LoggingConfig()).path)
 
     # THEN
     assert status.installed
@@ -226,4 +240,4 @@ def test_status_reports_timer_schedule_service_result_and_log_path(tmp_path: Pat
     assert status.service_substate == "dead"
     assert status.last_result == "success"
     assert status.last_exit_status == "0"
-    assert status.log_path == paths.daemon_log
+    assert status.log_path == daemon_log_settings(paths.state_home, LoggingConfig()).path

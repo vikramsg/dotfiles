@@ -86,9 +86,7 @@ def test_daemon_logging_depends_on_the_log_rotation_contract() -> None:
 
     # WHEN
     tree = ast.parse(logging_module.read_text())
-    imports = {
-        node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None
-    }
+    imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None}
 
     # THEN
     assert "ocint.daemon.models" in imports
@@ -232,8 +230,8 @@ def test_daemon_context_is_the_only_configuration_load_boundary() -> None:
     for module in daemon.rglob("*.py"):
         tree = ast.parse(module.read_text())
         if any(
-            isinstance(node, ast.Import) and any(alias.name == "tomllib" for alias in node.names)
-            or isinstance(node, ast.ImportFrom) and node.module == "tomllib"
+            (isinstance(node, ast.Import) and any(alias.name == "tomllib" for alias in node.names))
+            or (isinstance(node, ast.ImportFrom) and node.module == "tomllib")
             for node in ast.walk(tree)
         ):
             tomllib_importers.append(module.name)

@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 import pytest
+from ocint.daemon.config import LoggingConfig
 from ocint.daemon.logging import (
     DaemonLogSettings,
     close,
@@ -17,7 +18,7 @@ from ocint.daemon.logging import (
 
 def test_daemon_log_is_private_human_readable_and_single_line(tmp_path: Path) -> None:
     # GIVEN
-    settings = DaemonLogSettings(path=tmp_path / "state" / "ocint" / "daemon.log")
+    settings = daemon_log_settings(tmp_path / "state", LoggingConfig())
     configure(settings)
     logger = get_logger("test")
 
@@ -55,7 +56,7 @@ def test_rotating_handler_retains_only_configured_private_backups(tmp_path: Path
 
 def test_log_tail_reads_rotated_files_in_chronological_order(tmp_path: Path) -> None:
     # GIVEN
-    settings = DaemonLogSettings(path=tmp_path / "daemon.log", backups=2)
+    settings = DaemonLogSettings(path=tmp_path / "daemon.log", max_bytes=1024, backups=2)
     (tmp_path / "daemon.log.2").write_text("oldest\n")
     (tmp_path / "daemon.log.1").write_text("middle\n")
     settings.path.write_text("newest\n")
@@ -76,15 +77,17 @@ def test_logging_rejects_symlink_destination(tmp_path: Path) -> None:
 
     # WHEN / THEN
     with pytest.raises(RuntimeError, match="regular mode-0600"):
-        configure(DaemonLogSettings(path=path))
+        configure(DaemonLogSettings(path=path, max_bytes=1024, backups=2))
 
 
 def test_log_path_uses_xdg_state_home(tmp_path: Path) -> None:
     # GIVEN / WHEN
-    settings = daemon_log_settings(tmp_path / "home", {"XDG_STATE_HOME": str(tmp_path / "state")})
+    settings = daemon_log_settings(tmp_path / "state", LoggingConfig(max_bytes=2048, backup_count=2))
 
     # THEN
     assert settings.path == tmp_path / "state" / "ocint" / "daemon.log"
+    assert settings.max_bytes == 2048
+    assert settings.backups == 2
 
 
 def test_log_follow_reopens_active_file_after_rotation(tmp_path: Path) -> None:

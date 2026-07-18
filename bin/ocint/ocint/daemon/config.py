@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import re
+import tomllib
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from ocint._models import CliOutput
 
 
 class RepositoryConfig(BaseModel):
@@ -38,6 +43,20 @@ class SchedulerConfig(BaseModel):
     shutdown_timeout_seconds: int = Field(default=30, ge=1)
     command_timeout_seconds: int = Field(default=900, ge=1)
     command_output_bytes: int = Field(default=65536, ge=1024)
+
+
+class LifecycleConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    startup_delay_seconds: int = Field(default=60, ge=1)
+    inactive_interval_seconds: int = Field(default=900, ge=1)
+
+
+class LoggingConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
+    backup_count: int = Field(default=5, ge=1)
 
 
 class OpenCodeConfig(BaseModel):
@@ -96,6 +115,8 @@ class DaemonConfig(BaseModel):
     worktree_root: Path
     repositories: tuple[RepositoryConfig, ...] = Field(min_length=1)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    lifecycle: LifecycleConfig = Field(default_factory=LifecycleConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     github: GitHubConfig = Field(default_factory=GitHubConfig)
@@ -140,3 +161,47 @@ class DaemonSettings(BaseSettings):
             return self.config.expanduser().resolve()
         base = self.xdg_config_home if self.xdg_config_home is not None else home / ".config"
         return (base / "ocint" / "daemon.toml").resolve()
+
+
+@dataclass
+class DaemonContext:
+    output: CliOutput
+    home: Path
+    settings: DaemonSettings
+    config_home: Path
+    data_home: Path
+    state_home: Path
+    user: str
+    environment: dict[str, str]
+    _config: DaemonConfig | None = field(default=None, init=False, repr=False)
+
+    @classmethod
+    def create(
+        cls,
+        output: CliOutput,
+        home: Path,
+        environment: Mapping[str, str],
+        settings: DaemonSettings | None = None,
+    ) -> DaemonContext:
+        resolved_settings = settings or DaemonSettings()
+        config_home = resolved_settings.xdg_config_home or Path(environment.get("XDG_CONFIG_HOME", home / ".config"))
+        return cls(
+            output=output,
+            home=home.resolve(),
+            settings=resolved_settings,
+            config_home=config_home.expanduser().resolve(),
+            data_home=Path(environment.get("XDG_DATA_HOME", home / ".local" / "share")).expanduser().resolve(),
+            state_home=Path(environment.get("XDG_STATE_HOME", home / ".local" / "state")).expanduser().resolve(),
+            user=environment.get("USER", ""),
+            environment=dict(environment),
+        )
+
+    @property
+    def config_path(self) -> Path:
+        return self.settings.config_path(self.home)
+
+    def config(self) -> DaemonConfig:
+        if self._config is None:
+            with self.config_path.open("rb") as stream:
+                self._config = DaemonConfig.model_validate(tomllib.load(stream))
+        return self._config

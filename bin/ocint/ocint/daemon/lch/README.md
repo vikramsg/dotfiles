@@ -10,6 +10,10 @@ logs      -> read the private rotating daemon log (--lines, --follow)
 uninstall -> disable/stop -> remove only units -> reload
 ```
 
+LCH owns these service operations only. The outer daemon command context loads
+and validates `daemon.toml`, then passes resolved lifecycle and logging policy
+into the LCH adapter.
+
 It generates exactly:
 
 ```text
@@ -17,15 +21,16 @@ $XDG_CONFIG_HOME/systemd/user/ocint-daemon.timer
 $XDG_CONFIG_HOME/systemd/user/ocint-daemon.service
 ```
 
-The timer uses `OnStartupSec=1m` relative to user-manager startup and
-`OnUnitInactiveSec=15m` after each service invocation becomes inactive.
-Reinstalling with `enable --now` can trigger immediately when the startup
-deadline has elapsed. User lingering is required, and the mode-0600
+The timer renders daemon-owned `[lifecycle]` policy: its defaults are a
+60-second startup delay relative to user-manager startup and a 900-second
+inactive interval after each service invocation becomes inactive. Reinstalling
+with `enable --now` can trigger immediately when the startup deadline has
+elapsed. User lingering is required, and the mode-0600
 `$XDG_CONFIG_HOME/ocint/daemon.env` must exist before installation.
 
 Each invocation appends human-readable lifecycle, issue, job, and publication
-events to `$XDG_STATE_HOME/ocint/daemon.log`. The mode-0600 log rotates at 10
-MiB through five backups. `logs --lines N` reads across those backups, while
+events to `$XDG_STATE_HOME/ocint/daemon.log`. The daemon-owned `[logging]`
+policy defaults to 10 MiB through five mode-0600 backups. `logs --lines N` reads across those backups, while
 `logs --follow` follows the active file across rotation without using journald.
 
 Provision must run from the target Git checkout root. It discovers GitHub, Git,

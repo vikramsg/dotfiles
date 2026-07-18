@@ -2,6 +2,7 @@ import re
 from io import StringIO
 from pathlib import Path
 
+from ocint.daemon.config import DaemonConfig, GitConfig, GitHubConfig, OpenCodeConfig, RepositoryConfig
 from ocint.daemon.lch.render import render_status
 from ocint.daemon.lch.systemd import LifecycleStatus
 from rich.console import Console
@@ -24,11 +25,36 @@ def test_status_rendering_has_colored_sections_and_copyable_log_commands(tmp_pat
         log_path=tmp_path / "home" / ".local" / "state" / "ocint" / "daemon.log",
         home=tmp_path / "home",
     )
+    config = DaemonConfig(
+        database_path=tmp_path / "daemon.sqlite",
+        mirror_root=tmp_path / "mirrors",
+        worktree_root=tmp_path / "worktrees",
+        repositories=(
+            RepositoryConfig(
+                name="project",
+                remote_url="git@example.test:owner/project.git",
+                github_repository="owner/project",
+                author_name="Agent",
+                author_email="agent@example.test",
+            ),
+        ),
+        opencode=OpenCodeConfig(
+            config_file=tmp_path / "opencode.json",
+            xdg_config_home=tmp_path / "config",
+            xdg_data_home=tmp_path / "data",
+        ),
+        github=GitHubConfig(agent_actor="agent"),
+        git=GitConfig(
+            ssh_executable=tmp_path / "ssh",
+            identity_file=tmp_path / "identity",
+            known_hosts_file=tmp_path / "known_hosts",
+        ),
+    )
     output = StringIO()
     console = Console(file=output, force_terminal=True, color_system="standard", width=100)
 
     # WHEN
-    console.print(render_status(status))
+    console.print(render_status(status, config))
     rendered = output.getvalue()
 
     # THEN
