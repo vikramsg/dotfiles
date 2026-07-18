@@ -59,6 +59,13 @@ that package. If a models module mixes unrelated transport, persistence,
 rendering, configuration, and infrastructure concerns, move each group down to
 its closest owner.
 
+A shared contract module may intentionally contain only `Protocol`
+declarations. Keep concrete Pydantic models at the boundary that validates and
+constructs them, then pass them to consumers through narrow read-only protocols.
+The type checker verifies structural conformance from the concrete model's
+annotated attributes; the protocol does not need Pydantic fields, defaults, or
+runtime checks.
+
 Keep adapter and workflow details local even when several implementation files
 use them. Examples include external API payloads, database row representations,
 renderer view data, infrastructure diagnostics, derived filesystem settings,
@@ -129,7 +136,9 @@ by only one file remain local. Types shared only within a narrower subfeature
 belong in that subfeature's `models.py`.
 
 For example, `daemon/models.py` may own daemon-wide job and policy contracts
-used across execution, persistence, API, and integrations. LCH status, GitHub
+used across execution, persistence, API, and integrations. It can instead be a
+protocol-only contract module: `LogRotation` describes the logging policy while
+the concrete Pydantic configuration remains in `config.py`. LCH status, GitHub
 transport payloads, OpenCode transport payloads, logging internals, and renderer
 values remain with their owning subfeatures or adapters. Their presence under
 the daemon package does not make them daemon-wide domain models.
