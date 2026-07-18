@@ -11,12 +11,14 @@ from ocint.daemon.lch.systemd import SubprocessRunner, SystemdLifecycle, Systemd
 def lifecycle(home: Path) -> SystemdLifecycle:
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
     data_home = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share"))
+    state_home = Path(os.environ.get("XDG_STATE_HOME", home / ".local" / "state"))
     return SystemdLifecycle(
         SystemdPaths(
             directory=config_home / "systemd" / "user",
             environment_file=config_home / "ocint" / "daemon.env",
             config_home=config_home,
             data_home=data_home,
+            state_home=state_home,
             daemon_config=config_home / "ocint" / "daemon.toml",
             home=home,
         ),
@@ -62,4 +64,14 @@ def status_command(context: CliContext) -> None:
 @click.option("follow", "--follow", is_flag=True)
 @click.pass_obj
 def logs_command(context: CliContext, lines: int, follow: bool) -> None:
-    context.output.write(lifecycle(Path.home()).logs(lines, follow), nl=False)
+    managed = lifecycle(Path.home())
+    try:
+        if follow:
+            for text in managed.follow_logs(lines):
+                context.output.write(text, nl=False)
+        else:
+            context.output.write(managed.logs(lines), nl=False)
+    except RuntimeError as error:
+        raise click.ClickException(str(error)) from error
+    except KeyboardInterrupt:
+        return

@@ -730,6 +730,12 @@ boot. `OnUnitInactiveSec=15m` starts the next invocation after the previous
 service becomes inactive. `enable --now` means reinstalling the timer can cause
 an immediate trigger when the startup deadline has already elapsed.
 
+The generated service passes `XDG_STATE_HOME` explicitly. Each invocation
+appends one-line human-readable events to the private
+`$XDG_STATE_HOME/ocint/daemon.log`. Python's rotating file handler rolls the
+file at 10 MiB and retains five backups. `lch logs` reads this artifact directly
+and follows it across rotation; it does not depend on journald access.
+
 `ocint daemon lch uninstall` disables/stops the units, removes only the two unit
 files, and reloads systemd. It preserves configuration, environment, auth link,
 database, mirrors, and worktrees. Full manual cleanup may remove managed config,
@@ -797,11 +803,11 @@ GIT_SSH_COMMAND='/usr/bin/ssh -o BatchMode=yes' \
   git ls-remote git@github.com:OWNER/REPOSITORY.git refs/heads/main
 ```
 
-### Journald cannot be read
+### Daemon log cannot be read
 
-Use `ocint daemon lch logs` as the same user that owns the user manager. Check
-user journal permissions and that `systemctl --user` reaches that manager; do
-not switch the service to a system unit as a workaround.
+Run `ocint daemon lch status` and confirm its log path matches the generated
+service's `XDG_STATE_HOME`. The log directory must be user-owned mode 0700 and
+the active and rotated files must be regular user-owned mode-0600 files.
 
 ### Job remains queued after restart
 

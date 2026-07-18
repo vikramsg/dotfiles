@@ -1,6 +1,7 @@
 import asyncio
 import getpass
 import json
+import os
 import secrets
 import tomllib
 import uuid
@@ -14,6 +15,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
 
 from ocint._models import CliContext
+from ocint.daemon import logging as daemon_logging
 from ocint.daemon.api import create_api_router
 from ocint.daemon.config import DaemonConfig, DaemonSettings
 from ocint.daemon.db import create_daemon_engine, current_daemon_head_revision, migrate_daemon_db
@@ -24,6 +26,8 @@ from ocint.daemon.opencode import OpenCodeClient
 from ocint.daemon.repository import ControlRepository
 from ocint.daemon.run import serve_bounded, wait_for_idle
 from ocint.daemon.service import JobExecutor, WorkRequest
+
+logger = daemon_logging.get_logger("cli")
 
 
 class LoadedDaemonConfig(BaseModel):
@@ -87,15 +91,26 @@ def doctor_command(click_context: click.Context, json_output: bool) -> None:
 
 @daemon.command("run")
 def run_command() -> None:
-    app, loaded = create_daemon_app(DaemonSettings(), Path.home())
-    asyncio.run(
-        serve_bounded(
-            app,
-            loaded.config.api.host,
-            loaded.config.api.port,
-            app.state.shutdown_event,
+    home = Path.home()
+    settings = DaemonSettings()
+    daemon_logging.configure(daemon_logging.daemon_log_settings(home, os.environ))
+    logger.info("daemon cycle started", pid=os.getpid())
+    try:
+        app, loaded = create_daemon_app(settings, home)
+        asyncio.run(
+            serve_bounded(
+                app,
+                loaded.config.api.host,
+                loaded.config.api.port,
+                app.state.shutdown_event,
+            )
         )
-    )
+        logger.info("daemon cycle completed")
+    except BaseException:
+        logger.exception("daemon cycle failed")
+        raise
+    finally:
+        daemon_logging.close()
 
 
 @daemon.command("health")
@@ -184,13 +199,18 @@ def create_daemon_app(settings: DaemonSettings, home: Path) -> tuple[FastAPI, Lo
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        logger.info("OpenCode startup started", executable=str(loaded.config.opencode.executable))
         await opencode.start()
+        logger.info("OpenCode startup completed", version=loaded.config.opencode.expected_version)
         try:
             await github_client.start()
             try:
                 try:
+                    logger.info("GitHub poll started")
                     await github.poll(executor)
+                    logger.info("GitHub poll completed")
                     await executor.start()
+                    logger.info("daemon ready", api_port=loaded.config.api.port)
                     idle_task = asyncio.create_task(
                         wait_for_idle(executor, loaded.config.idle_timeout_seconds, shutdown_event)
                     )
@@ -204,7 +224,9 @@ def create_daemon_app(settings: DaemonSettings, home: Path) -> tuple[FastAPI, Lo
             finally:
                 await github_client.close()
         finally:
+            logger.info("OpenCode shutdown started")
             await opencode.close()
+            logger.info("OpenCode shutdown completed")
             engine.dispose()
 
     app = FastAPI(title="ocint daemon", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)

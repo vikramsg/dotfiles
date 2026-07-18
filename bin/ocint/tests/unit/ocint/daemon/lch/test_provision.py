@@ -162,6 +162,7 @@ def discovery_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Discov
         environment_file=config_home / "ocint" / "daemon.env",
         config_home=config_home,
         data_home=data_home,
+        state_home=state_home,
         daemon_config=config_home / "ocint" / "daemon.toml",
         home=home,
     )

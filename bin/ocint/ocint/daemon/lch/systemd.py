@@ -1,13 +1,17 @@
+import json
 import os
 import platform
 import shutil
 import stat
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
+
+from ocint.daemon.logging import DaemonLogSettings, follow_log, read_log_tail
 
 
 class CommandResult(BaseModel):
@@ -69,6 +73,7 @@ class SystemdPaths(BaseModel):
     environment_file: Path
     config_home: Path
     data_home: Path
+    state_home: Path
     daemon_config: Path
     home: Path
 
@@ -83,6 +88,10 @@ class SystemdPaths(BaseModel):
     @property
     def environment_reference(self) -> str:
         return self.reference(self.environment_file)
+
+    @property
+    def daemon_log(self) -> Path:
+        return self.state_home / "ocint" / "daemon.log"
 
     def reference(self, path: Path) -> str:
         resolved = path.resolve()
@@ -113,6 +122,7 @@ def service_text(
     environment_file: str,
     config_home: str,
     data_home: str,
+    state_home: str,
     daemon_config: str,
 ) -> str:
     return f"""[Unit]
@@ -124,6 +134,7 @@ UMask=0077
 EnvironmentFile={environment_file}
 Environment=XDG_CONFIG_HOME={config_home}
 Environment=XDG_DATA_HOME={data_home}
+Environment=XDG_STATE_HOME={state_home}
 Environment=OCINT_DAEMON_CONFIG={daemon_config}
 ExecStart={executable} daemon run
 TimeoutStartSec=infinity
@@ -150,6 +161,7 @@ class SystemdLifecycle:
                 self.paths.environment_reference,
                 self.paths.reference(self.paths.config_home),
                 self.paths.reference(self.paths.data_home),
+                self.paths.reference(self.paths.state_home),
                 self.paths.reference(self.paths.daemon_config),
             )
         )
@@ -166,27 +178,77 @@ class SystemdLifecycle:
 
     def status(self) -> str:
         installed = self.paths.timer.is_file() and self.paths.service.is_file()
-        active = (
-            self.runner.run(
-                ("systemctl", "--user", "show", "ocint-daemon.timer", "--property=ActiveState", "--value")
-            ).stdout.strip()
-            if installed
-            else "inactive"
+        if not installed:
+            return f"installed: no\nlog: {self.paths.daemon_log}"
+        timer = self._unit_properties("ocint-daemon.timer", ("ActiveState", "SubState", "LastTriggerUSec"))
+        service = self._unit_properties(
+            "ocint-daemon.service",
+            (
+                "ActiveState",
+                "SubState",
+                "Result",
+                "ExecMainStatus",
+                "ExecMainStartTimestamp",
+                "ExecMainExitTimestamp",
+            ),
         )
-        return f"installed: {'yes' if installed else 'no'}\nactive: {active}"
+        schedule = json.loads(
+            self.runner.run(
+                (
+                    "systemctl",
+                    "--user",
+                    "list-timers",
+                    "--all",
+                    "ocint-daemon.timer",
+                    "--output=json",
+                    "--no-pager",
+                )
+            ).stdout
+            or "[]"
+        )
+        timer_state = " ".join(filter(None, (timer.get("ActiveState", "unknown"), timer.get("SubState", ""))))
+        service_state = " ".join(filter(None, (service.get("ActiveState", "unknown"), service.get("SubState", ""))))
+        next_trigger = "unavailable"
+        last_trigger = timer.get("LastTriggerUSec", "unavailable") or "unavailable"
+        if schedule:
+            next_value = schedule[0].get("next")
+            last_value = schedule[0].get("last")
+            if isinstance(next_value, int):
+                next_trigger = self._timestamp(next_value)
+            elif service.get("ActiveState") == "active":
+                next_trigger = "pending service completion"
+            if isinstance(last_value, int):
+                last_trigger = self._timestamp(last_value)
+        return "\n".join(
+            (
+                "installed: yes",
+                f"timer: {timer_state}",
+                f"last trigger: {last_trigger}",
+                f"next trigger: {next_trigger}",
+                f"service: {service_state}",
+                f"last result: {service.get('Result', 'unknown') or 'unknown'}",
+                f"last exit status: {service.get('ExecMainStatus', 'unknown') or 'unknown'}",
+                f"last started: {service.get('ExecMainStartTimestamp', 'unavailable') or 'unavailable'}",
+                f"last completed: {service.get('ExecMainExitTimestamp', 'unavailable') or 'unavailable'}",
+                f"log: {self.paths.daemon_log}",
+            )
+        )
 
-    def logs(self, lines: int, follow: bool) -> str:
-        arguments = [
-            "journalctl",
-            "--user",
-            "--unit=ocint-daemon.timer",
-            "--unit=ocint-daemon.service",
-            "--lines",
-            str(lines),
-        ]
-        if follow:
-            arguments.append("--follow")
-        return self.runner.run(arguments).stdout
+    def logs(self, lines: int) -> str:
+        return read_log_tail(DaemonLogSettings(path=self.paths.daemon_log), lines)
+
+    def follow_logs(self, lines: int) -> Iterator[str]:
+        return follow_log(DaemonLogSettings(path=self.paths.daemon_log), lines)
+
+    def _unit_properties(self, unit: str, names: tuple[str, ...]) -> dict[str, str]:
+        result = self.runner.run(
+            ("systemctl", "--user", "show", unit, *(f"--property={name}" for name in names))
+        ).stdout
+        return dict(line.partition("=")[::2] for line in result.splitlines() if "=" in line)
+
+    @staticmethod
+    def _timestamp(microseconds: int) -> str:
+        return datetime.fromtimestamp(microseconds / 1_000_000, UTC).isoformat().replace("+00:00", "Z")
 
     def _validate_environment(self) -> None:
         path = self.paths.environment_file

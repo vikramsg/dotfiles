@@ -14,6 +14,7 @@ def test_daemon_has_only_intended_modules() -> None:
         "cli.py",
         "config.py",
         "git.py",
+        "logging.py",
         "opencode.py",
         "repository.py",
         "run.py",
@@ -57,7 +58,10 @@ def test_daemon_core_import_direction_points_from_service_to_config() -> None:
     # THEN
     assert not any(module.startswith("ocint.daemon") for module in config_imports)
     assert service_imports.intersection({"ocint.daemon.config"}) == {"ocint.daemon.config"}
-    assert not any(module.startswith("ocint.daemon.") and module != "ocint.daemon.config" for module in service_imports)
+    assert not any(
+        module.startswith("ocint.daemon.") and module not in {"ocint.daemon.config", "ocint.daemon.logging"}
+        for module in service_imports
+    )
 
 
 def test_prohibited_legacy_daemon_modules_are_absent() -> None:
@@ -178,3 +182,25 @@ def test_root_daemon_cli_uses_only_the_lch_facade() -> None:
 
     # THEN
     assert lch_imports == {"ocint.daemon.lch"}
+
+
+def test_daemon_log_events_do_not_include_secret_or_prompt_fields() -> None:
+    # GIVEN
+    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
+    prohibited = {"body", "environment", "identity_file", "password", "prompt", "token"}
+
+    # WHEN
+    fields: set[str] = set()
+    for module in daemon.rglob("*.py"):
+        tree = ast.parse(module.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "logger"
+            ):
+                fields.update(keyword.arg for keyword in node.keywords if keyword.arg is not None)
+
+    # THEN
+    assert fields.isdisjoint(prohibited)

@@ -8,7 +8,8 @@ The daemon is a FastAPI application served directly by Uvicorn. It persists
 jobs before scheduling them, runs OpenCode work behind a process-local capacity
 semaphore, validates the result, and owns commit, SSH push, and idempotent
 GitHub issue polling, exact-title pull-request creation, follow-ups, and bounded
-two-server shutdown.
+two-server shutdown. Its application-owned rotating log records human-readable
+lifecycle and job events under XDG state without relying on journald access.
 
 Documentation:
 

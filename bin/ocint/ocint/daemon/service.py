@@ -9,6 +9,9 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from ocint.daemon.config import DaemonConfig, RepositoryConfig
+from ocint.daemon.logging import get_logger
+
+logger = get_logger("service")
 
 
 class JobState(StrEnum):
@@ -217,8 +220,10 @@ class JobExecutor:
         self.activity_generation = 0
 
     async def start(self) -> None:
-        self.store.reconcile()
-        for job_id in self.store.pending_ids():
+        reconciled = self.store.reconcile()
+        pending = self.store.pending_ids()
+        logger.info("job recovery completed", reconciled=reconciled, pending=len(pending))
+        for job_id in pending:
             self.schedule(job_id)
 
     def submit(self, request: WorkRequest) -> Job:
@@ -230,6 +235,7 @@ class JobExecutor:
         authorize(request, self.config)
         job = self.store.submit(request)
         self.activity_generation += 1
+        logger.info("job accepted", job=job.id, repository=job.repository, actor=job.actor)
         return job
 
     def schedule_accepted(self, job_id: str) -> None:
@@ -239,6 +245,7 @@ class JobExecutor:
         job = self.store.reset(job_id, prompt)
         self.schedule(job.id)
         self.activity_generation += 1
+        logger.info("job resumed", job=job.id, repository=job.repository)
         return job
 
     @property
@@ -254,6 +261,7 @@ class JobExecutor:
             return
         task = asyncio.create_task(self._run(job_id))
         self.tasks[job_id] = task
+        logger.info("job scheduled", job=job_id)
         task.add_done_callback(lambda _task, identifier=job_id: self.tasks.pop(identifier, None))
 
     async def close(self) -> None:
@@ -273,21 +281,27 @@ class JobExecutor:
         try:
             async with self.capacity:
                 if self.store.claim(job_id) is None:
+                    logger.info("job claim skipped", job=job_id)
                     return
+                logger.info("job started", job=job_id)
                 async with asyncio.timeout(self.config.scheduler.job_timeout_seconds):
                     await self._execute(job_id)
         except asyncio.CancelledError:
             self.store.requeue(job_id)
+            logger.warning("job cancelled", job=job_id)
             raise
         except TimeoutError:
             self.store.fail(job_id, "job timed out")
+            logger.error("job timed out", job=job_id)
         except Exception as error:
             self.store.fail(job_id, str(error)[:2000])
+            logger.exception("job failed", job=job_id, error_type=type(error).__name__)
 
     async def _execute(self, job_id: str) -> None:
         job = self.store.get(job_id)
         repository = self.config.repository(job.repository)
         if job.worktree_path is None:
+            logger.info("job stage started", job=job.id, stage="worktree")
             worktree = await self.git.provision(repository, job.id)
             job = self.store.checkpoint(
                 job.id,
@@ -297,9 +311,11 @@ class JobExecutor:
                     base_revision=worktree.base_revision,
                 ),
             )
+            logger.info("job stage completed", job=job.id, stage="worktree", branch=worktree.branch)
         else:
             worktree = Worktree(path=job.worktree_path, branch=job.branch, base_revision=job.base_revision)
         if job.stage is JobStage.EXECUTION:
+            logger.info("job stage started", job=job.id, stage=JobStage.EXECUTION.value)
             if not job.session_id:
                 session_id = await self.opencode.create(worktree.path, f"ocint:{job.id}")
                 job = self.store.checkpoint(
@@ -314,18 +330,26 @@ class JobExecutor:
             if action is not PromptDecision.ADVANCE:
                 await self.opencode.wait_for_completion(worktree.path, job.session_id, job.prompt)
             job = self.store.checkpoint(job.id, StageCheckpoint(stage=JobStage.VALIDATION))
+            logger.info("job stage completed", job=job.id, stage=JobStage.EXECUTION.value)
         if job.stage is JobStage.VALIDATION:
+            logger.info("job stage started", job=job.id, stage=JobStage.VALIDATION.value)
             await self.git.validate(worktree, repository.checks)
             job = self.store.checkpoint(job.id, StageCheckpoint(stage=JobStage.COMMIT))
+            logger.info("job stage completed", job=job.id, stage=JobStage.VALIDATION.value)
         if job.stage is JobStage.COMMIT:
+            logger.info("job stage started", job=job.id, stage=JobStage.COMMIT.value)
             commit = await self.git.commit(
                 worktree, f"ocint: complete job {job.id}", repository.author_name, repository.author_email
             )
             job = self.store.checkpoint(job.id, CommitCheckpoint(sha=commit))
+            logger.info("job stage completed", job=job.id, stage=JobStage.COMMIT.value, commit=commit)
         if job.stage is JobStage.PUSH:
+            logger.info("job stage started", job=job.id, stage=JobStage.PUSH.value)
             await self.git.push(worktree)
             job = self.store.checkpoint(job.id, PushCheckpoint(revision=job.commit_sha))
+            logger.info("job stage completed", job=job.id, stage=JobStage.PUSH.value, branch=worktree.branch)
         if job.stage is JobStage.PULL_REQUEST:
+            logger.info("job stage started", job=job.id, stage=JobStage.PULL_REQUEST.value)
             url = await self.github.publish(
                 repository.github_repository,
                 worktree.branch,
@@ -334,4 +358,6 @@ class JobExecutor:
                 "Automated by ocint daemon.",
             )
             self.store.checkpoint(job.id, PullRequestCheckpoint(url=url))
+            logger.info("job stage completed", job=job.id, stage=JobStage.PULL_REQUEST.value, pull_request=url)
         self.store.complete(job.id)
+        logger.info("job completed", job=job.id, repository=job.repository)

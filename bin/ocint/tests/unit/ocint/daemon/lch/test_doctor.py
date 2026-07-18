@@ -31,6 +31,11 @@ class DoctorRunner:
         command = tuple(arguments)
         if self.fail_commands:
             raise subprocess.CalledProcessError(2, command, stderr="service unavailable")
+        if command[0] == "systemctl" and "list-timers" in command:
+            return CommandResult(
+                stdout='[{"next":1784312702000000,"last":1784311708000000,'
+                '"unit":"ocint-daemon.timer","activates":"ocint-daemon.service"}]'
+            )
         if command[0] == "systemctl" and any("ActiveState" in item for item in command):
             return CommandResult(stdout="active\n")
         if command[0] == "systemctl":
@@ -173,6 +178,7 @@ known_hosts_file = "{known_hosts}"
         environment_file=environment,
         config_home=config_home,
         data_home=data_home,
+        state_home=state_home,
         daemon_config=config,
         home=home,
     )
@@ -183,6 +189,7 @@ known_hosts_file = "{known_hosts}"
             paths.environment_reference,
             paths.reference(config_home),
             paths.reference(data_home),
+            paths.reference(state_home),
             paths.reference(config),
         )
     )
@@ -221,8 +228,11 @@ def test_diagnose_reports_healthy_complete_configuration(doctor_fixture: DoctorF
     assert len(report.diagnostics) >= 25
     assert all(item.ok for item in report.diagnostics if item.required)
     packaged = next(item for item in report.diagnostics if item.name == "opencode.packaged_policy")
+    schedule = next(item for item in report.diagnostics if item.name == "systemd.schedule")
     assert "resource=" in packaged.detail
     assert '"bash":"deny"' in packaged.value
+    assert schedule.ok
+    assert "next=2026-07-17T18:25:02Z" in schedule.value
 
 
 def test_diagnose_accepts_system_ssh_and_readable_symlinked_discovery_files(
