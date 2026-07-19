@@ -9,21 +9,7 @@
         },
         "external_directory": {
             "/tmp/**": "allow",
-            "/private/tmp/**": "allow"
-        },
-        "read": {
-            "*.local/**": "allow",
-            "*.config/**": "allow",
-            "/opt/homebrew/lib/**": "allow",
-            "~/go/**": "allow"
-        },
-        "glob": {
-            "*.local/**": "allow",
-            "*.config/**": "allow",
-            "/opt/homebrew/lib/**": "allow",
-            "~/go/**": "allow"
-        },
-        "grep": {
+            "/private/tmp/**": "allow",
             "*.local/**": "allow",
             "*.config/**": "allow",
             "/opt/homebrew/lib/**": "allow",
