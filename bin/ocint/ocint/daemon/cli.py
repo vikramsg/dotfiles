@@ -24,6 +24,8 @@ from ocint.daemon.opencode import OpenCodeClient
 from ocint.daemon.repository import ControlRepository
 from ocint.daemon.run import serve_bounded, wait_for_idle
 from ocint.daemon.service import JobExecutor, WorkRequest
+from ocint.daemon.tasks import TaskCoordinator
+from ocint.daemon.tasks.repository import TaskRepository
 
 logger = daemon_logging.get_logger("cli")
 
@@ -181,8 +183,10 @@ def create_daemon_app(context: DaemonContext) -> tuple[FastAPI, DaemonConfig]:
         context.settings.execution_lang,
     )
     github_client = GitHubClient(str(config.github.api_url), github_token)
-    github = GitHubService(config, github_client, GitHubRepository(engine))
+    tasks = TaskRepository(engine)
+    github = GitHubService(config, github_client, GitHubRepository(engine), tasks)
     executor = JobExecutor(config, repository, opencode, git, github)
+    coordinator = TaskCoordinator(github, tasks, executor)
     shutdown_event = asyncio.Event()
 
     @asynccontextmanager
@@ -194,13 +198,14 @@ def create_daemon_app(context: DaemonContext) -> tuple[FastAPI, DaemonConfig]:
             await github_client.start()
             try:
                 try:
-                    logger.info("GitHub poll started")
-                    await github.poll(executor)
-                    logger.info("GitHub poll completed")
-                    await executor.start()
+                    pending = executor.recover()
+                    logger.info("task reconciliation started")
+                    await coordinator.reconcile()
+                    logger.info("task reconciliation completed")
+                    executor.schedule_pending(pending)
                     logger.info("daemon ready", api_port=config.api.port)
                     idle_task = asyncio.create_task(
-                        wait_for_idle(executor, config.idle_timeout_seconds, shutdown_event)
+                        wait_for_idle(executor, config.idle_timeout_seconds, shutdown_event, coordinator)
                     )
                     try:
                         yield

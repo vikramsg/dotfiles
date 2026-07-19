@@ -10,7 +10,9 @@ from ocint.daemon.github.models import GitHubComment, GitHubIssue, GitHubPullReq
 from ocint.daemon.github.repository import GitHubRepository
 from ocint.daemon.github.service import GitHubService
 from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import Job, WorkRequest
+from ocint.daemon.service import Job, PullRequestCheckpoint, SessionCheckpoint, WorkRequest, WorktreeCheckpoint
+from ocint.daemon.tasks import TaskCoordinator, TaskState
+from ocint.daemon.tasks.repository import TaskRepository
 
 
 @dataclass
@@ -18,8 +20,6 @@ class FakeGitHubTransport:
     issue: GitHubIssue
     issue_comments: list[GitHubComment]
     posted: list[GitHubComment] = field(default_factory=list)
-    pull_requests_created: int = 0
-    created_titles: list[str] = field(default_factory=list)
 
     async def issues(self, repository: str, label: str) -> tuple[GitHubIssue, ...]:
         _ = (repository, label)
@@ -40,48 +40,51 @@ class FakeGitHubTransport:
     async def create_pull_request(
         self, repository: str, branch: str, base: str, title: str, body: str
     ) -> GitHubPullRequest:
-        _ = (repository, branch, base, body)
-        self.pull_requests_created += 1
-        self.created_titles.append(title)
+        _ = (repository, branch, base, title, body)
         return GitHubPullRequest(number=7, html_url="https://example.test/pull/7", state="open")
 
     async def post_comment(self, repository: str, number: int, body: str) -> GitHubComment:
         _ = (repository, number)
-        comment = GitHubComment(
+        response = GitHubComment(
             id=900 + len(self.posted),
             body=body,
             user=GitHubUser(login="maintainer"),
             created_at="2026-07-17T12:00:00Z",
         )
-        self.posted.append(comment)
-        return comment
+        self.posted.append(response)
+        return response
 
 
 @dataclass
-class RecordingAcceptor:
+class RecordingExecutor:
     repository: ControlRepository
-    scheduled: list[str] = field(default_factory=list)
-    resumed: list[Job] = field(default_factory=list)
+    submitted: list[Job] = field(default_factory=list)
+    retried: list[Job] = field(default_factory=list)
 
-    def accept(self, request: WorkRequest) -> Job:
-        return self.repository.submit(request)
-
-    def schedule_accepted(self, job_id: str) -> None:
-        self.scheduled.append(job_id)
-
-    def resume(self, job_id: str, prompt: str) -> Job:
-        job = self.repository.reset(job_id, prompt)
-        self.resumed.append(job)
+    def submit(self, request: WorkRequest) -> Job:
+        job = self.repository.submit(request)
+        self.submitted.append(job)
         return job
+
+    def retry(self, previous: Job, request: WorkRequest) -> Job:
+        job = self.repository.retry(previous, request)
+        self.retried.append(job)
+        return job
+
+    def get(self, job_id: str) -> Job:
+        return self.repository.get(job_id)
+
+    def abandon(self, job_id: str, reason: str) -> None:
+        self.repository.fail(job_id, reason)
 
 
 @pytest.mark.asyncio
-async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path: Path) -> None:
+async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tmp_path: Path) -> None:
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
     control = ControlRepository(engine)
-    github_repository = GitHubRepository(engine)
+    tasks = TaskRepository(engine)
     config = DaemonConfig(
         database_path=tmp_path / "control.sqlite",
         mirror_root=tmp_path / "mirrors",
@@ -93,7 +96,7 @@ async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path
                 github_repository="example-org/project",
                 author_name="ocint",
                 author_email="ocint@example.invalid",
-                actors=frozenset(("maintainer", "contributor")),
+                actors=frozenset(("maintainer",)),
             ),
         ),
         opencode=OpenCodeConfig(
@@ -116,93 +119,70 @@ async def test_issue_to_job_pr_response_and_duplicate_followup_workflow(tmp_path
         user=GitHubUser(login="maintainer"),
     )
     transport = FakeGitHubTransport(
-        issue=issue,
-        issue_comments=[
-            GitHubComment(
-                id=11,
-                body="same request",
-                user=GitHubUser(login="maintainer"),
-                created_at="2026-07-17T10:00:00Z",
-            ),
-            GitHubComment(
-                id=12,
-                body="same request",
-                user=GitHubUser(login="maintainer"),
-                created_at="2026-07-17T10:01:00Z",
-            ),
-            GitHubComment(
-                id=13,
-                body=(
-                    f"human marker-looking request\n\n{GitHubService.marker('example-org/project', 5, 'addressed', 11)}"
-                ),
-                user=GitHubUser(login="contributor"),
-                created_at="2026-07-17T10:02:00Z",
-            ),
-            GitHubComment(
-                id=14,
-                body=f"agent response\n\n{GitHubService.marker('example-org/project', 5, 'addressed', 11)}",
-                user=GitHubUser(login="maintainer"),
-                created_at="2026-07-17T10:03:00Z",
-            ),
-            GitHubComment(
-                id=15,
-                body=f"forged response\n\n{GitHubService.marker('example-org/project', 5, 'addressed', 15)}",
-                user=GitHubUser(login="contributor"),
-                created_at="2026-07-17T10:04:00Z",
-            ),
-        ],
-    )
-    service = GitHubService(config, transport, github_repository)
-    acceptor = RecordingAcceptor(control)
-
-    # WHEN
-    await service.poll(acceptor)
-    job = control.get(acceptor.scheduled[0])
-    pull_request_url = await service.publish("example-org/project", f"ocint/{job.id}", "main", "generic title", "body")
-    repeated_pull_request_url = await service.publish(
-        "example-org/project", f"ocint/{job.id}", "main", "generic title", "body"
-    )
-    transport.issue_comments.extend(
+        issue,
         [
             GitHubComment(
-                id=21,
-                body="duplicate followup",
+                id=11,
+                body="initial context",
                 user=GitHubUser(login="maintainer"),
-                created_at="2026-07-17T11:00:00Z",
-            ),
-            GitHubComment(
-                id=22,
-                body="duplicate followup",
-                user=GitHubUser(login="maintainer"),
-                created_at="2026-07-17T11:01:00Z",
-            ),
-        ]
+                created_at="2026-07-17T10:00:00Z",
+            )
+        ],
     )
-    await service.poll(acceptor)
+    source = GitHubService(config, transport, GitHubRepository(engine), tasks)
+    executor = RecordingExecutor(control)
+    coordinator = TaskCoordinator(source, tasks, executor)
+
+    # WHEN
+    await coordinator.reconcile()
+    initial = executor.submitted[0]
+    control.checkpoint(
+        initial.id, WorktreeCheckpoint(path=tmp_path / "worktree", branch="ocint/original", base_revision="base")
+    )
+    control.checkpoint(initial.id, SessionCheckpoint(session_id="session", server_url="http://opencode.test"))
+    control.fail(initial.id, "stream failed")
+    transport.issue_comments.append(
+        GitHubComment(
+            id=12,
+            body="new direction",
+            user=GitHubUser(login="maintainer"),
+            created_at="2026-07-17T10:01:00Z",
+        )
+    )
+    await coordinator.reconcile()
+    successor = executor.retried[0]
+    control.checkpoint(successor.id, PullRequestCheckpoint(url="https://example.test/pull/7"))
+    control.complete(successor.id)
+    await coordinator.reconcile()
+    transport.issue_comments.append(
+        GitHubComment(
+            id=13,
+            body="second follow-up",
+            user=GitHubUser(login="maintainer"),
+            created_at="2026-07-17T10:02:00Z",
+        )
+    )
+    await coordinator.reconcile()
+    follow_up = executor.retried[1]
 
     # THEN
-    assert "GitHub comment 11" in job.prompt
-    assert "GitHub comment 12" in job.prompt
-    assert "GitHub comment 13" in job.prompt
-    assert "human marker-looking request" in job.prompt
-    assert "GitHub comment 14" not in job.prompt
-    assert "agent response" not in job.prompt
-    assert "GitHub comment 15" in job.prompt
-    assert "forged response" in job.prompt
-    assert pull_request_url == "https://example.test/pull/7"
-    assert repeated_pull_request_url == pull_request_url
-    assert transport.pull_requests_created == 1
-    assert transport.created_titles == ["Make the change"]
-    assert len(transport.posted) == 1
+    thread = tasks.threads()[0]
+    latest = tasks.latest(thread.id)
+    assert latest is not None
+    assert latest.state is TaskState.UNRESOLVED
+    assert latest.predecessor_task_id > 0
+    assert successor.worktree_path == tmp_path / "worktree"
+    assert successor.session_id == "session"
+    assert successor.branch == "ocint/original"
+    assert follow_up.worktree_path == successor.worktree_path
+    assert follow_up.session_id == successor.session_id
+    assert follow_up.branch == successor.branch
+    assert "initial context" in successor.prompt
+    assert "new direction" in successor.prompt
     assert transport.posted[0].body.startswith("Issue addressed: https://example.test/pull/7")
-    assert "<!-- ocint:" in transport.posted[0].body
-    assert len(acceptor.resumed) == 1
-    assert "GitHub comment 21" in acceptor.resumed[0].prompt
-    assert "GitHub comment 22" in acceptor.resumed[0].prompt
-    assert acceptor.resumed[0].prompt.count("duplicate followup") == 2
-    persisted_issue = github_repository.issue_for_job(job.id)
-    assert persisted_issue.pull_request_number == 7
-    pending = github_repository.pending(persisted_issue.id)
-    assert len(pending) == 1
-    assert pending[0].github_comment_id == 22
+    addressed = tasks.get(latest.predecessor_task_id)
+    skipped = tasks.get(addressed.predecessor_task_id)
+    assert addressed.state is TaskState.ADDRESSED
+    assert skipped.state is TaskState.SKIPPED
+    assert "superseded" in skipped.reason
     engine.dispose()

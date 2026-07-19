@@ -156,6 +156,7 @@ type Checkpoint = (
 
 class JobStore(Protocol):
     def submit(self, request: WorkRequest) -> Job: ...
+    def retry(self, previous: Job, request: WorkRequest) -> Job: ...
     def claim(self, job_id: str) -> Job | None: ...
     def pending_ids(self) -> list[str]: ...
     def get(self, job_id: str) -> Job: ...
@@ -164,7 +165,6 @@ class JobStore(Protocol):
     def fail(self, job_id: str, error: str) -> Job: ...
     def requeue(self, job_id: str) -> None: ...
     def reconcile(self) -> int: ...
-    def reset(self, job_id: str, prompt: str) -> Job: ...
 
 
 class OpenCode(Protocol):
@@ -184,7 +184,7 @@ class Git(Protocol):
 
 
 class GitHub(Protocol):
-    async def publish(self, repository: str, branch: str, base: str, title: str, body: str) -> str: ...
+    async def publish(self, repository: str, branch: str, base: str, title: str, body: str, job_id: str) -> str: ...
 
 
 def authorize(request: WorkRequest, config: DaemonConfig) -> None:
@@ -216,15 +216,23 @@ class JobExecutor:
         self.github = github
         self.capacity = asyncio.Semaphore(config.scheduler.capacity)
         self.tasks: dict[str, asyncio.Task[None]] = {}
+        self.completed = asyncio.Event()
         self.closing = False
         self.activity_generation = 0
 
     async def start(self) -> None:
+        self.schedule_pending(self.recover())
+
+    def recover(self) -> list[str]:
         reconciled = self.store.reconcile()
         pending = self.store.pending_ids()
         logger.info("job recovery completed", reconciled=reconciled, pending=len(pending))
-        for job_id in pending:
-            self.schedule(job_id)
+        return pending
+
+    def schedule_pending(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            if self.store.get(job_id).state is JobState.QUEUED:
+                self.schedule(job_id)
 
     def submit(self, request: WorkRequest) -> Job:
         job = self.accept(request)
@@ -241,12 +249,23 @@ class JobExecutor:
     def schedule_accepted(self, job_id: str) -> None:
         self.schedule(job_id)
 
-    def resume(self, job_id: str, prompt: str) -> Job:
-        job = self.store.reset(job_id, prompt)
+    def retry(self, previous: Job, request: WorkRequest) -> Job:
+        authorize(request, self.config)
+        job = self.store.retry(previous, request)
         self.schedule(job.id)
         self.activity_generation += 1
-        logger.info("job resumed", job=job.id, repository=job.repository)
+        logger.info("job retry scheduled", previous_job=previous.id, job=job.id, repository=job.repository)
         return job
+
+    def get(self, job_id: str) -> Job:
+        return self.store.get(job_id)
+
+    def abandon(self, job_id: str, reason: str) -> None:
+        self.store.fail(job_id, reason)
+        task = self.tasks.get(job_id)
+        if task is not None:
+            task.cancel()
+        logger.info("job abandoned", job=job_id, reason=reason)
 
     @property
     def is_idle(self) -> bool:
@@ -256,13 +275,24 @@ class JobExecutor:
         while self.tasks:
             await asyncio.gather(*list(self.tasks.values()))
 
+    async def wait_for_completion(self) -> None:
+        if not self.tasks:
+            return
+        await self.completed.wait()
+        self.completed.clear()
+
     def schedule(self, job_id: str) -> None:
         if self.closing or job_id in self.tasks:
             return
         task = asyncio.create_task(self._run(job_id))
         self.tasks[job_id] = task
         logger.info("job scheduled", job=job_id)
-        task.add_done_callback(lambda _task, identifier=job_id: self.tasks.pop(identifier, None))
+
+        def completed(_task: asyncio.Task[None], identifier: str = job_id) -> None:
+            self.tasks.pop(identifier, None)
+            self.completed.set()
+
+        task.add_done_callback(completed)
 
     async def close(self) -> None:
         self.closing = True
@@ -356,6 +386,7 @@ class JobExecutor:
                 repository.default_branch,
                 f"ocint: complete job {job.id}",
                 "Automated by ocint daemon.",
+                job.id,
             )
             self.store.checkpoint(job.id, PullRequestCheckpoint(url=url))
             logger.info("job stage completed", job=job.id, stage=JobStage.PULL_REQUEST.value, pull_request=url)

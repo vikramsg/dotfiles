@@ -333,13 +333,14 @@ agent_actor = "automation-bot"
             )
         )
         for _attempt in range(250):
-            if log_path.is_file() and "daemon ready" in log_path.read_text():
+            log_files = (log_path, log_path.with_name("daemon.log.1"))
+            if any(path.is_file() and "daemon ready" in path.read_text() for path in log_files):
                 break
             if running.done():
                 break
             await asyncio.sleep(0.02)
         assert not running.done()
-        assert "daemon ready" in log_path.read_text()
+        assert any(path.is_file() and "daemon ready" in path.read_text() for path in log_files)
         logger = get_logger("e2e")
         for sequence in range(6):
             logger.info("log rotation verification", sequence=sequence, marker="x" * 300)

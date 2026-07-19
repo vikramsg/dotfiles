@@ -65,6 +65,43 @@ class ControlRepository:
             )
         return self.get(identifier)
 
+    def retry(self, previous: Job, request: WorkRequest) -> Job:
+        now = datetime.now(UTC).isoformat()
+        with self.engine.begin() as connection:
+            existing = (
+                connection.execute(select(job).where(job.c.idempotency_key == request.idempotency_key))
+                .mappings()
+                .one_or_none()
+            )
+            if existing is not None:
+                return self._job(existing)
+            identifier = uuid.uuid4().hex
+            connection.execute(
+                insert(job).values(
+                    id=identifier,
+                    idempotency_key=request.idempotency_key,
+                    actor=request.actor,
+                    repository=request.repository,
+                    prompt=request.prompt,
+                    state=JobState.QUEUED.value,
+                    stage=JobStage.EXECUTION.value,
+                    session_id=previous.session_id,
+                    server_url=previous.server_url,
+                    worktree_path=str(previous.worktree_path or ""),
+                    branch=previous.branch,
+                    base_revision=previous.base_revision,
+                    prompt_intended=0,
+                    prompt_submitted=0,
+                    commit_sha="",
+                    pushed=0,
+                    pull_request_url="",
+                    error="",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        return self.get(identifier)
+
     def claim(self, job_id: str) -> Job | None:
         now = datetime.now(UTC).isoformat()
         with self.engine.begin() as connection:
@@ -139,25 +176,6 @@ class ControlRepository:
                 .values(state=JobState.QUEUED.value, updated_at=datetime.now(UTC).isoformat())
             )
             return result.rowcount
-
-    def reset(self, job_id: str, prompt: str) -> Job:
-        with self.engine.begin() as connection:
-            connection.execute(
-                update(job)
-                .where(job.c.id == job_id)
-                .values(
-                    prompt=prompt,
-                    state=JobState.QUEUED.value,
-                    stage=JobStage.EXECUTION.value,
-                    prompt_intended=0,
-                    prompt_submitted=0,
-                    commit_sha="",
-                    pushed=0,
-                    error="",
-                    updated_at=datetime.now(UTC).isoformat(),
-                )
-            )
-        return self.get(job_id)
 
     def get(self, job_id: str) -> Job:
         with self.engine.connect() as connection:

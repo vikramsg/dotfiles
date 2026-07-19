@@ -2,26 +2,14 @@ import hashlib
 from typing import Protocol
 
 from ocint.daemon.config import DaemonConfig, RepositoryConfig
-from ocint.daemon.github.models import (
-    ActorType,
-    CommentState,
-    GitHubComment,
-    GitHubIssue,
-    GitHubPullRequest,
-    StoredComment,
-    StoredIssue,
-)
+from ocint.daemon.github.models import GitHubComment, GitHubIssue, GitHubPullRequest, StoredIssue
 from ocint.daemon.github.repository import GitHubRepository
 from ocint.daemon.logging import get_logger
-from ocint.daemon.service import Job, WorkRequest
+from ocint.daemon.service import Job
+from ocint.daemon.tasks.models import MessageActorType, MessageDisposition, Task, TaskState
+from ocint.daemon.tasks.repository import TaskRepository
 
 logger = get_logger("github")
-
-
-class WorkAcceptor(Protocol):
-    def accept(self, request: WorkRequest) -> Job: ...
-    def schedule_accepted(self, job_id: str) -> None: ...
-    def resume(self, job_id: str, prompt: str) -> Job: ...
 
 
 class GitHubTransport(Protocol):
@@ -36,14 +24,18 @@ class GitHubTransport(Protocol):
 
 
 class GitHubService:
-    def __init__(self, config: DaemonConfig, client: GitHubTransport, repository: GitHubRepository) -> None:
+    def __init__(
+        self, config: DaemonConfig, client: GitHubTransport, repository: GitHubRepository, tasks: TaskRepository
+    ) -> None:
         self.config = config
         self.client = client
         self.repository = repository
+        self.tasks = tasks
 
-    async def poll(self, acceptor: WorkAcceptor) -> None:
+    async def poll(self) -> None:
         for configured in self.config.repositories:
             issues = await self.client.issues(configured.github_repository, self.config.github.issue_label)
+            eligible = []
             logger.info(
                 "repository issues polled",
                 repository=configured.github_repository,
@@ -51,8 +43,7 @@ class GitHubService:
                 issues=len(issues),
             )
             for issue in issues:
-                existing = self.repository.find_issue(configured.name, issue.id)
-                if existing is None and not self._authorized(issue.user.login, configured):
+                if not self._authorized(issue.user.login, configured):
                     logger.warning(
                         "issue rejected",
                         repository=configured.github_repository,
@@ -60,138 +51,58 @@ class GitHubService:
                         actor=issue.user.login,
                     )
                     continue
+                eligible.append(str(issue.id))
+                thread = self.tasks.upsert_thread(
+                    configured.name,
+                    "github",
+                    str(issue.id),
+                    issue.user.login,
+                    issue.title,
+                    issue.body,
+                )
+                stored = self.repository.upsert_issue(thread.id, configured.github_repository, issue.id, issue.number)
                 comments = await self.client.comments(configured.github_repository, issue.number)
-                stored = existing
                 for comment in comments:
                     marker = self._marker_from_body(comment.body)
                     agent = self._is_agent_comment(comment, configured.github_repository, issue.number, comments)
-                    state = (
-                        CommentState.IGNORED
+                    disposition = (
+                        MessageDisposition.IGNORED
                         if agent
                         else (
-                            CommentState.PENDING
+                            MessageDisposition.ACCEPTED
                             if self._authorized(comment.user.login, configured)
-                            else CommentState.REJECTED
+                            else MessageDisposition.REJECTED
                         )
                     )
-                    if stored is None:
-                        continue
-                    self.repository.store_comment(
-                        stored.id, comment, ActorType.AGENT if agent else ActorType.HUMAN, state, marker
+                    message = self.tasks.upsert_message(
+                        thread.id,
+                        str(comment.id),
+                        comment.user.login,
+                        MessageActorType.AGENT if agent else MessageActorType.HUMAN,
+                        disposition,
+                        comment.body,
+                        comment.created_at,
                     )
-                    if state is CommentState.REJECTED:
+                    self.repository.upsert_comment(comment.id, message.id, marker)
+                    if disposition is MessageDisposition.REJECTED:
                         logger.warning(
-                            "issue comment rejected",
+                            "thread message rejected",
                             repository=configured.github_repository,
                             issue=issue.number,
-                            comment=comment.id,
+                            message=comment.id,
                             actor=comment.user.login,
                         )
                         await self._respond(
-                            stored, "unauthorized", comment.id, f"Actor @{comment.user.login} is not authorized."
+                            stored,
+                            "unauthorized",
+                            str(comment.id),
+                            f"Actor @{comment.user.login} is not authorized.",
                         )
-                if stored is None:
-                    initial_comments = tuple(
-                        item
-                        for item in comments
-                        if self._authorized(item.user.login, configured)
-                        and not self._is_agent_comment(item, configured.github_repository, issue.number, comments)
-                    )
-                    prompt = f"GitHub issue: {issue.title}\n\n{issue.body}" + "".join(
-                        f"\n\nGitHub comment {item.id} by @{item.user.login}:\n{item.body}"
-                        for item in sorted(initial_comments, key=lambda item: (item.created_at, item.id))
-                    )
-                    request = WorkRequest(
-                        idempotency_key=f"github:{configured.github_repository}:{issue.id}",
-                        actor=issue.user.login,
-                        repository=configured.name,
-                        prompt=prompt,
-                    )
-                    job = acceptor.accept(request)
-                    stored = self.repository.issue(configured.name, configured.github_repository, issue, job.id)
-                    logger.info(
-                        "issue accepted",
-                        repository=configured.github_repository,
-                        issue=issue.number,
-                        job=job.id,
-                    )
-                    for comment in comments:
-                        marker = self._marker_from_body(comment.body)
-                        agent = self._is_agent_comment(comment, configured.github_repository, issue.number, comments)
-                        state = (
-                            CommentState.IGNORED
-                            if agent
-                            else (
-                                CommentState.PENDING
-                                if self._authorized(comment.user.login, configured)
-                                else CommentState.REJECTED
-                            )
-                        )
-                        self.repository.store_comment(
-                            stored.id, comment, ActorType.AGENT if agent else ActorType.HUMAN, state, marker
-                        )
-                        if state is CommentState.REJECTED:
-                            logger.warning(
-                                "issue comment rejected",
-                                repository=configured.github_repository,
-                                issue=issue.number,
-                                comment=comment.id,
-                                actor=comment.user.login,
-                            )
-                            await self._respond(
-                                stored, "unauthorized", comment.id, f"Actor @{comment.user.login} is not authorized."
-                            )
-                    pending = self.repository.pending(stored.id)
-                    if pending:
-                        self.repository.activate(stored.id, pending)
-                    acceptor.schedule_accepted(job.id)
-                elif stored.active_anchor_comment_id == 0:
-                    pending = self.repository.pending(stored.id)
-                    if pending:
-                        self.repository.activate(stored.id, pending)
-                        if stored.pull_request_number:
-                            pull = await self.client.pull_request(
-                                configured.github_repository, stored.pull_request_number
-                            )
-                            if pull.state != "open" or pull.merged:
-                                logger.error(
-                                    "issue follow-up blocked",
-                                    repository=configured.github_repository,
-                                    issue=issue.number,
-                                    pull_request=stored.pull_request_url,
-                                )
-                                self.repository.set_error(stored.id, "owned pull request is closed or merged")
-                                self.repository.finalize(stored.id, CommentState.ERRORED)
-                                await self._respond(
-                                    stored,
-                                    "closed-pr",
-                                    pending[-1].github_comment_id,
-                                    "The owned pull request is closed or merged; no replacement will be created.",
-                                )
-                                continue
-                        logger.info(
-                            "issue follow-up accepted",
-                            repository=configured.github_repository,
-                            issue=issue.number,
-                            job=stored.job_id,
-                            comments=len(pending),
-                        )
-                        acceptor.resume(stored.job_id, self.followup_prompt(pending))
-                    elif stored.initial_state == CommentState.PENDING.value:
-                        acceptor.resume(stored.job_id, self.initial_prompt(stored.title, stored.body, ()))
-                else:
-                    active = self.repository.active(stored.id, stored.active_anchor_comment_id)
-                    prompt = (
-                        self.initial_prompt(stored.title, stored.body, active)
-                        if stored.initial_state == CommentState.PENDING.value
-                        else self.followup_prompt(active)
-                    )
-                    acceptor.resume(stored.job_id, prompt)
+            self.tasks.synchronize_source(configured.name, "github", tuple(eligible))
 
-    async def publish(self, repository: str, branch: str, base: str, title: str, body: str) -> str:
-        job_id = branch.removeprefix("ocint/")
-        issue = self.repository.find_issue_for_job(job_id)
-        if issue is None:
+    async def publish(self, repository: str, branch: str, base: str, title: str, body: str, job_id: str) -> str:
+        task = self.tasks.task_for_job(job_id)
+        if task is None:
             pull = await self.client.find_pull_request(repository, branch, base)
             if pull is None:
                 pull = await self.client.create_pull_request(repository, branch, base, title, body)
@@ -199,79 +110,60 @@ class GitHubService:
             else:
                 logger.info("pull request reused", repository=repository, branch=branch, pull_request=pull.html_url)
             return pull.html_url
-        if (
-            issue.pull_request_number
-            and issue.initial_state == CommentState.ADDRESSED.value
-            and not issue.active_anchor_comment_id
-        ):
-            return issue.pull_request_url
+        issue = self.repository.issue_for_thread(task.thread_id)
+        if issue is None:
+            raise RuntimeError(f"GitHub mapping missing for task {task.id}")
         if issue.pull_request_number:
             pull = await self.client.pull_request(repository, issue.pull_request_number)
             if pull.state != "open" or pull.merged:
-                self.repository.set_error(issue.id, "owned pull request is closed or merged")
-                self.repository.finalize(issue.id, CommentState.ERRORED)
+                self.tasks.set_state(task.id, TaskState.ERRORED, "owned pull request is closed or merged")
                 await self._respond(
                     issue,
                     "closed-pr",
-                    issue.active_anchor_comment_id,
+                    self._task_anchor(task),
                     "The owned pull request is closed or merged; no replacement will be created.",
                 )
                 raise RuntimeError("owned pull request is closed or merged")
+            return pull.html_url
+        thread = self.tasks.thread(task.thread_id)
+        pull = await self.client.find_pull_request(repository, branch, base)
+        if pull is None:
+            pull = await self.client.create_pull_request(repository, branch, base, thread.title, body)
+            logger.info(
+                "thread pull request created", repository=repository, thread=thread.id, pull_request=pull.html_url
+            )
         else:
-            pull = await self.client.find_pull_request(repository, branch, base)
-            if pull is None:
-                pull = await self.client.create_pull_request(repository, branch, base, issue.title, body)
-                logger.info(
-                    "issue pull request created",
-                    repository=repository,
-                    issue=issue.issue_number,
-                    branch=branch,
-                    pull_request=pull.html_url,
-                )
-            else:
-                logger.info(
-                    "issue pull request reused",
-                    repository=repository,
-                    issue=issue.issue_number,
-                    branch=branch,
-                    pull_request=pull.html_url,
-                )
-            self.repository.set_pull_request(issue.id, pull.number, pull.html_url)
+            logger.info(
+                "thread pull request reused", repository=repository, thread=thread.id, pull_request=pull.html_url
+            )
+        self.repository.set_pull_request(issue.thread_id, pull.number, pull.html_url)
+        return pull.html_url
+
+    async def complete_task(self, task: Task, job: Job) -> None:
+        issue = self.repository.issue_for_thread(task.thread_id)
+        if issue is None:
+            raise RuntimeError(f"GitHub mapping missing for task {task.id}")
+        if not job.pull_request_url:
+            raise RuntimeError(f"task {task.id} completed without a pull request URL")
         await self._respond(
             issue,
             "addressed",
-            issue.active_anchor_comment_id,
-            f"Issue addressed: {pull.html_url}\n\nTo make further changes, add a comment.",
+            self._task_anchor(task),
+            f"Issue addressed: {job.pull_request_url}\n\nTo make further changes, add a comment.",
         )
-        self.repository.finalize(issue.id, CommentState.ADDRESSED)
-        logger.info(
-            "issue addressed",
-            repository=repository,
-            issue=issue.issue_number,
-            job=job_id,
-            pull_request=pull.html_url,
-        )
-        return pull.html_url
+        self.tasks.set_state(task.id, TaskState.ADDRESSED)
+        logger.info("task addressed", task=task.id, thread=task.thread_id, pull_request=job.pull_request_url)
+
+    def _task_anchor(self, task: Task) -> str:
+        messages = self.tasks.task_messages(task.id)
+        return messages[-1].source_message_id if messages else "0"
 
     @staticmethod
-    def initial_prompt(title: str, body: str, comments: tuple[StoredComment, ...]) -> str:
-        additions = "".join(
-            f"\n\nGitHub comment {item.github_comment_id} by @{item.actor_login}:\n{item.body}" for item in comments
-        )
-        return f"GitHub issue: {title}\n\n{body}{additions}"
-
-    @staticmethod
-    def followup_prompt(comments: tuple[StoredComment, ...]) -> str:
-        return "GitHub follow-up comments:" + "".join(
-            f"\n\nGitHub comment {item.github_comment_id} by @{item.actor_login}:\n{item.body}" for item in comments
-        )
-
-    @staticmethod
-    def marker(repository: str, issue: int, outcome: str, anchor: int) -> str:
+    def marker(repository: str, issue: int, outcome: str, anchor: str | int) -> str:
         digest = hashlib.sha256(f"{repository}:{issue}:{outcome}:{anchor}".encode()).hexdigest()[:24]
         return f"<!-- ocint:{digest} -->"
 
-    async def _respond(self, issue: StoredIssue, outcome: str, anchor: int, text: str) -> None:
+    async def _respond(self, issue: StoredIssue, outcome: str, anchor: str, text: str) -> None:
         marker = self.marker(issue.github_repository, issue.issue_number, outcome, anchor)
         comments = await self.client.comments(issue.github_repository, issue.issue_number)
         existing = next(
@@ -281,7 +173,16 @@ class GitHubService:
         response = existing or await self.client.post_comment(
             issue.github_repository, issue.issue_number, f"{text}\n\n{marker}"
         )
-        self.repository.store_comment(issue.id, response, ActorType.AGENT, CommentState.IGNORED, marker)
+        message = self.tasks.upsert_message(
+            issue.thread_id,
+            str(response.id),
+            response.user.login,
+            MessageActorType.AGENT,
+            MessageDisposition.IGNORED,
+            response.body,
+            response.created_at,
+        )
+        self.repository.upsert_comment(response.id, message.id, self._marker_from_body(response.body))
 
     @staticmethod
     def _marker_from_body(body: str) -> str:
@@ -301,7 +202,7 @@ class GitHubService:
         marker = self._marker_from_body(comment.body)
         if not marker:
             return False
-        anchors = (0, *(item.id for item in comments))
+        anchors = ("0", *(str(item.id) for item in comments))
         return any(
             marker == self.marker(repository, issue_number, outcome, anchor)
             for outcome in ("addressed", "unauthorized", "closed-pr")
