@@ -102,4 +102,4 @@ smoke-daemon:
         sed -e "s#~/.local/state/ocint/daemon.sqlite#$TMPDIR/control.sqlite#g" -e "s#~/.local/share/ocint/mirrors#$TMPDIR/mirrors#g" -e "s#~/.local/share/ocint/worktrees#$TMPDIR/worktrees#g" "{{justfile_directory()}}/config/daemon.example.toml" > "$TMPDIR/daemon.toml"; \
         OCINT_DAEMON_CONFIG="$TMPDIR/daemon.toml" {{uv_ocint}} ocint daemon config --path; \
         OCINT_DAEMON_CONFIG="$TMPDIR/daemon.toml" {{uv_ocint}} ocint daemon migrate; \
-        CONTROL_DB="$TMPDIR/control.sqlite" {{uv_ocint}} python3 -c 'import os; from sqlalchemy import create_engine, inspect; assert set(inspect(create_engine("sqlite:///" + os.environ["CONTROL_DB"])).get_table_names()) == {"alembic_version", "github_issue", "github_issue_comment", "job"}'
+        CONTROL_DB="$TMPDIR/control.sqlite" {{uv_ocint}} python3 -c 'import os; from sqlalchemy import create_engine, inspect; assert set(inspect(create_engine("sqlite:///" + os.environ["CONTROL_DB"])).get_table_names()) == {"alembic_version", "github_issue", "github_issue_comment", "job", "task", "task_job", "task_message", "thread", "thread_message"}'

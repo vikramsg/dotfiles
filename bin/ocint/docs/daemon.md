@@ -94,6 +94,10 @@ leases, generic channels/providers, an outbox, replacement pull requests,
 workspace deletion, Slack, or a browser UI. There are no credential or
 configuration compatibility fallbacks.
 
+Thread/task reconciliation is documented in
+[`spec/daemon-thread-tasks.md`](spec/daemon-thread-tasks.md). The workflow core
+is provider-neutral even though GitHub is the current external-thread adapter.
+
 ## Modules
 
 The implementation uses a small set of deep modules:
@@ -111,6 +115,7 @@ The implementation uses a small set of deep modules:
 | `lch/provision.py` | Typed checkout, GitHub, Git, SSH, and OpenCode discovery; validated writes |
 | `lch/doctor.py` | Typed, redacted human/JSON diagnostics |
 | `lch/systemd.py` | Exact user unit generation and lifecycle commands |
+| `tasks/` | Provider-neutral thread/message/task reconciliation and job-attempt ownership |
 | `db/` | SQLAlchemy schema, SQLite engine policy, Alembic environment, and initial revision |
 
 The CLI is the composition root. Services depend on narrow protocols declared

@@ -1,74 +1,49 @@
-from ocint.daemon.github.models import ActorType, CommentState, StoredComment
-from ocint.daemon.github.service import GitHubService
+from ocint.daemon.tasks.models import MessageActorType, MessageDisposition, Thread, ThreadMessage
+from ocint.daemon.tasks.service import render_prompt
 
 
-def test_followup_prompt_orders_actor_attributed_comments() -> None:
+def test_task_prompt_includes_all_accepted_messages_in_order() -> None:
     # GIVEN
-    comments = (
-        StoredComment(
-            github_comment_id=1,
-            issue_id=2,
+    thread = Thread(
+        id=1,
+        repository="repo",
+        source="github",
+        source_thread_id="5",
+        actor="alice",
+        eligible=True,
+        execution_job_id="",
+        title="Make the change",
+        body="Issue body",
+    )
+    messages = (
+        ThreadMessage(
+            id=1,
+            thread_id=1,
+            source_message_id="11",
+            actor="alice",
+            actor_type=MessageActorType.HUMAN,
+            disposition=MessageDisposition.ACCEPTED,
             body="first",
-            actor_login="alice",
-            actor_type=ActorType.HUMAN,
-            state=CommentState.BATCHED,
-            github_created_at="2026-01-01T00:00:00Z",
-            marker="",
-            agent_response_comment_id=0,
+            source_created_at="2026-01-01T00:00:00Z",
         ),
-        StoredComment(
-            github_comment_id=2,
-            issue_id=2,
+        ThreadMessage(
+            id=2,
+            thread_id=1,
+            source_message_id="12",
+            actor="bob",
+            actor_type=MessageActorType.HUMAN,
+            disposition=MessageDisposition.ACCEPTED,
             body="second",
-            actor_login="bob",
-            actor_type=ActorType.HUMAN,
-            state=CommentState.PENDING,
-            github_created_at="2026-01-01T00:01:00Z",
-            marker="",
-            agent_response_comment_id=0,
+            source_created_at="2026-01-01T00:01:00Z",
         ),
     )
 
     # WHEN
-    prompt = GitHubService.followup_prompt(comments)
+    prompt = render_prompt(thread, messages)
 
     # THEN
-    assert prompt.index("@alice") < prompt.index("@bob")
-    assert "GitHub comment 1" in prompt
-    assert "GitHub comment 2" in prompt
-    assert "first" in prompt
-    assert "second" in prompt
-
-
-def test_duplicate_followups_have_distinct_prompt_identity() -> None:
-    # GIVEN
-    first = StoredComment(
-        github_comment_id=101,
-        issue_id=2,
-        body="same request",
-        actor_login="alice",
-        actor_type=ActorType.HUMAN,
-        state=CommentState.BATCHED,
-        github_created_at="2026-01-01T00:00:00Z",
-        marker="",
-        agent_response_comment_id=0,
-    )
-    second = StoredComment(
-        github_comment_id=102,
-        issue_id=2,
-        body="same request",
-        actor_login="alice",
-        actor_type=ActorType.HUMAN,
-        state=CommentState.PENDING,
-        github_created_at="2026-01-01T00:01:00Z",
-        marker="",
-        agent_response_comment_id=0,
-    )
-
-    # WHEN
-    prompt = GitHubService.followup_prompt((first, second))
-
-    # THEN
-    assert prompt.count("same request") == 2
-    assert "GitHub comment 101" in prompt
-    assert "GitHub comment 102" in prompt
+    assert "Make the change" in prompt
+    assert "Issue body" in prompt
+    assert prompt.index("Thread message 11") < prompt.index("Thread message 12")
+    assert "@alice" in prompt
+    assert "@bob" in prompt

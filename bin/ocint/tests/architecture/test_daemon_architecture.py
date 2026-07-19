@@ -93,7 +93,7 @@ def test_daemon_logging_depends_on_the_log_rotation_contract() -> None:
     assert "ocint.daemon.config" not in imports
 
 
-def test_initial_daemon_migration_is_single_and_independent_of_live_metadata() -> None:
+def test_daemon_migrations_are_independent_of_live_metadata() -> None:
     # GIVEN
     versions = Path(__file__).parents[2] / "ocint" / "daemon" / "db" / "migrations" / "versions"
 
@@ -106,6 +106,9 @@ def test_initial_daemon_migration_is_single_and_independent_of_live_metadata() -
     assert {path.name for path in revisions} == {
         "20260716_create_daemon_control.py",
         "20260717_add_github_issues.py",
+        "20260718_replace_github_workflow_with_threads.py",
+        "20260719_add_thread_eligibility.py",
+        "20260719_add_thread_execution_job.py",
     }
     assert "ocint.daemon.db.schema" not in imports
 
@@ -133,6 +136,22 @@ def test_production_uses_the_github_facade() -> None:
     # THEN
     assert imported.isdisjoint(private)
     assert not (daemon / "github.py").exists()
+
+
+def test_task_core_is_provider_neutral() -> None:
+    # GIVEN
+    tasks = Path(__file__).parents[2] / "ocint" / "daemon" / "tasks"
+
+    # WHEN
+    imports = set()
+    for module in tasks.glob("*.py"):
+        tree = ast.parse(module.read_text())
+        imports.update(
+            node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None
+        )
+
+    # THEN
+    assert not any(module.startswith("ocint.daemon.github") for module in imports)
 
 
 def test_daemon_artifacts_use_structural_pii_free_provisioning_examples() -> None:

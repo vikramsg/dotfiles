@@ -67,6 +67,19 @@ class StatefulJobStore:
         self.jobs.append(job)
         return job
 
+    def retry(self, previous: Job, request: WorkRequest) -> Job:
+        job = self.submit(request).model_copy(
+            update={
+                "session_id": previous.session_id,
+                "server_url": previous.server_url,
+                "worktree_path": previous.worktree_path,
+                "branch": previous.branch,
+                "base_revision": previous.base_revision,
+            }
+        )
+        self.save(job)
+        return job
+
     def claim(self, job_id: str) -> Job | None:
         job = self.get(job_id)
         if job.state is not JobState.QUEUED:
@@ -131,13 +144,6 @@ class StatefulJobStore:
                 reconciled += 1
         self.reconciled += reconciled
         return reconciled
-
-    def reset(self, job_id: str, prompt: str) -> Job:
-        job = self.get(job_id).model_copy(
-            update={"prompt": prompt, "state": JobState.QUEUED, "stage": JobStage.EXECUTION}
-        )
-        self.save(job)
-        return job
 
     def save(self, updated: Job) -> None:
         for index, job in enumerate(self.jobs):
@@ -208,8 +214,8 @@ class StatefulGit:
 class StatefulGitHub:
     calls: list[str] = field(default_factory=list)
 
-    async def publish(self, repository: str, branch: str, base: str, title: str, body: str) -> str:
-        _ = (repository, branch, base, title, body)
+    async def publish(self, repository: str, branch: str, base: str, title: str, body: str, job_id: str) -> str:
+        _ = (repository, branch, base, title, body, job_id)
         self.calls.append("pull_request")
         return "https://example.test/pull/1"
 

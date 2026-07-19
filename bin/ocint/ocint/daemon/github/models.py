@@ -1,20 +1,4 @@
-from enum import StrEnum
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-
-class ActorType(StrEnum):
-    HUMAN = "human"
-    AGENT = "agent"
-
-
-class CommentState(StrEnum):
-    PENDING = "pending"
-    BATCHED = "batched"
-    ADDRESSED = "addressed"
-    REJECTED = "rejected"
-    ERRORED = "errored"
-    IGNORED = "ignored"
 
 
 class GitHubUser(BaseModel):
@@ -65,33 +49,21 @@ class GitHubPullRequest(BaseModel):
 
 class StoredIssue(BaseModel):
     model_config = ConfigDict(frozen=True)
-    id: int
-    repository: str
+
+    thread_id: int
     github_repository: str
     github_issue_id: int
     issue_number: int
-    issue_author: str
-    title: str
-    body: str
-    job_id: str
     pull_request_number: int
     pull_request_url: str
-    initial_state: str
-    active_anchor_comment_id: int
-    error: str
 
 
 class StoredComment(BaseModel):
     model_config = ConfigDict(frozen=True)
+
     github_comment_id: int
-    issue_id: int
-    body: str
-    actor_login: str
-    actor_type: ActorType
-    state: CommentState
-    github_created_at: str
+    message_id: int
     marker: str
-    agent_response_comment_id: int
 
 
 class CommentPage(BaseModel):

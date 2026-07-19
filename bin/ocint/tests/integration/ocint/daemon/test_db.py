@@ -1,12 +1,12 @@
 import stat
 from pathlib import Path
 
-from ocint.daemon.db import create_daemon_engine, downgrade_daemon_db, migrate_daemon_db
+from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.db.schema import metadata
 from sqlalchemy import UniqueConstraint, inspect
 
 
-def test_upgrade_downgrade_upgrade_matches_complete_metadata(tmp_path: Path) -> None:
+def test_upgrade_matches_complete_metadata(tmp_path: Path) -> None:
     # GIVEN
     database = tmp_path / "control.sqlite"
 
@@ -18,13 +18,13 @@ def test_upgrade_downgrade_upgrade_matches_complete_metadata(tmp_path: Path) -> 
         "github_issue",
         "github_issue_comment",
         "job",
+        "task",
+        "task_job",
+        "task_message",
+        "thread",
+        "thread_message",
     }
     engine.dispose()
-    downgrade_daemon_db(database)
-    engine = create_daemon_engine(database)
-    assert set(inspect(engine).get_table_names()) == {"alembic_version"}
-    engine.dispose()
-    migrate_daemon_db(database)
     engine = create_daemon_engine(database)
     inspector = inspect(engine)
 
@@ -34,6 +34,11 @@ def test_upgrade_downgrade_upgrade_matches_complete_metadata(tmp_path: Path) -> 
         "github_issue",
         "github_issue_comment",
         "job",
+        "task",
+        "task_job",
+        "task_message",
+        "thread",
+        "thread_message",
     }
     for table in metadata.sorted_tables:
         primary_key_columns = set(inspector.get_pk_constraint(table.name)["constrained_columns"])

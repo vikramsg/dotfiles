@@ -4,6 +4,9 @@
 once from the target repository, then use GitHub issues and comments to request
 work.
 
+The provider-neutral thread/task lifecycle is documented in
+[`../spec/daemon-thread-tasks.md`](../spec/daemon-thread-tasks.md).
+
 ```text
 systemd timer -> poll GitHub for open issues labelled "ocint"
                                       |
