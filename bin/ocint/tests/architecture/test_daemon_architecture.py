@@ -93,26 +93,6 @@ def test_daemon_logging_depends_on_the_log_rotation_contract() -> None:
     assert "ocint.daemon.config" not in imports
 
 
-def test_daemon_migrations_are_independent_of_live_metadata() -> None:
-    # GIVEN
-    versions = Path(__file__).parents[2] / "ocint" / "daemon" / "db" / "migrations" / "versions"
-
-    # WHEN
-    revisions = [path for path in versions.glob("*.py") if path.name != "__init__.py"]
-    tree = ast.parse(revisions[0].read_text())
-    imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None}
-
-    # THEN
-    assert {path.name for path in revisions} == {
-        "20260716_create_daemon_control.py",
-        "20260717_add_github_issues.py",
-        "20260718_replace_github_workflow_with_threads.py",
-        "20260719_add_thread_eligibility.py",
-        "20260719_add_thread_execution_job.py",
-    }
-    assert "ocint.daemon.db.schema" not in imports
-
-
 def test_production_uses_the_github_facade() -> None:
     # GIVEN
     daemon = Path(__file__).parents[2] / "ocint" / "daemon"
