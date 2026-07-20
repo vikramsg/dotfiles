@@ -5,16 +5,17 @@
     * And auto denies everything else
 4. The implementer, since it creates tests first, always then creates backward compatiblity shims after
 
-## Daemon
-
-1. Use Github as the issue tracker. Should be triggered on some event on Github
-2. Lock so that one feature at a time only.
-3. May always need a refactor PR after a feature PR, including updating docs.
-
 ## 5.6
 
 - Too happy to invoke subagents
 - I need to create commands that do not invoke subagents
+- We need a build prompt that has sections about invoking subagents that have the same lessons as our orchestrator
+  - Provide full context to implementation agent, especially if any decisions have already been made.
+  - Ask it to provide all decisions that it did during implementation not already decided 
+
+## Workflow
+
+1. Keep `dotfiles` folder free for making quick changes. If required add a second worktree for other changes.
 
 ## Prompts
 
