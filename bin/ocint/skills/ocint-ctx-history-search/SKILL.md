@@ -1,6 +1,6 @@
 ---
 name: ocint-ctx-history-search
-description: Use ocint ctx to search local OpenCode history before acting. Use when prior OpenCode sessions may contain relevant decisions, attempts, transcript context, or source citations.
+description: Use ocint ctx when specifically asked to search OpenCode history. This can be useful for anlyazing OpenCode sessions to find context or citations however it is not fuzzy search and requires exact terms for searching.
 ---
 
 # ocint ctx OpenCode History Search
