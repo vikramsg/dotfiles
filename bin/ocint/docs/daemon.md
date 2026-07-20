@@ -84,8 +84,8 @@ The daemon currently supports:
 - Configured validation commands.
 - Control-owned commit, SSH push, and GitHub pull-request creation.
 - Stage checkpoints and single-process restart recovery.
-- One GitHub issue poll per invocation, durable comment batching, and permanent
-  issue-to-session/worktree/branch/pull-request ownership.
+- GitHub issue polling with root-message ingestion, durable contribution
+  batching, and addressed-task session/worktree/branch inheritance.
 - A generated systemd user timer and one-shot service.
 - Graceful Uvicorn, FastAPI, and OpenCode lifespan shutdown after unchanged idle.
 
@@ -111,7 +111,7 @@ The implementation uses a small set of deep modules:
 | `service.py` | Job models, narrow dependency protocols, capacity, execution stages, and shutdown draining |
 | `opencode.py` | OpenCode health, sessions, prompts, status, and global SSE events |
 | `git.py` | Managed mirrors/worktrees, validation processes, commits, and SSH pushes |
-| `github/` | Issue polling, comment persistence/batching, exact issue-title PR creation, and responses |
+| `github/` | Source routing/eligibility, issue and root-message mappings, exact issue-title PR creation, and responses |
 | `lch/provision.py` | Typed checkout, GitHub, Git, SSH, and OpenCode discovery; validated writes |
 | `lch/doctor.py` | Typed, redacted human/JSON diagnostics |
 | `lch/systemd.py` | Exact user unit generation and lifecycle commands |
@@ -429,18 +429,25 @@ ocint daemon status <job-id>
 The control database is independent from OpenCode's database. The daemon does
 not read OpenCode's SQLite schema.
 
-Alembic owns daemon schema creation. The second revision preserves all existing
-job rows while adding issue tracking:
+Alembic owns daemon schema creation. The thread-model reset revision preserves
+all job rows but intentionally discards and recreates workflow state with no
+backfill:
 
 ```text
 20260716_create_daemon_control
         |
         v
 20260717_add_github_issues
+        |
+        v
+20260719_add_thread_execution_job
+        |
+        v
+20260719_reset_thread_task_model
 ```
 
-The application schema contains the existing `job` table plus
-`github_issue` and `github_issue_comment`:
+The application schema contains the existing `job` table plus provider-neutral
+thread/task tables and GitHub-owned mapping tables:
 
 | Column group | Fields |
 | --- | --- |
@@ -455,20 +462,19 @@ The application schema contains the existing `job` table plus
 foreign keys, WAL mode, and a busy timeout through the daemon engine policy.
 
 ```text
- github_issue 1 ---- * github_issue_comment
-      |
-      `---- 1 permanent job
-                |
-                +-- one OpenCode session
-                +-- one worktree and branch
-                `-- at most one owned pull request
+ github_issue -> thread -> thread_message
+                    |
+                    `-> task -> task_message
+                           `-> task_job -> job
 ```
 
-Human comment states are `pending`, `batched`, `addressed`, `rejected`, or
-`errored`; marker-identified daemon comments are `agent`/`ignored`. The newest
-comment in an active batch is its durable anchor. Earlier comments become
-`batched`; the complete batch becomes `addressed` only after publication and
-response persistence succeed.
+Messages are classified as `actionable`, `unauthorized`, or `agent_response`.
+An actionable message is pending unless an unresolved or addressed task covers
+it. Skipped, rejected, and errored tasks release their messages. Task creation
+attaches every pending message under a SQLite immediate write transaction.
+GitHub root and comment messages use globally qualified opaque source IDs.
+Marker-identified daemon comments, including root-only completion responses, are
+excluded from prompts.
 
 ## States And Stages
 
@@ -501,7 +507,7 @@ complete
 ```
 
 ```text
-pending comments -> persist immutable prompt -> active anchor
+pending messages -> atomically create task batch -> job attempt
        |                                      |
        | process restart ---------------------+
        v
@@ -583,7 +589,10 @@ Every directory-scoped request sends the raw resolved worktree path in
 Prompt submission records intent before calling OpenCode and records submission
 after the HTTP call. On restart, existing messages and session status determine
 whether to submit, wait, or advance. A prompt is complete only when an assistant
-response exists and the session is idle.
+response exists and the session is idle. A matching incomplete prompt with a
+busy status is still active and is not duplicated. A matching incomplete prompt
+whose session is idle or absent is treated as an interrupted provider stream and
+is submitted again so recovery makes progress.
 
 The global SSE stream is filtered by directory and session. A directory-less
 `server.connected` event is accepted as a global connection event. Completion

@@ -3,15 +3,10 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict
 
 
-class MessageDisposition(StrEnum):
-    ACCEPTED = "accepted"
-    REJECTED = "rejected"
-    IGNORED = "ignored"
-
-
-class MessageActorType(StrEnum):
-    HUMAN = "human"
-    AGENT = "agent"
+class MessageClassification(StrEnum):
+    ACTIONABLE = "actionable"
+    UNAUTHORIZED = "unauthorized"
+    AGENT_RESPONSE = "agent_response"
 
 
 class TaskKind(StrEnum):
@@ -31,14 +26,8 @@ class Thread(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: int
-    repository: str
-    source: str
-    source_thread_id: str
-    actor: str
-    eligible: bool
-    execution_job_id: str
-    title: str
-    body: str
+    source_id: str
+    title: str | None = None
 
 
 class ThreadMessage(BaseModel):
@@ -46,10 +35,9 @@ class ThreadMessage(BaseModel):
 
     id: int
     thread_id: int
-    source_message_id: str
+    source_id: str
     actor: str
-    actor_type: MessageActorType
-    disposition: MessageDisposition
+    classification: MessageClassification
     body: str
     source_created_at: str
 
@@ -63,3 +51,35 @@ class Task(BaseModel):
     state: TaskState
     predecessor_task_id: int
     reason: str
+
+
+class SuccessorCreated(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    task: Task
+
+
+class SuccessorExisting(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    task: Task
+
+
+class SuccessorUnavailable(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
+class FailedTaskRetry(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    task: Task
+    attempt: int
+
+
+class RetryAttachment(StrEnum):
+    ATTACHED = "attached"
+    EXISTING = "existing"
+    REJECTED = "rejected"
+
+
+type FailedTaskClaim = SuccessorCreated | SuccessorExisting | SuccessorUnavailable | FailedTaskRetry

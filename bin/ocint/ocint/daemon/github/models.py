@@ -17,6 +17,7 @@ class GitHubIssue(BaseModel):
     number: int
     title: str
     body: str = ""
+    created_at: str
     user: GitHubUser
     pull_request: GitHubPullReference | None = None
 
@@ -51,9 +52,12 @@ class StoredIssue(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     thread_id: int
+    root_message_id: int
+    configured_repository: str
     github_repository: str
     github_issue_id: int
     issue_number: int
+    eligible: bool
     pull_request_number: int
     pull_request_url: str
 

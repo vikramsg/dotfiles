@@ -201,9 +201,10 @@ class OpenCodeClient:
         messages = await self._messages(directory, session_id)
         found_at = self._managed_prompt_index(messages, text)
         assistant_completed = found_at is not None and self._terminal_assistant_after(messages, found_at)
-        status = await self._status(directory, session_id) if assistant_completed else "busy"
-        completed = assistant_completed and status in {None, "idle"}
-        return PromptObservation(found=found_at is not None, completed=completed)
+        status = await self._status(directory, session_id)
+        active = status not in {None, "idle"}
+        completed = assistant_completed and not active
+        return PromptObservation(found=found_at is not None, completed=completed, active=active)
 
     async def prompt(self, directory: Path, session_id: str, text: str) -> None:
         async with self._client().post(

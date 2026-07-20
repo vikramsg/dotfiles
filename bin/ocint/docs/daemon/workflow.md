@@ -11,7 +11,10 @@ The provider-neutral thread/task lifecycle is documented in
 systemd timer -> poll GitHub for open issues labelled "ocint"
                                       |
                                       v
-                     create a permanent daemon job
+                  persist issue body as the root message
+                                       |
+                                       v
+                       create a thread task and job
                                       |
                                       v
                OpenCode edits an isolated Git worktree
@@ -61,6 +64,12 @@ The issue author and commenters must be allowed by the provisioned actor policy.
 At the next timer invocation, ocint reads the issue and its comments, performs
 the work, opens a pull request, and replies with its URL.
 
+Removing the label abandons a queued job and skips its current unresolved task.
+A running job may finish; its task stays unresolved until that job is terminal,
+then is skipped if the label is still absent. Restoring the label makes a skipped
+task's messages pending again and creates a replacement even when no new comment
+was added.
+
 ```text
 Issue addressed: <pull-request-url>
 
@@ -76,6 +85,10 @@ pull request.
 
 Comments added while a batch is running wait for the next invocation. A closed
 or merged pull request is not replaced.
+
+Editing a contribution updates stored text only until an addressed task covers
+it, and an edit never schedules work by itself. Add a new comment for follow-up
+work. In particular, an edit during a successful active attempt may be missed.
 
 ## Check Progress
 

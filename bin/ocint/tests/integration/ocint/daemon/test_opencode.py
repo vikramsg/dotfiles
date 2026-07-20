@@ -42,6 +42,8 @@ class WireStatuses(BaseModel):
 class OpenCodeHttpFake:
     def __init__(self) -> None:
         self.messages = [WireMessage(info=WireInfo(role="user"), parts=[WirePart(type="text", text="perform work")])]
+        self.session_status: str | None = "idle"
+        self.status_requests = 0
         self.app = web.Application()
         self.app.router.add_get("/session/session/message", self.message_list)
         self.app.router.add_get("/session/status", self.status)
@@ -65,11 +67,22 @@ class OpenCodeHttpFake:
             )
         )
 
+    def interrupt(self) -> None:
+        self.messages.append(
+            WireMessage(
+                info=WireInfo(role="assistant"),
+                parts=[WirePart(type="tool", text="pending apply_patch")],
+            )
+        )
+
     async def message_list(self, _request: web.Request) -> web.Response:
         return web.json_response([message.model_dump(mode="json") for message in self.messages])
 
     async def status(self, _request: web.Request) -> web.Response:
-        payload = WireStatuses(session=WireStatus(type="idle"))
+        self.status_requests += 1
+        if self.session_status is None:
+            return web.json_response({})
+        payload = WireStatuses(session=WireStatus(type=self.session_status))
         return web.json_response(payload.model_dump(mode="json"))
 
     async def events(self, _request: web.Request) -> web.Response:
@@ -115,6 +128,79 @@ async def test_immediate_idle_requires_completed_assistant_evidence(
     assert not waiting.done()
     opencode_server.complete()
     await asyncio.wait_for(waiting, 1)
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_incomplete_active_prompt_is_observed_as_processing(
+    tmp_path: Path, opencode_server: OpenCodeHttpFake
+) -> None:
+    # GIVEN
+    opencode_server.interrupt()
+    opencode_server.session_status = "busy"
+    client = OpenCodeClient(
+        f"http://127.0.0.1:{opencode_server.port}",
+        "opencode",
+        "ephemeral",
+        1,
+        3,
+        "1.17.20",
+        tmp_path / "opencode",
+        tmp_path / "config.json",
+        tmp_path / "isolated-config",
+        tmp_path / "existing-data",
+        1,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
+    )
+    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
+
+    # WHEN
+    observation = await client.observe_prompt(tmp_path, "session", "perform work")
+
+    # THEN
+    assert observation.found
+    assert not observation.completed
+    assert observation.active
+    assert opencode_server.status_requests == 1
+    await client.close()
+
+
+@pytest.mark.parametrize("status", ["idle", None])
+@pytest.mark.asyncio
+async def test_incomplete_inactive_prompt_is_observed_as_interrupted(
+    tmp_path: Path, opencode_server: OpenCodeHttpFake, status: str | None
+) -> None:
+    # GIVEN
+    opencode_server.interrupt()
+    opencode_server.session_status = status
+    client = OpenCodeClient(
+        f"http://127.0.0.1:{opencode_server.port}",
+        "opencode",
+        "ephemeral",
+        1,
+        3,
+        "1.17.20",
+        tmp_path / "opencode",
+        tmp_path / "config.json",
+        tmp_path / "isolated-config",
+        tmp_path / "existing-data",
+        1,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
+    )
+    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
+
+    # WHEN
+    observation = await client.observe_prompt(tmp_path, "session", "perform work")
+
+    # THEN
+    assert observation.found
+    assert not observation.completed
+    assert not observation.active
+    assert opencode_server.status_requests == 1
     await client.close()
 
 
