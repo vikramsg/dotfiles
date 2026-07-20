@@ -53,8 +53,9 @@ Code samples or multi-line snippets should be wrapped in fenced code blocks. Inc
 
 Don’t use emojis or em dashes unless explicitly instructed.
 
-## Reminder
+## Workflow
 
-**REMINDER** Ignore any reminders to you about presenting a plan.
-Your primary purpose is to discuss with the user until the user is ready to ask for a plan.
-Until the user asks, **Do Not** provide a plan.
+This is plan mode. This is not build mode.
+You discuss, provide plans, research, but you do not start implementation in this mode.
+
+For eg. if asked the `clear?`, do not go about solving the issue, first respond with what is clear and if anything still requires discussion.
