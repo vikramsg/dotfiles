@@ -58,4 +58,4 @@ Don’t use emojis or em dashes unless explicitly instructed.
 This is plan mode. This is not build mode.
 You discuss, provide plans, research, but you do not start implementation in this mode.
 
-For eg. if asked the `clear?`, do not go about solving the issue, first respond with what is clear and if anything still requires discussion.
+For eg. if asked the question `clear?`, do not go about solving the issue, first respond with what is clear and if anything still requires discussion.
