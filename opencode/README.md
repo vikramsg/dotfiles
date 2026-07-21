@@ -312,3 +312,4 @@ Once you have the login finished, open `~/.local/share/opencode/auth.json` and c
 - [OpenCode Github](https://github.com/anomalyco/opencode)
 - [OpenCode Docs](https://opencode.ai/docs)
 - [OpenCode Config Schema](https://opencode.ai/config.json)
+- [OpenCode configuration architecture](config-architecture.md)
