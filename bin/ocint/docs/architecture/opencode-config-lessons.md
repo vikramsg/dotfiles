@@ -1,330 +1,513 @@
-# OpenCode configuration lessons for ocint modularity
+# Compiling global configuration without global coupling
 
-## Scope
+## Problem
 
-This note distills the OpenCode configuration analysis in
-[dotfiles PR 212](https://github.com/vikramsg/dotfiles/pull/212) and connects it
-to ocint's protocol-first rearchitecture. The upstream evidence is pinned to
+ocint needs one daemon configuration file and one model that validates the
+whole file. That model must know every config section. The mistake is not the
+aggregate itself; the mistake is allowing runtime features to import it.
+
+The target dependency rule is:
+
+```text
+The aggregate imports every concrete config section.
+No config section or runtime feature imports the aggregate.
+Only composition and config-management code receives the aggregate type.
+Runtime features receive narrow protocols or domain services.
+```
+
+This note makes that rule concrete for Python imports, Pydantic parsing, and
+ocint dependency injection. It distills the useful parts of
+[dotfiles PR 212](https://github.com/vikramsg/dotfiles/pull/212), which analyzed
 [OpenCode revision 849c2598](https://github.com/anomalyco/opencode/tree/849c2598abc7d2b40261e74b5826bc74ffc78308).
 
-The useful lesson is not that ocint should reproduce OpenCode's Effect service
-graph. It is that one user-facing configuration document, one config file, or
-one application process does not require one internal configuration owner or
-one model imported by every module.
+## The unavoidable dependency
 
-## OpenCode in four boundaries
-
-OpenCode separates configuration into four boundaries:
+An aggregate schema must depend on all of its sections:
 
 ```text
-feature schemas
-      |
-      v
-aggregate external schema
-      |
-      v
-source discovery, precedence, validation and merging
-      |
-      v
-instance-scoped resolved configuration
-      |
-      v
-domain services and runtime values
+                    aggregate.py
+                   /     |      \
+                  v      v       v
+              git.py  github.py  opencode.py
 ```
 
-### 1. Feature schemas compose one external contract
+Trying to remove these imports with registration decorators, import side
+effects, or a plugin registry only hides the dependency. It also makes config
+completeness depend on import order.
 
-OpenCode's root `ConfigV1.Info` is the user-facing JSON shape, but agent,
-provider, MCP, formatter, LSP, permission, plugin, server, and skill schemas are
-declared by their owning features. The root schema composes them.
-
-This permits a single documented config file without requiring one source file
-to own the details of every feature. The aggregate owns document composition;
-features own the meaning and validation of their sections.
-
-### 2. Loading is a service, not an ambient object
-
-OpenCode exposes config reads, updates, invalidation, and directory discovery
-through an injected `Config.Service`. Its implementation receives filesystem,
-environment, account, authentication, package, and HTTP dependencies through
-the layer graph.
-
-This makes loading and mutation explicit and replaceable. A module cannot
-silently read a process-global object merely because configuration is widely
-available.
-
-### 3. Global is a source precedence, not a lifetime
-
-OpenCode merges global files, explicit paths, discovered project files,
-directory content, inline content, account data, and managed configuration in
-a defined order. The resolved result is cached by active instance directory
-and invalidated with that instance.
-
-The word "global" therefore identifies an early configuration source. It does
-not mean that all projects in a server share one mutable resolved object.
-
-### 4. Domain services absorb configuration
-
-Provider and agent services read resolved configuration while constructing
-their state, then expose provider models, agents, tools, and operations. Their
-callers usually work with domain values rather than config fragments.
-
-The boundary is:
+Keep the dependency static and visible. The important property is that it is
+one-way:
 
 ```text
-external config -> feature initialization -> domain API -> runtime consumers
+GOOD
+
+aggregate.py ------> git config section
+       |
+       +-----------> GitHub config section
+       |
+       `-----------> OpenCode config section
+
+
+BAD
+
+aggregate.py ------> git config section
+     ^                    |
+     |                    |
+     `------ Git runtime -+
 ```
 
-This is more modular than passing the root config through every call.
+The aggregate is the one module allowed to know all config models. That does
+not make it a runtime API.
 
-## The caution in OpenCode
+## Concrete module layout
 
-OpenCode does not completely isolate features from its aggregate. Agent,
-Provider, LLM, MCP, and session code still import `Config.Service` or the root
-`ConfigV1.Info` type in places. Some helpers accept the whole config even when
-they read one nested policy.
-
-Injection improves lifecycle and test replacement, but a broad injected
-dependency remains broad. A field rename in the root schema can still force
-unrelated runtime modules to change.
-
-ocint should adopt OpenCode's separation of external schema, resolution scope,
-and runtime domain APIs, while using narrower contracts than OpenCode where the
-consumer needs only a small policy view.
-
-## Current ocint shape
-
-ocint already has several useful boundaries:
-
-- `DaemonSettings` owns environment-backed paths, secrets, and process values.
-- `DaemonContext.config()` is the configuration load boundary.
-- `DaemonConfig` is the validated aggregate for one daemon configuration file.
-- `daemon/cli.py` is the composition root and constructs concrete adapters.
-- Concrete OpenCode, Git, GitHub, API, logging, scheduler, lifecycle, and
-  repository settings are immutable Pydantic models.
-
-The main coupling occurs after validation:
-
-- `JobExecutor` receives all of `DaemonConfig`.
-- `GitHubService` receives all of `DaemonConfig`.
-- authorization and Git provisioning accept concrete `RepositoryConfig`.
-- LCH diagnostics, rendering, and provisioning import the aggregate config.
-- `service.py` imports concrete config classes while also owning shared job
-  models and workflow ports.
-
-The current flow is therefore:
+Replace the single `daemon/config.py` with a small aggregate package and
+feature-owned config modules. Existing flat features become packages only when
+their config and runtime implementation need independent import boundaries:
 
 ```text
-daemon.toml
+ocint/daemon/
+├── config/
+│   ├── __init__.py       # narrow facade: DaemonConfig, DaemonContext
+│   ├── aggregate.py      # root composition and cross-section validation
+│   ├── context.py        # DaemonSettings, DaemonContext, file loading
+│   └── repository.py     # daemon-wide repository config and registry
+├── api/
+│   ├── config.py         # ApiConfig
+│   └── router.py         # FastAPI adapter
+├── execution/
+│   ├── config.py         # SchedulerConfig and command limits
+│   └── service.py        # JobExecutor and job policy
+├── git/
+│   ├── config.py         # GitConfig
+│   └── manager.py        # GitManager
+├── github/
+│   ├── config.py         # GitHubConfig
+│   └── service.py
+├── lch/
+│   ├── config.py         # LifecycleConfig
+│   └── ...
+├── logging/
+│   ├── config.py         # LoggingConfig
+│   └── service.py
+└── opencode/
+    ├── config.py         # OpenCodeConfig
+    └── client.py         # OpenCode HTTP/process adapter
+```
+
+Each feature `config.py` contains its concrete Pydantic schema, defaults, and
+validators. It does not contain Git commands, HTTP calls, workflow behavior, or
+feature service ports. The root config package does not become a collection of
+all feature settings; it only composes them and owns daemon-wide config.
+
+Do not split files more finely than the schema requires. For example, keep
+closely related scheduler and command execution limits together while they
+share one lifecycle.
+
+## What compiles the global config
+
+`config/aggregate.py` statically imports every section and composes the root
+Pydantic model:
+
+```python
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from ocint.daemon.api.config import ApiConfig
+from ocint.daemon.config.repository import RepositoryConfig
+from ocint.daemon.execution.config import SchedulerConfig
+from ocint.daemon.git.config import GitConfig
+from ocint.daemon.github.config import GitHubConfig
+from ocint.daemon.lch.config import LifecycleConfig
+from ocint.daemon.logging.config import LoggingConfig
+from ocint.daemon.opencode.config import OpenCodeConfig
+
+
+class DaemonConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    database_path: Path
+    mirror_root: Path
+    worktree_root: Path
+    repositories: tuple[RepositoryConfig, ...] = Field(min_length=1)
+    scheduler: SchedulerConfig
+    lifecycle: LifecycleConfig
+    logging: LoggingConfig
+    opencode: OpenCodeConfig
+    api: ApiConfig
+    github: GitHubConfig
+    git: GitConfig
+    idle_timeout_seconds: int
+
+    @model_validator(mode="after")
+    def validate_cross_section_rules(self) -> "DaemonConfig":
+        ...
+```
+
+Pydantic compiles this type graph from the field annotations. No runtime
+registration is needed. `DaemonConfig.model_validate(raw_toml)` recursively
+parses each nested section using its concrete owner.
+
+`aggregate.py` owns only:
+
+- the top-level document shape;
+- section composition;
+- defaults that apply to the whole document;
+- invariants spanning sections;
+- exact serialization of the complete document.
+
+It does not own feature behavior, config source I/O, secrets, or protocols.
+
+## What parses it
+
+`config/context.py` owns source selection and parsing:
+
+```text
+environment
     |
     v
-DaemonContext.config()
+DaemonSettings.config_path(home)
     |
     v
-DaemonConfig ------------------------------+
-    |                                      |
-    +--> CLI composition                   |
-    +--> JobExecutor ----------------------+ broad aggregate dependency
-    +--> GitHubService --------------------+
-    +--> LCH diagnostics/render/provision -+
+read TOML once
+    |
+    v
+DaemonConfig.model_validate(raw mapping)
+    |
+    v
+one immutable aggregate for this CLI invocation / daemon process
 ```
 
-This is manageable while the daemon is small, but it makes the aggregate model
-an attractive shortcut for every new feature.
+`DaemonSettings` continues to own environment-backed values and secrets.
+`DaemonContext` continues to own the lazy file read. The parser imports
+`DaemonConfig`; section modules do not import the parser.
 
-## Recommended ocint model
+ocint currently has one config source and one resolved scope. It does not need
+a `ConfigService`. Add a service only if config gains live updates, source
+precedence, invalidation, or multiple simultaneous scopes.
 
-Keep one aggregate external configuration while making runtime dependencies
-narrower:
+## What injects it
+
+`daemon/cli.py` is the composition root. It may import the aggregate and every
+concrete implementation because its job is wiring:
 
 ```text
-                         daemon.toml
-                              |
-                              v
-                DaemonSettings + DaemonContext
-                    source and load boundary
-                              |
-                              v
-                         DaemonConfig
-                 validated aggregate document
-                              |
-                   daemon/cli.py composition
-                  /           |             \
-                 v            v              v
-       RepositoryPolicy  ExecutionPolicy  GitHubPolicy
-          protocol          protocol        protocol
-              |                |               |
-              v                v               v
-         Git/service      JobExecutor      GitHubService
+                        daemon/cli.py
+                             |
+              load and validate DaemonConfig
+                             |
+          +------------------+------------------+
+          |                  |                  |
+          v                  v                  v
+  config.scheduler    config.repositories  config.github
+          |                  |                  |
+          v                  v                  v
+  ExecutionPolicy    RepositoryCatalog   GitHubPollingPolicy
+          |                  |                  |
+          +---------> JobExecutor               |
+                             ^                  |
+                             |                  v
+                             +----------- GitHubService
 ```
 
-`DaemonConfig` remains concrete because TOML validation, defaults, cross-field
-checks, serialization, provisioning, and `config show` need a complete runtime
-model. Runtime modules should not depend on it by default.
+The aggregate is deconstructed at this boundary. It is never passed as a
+parameter named `config` to a runtime service.
 
-The composition root can pass concrete nested Pydantic values directly when
-they structurally satisfy read-only protocols. A second copied settings model
-is unnecessary unless the feature performs a real transformation from external
-configuration to runtime state.
+A concrete composition sketch is:
 
-## Configuration ownership rules
+```python
+config = context.config()
+repositories = ConfiguredRepositories(config.repositories)
 
-### The root owns aggregation
+git = GitManager(
+    mirror_root=config.mirror_root,
+    worktree_root=config.worktree_root,
+    command_policy=config.scheduler,
+    ssh_policy=config.git,
+    ...
+)
+github = GitHubService(
+    polling_policy=config.github,
+    repositories=repositories,
+    client=github_client,
+    repository=github_repository,
+    tasks=tasks,
+)
+executor = JobExecutor(
+    execution_policy=config.scheduler,
+    repositories=repositories,
+    store=control_repository,
+    opencode=opencode,
+    git=git,
+    github=github,
+)
+```
 
-Root config owns:
+The exact constructor grouping can change during implementation. The invariant
+is that `GitHubService` and `JobExecutor` do not import or annotate
+`DaemonConfig`.
 
-- the complete external document;
-- cross-section invariants, such as unique repository names and distinct
-  storage roots;
-- configuration source selection and loading;
-- composition of feature-owned config sections;
-- exact serialization needed by provisioning and `config show`.
+## How feature imports work
 
-It should not own feature behavior merely because behavior is configurable.
+Runtime consumers declare the smallest interface they read. They do not import
+the concrete config section merely because that section currently implements
+the interface.
 
-### Features own section meaning
+```python
+# daemon/service.py
+class ExecutionPolicy(Protocol):
+    @property
+    def capacity(self) -> int: ...
 
-A concrete config section should move to a feature package when it has an
-independent schema, validation rules, defaults, and reasons to change. The root
-aggregate may import and compose that model.
+    @property
+    def job_timeout_seconds(self) -> int: ...
 
-Do not split `config.py` mechanically into one file per class. `ApiConfig` or
-`GitConfig` should move only when the destination has substantial feature
-ownership. File count is not modularity.
+    @property
+    def shutdown_timeout_seconds(self) -> int: ...
 
-### Consumers own narrow runtime ports
 
-A protocol belongs next to its consumer when one workflow uses it. Promote it
-to `daemon/models.py` only when independent sibling features share the same
-stable vocabulary and lifecycle.
+class JobExecutor:
+    def __init__(self, execution_policy: ExecutionPolicy, ...) -> None:
+        ...
+```
 
-Examples:
+`SchedulerConfig` does not inherit from or import `ExecutionPolicy`. Structural
+typing checks conformance when `daemon/cli.py` passes the concrete object to
+`JobExecutor`.
 
-- A scheduler/execution policy used only by `JobExecutor` belongs in
-  `service.py`.
-- A Git command policy used only by `GitManager` belongs in `git.py`.
-- `RepositoryPolicy` may belong in `daemon/models.py` if service, Git, and
-  GitHub independently consume the same repository identity and policy.
-- `LogRotation` is a stable cross-boundary policy contract; concrete defaults
-  and validation remain in `LoggingConfig`.
-
-This is how protocol-first design avoids turning `models.py` into a registry of
-every protocol in the package.
-
-### Runtime services expose domain APIs
-
-After a feature consumes configuration, callers should use its domain API. A
-caller should ask a repository registry for an authorized repository, a
-provider service for a model, or an executor to submit work. It should not
-inspect the root config to reproduce those decisions.
-
-For ocint, repository lookup and actor authorization are candidates for one
-cohesive policy API. That API can return a `RepositoryPolicy` without exposing
-the entire `DaemonConfig` or requiring every caller to implement lookup rules.
-
-## What to adopt
-
-1. Keep one validated external daemon document while allowing feature-owned
-   section schemas.
-2. Treat config loading as an explicit outer-boundary operation.
-3. Define the scope of every resolved config value. Today that scope is one CLI
-   invocation or daemon process; future per-worktree overlays must be keyed by
-   worktree or repository rather than stored in one process singleton.
-4. Resolve source precedence before constructing runtime services.
-5. Pass concrete config values through narrow read-only protocols.
-6. Let domain services translate config into runtime state and expose domain
-   operations to callers.
-7. Keep secrets and process environment in `DaemonSettings`; do not add them to
-   broad domain contracts.
-8. Test aggregate validation separately from protocol conformance and feature
-   behavior.
-
-## What not to copy
-
-1. Do not add an Effect-style dependency framework. Python constructor and
-   function injection at `daemon/cli.py` is sufficient.
-2. Do not introduce a `ConfigService` merely to wrap the existing one-time
-   `DaemonContext.config()` read. A service is justified only by multiple
-   sources, updates, invalidation, or multiple simultaneous scopes.
-3. Do not inject all of `DaemonConfig` behind a protocol with the same fields.
-   That hides the concrete name but preserves the coupling.
-4. Do not let feature types index into or alias nested root config types. Import
-   the feature-owned type or consume a protocol.
-5. Do not pass the aggregate to helpers that need one or two values.
-6. Do not put feature config models or consumer-local config protocols in root
-   `daemon/models.py` solely because configuration is shared infrastructure.
-7. Do not add project overlays until ocint has a real requirement for multiple
-   resolved scopes in one process.
-
-## Connection to the protocol-first plan
-
-The protocol-first `models.py` plan and the OpenCode config lesson solve
-different parts of the same dependency problem:
-
-- The aggregate Pydantic config is an external boundary model.
-- Protocols are runtime consumer views.
-- Enums are shared closed vocabulary.
-- Domain services own behavior and consumer ports.
-- Adapters own transport and persistence models.
-
-The aggregate should not move into `models.py`, and protocols should not move
-into `config.py`. Their dependency direction is:
+The resulting import graph is:
 
 ```text
-daemon/models.py protocols <--- config.py concrete models
-             ^                            |
-             |                            |
-       runtime consumers <-------- CLI composition
+                          daemon/models.py
+                        shared stable protocols
+                           ^       ^       ^
+                           |       |       |
+service.py ----------------+       |       +------ github/service.py
+                                   |
+git.py ----------------------------+
+
+config section modules             runtime feature modules
+          ^                                  ^
+          |                                  |
+          +--------- config/aggregate.py     |
+                              ^              |
+                              |              |
+                              +--- daemon/cli.py
 ```
 
-Python structural typing allows `RepositoryConfig` and `LoggingConfig` to
-satisfy read-only protocols without importing protocol implementations or
-duplicating data. The strict type checker is the conformance test.
+There is no arrow from a runtime feature to `config/aggregate.py`.
 
-## Incremental application
+### Python package initialization
 
-Apply these lessons with the protocol-first migration rather than as a separate
-config rewrite:
+Python executes `feature/__init__.py` before loading `feature/config.py`.
+Therefore a feature facade imported by `aggregate.py` must not eagerly import
+its router, client, manager, repository, or service implementation.
 
-1. Inventory which `DaemonConfig` fields each service and helper reads.
-2. Move shared stable policy protocols to `daemon/models.py`; keep single-
-   consumer protocols beside the consumer.
-3. Change authorization, Git provisioning, and GitHub behavior to consume the
-   narrowest policy that preserves their semantics.
-4. Change `JobExecutor` to consume an executor-owned policy view rather than
-   `DaemonConfig`.
-5. Keep `daemon/cli.py` responsible for loading the aggregate and wiring
-   concrete values into those contracts.
-6. Add architecture tests prohibiting aggregate config imports from core
-   service and adapter modules where a narrow contract exists.
-7. Reassess concrete config file placement only after runtime coupling has been
-   removed. Moving classes first would change paths without changing the
-   architecture.
+```text
+aggregate.py
+    |
+    v
+api/__init__.py       must stay dependency-light
+    |
+    v
+api/config.py         safe schema import
 
-## Decision test for future configuration
+api/__init__.py -X-> api/router.py -> FastAPI and runtime dependencies
+```
 
-For each new setting, answer these questions before choosing its location:
+Keep affected `__init__.py` files limited to eager config and contract exports.
+Runtime operations that must remain available through the feature facade use a
+deliberate lazy export: importing `feature.config` does not resolve it, while
+`from feature import create_router` does. Cover both import paths with tests;
+do not restore eager exports that make config parsing load the application.
 
-1. Which external source defines it?
-2. Which feature owns its validation and default?
-3. What is the lifetime and scope of its resolved value?
-4. Which runtime consumer needs it?
-5. Does that consumer need raw configuration, a narrow policy, or an already
-   resolved domain value?
-6. Is the contract shared by independent siblings, or should it remain beside
-   one consumer?
+## Protocol placement
 
-If these questions are answered explicitly, ocint can keep one convenient
-daemon configuration file without creating either a global config god object
-or a protocol dumping ground.
+Do not respond to global config coupling by moving every config view into
+`daemon/models.py`.
 
-## Upstream references
+Use this placement rule:
+
+```text
+one runtime consumer
+    -> protocol beside that consumer
+
+independent sibling consumers with the same meaning and lifecycle
+    -> protocol in daemon/models.py
+
+external validation and defaults
+    -> concrete model in the owning feature's config.py
+```
+
+Concrete examples:
+
+| Contract | Owner | Reason |
+| --- | --- | --- |
+| `ExecutionPolicy` | `service.py` | Only `JobExecutor` consumes scheduler lifecycle policy. |
+| Git command/SSH policy | `git.py` | Only `GitManager` consumes it. |
+| GitHub polling policy | `github/service.py` | Only GitHub polling consumes it. |
+| `RepositoryPolicy` | `daemon/models.py` | Execution, Git, and GitHub share repository identity and authorization vocabulary. |
+| `RepositoryCatalog` | `daemon/models.py` if both execution and GitHub use identical lookup semantics | It is a shared domain capability, not raw config. |
+| `LogRotation` | `daemon/models.py` | Logging and concrete config share a stable cross-boundary policy. |
+
+If two local protocols happen to have the same fields but different meanings,
+keep both. Shape equality is not shared ownership.
+
+## Repository configuration needs a resolver
+
+The current `DaemonConfig.repository(name)` method combines aggregate config
+with runtime lookup. Move that lookup into a small concrete registry built by
+the composition root:
+
+```text
+tuple[RepositoryConfig, ...]
+             |
+             v
+ ConfiguredRepositories
+             |
+             +--> get(name) -> RepositoryPolicy
+             `--> list() ----> tuple[RepositoryPolicy, ...]
+```
+
+`JobExecutor` asks the registry for one repository. `GitHubService` asks it for
+configured repositories. Neither knows where the policies came from or how the
+global document stores them.
+
+This is a real config-to-domain boundary. It removes repository lookup behavior
+from the aggregate and prevents callers from traversing `config.repositories`
+directly.
+
+## Config-management exceptions
+
+Some outer operations must handle the complete document:
+
+- `config show` serializes the complete aggregate;
+- provisioning creates a complete aggregate and writes TOML;
+- migration may inspect a complete document version;
+- cross-section diagnostics may validate relationships between sections.
+
+These are config-management operations, not runtime features. They may import
+`DaemonConfig` through the `ocint.daemon.config` facade.
+
+LCH diagnostics that inspect one section should still accept that section or a
+narrow protocol. Only diagnostics that genuinely compare sections receive the
+aggregate.
+
+## What OpenCode teaches
+
+OpenCode gets three important decisions right:
+
+1. Its external `ConfigV1.Info` composes feature-owned schemas.
+2. Config loading and source precedence are explicit behind `Config.Service`.
+3. Resolved config is scoped by active directory instead of stored as one
+   mutable process-global value.
+
+OpenCode also shows the remaining failure mode: Agent, LLM, MCP, and session
+code still import the broad config service or root config type in places. An
+injected global model is still a global model from the type dependency's point
+of view.
+
+ocint should use OpenCode's explicit composition and scope, but stop one step
+earlier at runtime boundaries:
+
+```text
+OpenCode in coupled paths
+
+Config.Service.get() -> ConfigV1.Info -> runtime helper reads one field
+
+
+ocint target
+
+DaemonConfig -> CLI composition -> narrow policy -> runtime helper
+```
+
+ocint does not need OpenCode's Effect layer graph. Constructor and function
+injection from `daemon/cli.py` provides the required boundary.
+
+## Enforcement
+
+Add architecture tests with explicit import rules:
+
+1. Only `daemon/config/aggregate.py`, `daemon/config/context.py`,
+   `daemon/config/__init__.py`, `daemon/cli.py`, and designated config-management
+   modules may import `DaemonConfig`.
+2. Runtime modules such as `service.py`, `git.py`, `github/service.py`,
+   `opencode.py`, `tasks/`, and repositories may not import
+   `ocint.daemon.config.aggregate` or `DaemonConfig`.
+3. Feature config modules may not import `aggregate.py`, `context.py`, CLI,
+   services, or adapters. They may import narrow shared value types when those
+   types are part of their schema.
+4. `aggregate.py` may import concrete config section modules but no runtime
+   implementations, frameworks, database modules, or presentation modules.
+5. Feature `__init__.py` modules reached while importing config sections may
+   not eagerly import runtime implementations or frameworks.
+6. `daemon/models.py` may not import the config package.
+7. An import smoke test must load `ocint.daemon.config`, `daemon.cli`, and each
+   runtime feature to catch package facade cycles.
+8. Strict type checking at `daemon/cli.py` verifies that concrete Pydantic
+   sections satisfy consumer protocols without ignores or casts.
+
+The architecture should fail if a developer takes the convenient shortcut:
+
+```python
+from ocint.daemon.config import DaemonConfig
+
+
+class NewFeature:
+    def __init__(self, config: DaemonConfig) -> None:
+        ...
+```
+
+## Migration order
+
+```text
+1. Create aggregate package and feature-owned config modules
+                    |
+                    v
+2. Keep behavior unchanged; aggregate still validates the same TOML
+                    |
+                    v
+3. Add local/shared policy protocols
+                    |
+                    v
+4. Build ConfiguredRepositories at CLI composition
+                    |
+                    v
+5. Replace DaemonConfig constructor parameters with narrow dependencies
+                    |
+                    v
+6. Add import guards, then remove aggregate imports from runtime modules
+```
+
+Do not move schemas and redesign runtime constructors in one step. First make
+the aggregate compilation explicit, then remove inward dependencies one
+consumer at a time. The external TOML shape and defaults remain unchanged
+throughout.
+
+## Result
+
+The final system still has a global aggregate, because parsing a global file
+requires one. Coupling is removed by controlling import direction and ending
+the aggregate's lifetime at the composition boundary:
+
+```text
+all config models ---> aggregate ---> parser ---> composition root
+       |                                             |
+       |                                             v
+       |                                  protocols/domain services
+       |                                             |
+       `---- no imports from runtime <---------------+
+```
+
+The aggregate knows all config sections. Features do not know the aggregate.
+That asymmetry is the architecture.
+
+## Upstream evidence
 
 - Root schema composition: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/v1/config/config.ts#L3-L18
 - Config service interface: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L117-L137
 - Global and project source merging: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L398-L410
 - Instance-scoped config state: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L600-L608
-- Directory-keyed state cache: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/effect/instance-state.ts#L26-L50
 - Provider domain service: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/provider/provider.ts#L1148-L1172
-- Broad config dependency in LLM: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/llm.ts#L95-L103
-- Broad config parameter in overflow logic: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/overflow.ts#L8-L19
+- Broad config read in LLM: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/llm.ts#L95-L103

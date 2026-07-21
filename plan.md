@@ -140,7 +140,7 @@ Do not place these in root `models.py`:
 | Owner | Concrete declarations and behavior |
 | --- | --- |
 | `daemon/api.py` | FastAPI request payload and response models; map request payloads to the `WorkRequest` contract and `Job` views to responses. |
-| `daemon/config.py` | Pydantic settings and resolved config, including concrete repository policy validation. |
+| Feature-owned `config.py` modules plus `daemon/config/` | Features own concrete Pydantic sections. The root config package owns only aggregate composition, settings/context loading, cross-section validation, and the daemon-wide repository registry. |
 | `daemon/repository.py` | Concrete immutable stored-job record built from SQL rows and all SQL persistence mapping. |
 | `daemon/git.py` | Concrete immutable worktree result constructed after Git operations. |
 | `daemon/opencode.py` | OpenCode wire payloads and concrete prompt observation. |
@@ -250,20 +250,28 @@ a database migration.
 
 ### Phase 5: Invert concrete config dependencies selectively
 
-1. Change service authorization, Git provisioning, and relevant GitHub policy
-   checks to accept `RepositoryPolicy`, while `RepositoryConfig` remains the
-   concrete validated implementation.
-2. Do not create one protocol that mirrors all of `DaemonConfig`.
-3. Keep scheduler and executor settings consumer-local unless a second
+1. Split `daemon/config.py` into feature-owned config modules plus root
+   `aggregate.py` and `context.py`. `aggregate.py` statically imports every
+   section and is the only module that compiles the complete Pydantic graph.
+   Preserve the TOML shape.
+2. Build `ConfiguredRepositories` from `config.repositories` in `daemon/cli.py`
+   and remove repository lookup behavior from `DaemonConfig`.
+3. Change service authorization, Git provisioning, and relevant GitHub policy
+   checks to accept `RepositoryPolicy` or `RepositoryCatalog`, while
+   `RepositoryConfig` remains the concrete validated implementation.
+4. Do not create one protocol that mirrors all of `DaemonConfig`, and do not
+   pass the aggregate object into a runtime service under a narrower parameter
+   name.
+5. Keep scheduler and executor settings consumer-local unless a second
    independent consumer needs the exact same policy. If needed, define a narrow
    service-owned execution-policy protocol rather than promoting all daemon
    config to root models.
-4. Revisit the architecture test that currently requires `service -> config`.
-   Replace it with the intended direction: config constructs concrete policy;
-   core behavior reads protocol contracts. Composition code may still import
-   both.
-5. Verify concrete return types such as `DaemonConfig.repository()` conform
-   covariantly to the protocol expected by consumers.
+6. Revisit the architecture test that currently requires `service -> config`.
+   Require instead that only config compilation, config management, and CLI
+   composition import `DaemonConfig`; runtime features import contracts.
+7. Verify at CLI wiring that concrete section models structurally satisfy the
+   consumer protocols. Do not add casts, inheritance, or protocol imports to
+   concrete section modules.
 
 ### Phase 6: Clarify package API without creating cycles
 
