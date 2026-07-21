@@ -247,7 +247,11 @@ def test_diagnose_reports_healthy_complete_configuration(doctor_fixture: DoctorF
     packaged = next(item for item in report.diagnostics if item.name == "opencode.packaged_policy")
     schedule = next(item for item in report.diagnostics if item.name == "systemd.schedule")
     assert "resource=" in packaged.detail
-    assert '"bash":"deny"' in packaged.value
+    assert '"*":"deny"' in packaged.value
+    assert '"bash":"allow"' in packaged.value
+    assert '"webfetch":"allow"' in packaged.value
+    assert '"websearch":"allow"' in packaged.value
+    assert '"question":"deny"' in packaged.value
     assert schedule.ok
     assert "next=2026-07-17T18:25:02Z" in schedule.value
 

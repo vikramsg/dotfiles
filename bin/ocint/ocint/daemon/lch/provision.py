@@ -69,6 +69,7 @@ class OpenCodeSourceConfig(BaseModel):
 
 class OpenCodePermission(BaseModel):
     model_config = ConfigDict(frozen=True)
+    fallback: str = Field(validation_alias="*", serialization_alias="*")
     read: str
     edit: str
     glob: str
@@ -78,6 +79,7 @@ class OpenCodePermission(BaseModel):
     webfetch: str
     websearch: str
     bash: str
+    question: str
 
 
 class StaticOpenCodePolicy(BaseModel):
@@ -210,7 +212,13 @@ def restricted_opencode_config(
         raise click.ClickException(f"existing OpenCode model is not configured: {model_name_with_provider}")
     restricted_provider = provider.model_copy(update={"models": {model_name: model}})
     permission = policy.permission.model_copy(
-        update={"external_directory": {"*": "deny", f"{worktree_root.resolve()}/**": "allow"}}
+        update={
+            "external_directory": {
+                "*": "deny",
+                "/tmp/**": "allow",
+                f"{worktree_root.resolve()}/**": "allow",
+            }
+        }
     )
     restricted = RestrictedOpenCodeConfig(
         **policy.model_dump(by_alias=False, exclude={"permission"}),

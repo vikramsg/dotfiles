@@ -187,14 +187,14 @@ class OpenCodeClient:
             sessions = TypeAdapter(tuple[SessionPayload, ...]).validate_python(await response.json())
         existing = next((item for item in sessions if item.title == identity), None)
         if existing is not None:
-            logger.info("OpenCode session reused", session=existing.id)
+            logger.info("OpenCode session reused", session=existing.id, directory=str(directory.resolve()))
             return existing.id
         async with self._client().post(
             f"{self.server_url}/session", headers=self._directory(directory), json={"title": identity}
         ) as response:
             await self._raise(response)
             session = SessionPayload.model_validate(await response.json()).id
-        logger.info("OpenCode session created", session=session)
+        logger.info("OpenCode session created", session=session, directory=str(directory.resolve()))
         return session
 
     async def observe_prompt(self, directory: Path, session_id: str, text: str) -> PromptObservation:
@@ -213,14 +213,14 @@ class OpenCodeClient:
             json={"parts": [{"type": "text", "text": text}]},
         ) as response:
             await self._raise(response)
-        logger.info("OpenCode prompt submitted", session=session_id)
+        logger.info("OpenCode prompt submitted", session=session_id, directory=str(directory.resolve()))
 
     async def wait_for_completion(self, directory: Path, session_id: str, text: str) -> None:
         try:
             async with asyncio.timeout(self.execution_timeout_seconds):
                 while True:
                     if (await self.observe_prompt(directory, session_id, text)).completed:
-                        logger.info("OpenCode prompt completed", session=session_id)
+                        logger.info("OpenCode prompt completed", session=session_id, directory=str(directory.resolve()))
                         return
                     async for event_type, event_session, status in self._events(directory, session_id, text):
                         if event_session and event_session != session_id:
@@ -230,7 +230,7 @@ class OpenCodeClient:
                         if event_type == "session.idle" or (event_type == "session.status" and status == "idle"):
                             break
                     if (await self.observe_prompt(directory, session_id, text)).completed:
-                        logger.info("OpenCode prompt completed", session=session_id)
+                        logger.info("OpenCode prompt completed", session=session_id, directory=str(directory.resolve()))
                         return
                     await asyncio.sleep(0.1)
         except TimeoutError:

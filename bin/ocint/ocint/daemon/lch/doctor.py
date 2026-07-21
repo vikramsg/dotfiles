@@ -579,7 +579,8 @@ def _effective_policy_matches(
         and effective.lsp == policy.lsp
         and effective.formatter == policy.formatter
         and effective.permission.model_copy(update={"external_directory": {"*": "deny"}}) == policy.permission
-        and effective.permission.external_directory == {"*": "deny", f"{worktree_root.resolve()}/**": "allow"}
+        and effective.permission.external_directory
+        == {"*": "deny", "/tmp/**": "allow", f"{worktree_root.resolve()}/**": "allow"}
     )
 
 
