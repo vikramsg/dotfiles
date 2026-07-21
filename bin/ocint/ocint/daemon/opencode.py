@@ -236,31 +236,6 @@ class OpenCodeClient:
         except TimeoutError:
             raise RuntimeError(f"OpenCode session {session_id} did not complete the submitted prompt") from None
 
-    async def response(self, directory: Path, session_id: str, text: str) -> str:
-        messages = await self._messages(directory, session_id)
-        found_at = self._managed_prompt_index(messages, text)
-        if found_at is None:
-            raise RuntimeError("OpenCode response is missing its managed prompt")
-        terminal = next(
-            (
-                message
-                for message in reversed(messages[found_at + 1 :])
-                if message.info.role == "assistant"
-                and bool(message.info.finish)
-                and message.info.finish not in {"tool-calls", "unknown"}
-                and message.info.error is None
-            ),
-            None,
-        )
-        if terminal is None:
-            raise RuntimeError("OpenCode response is not complete")
-        response = "\n\n".join(
-            part.text.strip() for part in terminal.parts if part.type == "text" and part.text.strip()
-        )
-        if not response:
-            raise RuntimeError("OpenCode completed without a textual response")
-        return response
-
     async def _events(self, directory: Path, session_id: str, text: str) -> AsyncIterator[tuple[str, str, str]]:
         timeout = aiohttp.ClientTimeout(total=None, sock_connect=self.request_timeout_seconds, sock_read=None)
         expected_directory = str(directory.resolve())

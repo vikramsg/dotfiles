@@ -12,14 +12,7 @@ from ocint.daemon.github.models import GitHubComment, GitHubIssue, GitHubPullReq
 from ocint.daemon.github.repository import GitHubRepository
 from ocint.daemon.github.service import GitHubService
 from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import (
-    Job,
-    PullRequestCheckpoint,
-    ReplyCheckpoint,
-    SessionCheckpoint,
-    WorkRequest,
-    WorktreeCheckpoint,
-)
+from ocint.daemon.service import Job, PullRequestCheckpoint, SessionCheckpoint, WorkRequest, WorktreeCheckpoint
 from ocint.daemon.tasks import TaskCoordinator, TaskState
 from ocint.daemon.tasks.models import MessageClassification
 from ocint.daemon.tasks.repository import TaskRepository
@@ -189,7 +182,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
     )
     await coordinator.reconcile()
     successor = executor.retried[0]
-    control.checkpoint(successor.id, ReplyCheckpoint(response="The repository already supports this."))
+    control.checkpoint(successor.id, PullRequestCheckpoint(url="https://example.test/pull/7"))
     control.complete(successor.id)
     await coordinator.reconcile()
     transport.issue_comments.append(
@@ -224,7 +217,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
     assert "initial context" in successor.prompt
     assert "new direction" in successor.prompt
     assert "agent result" not in successor.prompt
-    assert any(item.body.startswith("The repository already supports this.") for item in transport.posted)
+    assert any(item.body.startswith("Issue addressed: https://example.test/pull/7") for item in transport.posted)
     assert messages_after_second_poll == messages_after_first_poll
     assert thread.source_id == "github:example-org/project:100"
     assert messages_after_first_poll[0].source_id == "github:example-org/project:issue:100"
@@ -331,14 +324,17 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
     database = tmp_path / "control.sqlite"
     command.upgrade(alembic_config(database), "20260719_add_thread_execution_job")
     engine = create_daemon_engine(database)
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO job VALUES "
-                "('historical-job', 'thread-task:1:attempt:1', 'maintainer', 'dotfiles', 'historical', "
-                "'failed', 'execution', '', '', '', '', '', 0, 0, '', 0, '', 'historical failure', 'now', 'now')"
-            )
+    control = ControlRepository(engine)
+    historical = control.submit(
+        WorkRequest(
+            idempotency_key="thread-task:1:attempt:1",
+            actor="maintainer",
+            repository="dotfiles",
+            prompt="historical",
         )
+    )
+    control.fail(historical.id, "historical failure")
+    with engine.begin() as connection:
         connection.execute(
             text(
                 "INSERT INTO thread VALUES (1, 'dotfiles', 'github', '100', 'maintainer', 1, '', 'Old', 'Old', 'now', 'now')"
@@ -354,7 +350,7 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
         connection.execute(text("INSERT INTO task_message VALUES (1, 1)"))
         connection.execute(
             text("INSERT INTO task_job VALUES (1, :job_id, 1)"),
-            {"job_id": "historical-job"},
+            {"job_id": historical.id},
         )
     engine.dispose()
     migrate_daemon_db(database)
@@ -415,10 +411,10 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
     assert task.id == 1
     assert len(executor.submitted) == 1
     submitted = executor.submitted[0]
-    assert submitted.id != "historical-job"
+    assert submitted.id != historical.id
     assert submitted.idempotency_key == ("thread-task:model-v2:source:github:example-org/project:100:task:1:attempt:1")
     assert tasks.latest_job_id(task.id) == submitted.id
-    assert control.get("historical-job").error == "historical failure"
+    assert control.get(historical.id).error == "historical failure"
     assert restarted_executor.submitted == []
     assert restarted_executor.retried == []
     assert restarted_executor.scheduled == []

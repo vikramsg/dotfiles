@@ -11,14 +11,12 @@ from ocint.daemon.service import (
     Checkpoint,
     CommitCheckpoint,
     Job,
-    JobOutcome,
     JobStage,
     JobState,
     PromptIntentCheckpoint,
     PromptSubmittedCheckpoint,
     PullRequestCheckpoint,
     PushCheckpoint,
-    ReplyCheckpoint,
     SessionCheckpoint,
     StageCheckpoint,
     WorkRequest,
@@ -60,8 +58,6 @@ class ControlRepository:
                     commit_sha="",
                     pushed=0,
                     pull_request_url="",
-                    outcome=JobOutcome.PENDING.value,
-                    response="",
                     error="",
                     created_at=now,
                     updated_at=now,
@@ -99,8 +95,6 @@ class ControlRepository:
                     commit_sha="",
                     pushed=0,
                     pull_request_url="",
-                    outcome=JobOutcome.PENDING.value,
-                    response="",
                     error="",
                     created_at=now,
                     updated_at=now,
@@ -143,9 +137,7 @@ class ControlRepository:
             case PushCheckpoint(revision=revision):
                 columns.update(pushed=1, stage=JobStage.PULL_REQUEST.value, base_revision=revision)
             case PullRequestCheckpoint(url=url):
-                columns.update(pull_request_url=url, outcome=JobOutcome.PULL_REQUEST.value)
-            case ReplyCheckpoint(response=response):
-                columns.update(response=response, outcome=JobOutcome.REPLY.value, stage=JobStage.COMPLETE.value)
+                columns["pull_request_url"] = url
         with self.engine.begin() as connection:
             connection.execute(update(job).where(job.c.id == job_id).values(**columns))
         return self.get(job_id)
@@ -215,8 +207,6 @@ class ControlRepository:
             commit_sha=str(row["commit_sha"]),
             pushed=bool(row["pushed"]),
             pull_request_url=str(row["pull_request_url"]),
-            outcome=JobOutcome(str(row["outcome"])),
-            response=str(row["response"]),
             error=str(row["error"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),

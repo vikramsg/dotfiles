@@ -25,8 +25,6 @@ class JobResponse(BaseModel):
     attach_command: str
     commit_sha: str
     pull_request_url: str
-    outcome: str
-    response: str
     error: str
 
 
@@ -85,7 +83,5 @@ def response(item: Job) -> JobResponse:
         attach_command=attach_command(item),
         commit_sha=item.commit_sha,
         pull_request_url=item.pull_request_url,
-        outcome=item.outcome.value,
-        response=item.response,
         error=item.error,
     )

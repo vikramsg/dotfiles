@@ -132,36 +132,6 @@ async def test_immediate_idle_requires_completed_assistant_evidence(
 
 
 @pytest.mark.asyncio
-async def test_response_returns_terminal_assistant_text(tmp_path: Path, opencode_server: OpenCodeHttpFake) -> None:
-    # GIVEN
-    opencode_server.complete()
-    client = OpenCodeClient(
-        f"http://127.0.0.1:{opencode_server.port}",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "config.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
-    )
-    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
-
-    # WHEN
-    response = await client.response(tmp_path, "session", "perform work")
-
-    # THEN
-    assert response == "completed"
-    await client.close()
-
-
-@pytest.mark.asyncio
 async def test_incomplete_active_prompt_is_observed_as_processing(
     tmp_path: Path, opencode_server: OpenCodeHttpFake
 ) -> None:

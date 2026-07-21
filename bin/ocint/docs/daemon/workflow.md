@@ -1,8 +1,8 @@
-# Daemon Thread Workflow
+# Daemon Pull Request Workflow
 
-`ocint daemon` turns a labelled GitHub issue into either a direct reply or a
-pull request. Provision it once from the target repository, then use GitHub
-issues and comments to request work or ask repository-specific questions.
+`ocint daemon` turns a labelled GitHub issue into a pull request. Provision it
+once from the target repository, then use GitHub issues and comments to request
+work.
 
 The provider-neutral thread/task lifecycle is documented in
 [`../spec/daemon-thread-tasks.md`](../spec/daemon-thread-tasks.md).
@@ -17,22 +17,18 @@ systemd timer -> poll GitHub for open issues labelled "ocint"
                        create a thread task and job
                                       |
                                       v
-              OpenCode works in an isolated Git worktree
-                                       |
-                         +-------------+-------------+
-                         |                           |
-                    clean worktree              changed worktree
-                         |                           |
-                         v                           v
-                reply directly on issue    validate -> commit -> push
-                                                     |
-                                                     v
-                                            create PR -> reply with URL
+               OpenCode edits an isolated Git worktree
+                                      |
+                                      v
+                    validate -> commit -> push
+                                      |
+                                      v
+                    create PR -> reply on issue
                                       |
                     new authorized comments
                                       |
                                       v
-             reuse the same session, branch, and any PR
+              reuse the same session, branch, and PR
 ```
 
 ## Install And Provision
@@ -65,12 +61,8 @@ a failure, correct it before creating work.
 4. Apply the `ocint` label.
 
 The issue author and commenters must be allowed by the provisioned actor policy.
-At the next timer invocation, ocint reads the issue and its comments and lets
-OpenCode inspect the repository. If OpenCode leaves the worktree clean, its
-terminal response is posted directly on the issue. If it changes the worktree,
-ocint validates and publishes those changes as a pull request, then replies with
-the URL. Repository state, rather than a model-authored routing label, determines
-which path is used.
+At the next timer invocation, ocint reads the issue and its comments, performs
+the work, opens a pull request, and replies with its URL.
 
 Removing the label abandons a queued job and skips its current unresolved task.
 A running job may finish; its task stays unresolved until that job is terminal,
@@ -88,8 +80,7 @@ To make further changes, add a comment.
 
 Add comments to the same open issue. On its next invocation, ocint batches the
 new comments in chronological order and continues in the original OpenCode
-session and worktree. Each batch can independently produce a direct reply or
-changes. Changed follow-ups push to the original branch and update the same open
+session and worktree. It pushes to the original branch and updates the same open
 pull request.
 
 Comments added while a batch is running wait for the next invocation. A closed
