@@ -134,6 +134,21 @@ def test_task_core_is_provider_neutral() -> None:
     assert not any(module.startswith("ocint.daemon.github") for module in imports)
 
 
+def test_thread_core_contains_only_provider_neutral_identity_and_title() -> None:
+    # GIVEN
+    models = Path(__file__).parents[2] / "ocint" / "daemon" / "tasks" / "models.py"
+
+    # WHEN
+    tree = ast.parse(models.read_text())
+    thread = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Thread")
+    fields = {
+        node.target.id for node in thread.body if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+    }
+
+    # THEN
+    assert fields == {"id", "source_id", "title"}
+
+
 def test_daemon_artifacts_use_structural_pii_free_provisioning_examples() -> None:
     # GIVEN
     package = Path(__file__).parents[2]

@@ -83,6 +83,7 @@ class PromptObservation(BaseModel):
 
     found: bool
     completed: bool
+    active: bool
 
 
 class WorktreeCheckpoint(BaseModel):
@@ -202,7 +203,7 @@ def attach_command(job: Job) -> str:
 def prompt_action(observation: PromptObservation) -> PromptDecision:
     if observation.completed:
         return PromptDecision.ADVANCE
-    if observation.found:
+    if observation.found and observation.active:
         return PromptDecision.WAIT
     return PromptDecision.SUBMIT
 
@@ -236,7 +237,8 @@ class JobExecutor:
 
     def submit(self, request: WorkRequest) -> Job:
         job = self.accept(request)
-        self.schedule_accepted(job.id)
+        if job.state is JobState.QUEUED:
+            self.schedule(job.id)
         return job
 
     def accept(self, request: WorkRequest) -> Job:
@@ -247,14 +249,20 @@ class JobExecutor:
         return job
 
     def schedule_accepted(self, job_id: str) -> None:
-        self.schedule(job_id)
+        if self.store.get(job_id).state is JobState.QUEUED:
+            self.schedule(job_id)
 
     def retry(self, previous: Job, request: WorkRequest) -> Job:
+        job = self.accept_retry(previous, request)
+        if job.state is JobState.QUEUED:
+            self.schedule(job.id)
+        logger.info("job retry scheduled", previous_job=previous.id, job=job.id, repository=job.repository)
+        return job
+
+    def accept_retry(self, previous: Job, request: WorkRequest) -> Job:
         authorize(request, self.config)
         job = self.store.retry(previous, request)
-        self.schedule(job.id)
         self.activity_generation += 1
-        logger.info("job retry scheduled", previous_job=previous.id, job=job.id, repository=job.repository)
         return job
 
     def get(self, job_id: str) -> Job:

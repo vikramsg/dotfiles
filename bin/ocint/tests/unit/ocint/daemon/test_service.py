@@ -159,6 +159,7 @@ class StatefulOpenCode:
     calls: list[str] = field(default_factory=list)
     wait_gate: asyncio.Event = field(default_factory=asyncio.Event)
     block_wait: bool = False
+    observations: list[PromptObservation] = field(default_factory=list)
 
     async def create(self, directory: Path, identity: str) -> str:
         _ = directory
@@ -168,7 +169,9 @@ class StatefulOpenCode:
     async def observe_prompt(self, directory: Path, session_id: str, text: str) -> PromptObservation:
         _ = (directory, session_id, text)
         self.calls.append("observe")
-        return PromptObservation(found=False, completed=False)
+        if self.observations:
+            return self.observations.pop(0)
+        return PromptObservation(found=False, completed=False, active=False)
 
     async def prompt(self, directory: Path, session_id: str, text: str) -> None:
         _ = (directory, session_id, text)
@@ -275,26 +278,22 @@ def job_store() -> StatefulJobStore:
     return StatefulJobStore()
 
 
-def test_prompt_decision_is_typed() -> None:
+@pytest.mark.parametrize(
+    ("observation", "expected"),
+    [
+        (PromptObservation(found=True, completed=True, active=False), PromptDecision.ADVANCE),
+        (PromptObservation(found=True, completed=False, active=True), PromptDecision.WAIT),
+        (PromptObservation(found=True, completed=False, active=False), PromptDecision.SUBMIT),
+        (PromptObservation(found=False, completed=False, active=False), PromptDecision.SUBMIT),
+        (PromptObservation(found=False, completed=False, active=True), PromptDecision.SUBMIT),
+    ],
+)
+def test_prompt_decision_matrix(observation: PromptObservation, expected: PromptDecision) -> None:
     # GIVEN
-    observation = PromptObservation(found=True, completed=False)
-
-    # WHEN
     decision = prompt_action(observation)
 
     # THEN
-    assert decision is PromptDecision.WAIT
-
-
-def test_completed_prompt_advances() -> None:
-    # GIVEN
-    observation = PromptObservation(found=True, completed=True)
-
-    # WHEN
-    decision = prompt_action(observation)
-
-    # THEN
-    assert decision is PromptDecision.ADVANCE
+    assert decision is expected
 
 
 def test_attach_command_uses_runtime_path() -> None:
@@ -444,6 +443,52 @@ async def test_start_recovers_running_job(
     assert job_store.get(job.id).state is JobState.COMPLETED
 
 
+@pytest.mark.parametrize(
+    ("active", "expected_calls"),
+    [
+        (False, ["observe", "prompt", "wait"]),
+        (True, ["observe", "wait"]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_restart_recovers_interrupted_prompt_without_duplicating_active_prompt(
+    tmp_path: Path,
+    daemon_config: DaemonConfig,
+    job_store: StatefulJobStore,
+    active: bool,
+    expected_calls: list[str],
+) -> None:
+    # GIVEN
+    worktree = tmp_path / "interrupted-worktree"
+    worktree.mkdir()
+    job = job_store.submit(
+        WorkRequest(idempotency_key="interrupted", actor="allowed", repository="repo", prompt="work")
+    )
+    job_store.checkpoint(job.id, WorktreeCheckpoint(path=worktree, branch="ocint/interrupted", base_revision="base"))
+    job_store.checkpoint(job.id, SessionCheckpoint(session_id="session", server_url="http://opencode.test"))
+    job_store.checkpoint(job.id, PromptIntentCheckpoint())
+    job_store.checkpoint(job.id, PromptSubmittedCheckpoint())
+    job_store.claim(job.id)
+    opencode = StatefulOpenCode(observations=[PromptObservation(found=True, completed=False, active=active)])
+    executor = JobExecutor(
+        daemon_config,
+        job_store,
+        opencode,
+        StatefulGit(tmp_path / "managed"),
+        StatefulGitHub(),
+    )
+
+    # WHEN
+    await executor.start()
+    await executor.close()
+
+    # THEN
+    assert opencode.calls == expected_calls
+    assert opencode.calls.count("prompt") == (0 if active else 1)
+    assert job_store.reconciled == 1
+    assert job_store.get(job.id).state is JobState.COMPLETED
+
+
 @pytest.mark.asyncio
 async def test_duplicate_idempotent_submission_executes_once(
     tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
@@ -467,6 +512,29 @@ async def test_duplicate_idempotent_submission_executes_once(
     opencode.wait_gate.set()
     await executor.close()
     assert job_store.get(first.id).state is JobState.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_terminal_idempotent_submission_is_not_scheduled_again(
+    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+) -> None:
+    # GIVEN
+    git = StatefulGit(tmp_path / "worktrees")
+    executor = JobExecutor(daemon_config, job_store, StatefulOpenCode(), git, StatefulGitHub())
+    request = WorkRequest(idempotency_key="terminal", actor="allowed", repository="repo", prompt="work")
+    completed = executor.submit(request)
+    await executor.wait_until_idle()
+
+    # WHEN
+    duplicate = executor.submit(request)
+    await asyncio.sleep(0)
+
+    # THEN
+    assert duplicate.id == completed.id
+    assert job_store.get(completed.id).state is JobState.COMPLETED
+    assert executor.is_idle
+    assert git.calls == ["provision", "validate", "commit", "push"]
+    await executor.close()
 
 
 @pytest.mark.asyncio
