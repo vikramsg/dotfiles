@@ -10,7 +10,8 @@ configuration model.
 The source analysis is pinned to this
 [OpenCode source snapshot](https://github.com/anomalyco/opencode/tree/849c2598abc7d2b40261e74b5826bc74ffc78308).
 Every code excerpt below links to the exact lines in that revision.
-Documentation pages are not used as evidence.
+Every `[S#]` marker is a clickable source permalink. Documentation pages are
+not used as evidence.
 
 ## Summary
 
@@ -502,23 +503,44 @@ while preserving a single validated user configuration file.
 
 ## Source References
 
-- [S1] Config schema imports: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/v1/config/config.ts#L3-L18
-- [S2] Feature schema composition: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/v1/config/config.ts#L90-L123
-- [S3] Config service interface: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L117-L137
-- [S4] Config implementation dependencies: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L175-L184
-- [S5] Config layer dependencies: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L675-L679
-- [S6] Global config creation: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L246-L257
-- [S7] Global config merge order: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L258-L260
-- [S8] Global and project merge: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L398-L410
-- [S9] Config instance state and getter: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L600-L608
-- [S10] Scoped instance cache and disposal: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/effect/instance-state.ts#L26-L45
-- [S11] Directory-keyed instance read: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/effect/instance-state.ts#L47-L50
-- [S12] Provider service interface: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/provider/provider.ts#L1148-L1172
-- [S13] Provider config dependency and instance state: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/provider/provider.ts#L1327-L1343
-- [S14] LLM stream domain input: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/llm.ts#L35-L48
-- [S15] Agent config dependency: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/agent/agent.ts#L88-L101
-- [S16] LLM config read: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/llm.ts#L95-L103
-- [S17] Broad config type in overflow calculation: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/overflow.ts#L8-L19
-- [S18] Root config type indexed by MCP: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/mcp/index.ts#L109-L120
-- [S19] Directory config and inline config merge: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L416-L476
-- [S20] Account and managed config merge: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L478-L534
+- [S1: Config schema imports][S1]
+- [S2: Feature schema composition][S2]
+- [S3: Config service interface][S3]
+- [S4: Config implementation dependencies][S4]
+- [S5: Config layer dependencies][S5]
+- [S6: Global config creation][S6]
+- [S7: Global config merge order][S7]
+- [S8: Global and project merge][S8]
+- [S9: Config instance state and getter][S9]
+- [S10: Scoped instance cache and disposal][S10]
+- [S11: Directory-keyed instance read][S11]
+- [S12: Provider service interface][S12]
+- [S13: Provider config dependency and instance state][S13]
+- [S14: LLM stream domain input][S14]
+- [S15: Agent config dependency][S15]
+- [S16: LLM config read][S16]
+- [S17: Broad config type in overflow calculation][S17]
+- [S18: Root config type indexed by MCP][S18]
+- [S19: Directory config and inline config merge][S19]
+- [S20: Account and managed config merge][S20]
+
+[S1]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/v1/config/config.ts#L3-L18
+[S2]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/v1/config/config.ts#L90-L123
+[S3]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L117-L137
+[S4]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L175-L184
+[S5]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L675-L679
+[S6]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L246-L257
+[S7]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L258-L260
+[S8]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L398-L410
+[S9]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L600-L608
+[S10]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/effect/instance-state.ts#L26-L45
+[S11]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/effect/instance-state.ts#L47-L50
+[S12]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/provider/provider.ts#L1148-L1172
+[S13]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/provider/provider.ts#L1327-L1343
+[S14]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/llm.ts#L35-L48
+[S15]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/agent/agent.ts#L88-L101
+[S16]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/llm.ts#L95-L103
+[S17]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/overflow.ts#L8-L19
+[S18]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/mcp/index.ts#L109-L120
+[S19]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L416-L476
+[S20]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L478-L534
