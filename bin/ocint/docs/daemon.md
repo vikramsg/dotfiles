@@ -511,13 +511,17 @@ pending messages -> atomically create task batch -> job attempt
        |                                      |
        | process restart ---------------------+
        v
-execution -> validation -> commit -> push -> PR verify/create -> response
-                                                            |
-                                                            v
-                                                 batch addressed
+execution -- changed --> validation -> commit -> push -> PR verify/create
+    |                                                        |
+    +-- clean --> persist assistant reply --------------------+
+                                                             |
+                                                             v
+                                                  response -> batch addressed
 ```
 
-The state and stage are intentionally separate. A restarted job can return to
+The execution outcome is persisted as `reply` or `pull_request`; it remains
+`pending` until one path has been durably selected. The state and stage are
+intentionally separate. A restarted job can return to
 `queued` while retaining `push`, for example, so execution resumes without
 rerunning OpenCode, validation, or commit.
 
@@ -600,6 +604,14 @@ accepts `session.idle` or `session.status` with idle status. Premature SSE EOF
 while the session remains busy reconnects until the request timeout; it never
 advances the job as completed.
 
+After completion, the daemon compares the worktree with the job's persisted base
+revision. Uncommitted changes or a changed `HEAD` select the pull-request path.
+A clean worktree selects the reply path, and the daemon extracts and persists
+the terminal assistant text before completing the job. This keeps routing tied
+to an observable artifact instead of asking the model to emit and correctly
+format a second control-plane decision. An empty or incomplete assistant reply
+fails the job rather than posting an empty comment.
+
 OpenCode configuration defaults every permission to deny, allows shell and web
 research tools, and denies the interactive question tool so unattended jobs
 cannot wait for an answer. External-directory access is limited to `/tmp` and
@@ -614,7 +626,13 @@ worktree allow rules. Provider secrets are not copied.
 OpenCode must not receive `SSH_AUTH_SOCK`, the GitHub token, or the daemon API
 token.
 
-## GitHub Pull Requests
+## GitHub Publication
+
+Reply outcomes are posted verbatim as issue comments with an idempotency marker.
+They do not run validation, commit, push, or pull-request operations. The marker
+also prevents the daemon's own reply from being ingested as a new request.
+
+Changed worktrees use the pull-request path below.
 
 After push, the GitHub client calls:
 

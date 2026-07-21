@@ -122,10 +122,12 @@ class GitManager:
             if not command:
                 raise ValueError("validation commands cannot be empty")
             await self._run(command, worktree.path, self.validation_environment)
-        status = (await self._git(worktree.path, "status", "--porcelain")).strip()
-        if not status and (await self._git(worktree.path, "rev-parse", "HEAD")).strip() == worktree.base_revision:
-            raise ValueError("OpenCode produced no changes")
         logger.info("validation completed", branch=worktree.branch)
+
+    async def has_changes(self, worktree: Worktree) -> bool:
+        status = (await self._git(worktree.path, "status", "--porcelain")).strip()
+        revision = (await self._git(worktree.path, "rev-parse", "HEAD")).strip()
+        return bool(status) or revision != worktree.base_revision
 
     async def commit(self, worktree: Worktree, message: str, author_name: str, author_email: str) -> str:
         status = (await self._git(worktree.path, "status", "--porcelain")).strip()

@@ -10,6 +10,7 @@ from ocint.daemon.service import (
     CommitCheckpoint,
     Job,
     JobExecutor,
+    JobOutcome,
     JobStage,
     JobState,
     PromptDecision,
@@ -18,6 +19,7 @@ from ocint.daemon.service import (
     PromptSubmittedCheckpoint,
     PullRequestCheckpoint,
     PushCheckpoint,
+    ReplyCheckpoint,
     SessionCheckpoint,
     StageCheckpoint,
     WorkRequest,
@@ -60,6 +62,8 @@ class StatefulJobStore:
             commit_sha="",
             pushed=False,
             pull_request_url="",
+            outcome=JobOutcome.PENDING,
+            response="",
             error="",
             created_at="now",
             updated_at="now",
@@ -119,7 +123,13 @@ class StatefulJobStore:
                     update={"stage": JobStage.PULL_REQUEST, "pushed": True, "base_revision": revision}
                 )
             case PullRequestCheckpoint(url=url):
-                updated = job.model_copy(update={"stage": JobStage.COMPLETE, "pull_request_url": url})
+                updated = job.model_copy(
+                    update={"stage": JobStage.COMPLETE, "outcome": JobOutcome.PULL_REQUEST, "pull_request_url": url}
+                )
+            case ReplyCheckpoint(response=response):
+                updated = job.model_copy(
+                    update={"stage": JobStage.COMPLETE, "outcome": JobOutcome.REPLY, "response": response}
+                )
         self.save(updated)
         return updated
 
@@ -160,6 +170,7 @@ class StatefulOpenCode:
     wait_gate: asyncio.Event = field(default_factory=asyncio.Event)
     block_wait: bool = False
     observations: list[PromptObservation] = field(default_factory=list)
+    final_response: str = "Completed the requested investigation."
 
     async def create(self, directory: Path, identity: str) -> str:
         _ = directory
@@ -183,12 +194,18 @@ class StatefulOpenCode:
         if self.block_wait:
             await self.wait_gate.wait()
 
+    async def response(self, directory: Path, session_id: str, text: str) -> str:
+        _ = (directory, session_id, text)
+        self.calls.append("response")
+        return self.final_response
+
 
 @dataclass
 class StatefulGit:
     root: Path
     failure: GitFailure = GitFailure.NONE
     calls: list[str] = field(default_factory=list)
+    changed: bool = True
 
     async def provision(self, repository: RepositoryConfig, job_id: str) -> Worktree:
         _ = repository
@@ -202,6 +219,11 @@ class StatefulGit:
         self.calls.append("validate")
         if self.failure is GitFailure.VALIDATION:
             raise RuntimeError("validation failed")
+
+    async def has_changes(self, worktree: Worktree) -> bool:
+        _ = worktree
+        self.calls.append("has_changes")
+        return self.changed
 
     async def commit(self, worktree: Worktree, message: str, author_name: str, author_email: str) -> str:
         _ = (worktree, message, author_name, author_email)
@@ -316,6 +338,8 @@ def test_attach_command_uses_runtime_path() -> None:
         commit_sha="",
         pushed=False,
         pull_request_url="",
+        outcome=JobOutcome.PENDING,
+        response="",
         error="",
         created_at="now",
         updated_at="now",
@@ -344,7 +368,7 @@ async def test_executor_runs_every_stage_and_persists_result(
 
     # THEN
     completed = job_store.get(job.id)
-    assert git.calls == ["provision", "validate", "commit", "push"]
+    assert git.calls == ["provision", "has_changes", "validate", "commit", "push"]
     assert opencode.calls == ["create", "observe", "prompt", "wait"]
     assert github.calls == ["pull_request"]
     assert completed.state is JobState.COMPLETED
@@ -353,6 +377,30 @@ async def test_executor_runs_every_stage_and_persists_result(
     assert completed.commit_sha == "commit-sha"
     assert completed.base_revision == "commit-sha"
     assert completed.pull_request_url == "https://example.test/pull/1"
+    assert completed.outcome is JobOutcome.PULL_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_executor_persists_reply_without_validation_or_publication(
+    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+) -> None:
+    # GIVEN
+    opencode = StatefulOpenCode(final_response="The current setting already provides that behavior.")
+    git = StatefulGit(tmp_path / "worktrees", changed=False)
+    github = StatefulGitHub()
+    executor = JobExecutor(daemon_config, job_store, opencode, git, github)
+
+    # WHEN
+    job = executor.submit(WorkRequest(idempotency_key="reply", actor="allowed", repository="repo", prompt="question"))
+    await executor.close()
+
+    # THEN
+    completed = job_store.get(job.id)
+    assert git.calls == ["provision", "has_changes"]
+    assert github.calls == []
+    assert completed.state is JobState.COMPLETED
+    assert completed.outcome is JobOutcome.REPLY
+    assert completed.response == "The current setting already provides that behavior."
 
 
 @pytest.mark.asyncio
@@ -381,7 +429,12 @@ async def test_executor_marks_stage_failure_terminal(
 @pytest.mark.parametrize(
     ("stage", "expected_git", "expected_opencode", "expected_github"),
     [
-        (JobStage.EXECUTION, ["validate", "commit", "push"], ["observe", "prompt", "wait"], ["pull_request"]),
+        (
+            JobStage.EXECUTION,
+            ["has_changes", "validate", "commit", "push"],
+            ["observe", "prompt", "wait"],
+            ["pull_request"],
+        ),
         (JobStage.VALIDATION, ["validate", "commit", "push"], [], ["pull_request"]),
         (JobStage.COMMIT, ["commit", "push"], [], ["pull_request"]),
         (JobStage.PUSH, ["push"], [], ["pull_request"]),
@@ -533,7 +586,7 @@ async def test_terminal_idempotent_submission_is_not_scheduled_again(
     assert duplicate.id == completed.id
     assert job_store.get(completed.id).state is JobState.COMPLETED
     assert executor.is_idle
-    assert git.calls == ["provision", "validate", "commit", "push"]
+    assert git.calls == ["provision", "has_changes", "validate", "commit", "push"]
     await executor.close()
 
 

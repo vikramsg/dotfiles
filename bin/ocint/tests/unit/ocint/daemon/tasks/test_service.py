@@ -32,8 +32,8 @@ def test_render_prompt_includes_all_contributions_in_order() -> None:
     # THEN
     assert "Make the change" in prompt
     assert "Issue body" in prompt
-    assert "making meaningful changes in the repository" in prompt
-    assert "research or informational request" in prompt
+    assert "most appropriate outcome" in prompt
+    assert "leave the repository unchanged" in prompt
     assert "Do not create or publish a pull request" in prompt
     assert prompt.index("Thread message github:owner/repo:issue:5") < prompt.index(
         "Thread message github:owner/repo:comment:12"

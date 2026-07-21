@@ -77,6 +77,7 @@ raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
         manager.provision(repository, "job-two"),
     )
     (worktree.path / "result.txt").write_text("result\n")
+    assert await manager.has_changes(worktree)
     await manager.validate(worktree, ((sys.executable, "-c", "import os; assert 'SSH_AUTH_SOCK' not in os.environ"),))
     commit = await manager.commit(worktree, "result", repository.author_name, repository.author_email)
     await manager.push(worktree)
@@ -105,8 +106,7 @@ raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
     assert author == "Daemon Agent <daemon@example.test>"
     assert branch == commit
     assert second_revision == worktree.base_revision
-    with pytest.raises(ValueError, match="OpenCode produced no changes"):
-        await manager.validate(advanced_baseline, ())
+    assert not await manager.has_changes(advanced_baseline)
     assert sum(event["arguments"][0] == "clone" for event in git_events) == 1
     assert (tmp_path / "mirrors" / "repo.git").is_dir()
     assert worktree.path.is_dir()
@@ -206,5 +206,4 @@ async def test_reprovision_preserves_uncheckpointed_worktree_after_remote_advanc
     assert recovered.path == original.path
     assert recovered.branch == original.branch == "ocint/job"
     assert recovered.base_revision == actual_revision == original.base_revision
-    with pytest.raises(ValueError, match="OpenCode produced no changes"):
-        await manager.validate(recovered, ())
+    assert not await manager.has_changes(recovered)

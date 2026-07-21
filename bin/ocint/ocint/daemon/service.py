@@ -30,6 +30,12 @@ class JobStage(StrEnum):
     COMPLETE = "complete"
 
 
+class JobOutcome(StrEnum):
+    PENDING = "pending"
+    REPLY = "reply"
+    PULL_REQUEST = "pull_request"
+
+
 class PromptDecision(StrEnum):
     SUBMIT = "submit"
     WAIT = "wait"
@@ -65,6 +71,8 @@ class Job(BaseModel):
     commit_sha: str
     pushed: bool
     pull_request_url: str
+    outcome: JobOutcome
+    response: str
     error: str
     created_at: str
     updated_at: str
@@ -143,6 +151,13 @@ class PullRequestCheckpoint(BaseModel):
     url: str
 
 
+class ReplyCheckpoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["reply"] = "reply"
+    response: str = Field(min_length=1)
+
+
 type Checkpoint = (
     WorktreeCheckpoint
     | SessionCheckpoint
@@ -152,6 +167,7 @@ type Checkpoint = (
     | CommitCheckpoint
     | PushCheckpoint
     | PullRequestCheckpoint
+    | ReplyCheckpoint
 )
 
 
@@ -175,10 +191,12 @@ class OpenCode(Protocol):
     async def observe_prompt(self, directory: Path, session_id: str, text: str) -> PromptObservation: ...
     async def prompt(self, directory: Path, session_id: str, text: str) -> None: ...
     async def wait_for_completion(self, directory: Path, session_id: str, text: str) -> None: ...
+    async def response(self, directory: Path, session_id: str, text: str) -> str: ...
 
 
 class Git(Protocol):
     async def provision(self, repository: RepositoryConfig, job_id: str) -> Worktree: ...
+    async def has_changes(self, worktree: Worktree) -> bool: ...
     async def validate(self, worktree: Worktree, checks: tuple[tuple[str, ...], ...]) -> None: ...
     async def commit(self, worktree: Worktree, message: str, author_name: str, author_email: str) -> str: ...
     async def push(self, worktree: Worktree) -> None: ...
@@ -367,7 +385,11 @@ class JobExecutor:
                 job = self.store.checkpoint(job.id, PromptSubmittedCheckpoint())
             if action is not PromptDecision.ADVANCE:
                 await self.opencode.wait_for_completion(worktree.path, job.session_id, job.prompt)
-            job = self.store.checkpoint(job.id, StageCheckpoint(stage=JobStage.VALIDATION))
+            if await self.git.has_changes(worktree):
+                job = self.store.checkpoint(job.id, StageCheckpoint(stage=JobStage.VALIDATION))
+            else:
+                response = await self.opencode.response(worktree.path, job.session_id, job.prompt)
+                job = self.store.checkpoint(job.id, ReplyCheckpoint(response=response))
             logger.info("job stage completed", job=job.id, stage=JobStage.EXECUTION.value)
         if job.stage is JobStage.VALIDATION:
             logger.info("job stage started", job=job.id, stage=JobStage.VALIDATION.value)
@@ -396,7 +418,7 @@ class JobExecutor:
                 "Automated by ocint daemon.",
                 job.id,
             )
-            self.store.checkpoint(job.id, PullRequestCheckpoint(url=url))
+            job = self.store.checkpoint(job.id, PullRequestCheckpoint(url=url))
             logger.info("job stage completed", job=job.id, stage=JobStage.PULL_REQUEST.value, pull_request=url)
         self.store.complete(job.id)
         logger.info("job completed", job=job.id, repository=job.repository)

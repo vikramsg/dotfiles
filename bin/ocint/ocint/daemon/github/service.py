@@ -5,7 +5,7 @@ from ocint.daemon.config import DaemonConfig, RepositoryConfig
 from ocint.daemon.github.models import GitHubComment, GitHubIssue, GitHubPullRequest, StoredIssue
 from ocint.daemon.github.repository import GitHubRepository
 from ocint.daemon.logging import get_logger
-from ocint.daemon.service import Job
+from ocint.daemon.service import Job, JobOutcome
 from ocint.daemon.tasks.models import MessageClassification, Task, TaskState
 from ocint.daemon.tasks.repository import TaskRepository
 
@@ -167,16 +167,18 @@ class GitHubService:
         issue = self.repository.issue_for_thread(task.thread_id)
         if issue is None:
             raise RuntimeError(f"GitHub mapping missing for task {task.id}")
-        if not job.pull_request_url:
-            raise RuntimeError(f"task {task.id} completed without a pull request URL")
-        await self._respond(
-            issue,
-            "addressed",
-            self._task_anchor(issue, task),
-            f"Issue addressed: {job.pull_request_url}\n\nTo make further changes, add a comment.",
-        )
+        match job.outcome:
+            case JobOutcome.PULL_REQUEST if job.pull_request_url:
+                outcome = "addressed"
+                response = f"Issue addressed: {job.pull_request_url}\n\nTo make further changes, add a comment."
+            case JobOutcome.REPLY if job.response:
+                outcome = "replied"
+                response = job.response
+            case _:
+                raise RuntimeError(f"task {task.id} completed without a publishable outcome")
+        await self._respond(issue, outcome, self._task_anchor(issue, task), response)
         self.tasks.set_state(task.id, TaskState.ADDRESSED)
-        logger.info("task addressed", task=task.id, thread=task.thread_id, pull_request=job.pull_request_url)
+        logger.info("task addressed", task=task.id, thread=task.thread_id, outcome=job.outcome.value)
 
     def _task_anchor(self, issue: StoredIssue, task: Task) -> str:
         messages = self.tasks.task_messages(task.id)
@@ -232,7 +234,7 @@ class GitHubService:
         )
         return any(
             marker == self.marker(issue.github_repository, issue.issue_number, outcome, anchor)
-            for outcome in ("addressed", "unauthorized", "closed-pr")
+            for outcome in ("addressed", "replied", "unauthorized", "closed-pr")
             for anchor in anchors
         )
 
