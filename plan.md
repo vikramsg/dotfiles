@@ -11,6 +11,11 @@ This is not a move of every class or every `Protocol` into `models.py`. The
 migration should remove `service.py` as the accidental schema hub without
 creating a new hub with the same problem.
 
+The companion
+[OpenCode configuration lessons](bin/ocint/docs/architecture/opencode-config-lessons.md)
+note explains how one aggregate external config can support this modular shape
+without becoming a runtime god object.
+
 ## Current problem
 
 `ocint/daemon/service.py` currently owns four different concerns:

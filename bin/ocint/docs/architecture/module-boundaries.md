@@ -5,6 +5,10 @@
 This document defines when to create files, what common files own, where shared
 types belong, and how dependencies should flow.
 
+See [OpenCode configuration lessons](opencode-config-lessons.md) for how these
+rules apply when one external configuration document composes feature-owned
+schemas and supplies narrow runtime contracts.
+
 ## Creating files
 
 - Create a file when its responsibility is substantial or shared.
