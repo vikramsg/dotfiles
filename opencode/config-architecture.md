@@ -15,95 +15,308 @@ not used as evidence.
 
 ## Summary
 
-OpenCode's complete configuration flow has four boundaries:
+Once configuration has been resolved, the important flow is service
+construction and injection:
 
 ```text
-SCHEMA DEFINITION
+MODULE DEFINITION (written once in each domain module)
 
- ConfigAgentV1   ConfigProviderV1   ConfigMCPV1   other feature schemas
-       \                 |               /                 /
-        +----------------+--------------+-----------------+
-                                 |
-                                 v
-                         ConfigV1.Info
-                  one external JSON contract
-
-
-CONFIGURATION SOURCES AND MERGING
-
- remote well-known config
-             |
-             v
- global config directory
- config.json -> opencode.json -> opencode.jsonc
-             |
-             v
- OPENCODE_CONFIG explicit file
-             |
-             v
- discovered project opencode files
-             |
-             v
- .opencode directory config, agents, commands and plugins
-             |
-             v
- OPENCODE_CONFIG_CONTENT
-             |
-             v
- active account / organization config
-             |
-             v
- managed config directory -> macOS managed preferences
-             |
-             |  each source: substitute -> parse -> validate -> merge
-             |  later sources override earlier sources
-             v
-       resolved Config.Service state
-             |
-             v
-     loadInstanceState(context)
+ config/config.ts
+ [Config.Interface]
+          |
+          v
+ [Config.Service tag] -> [config layer returns Service.of] -> [Config.node]
+                                                               ^
+                                                               | dependency
+ agent/agent.ts                                                |
+ [Agent.Interface]                                             |
+          |                                                    |
+          v                                                    |
+ [Agent.Service tag] ---> [agent layer returns Service.of] -> [Agent.node]
+                                                       deps include Config.node
 
 
-INSTANCE LIFETIME
+APPLICATION ASSEMBLY AND INJECTION (startup)
 
- InstanceRef
- { directory, worktree, project }
+ Config.node   Provider.node   Agent.node   LLM.node   other nodes
+      \              |             |           /          /
+       +-------------+-------------+----------+----------+
+                                  |
+                                  v
+                         AppRuntime.AppLayer
+                   groups the application nodes
+                                  |
+                                  v
+                       AppNodeBuilder.build(...)
+                                  |
+                                  v
+                         LayerNode.compile(...)
+                recursively applies Layer.provide(dependencies)
+                                  |
+                                  v
+                       ManagedRuntime.make(AppLayer)
+                                  |
+                   +--------------+---------------+
+                   |                              |
+                   v                              v
+       Config layer is evaluated       Agent layer is evaluated
+       dependencies are provided       Config.Service is provided
+       Config.Service.of registered    Agent.Service.of registered
+
+
+PROJECT OPERATION (after startup)
+
+ AppRuntime.runPromise(effect)
               |
               v
- ScopedCache<directory, resolved state>
+ InstanceStore.provide(project, domain effect)
               |
-              +--> directory A --> resolved config A
-              +--> directory B --> resolved config B
+              +--> installs InstanceRef { directory, worktree, project }
               |
-              `--> invalidate directory entry on instance disposal
-                                |
-                                v
-                     Config.Service.get()
+              v
+ domain effect asks: yield* Agent.Service
+              |
+              v
+ Effect returns the Agent implementation registered at startup
 
 
-RUNTIME MODULES
+CONFIG USE INSIDE A DOMAIN SERVICE
 
- Effect layer graph injects Config.Service
-              |
-              +--> Agent layer -----> Agent.Info / Agent.Service
-              +--> Provider layer --> Provider.Model / Provider.Service
-              +--> MCP layer -------> MCP status, tools and resources
-              `--> LLM layer -------> stream(model, agent, messages, tools)
-                                            |
-                                            v
-                              callers use domain operations and types
-                              instead of parsing config files themselves
+ Agent.Service.list()
+        |
+        v
+ Agent instance state initializes for current directory
+        |
+        v
+ config.get() -> Config InstanceState -> resolved ConfigV1.Info
+        |
+        v
+ Agent translates config fields into Agent.Info runtime objects
+        |
+        v
+ caller receives Agent.Info[] through Agent.Interface
+ caller does not parse files or depend on agent config-file syntax
 ```
 
-Sources: schema composition [S1] [S2]; config service and layer [S3] [S5];
-source merging [S6] [S7] [S8] [S19] [S20]; instance scope [S9] [S10] [S11];
-runtime services [S12] [S13] [S14] [S15] [S16].
+Sources: service declarations and implementations [S3] [S4] [S5] [S15]
+[S21] [S27] [S31]; node graph and compilation [S22] [S23] [S24] [S25];
+runtime execution and instance context [S26] [S30]; domain-facing APIs [S12]
+[S14].
 
 The important qualification is that this is not complete decoupling. Agent,
 Provider, LLM, MCP, and session code still import either `Config.Service` or
 `ConfigV1.Info`. OpenCode replaces an ambient singleton with explicit service
 requirements and instance-scoped state, then hides much of the configuration
 behind domain services. That localizes coupling; it does not remove it.
+
+## Who Creates, Instantiates, And Injects Services
+
+| Question | Answer |
+|---|---|
+| Who defines an interface? | The domain module defines its own TypeScript `Interface`. Config defines `Config.Interface`; Agent defines `Agent.Interface`; Provider defines `Provider.Interface`. |
+| Who creates the service identity? | The same module declares a `Context.Service` tag. The tag is the lookup key used by Effect. |
+| Who implements and instantiates it? | The module's `Layer.effect` implementation captures required services and returns `Service.of({...})`. Effect evaluates that layer when building the runtime. |
+| Who declares dependencies? | The module exports a `LayerNode.make` node whose `deps` list names the nodes required by its layer. |
+| Who injects dependencies? | `LayerNode.compile` recursively turns node dependencies into `Layer.provide(...)` calls. `AppNodeBuilder` invokes that compiler. |
+| Who starts the complete graph? | `AppRuntime` groups application nodes, builds `AppLayer`, and passes it to `ManagedRuntime.make`. |
+| Who selects the project instance? | `InstanceStore.provide` loads the project context and provides `InstanceRef` while running an effect. |
+| How does a consumer obtain a service? | It yields the service tag, for example `const config = yield* Config.Service`. Effect returns the implementation in the current context. |
+
+These roles are separate. An interface is a compile-time contract; a
+`Context.Service` is a runtime identity; a layer creates the implementation; a
+node declares graph edges; and the compiled application layer performs the
+injection.
+
+### 1. A Domain Module Owns Its Interface
+
+Agent, not Config, defines the operations that callers can perform on agents:
+
+```ts
+export interface Interface {
+  readonly get: (agent: string) => Effect.Effect<Info>
+  readonly list: () => Effect.Effect<Info[]>
+  readonly defaultInfo: () => Effect.Effect<Info>
+  readonly defaultAgent: () => Effect.Effect<string>
+  readonly generate: (input: {
+    description: string
+    model?: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
+  }) => Effect.Effect<
+    {
+      identifier: string
+      whenToUse: string
+      systemPrompt: string
+    },
+    Provider.DefaultModelError
+  >
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/Agent") {}
+```
+
+Source: [S21]
+
+The Config module independently owns its loader and update contract, shown in
+[S3]. Neither interface is generated from `ConfigV1.Info`; they are manually
+defined capability APIs.
+
+### 2. The Layer Instantiates The Interface
+
+Inside a layer, Agent obtains its dependencies by their service tags. It then
+constructs instance-scoped behavior and eventually returns an implementation
+with `Service.of(...)`:
+
+```ts
+const config = yield* Config.Service
+const auth = yield* Auth.Service
+const plugin = yield* Plugin.Service
+const skill = yield* Skill.Service
+const provider = yield* Provider.Service
+const locations = yield* LocationServiceMap.Service
+
+const state = yield* InstanceState.make<State>(
+  Effect.fn("Agent.state")(function* (ctx) {
+    const cfg = yield* config.get()
+```
+
+Source: [S15]
+
+```ts
+return Service.of({
+  get: Effect.fn("Agent.get")(function* (agent: string) {
+    return yield* InstanceState.useEffect(state, (s) => s.get(agent))
+  }),
+  list: Effect.fn("Agent.list")(function* () {
+    return yield* InstanceState.useEffect(state, (s) => s.list())
+  }),
+  defaultInfo: Effect.fn("Agent.defaultInfo")(function* () {
+    return yield* InstanceState.useEffect(state, (s) => s.defaultInfo())
+  }),
+  defaultAgent: Effect.fn("Agent.defaultAgent")(function* () {
+    return yield* InstanceState.useEffect(state, (s) => s.defaultAgent())
+  }),
+```
+
+Source: [S27]
+
+`yield* Config.Service` does not read a global variable. It requests the
+implementation registered under the Config context tag. The returned `config`
+value is captured by the Agent implementation's closure.
+
+### 3. The Node Declares What The Layer Needs
+
+Agent exports a node connecting its service identity, implementation layer, and
+dependency nodes:
+
+```ts
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Config.node, Auth.node, Plugin.node, Skill.node, Provider.node, locationServiceMapNode],
+})
+```
+
+Source: [S28]
+
+`LayerNode.make` records the layer and dependency list. Its types also reject a
+node whose `deps` do not provide all services required by the implementation:
+
+```ts
+type CheckDependencies<Implementation extends Layer.Any, Dependencies extends NodeList> = [
+  Missing<Layer.Services<Implementation>, Dependencies>,
+] extends [never]
+  ? unknown
+  : { readonly "Missing dependencies": Missing<Layer.Services<Implementation>, Dependencies> }
+```
+
+Source: [S22]
+
+This makes dependency edges explicit and statically checked, even though the
+implementation retrieves dependencies from an Effect context.
+
+### 4. The Application Compiles And Starts The Graph
+
+`AppRuntime` groups Config, Provider, Agent, LLM, and the other application
+nodes, builds the graph, and creates the managed runtime:
+
+```ts
+export const AppLayer = AppNodeBuilderV1.build(
+  LayerNode.group([
+    Npm.node,
+    FSUtil.node,
+    Database.node,
+    Auth.node,
+    Account.node,
+    Config.node,
+    Git.node,
+    Storage.node,
+    Snapshot.node,
+    Plugin.node,
+    ModelsDev.node,
+    Provider.node,
+    ProviderAuth.node,
+    Agent.node,
+```
+
+Source: [S24]
+
+```ts
+const rt = ManagedRuntime.make(AppLayer, { memoMap })
+```
+
+Source: [S25]
+
+`AppNodeBuilder` delegates graph construction to `LayerNode.compile`:
+
+```ts
+export function build<A, E>(root: LayerNode.Node<A, E, any>, replacements: LayerNode.Replacements = []) {
+  let allReplacements = replacements
+
+  // Only build the location service map if it's actually needed
+  if (LayerNode.hasUnbound(root, LocationServiceMap.node) && !hasReplacement(replacements, LocationServiceMap.node)) {
+    const locationMap = buildLocationServiceMap(replacements)
+    const locationMapNode = makeGlobalNode({ service: LocationServiceMap.Service, layer: locationMap, deps: [] })
+    allReplacements = replacements.concat([[LocationServiceMap.node, locationMapNode]])
+  }
+
+  return LayerNode.compile(root, allReplacements)
+}
+```
+
+Source: [S23]
+
+The compiler recursively compiles dependencies and supplies them to each
+implementation with `Layer.provide`:
+
+```ts
+const dependencies = node.dependencies.flatMap(flatten).map(context.visit)
+const implementation = node.implementation! as RuntimeLayer
+return dependencies.length === 0
+  ? implementation
+  : implementation.pipe(Layer.provide(dependencies as [RuntimeLayer, ...RuntimeLayer[]]))
+```
+
+Source: [S29]
+
+This compiler is the concrete answer to "who injects the service?": OpenCode's
+node graph compiler builds the Effect layers that provide each implementation's
+declared dependencies.
+
+### 5. Instance Context Selects The Resolved Value
+
+The service graph is application-wide, but config data is selected by project.
+`InstanceStore.provide` loads an `InstanceContext` and installs it as
+`InstanceRef` around the requested effect:
+
+```ts
+const provide = <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  load(input).pipe(Effect.flatMap((ctx) => effect.pipe(Effect.provideService(InstanceRef, ctx))))
+```
+
+Source: [S26]
+
+When Agent calls `config.get()`, Config's `InstanceState` uses that context's
+directory to select the correct resolved config. The service implementation is
+shared; the selected state is per instance. [S9] [S10] [S11]
 
 ## One Schema, Composed From Feature Schemas
 
@@ -220,58 +433,6 @@ Consequently, modules depend on the `Config.Service` contract and the
 application layer graph supplies its implementation. This is still a broad
 service contract, but it is not an unreplaceable imported object holding
 mutable process-global data.
-
-## Global Files And Project Overrides
-
-OpenCode creates a minimal global file containing the schema URL when no global
-config exists and no environment override redirects configuration:
-
-```ts
-if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
-  const file = globalConfigFile()
-  if (!existsSync(file)) {
-    yield* fs
-      .writeWithDirs(file, JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2))
-      .pipe(Effect.catch(() => Effect.void))
-  }
-}
-```
-
-Source: [S6]
-
-It then merges legacy `config.json`, `opencode.json`, and `opencode.jsonc` from
-the global config directory in order:
-
-```ts
-result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
-result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env))
-result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env))
-```
-
-Source: [S7]
-
-For an active project, the loader starts with global config and then merges an
-explicit config path and discovered project files. Therefore "global" describes
-a configuration source and precedence level, not the lifetime of one mutable
-JavaScript object:
-
-```ts
-const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
-yield* merge(Global.Path.config, global, "global")
-
-if (Flag.OPENCODE_CONFIG) {
-  yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
-  yield* Effect.logDebug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
-}
-
-if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-  for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
-    yield* merge(file, yield* loadFile(file, authEnv), "local")
-  }
-}
-```
-
-Source: [S8]
 
 ## Resolved Config Is Instance-Scoped
 
@@ -501,6 +662,59 @@ ConfigV1.Info
 That variation prevents feature code from importing the aggregate config type
 while preserving a single validated user configuration file.
 
+## Appendix: File Resolution
+
+File discovery is separate from the module-injection design above. OpenCode
+creates a minimal global file containing the schema URL when no global config
+exists and no environment override redirects configuration:
+
+```ts
+if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
+  const file = globalConfigFile()
+  if (!existsSync(file)) {
+    yield* fs
+      .writeWithDirs(file, JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2))
+      .pipe(Effect.catch(() => Effect.void))
+  }
+}
+```
+
+Source: [S6]
+
+It then merges legacy `config.json`, `opencode.json`, and `opencode.jsonc` from
+the global config directory in order:
+
+```ts
+result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
+result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env))
+result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env))
+```
+
+Source: [S7]
+
+For an active project, the loader starts with global config and then merges an
+explicit config path and discovered project files. Therefore "global" describes
+a configuration source and precedence level, not the lifetime of one mutable
+JavaScript object:
+
+```ts
+const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
+yield* merge(Global.Path.config, global, "global")
+
+if (Flag.OPENCODE_CONFIG) {
+  yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
+  yield* Effect.logDebug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+}
+
+if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+  for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+    yield* merge(file, yield* loadFile(file, authEnv), "local")
+  }
+}
+```
+
+Source: [S8]
+
 ## Source References
 
 - [S1: Config schema imports][S1]
@@ -523,6 +737,17 @@ while preserving a single validated user configuration file.
 - [S18: Root config type indexed by MCP][S18]
 - [S19: Directory config and inline config merge][S19]
 - [S20: Account and managed config merge][S20]
+- [S21: Agent-owned interface and context tag][S21]
+- [S22: Compile-time dependency check][S22]
+- [S23: Application node builder][S23]
+- [S24: Application node group][S24]
+- [S25: Managed runtime construction][S25]
+- [S26: Instance context provision][S26]
+- [S27: Agent service implementation][S27]
+- [S28: Agent node dependency declaration][S28]
+- [S29: Dependency layer injection][S29]
+- [S30: Effects executed through the managed runtime][S30]
+- [S31: Config service implementation registration][S31]
 
 [S1]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/v1/config/config.ts#L3-L18
 [S2]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/v1/config/config.ts#L90-L123
@@ -544,3 +769,14 @@ while preserving a single validated user configuration file.
 [S18]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/mcp/index.ts#L109-L120
 [S19]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L416-L476
 [S20]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L478-L534
+[S21]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/agent/agent.ts#L64-L86
+[S22]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/effect/layer-node.ts#L9-L14
+[S23]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/effect/app-node-builder.ts#L6-L17
+[S24]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/effect/app-runtime.ts#L58-L73
+[S25]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/effect/app-runtime.ts#L109-L115
+[S26]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/project/instance-store.ts#L189-L190
+[S27]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/agent/agent.ts#L355-L367
+[S28]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/agent/agent.ts#L447-L451
+[S29]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/core/src/effect/layer-node.ts#L250-L271
+[S30]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/effect/app-runtime.ts#L118-L134
+[S31]: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L662-L679
