@@ -73,6 +73,12 @@ responses are excluded. A follow-up derives its reusable OpenCode session,
 worktree, branch, and Git baseline from an addressed task's completed job; no
 execution-artifact state lives on the thread.
 
+The prompt requires meaningful repository changes because the daemon's output
+contract is a pull request, not a private conversational response. Research and
+informational requests are materialized in the most appropriate repository
+documentation. OpenCode never publishes the pull request itself; validation,
+commit, push, and publication remain daemon-owned stages.
+
 ## Edits
 
 Messages are not versioned. Polling updates a stored message while it is not

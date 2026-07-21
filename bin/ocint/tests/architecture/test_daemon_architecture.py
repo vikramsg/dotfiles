@@ -181,7 +181,12 @@ def test_daemon_artifacts_use_structural_pii_free_provisioning_examples() -> Non
     assert agent_defaults == []
     assert "model" not in policy
     assert "provider" not in policy
+    assert policy["permission"]["*"] == "deny"
     assert policy["permission"]["external_directory"] == {"*": "deny"}
+    assert policy["permission"]["bash"] == "allow"
+    assert policy["permission"]["webfetch"] == "allow"
+    assert policy["permission"]["websearch"] == "allow"
+    assert policy["permission"]["question"] == "deny"
 
 
 def test_policy_resource_is_one_canonical_symlinked_source() -> None:

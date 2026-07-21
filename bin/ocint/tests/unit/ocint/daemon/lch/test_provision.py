@@ -538,9 +538,14 @@ def test_packaged_policy_is_the_authoritative_source_and_composition_preserves_i
     # THEN
     assert packaged == policy_bytes() == source_policy.read_bytes()
     assert effective.share == policy.share
-    assert effective.permission.bash == policy.permission.bash
+    assert effective.permission.fallback == "deny"
+    assert effective.permission.bash == "allow"
+    assert effective.permission.webfetch == "allow"
+    assert effective.permission.websearch == "allow"
+    assert effective.permission.question == "deny"
     assert effective.permission.external_directory == {
         "*": "deny",
+        "/tmp/**": "allow",
         f"{(tmp_path / 'managed-worktrees').resolve()}/**": "allow",
     }
     assert "apiKey" not in effective.model_dump_json(by_alias=True)

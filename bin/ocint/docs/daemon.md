@@ -600,14 +600,17 @@ accepts `session.idle` or `session.status` with idle status. Premature SSE EOF
 while the session remains busy reconnects until the request timeout; it never
 advances the job as completed.
 
-OpenCode configuration must deny shell and publication network tools. The
+OpenCode configuration defaults every permission to deny, allows shell and web
+research tools, and denies the interactive question tool so unattended jobs
+cannot wait for an answer. External-directory access is limited to `/tmp` and
+the managed worktree root; every other directory is denied without prompting. The
 tracked policy is [`config/opencode.daemon.json`](../config/opencode.daemon.json),
 the sole authoritative static policy. A tracked package symlink points to that
 source; Hatchling dereferences it into the wheel as byte-identical
 `ocint/daemon/opencode.daemon.json`, and runtime loads only that
-`importlib.resources` resource. Provision preserves that policy and adds only the
-selected model/provider's safe typed fields and the resolved worktree allow
-rule. Provider secrets are not copied.
+`importlib.resources` resource. Provision preserves that policy and adds only
+the selected model/provider's safe typed fields plus `/tmp` and resolved
+worktree allow rules. Provider secrets are not copied.
 OpenCode must not receive `SSH_AUTH_SOCK`, the GitHub token, or the daemon API
 token.
 
