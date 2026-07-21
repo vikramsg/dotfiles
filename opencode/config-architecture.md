@@ -7,29 +7,96 @@ without making that document an unqualified process-global variable. It also
 identifies the places where OpenCode still couples modules to the complete
 configuration model.
 
-The source analysis is pinned to OpenCode commit
-`849c2598abc7d2b40261e74b5826bc74ffc78308`. Every code excerpt below links to
-the exact lines in that revision. Documentation pages are not used as evidence.
+The source analysis is pinned to this
+[OpenCode source snapshot](https://github.com/anomalyco/opencode/tree/849c2598abc7d2b40261e74b5826bc74ffc78308).
+Every code excerpt below links to the exact lines in that revision.
+Documentation pages are not used as evidence.
 
 ## Summary
 
-OpenCode uses four boundaries:
+OpenCode's complete configuration flow has four boundaries:
 
 ```text
-config files
-    |
-    v
-ConfigV1.Info schema             external document contract
-    |
-    v
-Config.Service                   loading, validation, merging and updates
-    |
-    v
-directory-keyed InstanceState    project-specific resolved configuration
-    |
-    v
-Agent / Provider / MCP services  runtime domain APIs
+SCHEMA DEFINITION
+
+ ConfigAgentV1   ConfigProviderV1   ConfigMCPV1   other feature schemas
+       \                 |               /                 /
+        +----------------+--------------+-----------------+
+                                 |
+                                 v
+                         ConfigV1.Info
+                  one external JSON contract
+
+
+CONFIGURATION SOURCES AND MERGING
+
+ remote well-known config
+             |
+             v
+ global config directory
+ config.json -> opencode.json -> opencode.jsonc
+             |
+             v
+ OPENCODE_CONFIG explicit file
+             |
+             v
+ discovered project opencode files
+             |
+             v
+ .opencode directory config, agents, commands and plugins
+             |
+             v
+ OPENCODE_CONFIG_CONTENT
+             |
+             v
+ active account / organization config
+             |
+             v
+ managed config directory -> macOS managed preferences
+             |
+             |  each source: substitute -> parse -> validate -> merge
+             |  later sources override earlier sources
+             v
+       resolved Config.Service state
+             |
+             v
+     loadInstanceState(context)
+
+
+INSTANCE LIFETIME
+
+ InstanceRef
+ { directory, worktree, project }
+              |
+              v
+ ScopedCache<directory, resolved state>
+              |
+              +--> directory A --> resolved config A
+              +--> directory B --> resolved config B
+              |
+              `--> invalidate directory entry on instance disposal
+                                |
+                                v
+                     Config.Service.get()
+
+
+RUNTIME MODULES
+
+ Effect layer graph injects Config.Service
+              |
+              +--> Agent layer -----> Agent.Info / Agent.Service
+              +--> Provider layer --> Provider.Model / Provider.Service
+              +--> MCP layer -------> MCP status, tools and resources
+              `--> LLM layer -------> stream(model, agent, messages, tools)
+                                            |
+                                            v
+                              callers use domain operations and types
+                              instead of parsing config files themselves
 ```
+
+Sources: schema composition [S1] [S2]; config service and layer [S3] [S5];
+source merging [S6] [S7] [S8] [S19] [S20]; instance scope [S9] [S10] [S11];
+runtime services [S12] [S13] [S14] [S15] [S16].
 
 The important qualification is that this is not complete decoupling. Agent,
 Provider, LLM, MCP, and session code still import either `Config.Service` or
@@ -418,7 +485,8 @@ ports.
 
 For code requiring stricter dependency inversion, retain OpenCode's composed
 schema and instance-scoped lifecycle but map the root document at the
-composition boundary:
+composition boundary. The following diagram is a recommendation derived from
+the assessment above, not an excerpt from OpenCode:
 
 ```text
 ConfigV1.Info
@@ -452,3 +520,5 @@ while preserving a single validated user configuration file.
 - [S16] LLM config read: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/llm.ts#L95-L103
 - [S17] Broad config type in overflow calculation: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/overflow.ts#L8-L19
 - [S18] Root config type indexed by MCP: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/mcp/index.ts#L109-L120
+- [S19] Directory config and inline config merge: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L416-L476
+- [S20] Account and managed config merge: https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/config/config.ts#L478-L534
