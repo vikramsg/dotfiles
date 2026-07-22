@@ -1,0 +1,67 @@
+source_roots = ["."]
+exclude = ["tests/", "scripts/"]
+forbid_circular_dependencies = true
+
+[[modules]]
+path = "ocint.cli"
+depends_on = [
+  "ocint.ctx",
+  "ocint.daemon",
+  "ocint.presentation",
+  "ocint.state",
+]
+
+[[modules]]
+path = "ocint.ctx"
+depends_on = [
+  "ocint.presentation",
+  "ocint.opencode",
+  "ocint._models",
+  "ocint._timeutil",
+  "ocint._sqlsafe",
+  "ocint._errors",
+]
+
+[[modules]]
+path = "ocint.daemon"
+depends_on = [
+  "ocint.presentation",
+  "ocint._models",
+]
+
+[[modules]]
+path = "ocint.state"
+depends_on = [
+  "ocint.presentation",
+  "ocint.opencode",
+  "ocint._models",
+  "ocint._timeutil",
+]
+
+[[modules]]
+path = "ocint.presentation"
+depends_on = [
+  "ocint._models",
+]
+
+[[modules]]
+path = "ocint.opencode"
+depends_on = [
+  "ocint._sqlsafe",
+]
+
+[[modules]]
+path = "ocint._models"
+depends_on = []
+
+[[modules]]
+path = "ocint._timeutil"
+depends_on = []
+
+[[modules]]
+path = "ocint._sqlsafe"
+depends_on = []
+
+[[modules]]
+path = "ocint._errors"
+depends_on = []

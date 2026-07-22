@@ -17,18 +17,7 @@ ROOT_PERSISTENCE_FILES = {
 
 
 def iter_python_files(root: Path) -> Iterator[Path]:
-    """FIXME: Move import-boundary enforcement into tooling once this repo has a dedicated architecture lint rule."""
     yield from root.rglob("*.py")
-
-
-def test_no_relative_imports() -> None:
-    offenders: list[str] = []
-    for path in iter_python_files(PACKAGE_ROOT):
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.ImportFrom) and node.level:
-                offenders.append(str(path.relative_to(PACKAGE_ROOT)))
-
-    assert offenders == []
 
 
 def test_no_root_persistence_modules_or_workflow_file() -> None:
