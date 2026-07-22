@@ -21,6 +21,7 @@
 
 1. Give me component map + interface sketch of change
 2. Next give me files changed, and patterns used
+3. First tell me if before this plan we should do a Tidy, First pass and then update plan based on that.
 
 ## Agent requirements
 
