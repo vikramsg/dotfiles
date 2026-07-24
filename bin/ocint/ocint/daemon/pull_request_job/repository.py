@@ -7,14 +7,18 @@ from sqlalchemy import Engine, and_, insert, select, update
 from sqlalchemy.engine import RowMapping
 
 from ocint.daemon.db.schema import job
-from ocint.daemon.models import DirectOrigin, GitHubLogin, Job, JobStage, JobState, ThreadOrigin, WorkRequest
-from ocint.daemon.service import (
+from ocint.daemon.models import DirectOrigin, GitHubLogin, ThreadOrigin
+from ocint.daemon.pull_request_job.models import (
     Checkpoint,
     CommitCheckpoint,
     PromptIntentCheckpoint,
     PromptSubmittedCheckpoint,
     PublicationRefusalCheckpoint,
     PullRequestCheckpoint,
+    PullRequestJob,
+    PullRequestJobRequest,
+    PullRequestJobStage,
+    PullRequestJobState,
     PushCheckpoint,
     SessionCheckpoint,
     StageCheckpoint,
@@ -22,11 +26,11 @@ from ocint.daemon.service import (
 )
 
 
-class ControlRepository:
+class PullRequestJobRepository:
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
 
-    def submit(self, request: WorkRequest) -> Job:
+    def submit(self, request: PullRequestJobRequest) -> PullRequestJob:
         now = datetime.now(UTC).isoformat()
         with self.engine.begin() as connection:
             existing = (
@@ -45,8 +49,8 @@ class ControlRepository:
                     repository=request.repository,
                     title=request.title,
                     prompt=request.prompt,
-                    state=JobState.QUEUED.value,
-                    stage=JobStage.EXECUTION.value,
+                    state=PullRequestJobState.QUEUED.value,
+                    stage=PullRequestJobStage.EXECUTION.value,
                     session_id="",
                     server_url="",
                     worktree_path="",
@@ -72,7 +76,7 @@ class ControlRepository:
             )
         return self.get(identifier)
 
-    def retry(self, previous: Job, request: WorkRequest) -> Job:
+    def retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
         now = datetime.now(UTC).isoformat()
         with self.engine.begin() as connection:
             existing = (
@@ -91,8 +95,8 @@ class ControlRepository:
                     repository=request.repository,
                     title=request.title,
                     prompt=request.prompt,
-                    state=JobState.QUEUED.value,
-                    stage=JobStage.EXECUTION.value,
+                    state=PullRequestJobState.QUEUED.value,
+                    stage=PullRequestJobStage.EXECUTION.value,
                     session_id=previous.session_id,
                     server_url=previous.server_url,
                     worktree_path=str(previous.worktree_path or ""),
@@ -118,24 +122,24 @@ class ControlRepository:
             )
         return self.get(identifier)
 
-    def claim(self, job_id: str) -> Job | None:
+    def claim(self, job_id: str) -> PullRequestJob | None:
         now = datetime.now(UTC).isoformat()
         with self.engine.begin() as connection:
             result = connection.execute(
                 update(job)
-                .where(and_(job.c.id == job_id, job.c.state == JobState.QUEUED.value))
-                .values(state=JobState.RUNNING.value, updated_at=now)
+                .where(and_(job.c.id == job_id, job.c.state == PullRequestJobState.QUEUED.value))
+                .values(state=PullRequestJobState.RUNNING.value, updated_at=now)
             )
         return self.get(job_id) if result.rowcount == 1 else None
 
     def pending_ids(self) -> builtins.list[str]:
         with self.engine.connect() as connection:
             rows = connection.execute(
-                select(job.c.id).where(job.c.state == JobState.QUEUED.value).order_by(job.c.created_at)
+                select(job.c.id).where(job.c.state == PullRequestJobState.QUEUED.value).order_by(job.c.created_at)
             ).scalars()
             return [str(identifier) for identifier in rows]
 
-    def checkpoint(self, job_id: str, checkpoint: Checkpoint) -> Job:
+    def checkpoint(self, job_id: str, checkpoint: Checkpoint) -> PullRequestJob:
         columns: dict[str, str | int] = {"updated_at": datetime.now(UTC).isoformat()}
         match checkpoint:
             case WorktreeCheckpoint(path=path, branch=branch, base_revision=base_revision):
@@ -149,9 +153,9 @@ class ControlRepository:
             case StageCheckpoint(stage=stage):
                 columns["stage"] = stage.value
             case CommitCheckpoint(sha=sha):
-                columns.update(commit_sha=sha, stage=JobStage.PUSH.value)
+                columns.update(commit_sha=sha, stage=PullRequestJobStage.PUSH.value)
             case PushCheckpoint(revision=revision):
-                columns.update(pushed=1, stage=JobStage.PULL_REQUEST.value, base_revision=revision)
+                columns.update(pushed=1, stage=PullRequestJobStage.PULL_REQUEST.value, base_revision=revision)
             case PullRequestCheckpoint(url=url):
                 columns["pull_request_url"] = url
             case PublicationRefusalCheckpoint(reason=reason):
@@ -160,52 +164,52 @@ class ControlRepository:
             connection.execute(update(job).where(job.c.id == job_id).values(**columns))
         return self.get(job_id)
 
-    def _finish(self, job_id: str, state: JobState, error: str = "") -> Job:
+    def _finish(self, job_id: str, state: PullRequestJobState, error: str = "") -> PullRequestJob:
         values: dict[str, str] = {
             "state": state.value,
             "error": error,
             "updated_at": datetime.now(UTC).isoformat(),
         }
-        if state is JobState.COMPLETED:
-            values["stage"] = JobStage.COMPLETE.value
+        if state is PullRequestJobState.COMPLETED:
+            values["stage"] = PullRequestJobStage.COMPLETE.value
         with self.engine.begin() as connection:
             connection.execute(update(job).where(job.c.id == job_id).values(**values))
         return self.get(job_id)
 
-    def complete(self, job_id: str) -> Job:
-        return self._finish(job_id, JobState.COMPLETED)
+    def complete(self, job_id: str) -> PullRequestJob:
+        return self._finish(job_id, PullRequestJobState.COMPLETED)
 
-    def fail(self, job_id: str, error: str) -> Job:
-        return self._finish(job_id, JobState.FAILED, error)
+    def fail(self, job_id: str, error: str) -> PullRequestJob:
+        return self._finish(job_id, PullRequestJobState.FAILED, error)
 
     def requeue(self, job_id: str) -> None:
         with self.engine.begin() as connection:
             connection.execute(
                 update(job)
-                .where(and_(job.c.id == job_id, job.c.state == JobState.RUNNING.value))
-                .values(state=JobState.QUEUED.value, updated_at=datetime.now(UTC).isoformat())
+                .where(and_(job.c.id == job_id, job.c.state == PullRequestJobState.RUNNING.value))
+                .values(state=PullRequestJobState.QUEUED.value, updated_at=datetime.now(UTC).isoformat())
             )
 
     def reconcile(self) -> int:
         with self.engine.begin() as connection:
             result = connection.execute(
                 update(job)
-                .where(job.c.state == JobState.RUNNING.value)
-                .values(state=JobState.QUEUED.value, updated_at=datetime.now(UTC).isoformat())
+                .where(job.c.state == PullRequestJobState.RUNNING.value)
+                .values(state=PullRequestJobState.QUEUED.value, updated_at=datetime.now(UTC).isoformat())
             )
             return result.rowcount
 
-    def get(self, job_id: str) -> Job:
+    def get(self, job_id: str) -> PullRequestJob:
         with self.engine.connect() as connection:
             row = connection.execute(select(job).where(job.c.id == job_id)).mappings().one()
         return self._job(row)
 
-    def list(self, limit: int = 100) -> builtins.list[Job]:
+    def list(self, limit: int = 100) -> builtins.list[PullRequestJob]:
         with self.engine.connect() as connection:
             rows = connection.execute(select(job).order_by(job.c.created_at.desc()).limit(limit)).mappings().all()
         return [self._job(row) for row in rows]
 
-    def _job(self, row: RowMapping) -> Job:
+    def _job(self, row: RowMapping) -> PullRequestJob:
         path = str(row["worktree_path"])
         origin = (
             ThreadOrigin(
@@ -215,15 +219,15 @@ class ControlRepository:
             if str(row["origin_kind"]) == "thread"
             else DirectOrigin()
         )
-        return Job(
+        return PullRequestJob(
             id=str(row["id"]),
             idempotency_key=str(row["idempotency_key"]),
             actor=GitHubLogin(str(row["actor"])),
             repository=str(row["repository"]),
             title=str(row["title"]),
             prompt=str(row["prompt"]),
-            state=JobState(str(row["state"])),
-            stage=JobStage(str(row["stage"])),
+            state=PullRequestJobState(str(row["state"])),
+            stage=PullRequestJobStage(str(row["stage"])),
             session_id=str(row["session_id"]),
             server_url=str(row["server_url"]),
             worktree_path=Path(path) if path else None,

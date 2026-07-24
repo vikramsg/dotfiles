@@ -7,43 +7,6 @@ import tomllib
 from pathlib import Path
 
 
-def test_daemon_has_only_intended_modules() -> None:
-    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-
-    assert {path.name for path in daemon.glob("*.py")} == {
-        "__init__.py",
-        "api.py",
-        "cli.py",
-        "config.py",
-        "git.py",
-        "logging.py",
-        "models.py",
-        "opencode.py",
-        "repository.py",
-        "run.py",
-        "service.py",
-    }
-
-
-def test_daemon_core_does_not_import_frameworks_or_concrete_adapters() -> None:
-    # GIVEN
-    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-    prohibited = {"aiohttp", "alembic", "fastapi", "httpx", "sqlite3", "sqlalchemy", "uvicorn"}
-
-    # WHEN
-    imported: set[str] = set()
-    for module in (daemon / "config.py", daemon / "service.py"):
-        tree = ast.parse(module.read_text())
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imported.update(alias.name.split(".")[0] for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module is not None:
-                imported.add(node.module.split(".")[0])
-
-    # THEN
-    assert imported.isdisjoint(prohibited)
-
-
 def test_prohibited_legacy_daemon_modules_are_absent() -> None:
     # GIVEN
     daemon = Path(__file__).parents[2] / "ocint" / "daemon"
@@ -72,6 +35,42 @@ names = [
     "ocint.daemon.github.service",
     "ocint.daemon.github.integration",
     "ocint.daemon.github.runtime",
+]
+print(json.dumps([name for name in names if name in sys.modules]))
+"""
+
+    # WHEN
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=package,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    # THEN
+    assert json.loads(result.stdout) == []
+
+
+def test_daemon_feature_facades_do_not_initialize_runtime_adapters() -> None:
+    # GIVEN
+    package = Path(__file__).parents[2]
+    script = """
+import json
+import sys
+import ocint.daemon.config
+import ocint.daemon.git
+import ocint.daemon.git.config
+import ocint.daemon.github
+import ocint.daemon.opencode
+import ocint.daemon.opencode.config
+import ocint.daemon.pull_request_job
+names = [
+    "ocint.daemon.git.service",
+    "ocint.daemon.opencode.service",
+    "ocint.daemon.pull_request_job.repository",
+    "ocint.daemon.pull_request_job.run",
+    "sqlalchemy",
 ]
 print(json.dumps([name for name in names if name in sys.modules]))
 """

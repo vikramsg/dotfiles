@@ -2,10 +2,12 @@ import re
 from io import StringIO
 from pathlib import Path
 
-from ocint.daemon.config import DaemonConfig, GitConfig, GitHubConfig, OpenCodeConfig, RepositoryConfig
+from ocint.daemon.config import DaemonConfig, GitHubConfig, RepositoryConfig
+from ocint.daemon.git import GitConfig
 from ocint.daemon.lch.render import render_status
 from ocint.daemon.lch.systemd import LifecycleStatus
 from ocint.daemon.models import GitHubLogin
+from ocint.daemon.opencode import OpenCodeConfig
 from rich.console import Console
 
 

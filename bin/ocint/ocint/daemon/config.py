@@ -1,40 +1,28 @@
 from __future__ import annotations
 
-import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ocint._models import CliOutput
+from ocint.daemon.git import GitConfig
 from ocint.daemon.github import GitHubConfig
-from ocint.daemon.models import GitHubLogin
+from ocint.daemon.models import GitHubLogin, GitRepository
+from ocint.daemon.opencode import OpenCodeConfig
 
 
-class RepositoryConfig(BaseModel):
+class RepositoryConfig(GitRepository):
     model_config = ConfigDict(frozen=True)
 
-    name: str
-    remote_url: str
-    default_branch: str = "main"
     github_repository: str
     author_name: str
     author_email: str
     actors: frozenset[GitHubLogin] = frozenset()
     checks: tuple[tuple[str, ...], ...] = Field(default_factory=tuple)
-
-    @field_validator("remote_url")
-    @classmethod
-    def validate_ssh_remote(cls, value: str) -> str:
-        scp_style = re.fullmatch(r"[^@\s/:]+@[^\s/:]+:.+", value)
-        ssh_url = re.fullmatch(r"ssh://(?:[^@/\s]+@)?[^/:\s]+(?::[0-9]+)?/.+", value)
-        if scp_style is None and ssh_url is None:
-            raise ValueError("repository remote_url must use SSH (git@host:path or ssh://host/path)")
-        return value
 
 
 class SchedulerConfig(BaseModel):
@@ -61,44 +49,11 @@ class LoggingConfig(BaseModel):
     backup_count: int = Field(default=5, ge=1)
 
 
-class OpenCodeConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    server_url: HttpUrl = HttpUrl("http://127.0.0.1:4097")
-    username: str = "opencode"
-    request_timeout_seconds: int = Field(default=30, ge=1)
-    expected_version: Literal["1.17.20"] = "1.17.20"
-    executable: Path = Path("/usr/bin/opencode")
-    config_file: Path
-    xdg_config_home: Path
-    xdg_data_home: Path
-    startup_timeout_seconds: int = Field(default=120, ge=1)
-    shutdown_timeout_seconds: int = Field(default=10, ge=1)
-
-    @field_validator("executable", "config_file", "xdg_config_home", "xdg_data_home")
-    @classmethod
-    def expand_path(cls, value: Path) -> Path:
-        return value.expanduser().resolve()
-
-
 class ApiConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     host: str = "127.0.0.1"
     port: int = Field(default=8732, ge=1, le=65535)
-
-
-class GitConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    ssh_executable: Path
-    identity_file: Path
-    known_hosts_file: Path
-
-    @field_validator("ssh_executable", "identity_file", "known_hosts_file")
-    @classmethod
-    def expand_path(cls, value: Path) -> Path:
-        return value.expanduser().resolve()
 
 
 class DaemonConfig(BaseModel):

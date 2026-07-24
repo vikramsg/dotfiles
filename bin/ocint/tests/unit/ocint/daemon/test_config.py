@@ -7,9 +7,9 @@ from ocint.daemon.config import (
     DaemonSettings,
     LifecycleConfig,
     LoggingConfig,
-    OpenCodeConfig,
     RepositoryConfig,
 )
+from ocint.daemon.opencode import OpenCodeConfig
 from ocint.presentation import default_cli_context
 from pydantic import ValidationError
 

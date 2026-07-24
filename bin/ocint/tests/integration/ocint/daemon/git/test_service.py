@@ -7,9 +7,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from ocint.daemon.config import RepositoryConfig
-from ocint.daemon.git import GitManager
-from ocint.daemon.service import Worktree
+from ocint.daemon.git import GitConfig, GitRuntimeConfig
+from ocint.daemon.git.service import GitManager
+from ocint.daemon.models import GitRepository, Worktree
 
 
 @pytest.mark.asyncio
@@ -53,22 +53,20 @@ raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
     known_hosts = tmp_path / "known_hosts"
     known_hosts.write_text("example key")
     manager = GitManager(
-        tmp_path / "mirrors",
-        tmp_path / "worktrees",
-        {"PATH": path, "LANG": "C.UTF-8", "CI": "1"},
-        {"PATH": path, "LANG": "C.UTF-8", "GIT_TERMINAL_PROMPT": "0"},
-        ssh,
-        identity,
-        known_hosts,
-        30,
-        65536,
+        GitRuntimeConfig(
+            mirror_root=tmp_path / "mirrors",
+            worktree_root=tmp_path / "worktrees",
+            validation_environment={"PATH": path, "LANG": "C.UTF-8", "CI": "1"},
+            git_environment={"PATH": path, "LANG": "C.UTF-8", "GIT_TERMINAL_PROMPT": "0"},
+            transport=GitConfig(ssh_executable=ssh, identity_file=identity, known_hosts_file=known_hosts),
+            timeout_seconds=30,
+            output_bytes=65536,
+        )
     )
-    repository = RepositoryConfig(
+    repository = GitRepository(
         name="repo",
         remote_url=f"ssh://example{remote}",
-        github_repository="owner/repo",
-        author_name="Daemon Agent",
-        author_email="daemon@example.test",
+        default_branch="main",
     )
 
     # WHEN
@@ -78,7 +76,7 @@ raise SystemExit(subprocess.run([{real_git!r}, *sys.argv[1:]]).returncode)
     )
     (worktree.path / "result.txt").write_text("result\n")
     await manager.validate(worktree, ((sys.executable, "-c", "import os; assert 'SSH_AUTH_SOCK' not in os.environ"),))
-    commit = await manager.commit(worktree, "result", repository.author_name, repository.author_email)
+    commit = await manager.commit(worktree, "result", "Daemon Agent", "daemon@example.test")
     await manager.push(worktree)
     advanced_baseline = Worktree(path=worktree.path, branch=worktree.branch, base_revision=commit)
     author = subprocess.run(
@@ -148,22 +146,20 @@ async def test_reprovision_preserves_uncheckpointed_worktree_after_remote_advanc
     known_hosts = tmp_path / "known_hosts"
     known_hosts.write_text("example key")
     manager = GitManager(
-        tmp_path / "mirrors",
-        tmp_path / "worktrees",
-        {"PATH": path, "LANG": "C.UTF-8", "CI": "1"},
-        {"PATH": path, "LANG": "C.UTF-8", "GIT_TERMINAL_PROMPT": "0"},
-        ssh,
-        identity,
-        known_hosts,
-        30,
-        65536,
+        GitRuntimeConfig(
+            mirror_root=tmp_path / "mirrors",
+            worktree_root=tmp_path / "worktrees",
+            validation_environment={"PATH": path, "LANG": "C.UTF-8", "CI": "1"},
+            git_environment={"PATH": path, "LANG": "C.UTF-8", "GIT_TERMINAL_PROMPT": "0"},
+            transport=GitConfig(ssh_executable=ssh, identity_file=identity, known_hosts_file=known_hosts),
+            timeout_seconds=30,
+            output_bytes=65536,
+        )
     )
-    repository = RepositoryConfig(
+    repository = GitRepository(
         name="repo",
         remote_url=f"ssh://example{remote}",
-        github_repository="owner/repo",
-        author_name="Daemon Agent",
-        author_email="daemon@example.test",
+        default_branch="main",
     )
     original = await manager.provision(repository, "job")
     (seed / "README.md").write_text("advanced\n")

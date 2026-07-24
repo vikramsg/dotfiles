@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 from sqlalchemy import Engine, Select, and_, exists, insert, or_, select, update
 from sqlalchemy.engine import Connection, RowMapping
 
-from ocint.daemon.db.schema import job, task, task_job, task_message, thread, thread_message
-from ocint.daemon.models import GitHubLogin, JobState, MessageClassification
+from ocint.daemon.db.schema import task, task_job, task_message, thread, thread_message
+from ocint.daemon.models import GitHubLogin, MessageClassification
 from ocint.daemon.tasks.models import (
     FailedTaskClaim,
     FailedTaskRetry,
@@ -236,24 +236,18 @@ class TaskRepository:
             connection.execute(insert(task_job).values(task_id=task_id, job_id=job_id, attempt=attempt))
             return RetryAttachment.ATTACHED
 
-    def reusable_job_id(self, thread_id: int) -> str:
+    def reusable_job_ids(self, thread_id: int) -> tuple[str, ...]:
         with self.engine.connect() as connection:
-            value = (
-                connection.execute(
-                    select(task_job.c.job_id)
-                    .join(task, task.c.id == task_job.c.task_id)
-                    .join(job, job.c.id == task_job.c.job_id)
-                    .where(
-                        task.c.thread_id == thread_id,
-                        task.c.state == TaskState.ADDRESSED.value,
-                        job.c.state == JobState.COMPLETED.value,
-                    )
-                    .order_by(task.c.id.desc(), task_job.c.attempt.desc())
+            values = connection.execute(
+                select(task_job.c.job_id)
+                .join(task, task.c.id == task_job.c.task_id)
+                .where(
+                    task.c.thread_id == thread_id,
+                    task.c.state == TaskState.ADDRESSED.value,
                 )
-                .scalars()
-                .first()
-            )
-        return str(value) if value is not None else ""
+                .order_by(task.c.id.desc(), task_job.c.attempt.desc())
+            ).scalars()
+        return tuple(str(value) for value in values)
 
     def get(self, task_id: int) -> Task:
         with self.engine.connect() as connection:

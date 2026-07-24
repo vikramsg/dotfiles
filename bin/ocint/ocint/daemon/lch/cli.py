@@ -14,7 +14,7 @@ from ocint.daemon.lch.setup import discover, setup
 from ocint.daemon.lch.systemd import SubprocessRunner, SystemdLifecycle, SystemdPaths, installed_ocint
 from ocint.daemon.logging import daemon_log_settings
 from ocint.daemon.models import OpenCodeAttachment
-from ocint.daemon.repository import ControlRepository
+from ocint.daemon.pull_request_job import create_pull_request_job_repository
 
 
 def lifecycle(context: DaemonContext) -> SystemdLifecycle:
@@ -131,7 +131,7 @@ def list_command(context: DaemonContext, limit: int) -> None:
         raise click.ClickException(f"daemon database does not exist: {config.database_path}")
     engine = create_daemon_engine(config.database_path)
     try:
-        context.output.display(render_jobs(ControlRepository(engine).list(limit=limit)))
+        context.output.display(render_jobs(create_pull_request_job_repository(engine).list(limit=limit)))
     finally:
         engine.dispose()
 
@@ -147,7 +147,7 @@ def job_status_command(context: DaemonContext, job_id: str) -> None:
     engine = create_daemon_engine(config.database_path)
     try:
         try:
-            job = ControlRepository(engine).get(job_id)
+            job = create_pull_request_job_repository(engine).get(job_id)
         except NoResultFound as error:
             raise click.ClickException(f"daemon job not found: {job_id}") from error
         context.output.display(render_job(job))

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ocint.daemon.config import DaemonConfig
 from ocint.daemon.lch.systemd import LifecycleStatus
-from ocint.daemon.models import Job, JobState
+from ocint.daemon.pull_request_job import PullRequestJob, PullRequestJobState
 from ocint.presentation import Presentation, Text, data_table, document, key_value_section
 
 
@@ -61,7 +61,7 @@ def render_status(status: LifecycleStatus, config: DaemonConfig) -> Presentation
     )
 
 
-def render_jobs(jobs: list[Job]) -> Presentation:
+def render_jobs(jobs: list[PullRequestJob]) -> Presentation:
     return document(
         "Daemon jobs",
         data_table(
@@ -81,7 +81,7 @@ def render_jobs(jobs: list[Job]) -> Presentation:
     )
 
 
-def render_job(job: Job) -> Presentation:
+def render_job(job: PullRequestJob) -> Presentation:
     sections: list[Presentation] = [
         key_value_section(
             "Job",
@@ -113,7 +113,7 @@ def render_job(job: Job) -> Presentation:
             ],
         ),
     ]
-    if job.state is JobState.RUNNING and job.session_id:
+    if job.state is PullRequestJobState.RUNNING and job.session_id:
         sections.append(
             key_value_section(
                 "Actions",
@@ -123,12 +123,12 @@ def render_job(job: Job) -> Presentation:
     return document("Daemon job status", *sections)
 
 
-def _job_state(state: JobState) -> Text:
+def _job_state(state: PullRequestJobState) -> Text:
     style = {
-        JobState.QUEUED: "yellow",
-        JobState.RUNNING: "cyan",
-        JobState.COMPLETED: "green",
-        JobState.FAILED: "red",
+        PullRequestJobState.QUEUED: "yellow",
+        PullRequestJobState.RUNNING: "cyan",
+        PullRequestJobState.COMPLETED: "green",
+        PullRequestJobState.FAILED: "red",
     }[state]
     return _styled(state.value, style)
 

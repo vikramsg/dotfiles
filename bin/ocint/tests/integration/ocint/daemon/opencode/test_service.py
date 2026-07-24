@@ -7,8 +7,9 @@ import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp import web
-from ocint.daemon.opencode import OpenCodeClient
-from pydantic import BaseModel, ConfigDict, Field
+from ocint.daemon.opencode import OpenCodeConfig, OpenCodeRuntimeConfig
+from ocint.daemon.opencode.service import OpenCodeClient
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
 class WirePart(BaseModel):
@@ -128,27 +129,32 @@ async def opencode_server(unused_tcp_port: int) -> AsyncIterator[OpenCodeHttpFak
     await server.close()
 
 
+@pytest.fixture
+def opencode_config(tmp_path: Path, opencode_server: OpenCodeHttpFake) -> OpenCodeRuntimeConfig:
+    return OpenCodeRuntimeConfig(
+        service=OpenCodeConfig(
+            server_url=HttpUrl(f"http://127.0.0.1:{opencode_server.port}"),
+            request_timeout_seconds=1,
+            executable=tmp_path / "opencode",
+            config_file=tmp_path / "config.json",
+            xdg_config_home=tmp_path / "isolated-config",
+            xdg_data_home=tmp_path / "existing-data",
+            startup_timeout_seconds=1,
+            shutdown_timeout_seconds=1,
+        ),
+        password="ephemeral",
+        execution_timeout_seconds=3,
+        process_path="/usr/bin:/bin",
+        process_lang="C.UTF-8",
+    )
+
+
 @pytest.mark.asyncio
 async def test_immediate_idle_requires_completed_assistant_evidence(
-    tmp_path: Path, opencode_server: OpenCodeHttpFake
+    tmp_path: Path, opencode_server: OpenCodeHttpFake, opencode_config: OpenCodeRuntimeConfig
 ) -> None:
     # GIVEN
-    client = OpenCodeClient(
-        f"http://127.0.0.1:{opencode_server.port}",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "config.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
-    )
+    client = OpenCodeClient(opencode_config)
     client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
 
     # WHEN
@@ -164,27 +170,12 @@ async def test_immediate_idle_requires_completed_assistant_evidence(
 
 @pytest.mark.asyncio
 async def test_incomplete_active_prompt_is_observed_as_processing(
-    tmp_path: Path, opencode_server: OpenCodeHttpFake
+    tmp_path: Path, opencode_server: OpenCodeHttpFake, opencode_config: OpenCodeRuntimeConfig
 ) -> None:
     # GIVEN
     opencode_server.interrupt()
     opencode_server.session_status = "busy"
-    client = OpenCodeClient(
-        f"http://127.0.0.1:{opencode_server.port}",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "config.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
-    )
+    client = OpenCodeClient(opencode_config)
     client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
 
     # WHEN
@@ -201,27 +192,15 @@ async def test_incomplete_active_prompt_is_observed_as_processing(
 @pytest.mark.parametrize("status", ["idle", None])
 @pytest.mark.asyncio
 async def test_incomplete_inactive_prompt_is_observed_as_interrupted(
-    tmp_path: Path, opencode_server: OpenCodeHttpFake, status: str | None
+    tmp_path: Path,
+    opencode_server: OpenCodeHttpFake,
+    opencode_config: OpenCodeRuntimeConfig,
+    status: str | None,
 ) -> None:
     # GIVEN
     opencode_server.interrupt()
     opencode_server.session_status = status
-    client = OpenCodeClient(
-        f"http://127.0.0.1:{opencode_server.port}",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "config.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
-    )
+    client = OpenCodeClient(opencode_config)
     client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
 
     # WHEN
@@ -237,25 +216,10 @@ async def test_incomplete_inactive_prompt_is_observed_as_interrupted(
 
 @pytest.mark.asyncio
 async def test_agent_execution_can_exceed_individual_request_timeout(
-    tmp_path: Path, opencode_server: OpenCodeHttpFake
+    tmp_path: Path, opencode_server: OpenCodeHttpFake, opencode_config: OpenCodeRuntimeConfig
 ) -> None:
     # GIVEN
-    client = OpenCodeClient(
-        f"http://127.0.0.1:{opencode_server.port}",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "config.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
-    )
+    client = OpenCodeClient(opencode_config)
     client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
     waiting = asyncio.create_task(client.wait_for_completion(tmp_path, "session", "perform work"))
 
@@ -271,26 +235,11 @@ async def test_agent_execution_can_exceed_individual_request_timeout(
 
 @pytest.mark.asyncio
 async def test_terminal_assistant_error_fails_without_waiting_for_execution_timeout(
-    tmp_path: Path, opencode_server: OpenCodeHttpFake
+    tmp_path: Path, opencode_server: OpenCodeHttpFake, opencode_config: OpenCodeRuntimeConfig
 ) -> None:
     # GIVEN
     opencode_server.fail()
-    client = OpenCodeClient(
-        f"http://127.0.0.1:{opencode_server.port}",
-        "opencode",
-        "ephemeral",
-        1,
-        30,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "config.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
-    )
+    client = OpenCodeClient(opencode_config.model_copy(update={"execution_timeout_seconds": 30}))
     client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
 
     # WHEN / THEN
@@ -304,27 +253,12 @@ async def test_terminal_assistant_error_fails_without_waiting_for_execution_time
 
 @pytest.mark.asyncio
 async def test_active_retryable_assistant_error_remains_in_progress(
-    tmp_path: Path, opencode_server: OpenCodeHttpFake
+    tmp_path: Path, opencode_server: OpenCodeHttpFake, opencode_config: OpenCodeRuntimeConfig
 ) -> None:
     # GIVEN
     opencode_server.fail(retryable=True)
     opencode_server.session_status = "busy"
-    client = OpenCodeClient(
-        f"http://127.0.0.1:{opencode_server.port}",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "config.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
-    )
+    client = OpenCodeClient(opencode_config)
     client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
 
     # WHEN
@@ -339,29 +273,14 @@ async def test_active_retryable_assistant_error_remains_in_progress(
 
 @pytest.mark.asyncio
 async def test_completion_requires_the_managed_prompt_to_be_the_latest_user_turn(
-    tmp_path: Path, opencode_server: OpenCodeHttpFake
+    tmp_path: Path, opencode_server: OpenCodeHttpFake, opencode_config: OpenCodeRuntimeConfig
 ) -> None:
     # GIVEN
     opencode_server.complete()
     opencode_server.messages.append(
         WireMessage(info=WireInfo(role="user"), parts=[WirePart(type="text", text="different work")])
     )
-    client = OpenCodeClient(
-        f"http://127.0.0.1:{opencode_server.port}",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "config.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
-    )
+    client = OpenCodeClient(opencode_config)
     client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
 
     # WHEN
@@ -376,20 +295,22 @@ async def test_completion_requires_the_managed_prompt_to_be_the_latest_user_turn
 def test_child_process_uses_isolated_config_and_existing_auth_data_home(tmp_path: Path) -> None:
     # GIVEN
     client = OpenCodeClient(
-        "http://127.0.0.1:4096",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        tmp_path / "opencode",
-        tmp_path / "isolated-config" / "opencode" / "opencode.json",
-        tmp_path / "isolated-config",
-        tmp_path / "existing-data",
-        1,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
+        OpenCodeRuntimeConfig(
+            service=OpenCodeConfig(
+                server_url=HttpUrl("http://127.0.0.1:4096"),
+                request_timeout_seconds=1,
+                executable=tmp_path / "opencode",
+                config_file=tmp_path / "isolated-config" / "opencode" / "opencode.json",
+                xdg_config_home=tmp_path / "isolated-config",
+                xdg_data_home=tmp_path / "existing-data",
+                startup_timeout_seconds=1,
+                shutdown_timeout_seconds=1,
+            ),
+            password="ephemeral",
+            execution_timeout_seconds=3,
+            process_path="/usr/bin:/bin",
+            process_lang="C.UTF-8",
+        )
     )
 
     # WHEN
@@ -443,20 +364,22 @@ HTTPServer(("127.0.0.1", port), Handler).serve_forever()
     )
     executable.chmod(0o755)
     client = OpenCodeClient(
-        f"http://127.0.0.1:{unused_tcp_port}",
-        "opencode",
-        "ephemeral",
-        1,
-        3,
-        "1.17.20",
-        executable,
-        tmp_path / "isolated-config" / "opencode" / "opencode.json",
-        tmp_path / "isolated-config",
-        tmp_path / "isolated-data",
-        5,
-        1,
-        "/usr/bin:/bin",
-        "C.UTF-8",
+        OpenCodeRuntimeConfig(
+            service=OpenCodeConfig(
+                server_url=HttpUrl(f"http://127.0.0.1:{unused_tcp_port}"),
+                request_timeout_seconds=1,
+                executable=executable,
+                config_file=tmp_path / "isolated-config" / "opencode" / "opencode.json",
+                xdg_config_home=tmp_path / "isolated-config",
+                xdg_data_home=tmp_path / "isolated-data",
+                startup_timeout_seconds=5,
+                shutdown_timeout_seconds=1,
+            ),
+            password="ephemeral",
+            execution_timeout_seconds=3,
+            process_path="/usr/bin:/bin",
+            process_lang="C.UTF-8",
+        )
     )
 
     # WHEN

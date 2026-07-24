@@ -15,7 +15,7 @@ from ocint.daemon import logging as daemon_logging
 from ocint.daemon.api import create_api_router
 from ocint.daemon.config import DaemonConfig, DaemonContext, LoggingConfig
 from ocint.daemon.db import create_daemon_engine, current_daemon_head_revision, migrate_daemon_db
-from ocint.daemon.git import GitManager
+from ocint.daemon.git import GitRuntimeConfig, create_git_manager
 from ocint.daemon.github import (
     GitHubGateway,
     GitHubRepositoryPolicies,
@@ -23,10 +23,16 @@ from ocint.daemon.github import (
     open_github_service,
 )
 from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle
-from ocint.daemon.opencode import OpenCodeClient
-from ocint.daemon.repository import ControlRepository
+from ocint.daemon.models import GitRepository
+from ocint.daemon.opencode import OpenCodeRuntimeConfig, create_opencode_client
+from ocint.daemon.pull_request_job import (
+    PullRequestJobConfig,
+    RepositoryPolicy,
+    SchedulerPolicy,
+    create_pull_request_job_repository,
+    create_pull_request_job_runner,
+)
 from ocint.daemon.run import serve_bounded, wait_for_idle
-from ocint.daemon.service import JobExecutor
 from ocint.daemon.tasks import TaskCoordinator
 from ocint.daemon.tasks.repository import TaskRepository
 
@@ -109,7 +115,7 @@ def create_daemon_app(context: DaemonContext, github: GitHubGateway) -> DaemonAp
         raise ValueError("OCINT_DAEMON_API_TOKEN is required")
     migrate_daemon_db(config.database_path)
     engine = create_daemon_engine(config.database_path)
-    repository = ControlRepository(engine)
+    repository = create_pull_request_job_repository(engine)
     validation_environment = {
         "PATH": context.settings.execution_path,
         "LANG": context.settings.execution_lang,
@@ -120,35 +126,50 @@ def create_daemon_app(context: DaemonContext, github: GitHubGateway) -> DaemonAp
         "LANG": context.settings.execution_lang,
         "GIT_TERMINAL_PROMPT": "0",
     }
-    git = GitManager(
-        config.mirror_root,
-        config.worktree_root,
-        validation_environment,
-        git_environment,
-        config.git.ssh_executable,
-        config.git.identity_file,
-        config.git.known_hosts_file,
-        config.scheduler.command_timeout_seconds,
-        config.scheduler.command_output_bytes,
+    git = create_git_manager(
+        GitRuntimeConfig(
+            mirror_root=config.mirror_root,
+            worktree_root=config.worktree_root,
+            validation_environment=validation_environment,
+            git_environment=git_environment,
+            transport=config.git,
+            timeout_seconds=config.scheduler.command_timeout_seconds,
+            output_bytes=config.scheduler.command_output_bytes,
+        )
     )
-    opencode = OpenCodeClient(
-        str(config.opencode.server_url),
-        config.opencode.username,
-        secrets.token_urlsafe(32),
-        config.opencode.request_timeout_seconds,
-        config.scheduler.job_timeout_seconds,
-        config.opencode.expected_version,
-        config.opencode.executable,
-        config.opencode.config_file,
-        config.opencode.xdg_config_home,
-        config.opencode.xdg_data_home,
-        config.opencode.startup_timeout_seconds,
-        config.opencode.shutdown_timeout_seconds,
-        context.settings.execution_path,
-        context.settings.execution_lang,
+    opencode = create_opencode_client(
+        OpenCodeRuntimeConfig(
+            service=config.opencode,
+            password=secrets.token_urlsafe(32),
+            execution_timeout_seconds=config.scheduler.job_timeout_seconds,
+            process_path=context.settings.execution_path,
+            process_lang=context.settings.execution_lang,
+        )
     )
     tasks = TaskRepository(engine)
-    executor = JobExecutor(config, repository, opencode, git, github)
+    job_config = PullRequestJobConfig(
+        repositories=tuple(
+            RepositoryPolicy(
+                git_repository=GitRepository(
+                    name=item.name,
+                    remote_url=item.remote_url,
+                    default_branch=item.default_branch,
+                ),
+                github_repository=item.github_repository,
+                author_name=item.author_name,
+                author_email=item.author_email,
+                actors=item.actors,
+                checks=item.checks,
+            )
+            for item in config.repositories
+        ),
+        scheduler=SchedulerPolicy(
+            capacity=config.scheduler.capacity,
+            job_timeout_seconds=config.scheduler.job_timeout_seconds,
+            shutdown_timeout_seconds=config.scheduler.shutdown_timeout_seconds,
+        ),
+    )
+    executor = create_pull_request_job_runner(job_config, repository, opencode, git, github)
     coordinator = TaskCoordinator(github, tasks, executor)
     shutdown_event = asyncio.Event()
 

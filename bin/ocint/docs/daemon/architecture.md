@@ -22,19 +22,35 @@ an unchanged idle interval. It is not a permanently running queue worker.
 | Module | Responsibility |
 | --- | --- |
 | `cli.py` | Click composition, concrete dependencies, and FastAPI lifespan |
-| `config.py` | Typed policy, paths, environment settings, and validation |
+| `config.py` | Aggregate TOML shape, daemon lifecycle policy, paths, and validation |
 | `api.py` | Bearer authentication, control routes, and live attach metadata |
-| `repository.py` | Durable job submission, checkpoints, queries, and recovery |
-| `service.py` | Capacity, authorization, execution stages, and shutdown draining |
-| `opencode.py` | Private OpenCode process, sessions, prompts, status, and SSE |
-| `git.py` | Mirrors, worktrees, checks, commits, and SSH pushes |
+| `pull_request_job/` | Durable request, job state, policy, checkpoints, scheduling, and the complete publication workflow |
+| `opencode/` | OpenCode-owned config plus the independent process, session, prompt, status, and SSE adapter |
+| `git/` | Git-owned config plus the independent mirror, worktree, validation, commit, and SSH push adapter |
 | `github/` | Issue observation, authorization, replies, and pull requests |
 | `tasks/` | Provider-neutral thread, message, task, and retry coordination |
 | `lch/` | Linux user-systemd setup and local operator commands |
 | `db/` | SQLite policy, schema, and Alembic migrations |
 
-The CLI is the composition root. Services receive narrow protocols instead of
-constructing concrete repositories or clients.
+The CLI is the composition root. It translates the aggregate daemon config into
+the narrow `pull_request_job` policy and injects the Git, OpenCode, GitHub, and
+SQLite adapters. Runtime pull-request-job code never receives `DaemonConfig`.
+
+```text
+ api.py --------> pull_request_job <-------- tasks/
+                       |
+                       v
+                 daemon.models
+                  ^     ^     ^
+                  |     |     |
+               git/ opencode/ github/
+
+ cli.py ---- constructs and injects every concrete adapter ----^
+```
+
+Tasks own `task_job` associations but do not query the physical `job` table.
+They pass candidate job IDs through their consumer-owned pull-request-job
+gateway, which decides whether a completed job is reusable.
 
 The complete execution path remains visible in one diagram:
 
@@ -47,7 +63,7 @@ The complete execution path remains visible in one diagram:
     |
     | create asyncio task; wait for capacity semaphore
     v
- JobExecutor
+ PullRequestJobRunner
     |
     +--> managed Git mirror
     |       |

@@ -6,7 +6,8 @@ from typing import Annotated, Protocol
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
 
-from ocint.daemon.models import Job, JobState, OpenCodeAttachment, WorkRequest
+from ocint.daemon.models import OpenCodeAttachment
+from ocint.daemon.pull_request_job import PullRequestJob, PullRequestJobRequest, PullRequestJobState
 
 
 class HealthResponse(BaseModel):
@@ -29,8 +30,8 @@ class JobResponse(BaseModel):
 
 
 class JobQueries(Protocol):
-    def get(self, job_id: str) -> Job: ...
-    def list(self, limit: int = 100) -> builtins.list[Job]: ...
+    def get(self, job_id: str) -> PullRequestJob: ...
+    def list(self, limit: int = 100) -> builtins.list[PullRequestJob]: ...
 
 
 class OpenCodeConnection(Protocol):
@@ -41,7 +42,7 @@ class OpenCodeConnection(Protocol):
 
 def create_api_router(
     queries: JobQueries,
-    submit: Callable[[WorkRequest], Job],
+    submit: Callable[[PullRequestJobRequest], PullRequestJob],
     token: str,
     opencode: OpenCodeConnection,
 ) -> APIRouter:
@@ -61,7 +62,7 @@ def create_api_router(
         return HealthResponse(status="ready")
 
     @router.post("/api/jobs", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
-    async def submit_job(work: WorkRequest, _authenticated: authenticated) -> JobResponse:
+    async def submit_job(work: PullRequestJobRequest, _authenticated: authenticated) -> JobResponse:
         try:
             return response(submit(work))
         except PermissionError as error:
@@ -87,7 +88,7 @@ def create_api_router(
         except Exception as error:
             raise HTTPException(status_code=404, detail="job not found") from error
         if (
-            item.state is not JobState.RUNNING
+            item.state is not PullRequestJobState.RUNNING
             or not item.session_id
             or item.worktree_path is None
             or item.server_url != opencode.server_url
@@ -104,7 +105,7 @@ def create_api_router(
     return router
 
 
-def response(item: Job) -> JobResponse:
+def response(item: PullRequestJob) -> JobResponse:
     return JobResponse(
         id=item.id,
         state=item.state.value,

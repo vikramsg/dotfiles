@@ -13,9 +13,9 @@ from ocint.daemon.models import (
     PublicationResult,
     ReplyRequest,
     ThreadObservations,
-    WorkRequest,
 )
-from ocint.daemon.repository import ControlRepository
+from ocint.daemon.pull_request_job import PullRequestJobRequest
+from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
 from ocint.presentation import default_cli_context
 
 
@@ -56,10 +56,10 @@ agent_actor = "maintainer"
 ''')
     migrate_daemon_db(database)
     engine = create_daemon_engine(database)
-    repository = ControlRepository(engine)
+    repository = PullRequestJobRepository(engine)
     jobs = [
         repository.submit(
-            WorkRequest(
+            PullRequestJobRequest(
                 idempotency_key=f"key-{number}",
                 actor=GitHubLogin("maintainer"),
                 repository="repo",
