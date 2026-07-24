@@ -111,7 +111,7 @@ async def test_observations_are_ingested_before_task_work_is_scheduled(tmp_path:
     assert task is not None
     job = control.get(tasks.latest_job_id(task.id))
     assert isinstance(job.origin, ThreadOrigin)
-    assert job.title == "Make the change"
+    assert job.title == "ocint: Make the change"
     assert job.origin.source_thread_id == thread.source_id
     assert job.origin.source_anchor_id == "github:owner/repo:issue:5"
     engine.dispose()
