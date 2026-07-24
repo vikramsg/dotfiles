@@ -68,6 +68,10 @@ class DoctorRunner:
             return CommandResult(stdout="recognizable-gh-token\n")
         raise AssertionError(command)
 
+    def run_interactive(self, arguments: Sequence[str], environment: Mapping[str, str]) -> None:
+        _ = (arguments, environment)
+        raise AssertionError("not used")
+
 
 @dataclass
 class DoctorFixture:

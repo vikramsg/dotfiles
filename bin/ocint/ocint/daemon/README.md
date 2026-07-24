@@ -1,7 +1,7 @@
 # ocint Daemon Package
 
 ```text
-daemon package -> complete reference -> from-scratch workflow -> lch operations
+daemon package -> concise index -> focused references -> lch operations
 ```
 
 The daemon is a FastAPI application served directly by Uvicorn. It persists
@@ -13,8 +13,11 @@ lifecycle and job events under XDG state without relying on journald access.
 
 Documentation:
 
-- [Complete daemon reference](../../docs/daemon.md)
-- [From-scratch pull-request workflow](../../docs/daemon/workflow.md)
+- [Daemon documentation index](../../docs/daemon.md)
+- [Minimal pull-request workflow](../../docs/daemon/workflow.md)
+- [Operations and job inspection](../../docs/daemon/operations.md)
+- [Architecture](../../docs/daemon/architecture.md)
+- [Security and attach authentication](../../docs/daemon/security.md)
 - [systemd lifecycle surface](lch/README.md)
 
 The package intentionally contains no custom HTTP server, scheduler polling

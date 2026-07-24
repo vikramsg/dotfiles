@@ -25,7 +25,9 @@ class FakeRunner:
             commands = "  run\n  doctor\n  lch\n" if self.compatible else "  config\n"
             return CommandResult(stdout=f"Commands:\n{commands}")
         if command[-3:] == ["daemon", "lch", "--help"]:
-            return CommandResult(stdout="Commands:\n  provision\n  install\n  uninstall\n  status\n  logs\n")
+            return CommandResult(
+                stdout="Commands:\n  attach\n  install\n  lifecycle\n  list\n  logs\n  provision\n  status\n  uninstall\n"
+            )
         if command[0] == "loginctl":
             return CommandResult(stdout="yes\n")
         return CommandResult()
@@ -33,6 +35,10 @@ class FakeRunner:
     def run_isolated(self, arguments: Sequence[str], environment: Mapping[str, str]) -> CommandResult:
         _ = environment
         return self.run(arguments)
+
+    def run_interactive(self, arguments: Sequence[str], environment: Mapping[str, str]) -> None:
+        _ = (arguments, environment)
+        raise AssertionError("not used")
 
 
 @dataclass
@@ -62,6 +68,10 @@ class StatusRunner:
         _ = (arguments, environment)
         raise AssertionError("not used")
 
+    def run_interactive(self, arguments: Sequence[str], environment: Mapping[str, str]) -> None:
+        _ = (arguments, environment)
+        raise AssertionError("not used")
+
 
 def test_generated_timer_has_bounded_schedule() -> None:
     # GIVEN / WHEN
@@ -83,6 +93,28 @@ def test_generated_timer_uses_supplied_lifecycle_policy() -> None:
     # THEN
     assert "OnStartupSec=75s" in rendered
     assert "OnUnitInactiveSec=901s" in rendered
+
+
+def test_lifecycle_reads_provisioned_api_token_from_private_environment(tmp_path: Path) -> None:
+    # GIVEN
+    environment = tmp_path / "daemon.env"
+    environment.write_text("OCINT_DAEMON_API_TOKEN=local-api-token\nOCINT_DAEMON_GITHUB_TOKEN=github-token\n")
+    environment.chmod(0o600)
+    paths = SystemdPaths(
+        directory=tmp_path / "systemd",
+        environment_file=environment,
+        config_home=tmp_path / "config",
+        data_home=tmp_path / "data",
+        state_home=tmp_path / "state",
+        daemon_config=tmp_path / "daemon.toml",
+        home=tmp_path,
+    )
+
+    # WHEN
+    token = SystemdLifecycle(paths, FakeRunner()).api_token()
+
+    # THEN
+    assert token == "local-api-token"
 
 
 def test_generated_service_is_one_oneshot_cycle() -> None:

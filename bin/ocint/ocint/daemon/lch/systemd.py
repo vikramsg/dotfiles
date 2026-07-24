@@ -42,6 +42,7 @@ class LifecycleStatus(BaseModel):
 class CommandRunner(Protocol):
     def run(self, arguments: Sequence[str]) -> CommandResult: ...
     def run_isolated(self, arguments: Sequence[str], environment: Mapping[str, str]) -> CommandResult: ...
+    def run_interactive(self, arguments: Sequence[str], environment: Mapping[str, str]) -> None: ...
 
 
 class SubprocessRunner:
@@ -62,6 +63,9 @@ class SubprocessRunner:
         isolated = dict(environment)
         isolated.update(self._noninteractive_environment())
         return self._run(arguments, isolated)
+
+    def run_interactive(self, arguments: Sequence[str], environment: Mapping[str, str]) -> None:
+        subprocess.run(arguments, check=True, env=dict(environment))
 
     @staticmethod
     def _noninteractive_environment() -> dict[str, str]:
@@ -255,6 +259,15 @@ class SystemdLifecycle:
     def follow_logs(self, settings: DaemonLogSettings, lines: int) -> Iterator[str]:
         return follow_log(settings, lines)
 
+    def api_token(self) -> str:
+        self._validate_environment()
+        for line in self.paths.environment_file.read_text().splitlines():
+            if line.startswith("OCINT_DAEMON_API_TOKEN="):
+                token = line.partition("=")[2]
+                if token:
+                    return token
+        raise RuntimeError(f"OCINT_DAEMON_API_TOKEN is missing from {self.paths.environment_file}")
+
     def _unit_properties(self, unit: str, names: tuple[str, ...]) -> dict[str, str]:
         result = self.runner.run(
             ("systemctl", "--user", "show", unit, *(f"--property={name}" for name in names))
@@ -277,7 +290,12 @@ class SystemdLifecycle:
 
     def _validate_environment(self) -> None:
         path = self.paths.environment_file
-        if not path.is_file() or path.stat().st_uid != os.getuid() or stat.S_IMODE(path.stat().st_mode) != 0o600:
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or path.stat().st_uid != os.getuid()
+            or stat.S_IMODE(path.stat().st_mode) != 0o600
+        ):
             raise RuntimeError(f"environment file must exist, be user-owned, and mode 0600: {path}")
 
     def validate_executable(self, executable: Path) -> Path:
@@ -292,7 +310,7 @@ class SystemdLifecycle:
             raise RuntimeError(f"ocint executable does not expose daemon run, doctor, and lch: {resolved}")
         lch_help = self.runner.run((str(resolved), "daemon", "lch", "--help")).stdout
         lch_commands = {line.strip().split(maxsplit=1)[0] for line in lch_help.splitlines() if line.startswith("  ")}
-        required = {"provision", "install", "uninstall", "status", "logs"}
+        required = {"provision", "install", "uninstall", "lifecycle", "list", "status", "attach", "logs"}
         if not required.issubset(lch_commands):
             raise RuntimeError(f"ocint executable does not expose the required daemon lch commands: {resolved}")
         return resolved

@@ -2,12 +2,10 @@ import asyncio
 import json
 import os
 import secrets
-import uuid
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import aiohttp
 import click
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
@@ -25,7 +23,6 @@ from ocint.daemon.github import (
     open_github_service,
 )
 from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle
-from ocint.daemon.models import DirectOrigin, GitHubLogin, WorkRequest
 from ocint.daemon.opencode import OpenCodeClient
 from ocint.daemon.repository import ControlRepository
 from ocint.daemon.run import serve_bounded, wait_for_idle
@@ -103,44 +100,6 @@ def run_command(context: DaemonContext) -> None:
         raise
     finally:
         daemon_logging.close()
-
-
-@daemon.command("health")
-@click.pass_obj
-def health_command(context: DaemonContext) -> None:
-    context.output.write(asyncio.run(_request(context, "GET", "/health")), nl=True)
-
-
-@daemon.command("submit")
-@click.argument("repository")
-@click.argument("prompt")
-@click.option("actor", "--actor", required=True)
-@click.option("title", "--title", required=True)
-@click.option("key", "--idempotency-key", default="")
-@click.pass_obj
-def submit_command(context: DaemonContext, repository: str, prompt: str, actor: str, title: str, key: str) -> None:
-    request = WorkRequest(
-        idempotency_key=key or uuid.uuid4().hex,
-        actor=GitHubLogin(actor),
-        repository=repository,
-        title=title,
-        prompt=prompt,
-        origin=DirectOrigin(),
-    )
-    context.output.write(asyncio.run(_request(context, "POST", "/api/jobs", request.model_dump(mode="json"))), nl=True)
-
-
-@daemon.command("list")
-@click.pass_obj
-def list_command(context: DaemonContext) -> None:
-    context.output.write(asyncio.run(_request(context, "GET", "/api/jobs")), nl=True)
-
-
-@daemon.command("status")
-@click.argument("job_id")
-@click.pass_obj
-def status_command(context: DaemonContext, job_id: str) -> None:
-    context.output.write(asyncio.run(_request(context, "GET", f"/api/jobs/{job_id}")), nl=True)
 
 
 def create_daemon_app(context: DaemonContext, github: GitHubGateway) -> DaemonApplication:
@@ -221,7 +180,7 @@ def create_daemon_app(context: DaemonContext, github: GitHubGateway) -> DaemonAp
             engine.dispose()
 
     app = FastAPI(title="ocint daemon", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    app.include_router(create_api_router(repository, executor.submit, api_token))
+    app.include_router(create_api_router(repository, executor.submit, api_token, opencode))
     return DaemonApplication(app=app, config=config, shutdown_event=shutdown_event)
 
 
@@ -249,19 +208,3 @@ async def _run_daemon(context: DaemonContext) -> None:
             application.config.api.port,
             application.shutdown_event,
         )
-
-
-async def _request(context: DaemonContext, method: str, path: str, payload: Mapping[str, str] | None = None) -> str:
-    config = context.config()
-    token = context.settings.api_token.get_secret_value()
-    if not token:
-        raise click.ClickException("OCINT_DAEMON_API_TOKEN is required")
-    host = "127.0.0.1" if config.api.host in {"0.0.0.0", "::"} else config.api.host
-    async with (
-        aiohttp.ClientSession(headers={"Authorization": f"Bearer {token}"}) as client,
-        client.request(method, f"http://{host}:{config.api.port}{path}", json=payload) as response,
-    ):
-        body = await response.text()
-        if response.status >= 400:
-            raise click.ClickException(f"daemon HTTP {response.status}: {body}")
-        return body

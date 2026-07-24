@@ -50,7 +50,8 @@
                     "name": "gpt-5.6-sol",
                     "options": {
                         "reasoningEffort": "medium",
-                        "reasoningSummary": "auto"
+                        "reasoningSummary": "auto",
+                        "serviceTier": "priority"
                     },
                     "modalities": {
                         "input": ["text", "image", "pdf"],

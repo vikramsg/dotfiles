@@ -2,7 +2,8 @@ from pathlib import Path
 
 from ocint.daemon.config import DaemonConfig
 from ocint.daemon.lch.systemd import LifecycleStatus
-from ocint.presentation import Presentation, Text, document, key_value_section
+from ocint.daemon.models import Job, JobState
+from ocint.presentation import Presentation, Text, data_table, document, key_value_section
 
 
 def render_status(status: LifecycleStatus, config: DaemonConfig) -> Presentation:
@@ -58,6 +59,78 @@ def render_status(status: LifecycleStatus, config: DaemonConfig) -> Presentation
             ],
         ),
     )
+
+
+def render_jobs(jobs: list[Job]) -> Presentation:
+    return document(
+        "Daemon jobs",
+        data_table(
+            "Recent jobs",
+            ("ID", "State", "Stage", "Title"),
+            (
+                (
+                    job.id,
+                    job.state.value,
+                    job.stage.value,
+                    job.title,
+                )
+                for job in jobs
+            ),
+            empty_message="No daemon jobs have been recorded.",
+        ),
+    )
+
+
+def render_job(job: Job) -> Presentation:
+    sections: list[Presentation] = [
+        key_value_section(
+            "Job",
+            [
+                ("ID", job.id),
+                ("State", _job_state(job.state)),
+                ("Stage", job.stage.value),
+                ("Repository", job.repository),
+                ("Title", job.title),
+                ("Actor", str(job.actor)),
+                ("Created", job.created_at),
+                ("Updated", job.updated_at),
+            ],
+        ),
+        key_value_section(
+            "Execution",
+            [
+                ("Session", job.session_id or "unavailable"),
+                ("Worktree", str(job.worktree_path or "unavailable")),
+                ("Branch", job.branch or "unavailable"),
+                ("Commit", job.commit_sha or "unavailable"),
+            ],
+        ),
+        key_value_section(
+            "Result",
+            [
+                ("Pull request", job.pull_request_url or "unavailable"),
+                ("Error", job.error or "none"),
+            ],
+        ),
+    ]
+    if job.state is JobState.RUNNING and job.session_id:
+        sections.append(
+            key_value_section(
+                "Actions",
+                [("Attach", Text(f"ocint daemon lch attach {job.id}", style="bold magenta"))],
+            )
+        )
+    return document("Daemon job status", *sections)
+
+
+def _job_state(state: JobState) -> Text:
+    style = {
+        JobState.QUEUED: "yellow",
+        JobState.RUNNING: "cyan",
+        JobState.COMPLETED: "green",
+        JobState.FAILED: "red",
+    }[state]
+    return _styled(state.value, style)
 
 
 def _state(state: str, substate: str) -> Text:

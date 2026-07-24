@@ -189,3 +189,13 @@ class Job(BaseModel):
     publication_refusal: str = ""
     created_at: str
     updated_at: str
+
+
+class OpenCodeAttachment(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    server_url: str
+    username: str
+    password: str
+    directory: str
+    session_id: str

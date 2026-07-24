@@ -6,8 +6,7 @@ from typing import Annotated, Protocol
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
 
-from ocint.daemon.models import Job, WorkRequest
-from ocint.daemon.service import attach_command
+from ocint.daemon.models import Job, JobState, OpenCodeAttachment, WorkRequest
 
 
 class HealthResponse(BaseModel):
@@ -24,7 +23,6 @@ class JobResponse(BaseModel):
     title: str
     session_id: str
     worktree_path: str
-    attach_command: str
     commit_sha: str
     pull_request_url: str
     error: str
@@ -35,7 +33,18 @@ class JobQueries(Protocol):
     def list(self, limit: int = 100) -> builtins.list[Job]: ...
 
 
-def create_api_router(queries: JobQueries, submit: Callable[[WorkRequest], Job], token: str) -> APIRouter:
+class OpenCodeConnection(Protocol):
+    server_url: str
+    username: str
+    password: str
+
+
+def create_api_router(
+    queries: JobQueries,
+    submit: Callable[[WorkRequest], Job],
+    token: str,
+    opencode: OpenCodeConnection,
+) -> APIRouter:
     router = APIRouter()
 
     async def authenticate(request: Request) -> str:
@@ -71,6 +80,27 @@ def create_api_router(queries: JobQueries, submit: Callable[[WorkRequest], Job],
         except Exception as error:
             raise HTTPException(status_code=404, detail="job not found") from error
 
+    @router.get("/api/jobs/{job_id}/attach", response_model=OpenCodeAttachment)
+    async def attach(job_id: str, _authenticated: authenticated) -> OpenCodeAttachment:
+        try:
+            item = queries.get(job_id)
+        except Exception as error:
+            raise HTTPException(status_code=404, detail="job not found") from error
+        if (
+            item.state is not JobState.RUNNING
+            or not item.session_id
+            or item.worktree_path is None
+            or item.server_url != opencode.server_url
+        ):
+            raise HTTPException(status_code=409, detail="job does not have a running OpenCode session")
+        return OpenCodeAttachment(
+            server_url=opencode.server_url,
+            username=opencode.username,
+            password=opencode.password,
+            directory=str(item.worktree_path),
+            session_id=item.session_id,
+        )
+
     return router
 
 
@@ -83,7 +113,6 @@ def response(item: Job) -> JobResponse:
         title=item.title,
         session_id=item.session_id,
         worktree_path=str(item.worktree_path or ""),
-        attach_command=attach_command(item),
         commit_sha=item.commit_sha,
         pull_request_url=item.pull_request_url,
         error=item.error,
