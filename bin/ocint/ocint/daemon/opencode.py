@@ -64,6 +64,12 @@ class StatusPayload(BaseModel):
     type: str = "idle"
 
 
+class OpenCodePromptState(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    observation: PromptObservation
+    error: ErrorPayload | None = None
+
+
 class OpenCodeClient:
     def __init__(
         self,
@@ -198,13 +204,20 @@ class OpenCodeClient:
         return session
 
     async def observe_prompt(self, directory: Path, session_id: str, text: str) -> PromptObservation:
+        return (await self._prompt_state(directory, session_id, text)).observation
+
+    async def _prompt_state(self, directory: Path, session_id: str, text: str) -> OpenCodePromptState:
         messages = await self._messages(directory, session_id)
         found_at = self._managed_prompt_index(messages, text)
         assistant_completed = found_at is not None and self._terminal_assistant_after(messages, found_at)
         status = await self._status(directory, session_id)
         active = status not in {None, "idle"}
         completed = assistant_completed and not active
-        return PromptObservation(found=found_at is not None, completed=completed, active=active)
+        error = self._assistant_error_after(messages, found_at) if found_at is not None and not active else None
+        return OpenCodePromptState(
+            observation=PromptObservation(found=found_at is not None, completed=completed, active=active),
+            error=error,
+        )
 
     async def prompt(self, directory: Path, session_id: str, text: str) -> None:
         async with self._client().post(
@@ -219,7 +232,9 @@ class OpenCodeClient:
         try:
             async with asyncio.timeout(self.execution_timeout_seconds):
                 while True:
-                    if (await self.observe_prompt(directory, session_id, text)).completed:
+                    state = await self._prompt_state(directory, session_id, text)
+                    self._raise_prompt_error(state.error, directory, session_id)
+                    if state.observation.completed:
                         logger.info("OpenCode prompt completed", session=session_id, directory=str(directory.resolve()))
                         return
                     async for event_type, event_session, status in self._events(directory, session_id, text):
@@ -229,7 +244,9 @@ class OpenCodeClient:
                             raise PermissionError("OpenCode requested an unapproved permission")
                         if event_type == "session.idle" or (event_type == "session.status" and status == "idle"):
                             break
-                    if (await self.observe_prompt(directory, session_id, text)).completed:
+                    state = await self._prompt_state(directory, session_id, text)
+                    self._raise_prompt_error(state.error, directory, session_id)
+                    if state.observation.completed:
                         logger.info("OpenCode prompt completed", session=session_id, directory=str(directory.resolve()))
                         return
                     await asyncio.sleep(0.1)
@@ -307,6 +324,32 @@ class OpenCodeClient:
             and message.info.error is None
             for message in messages[found_at + 1 :]
         )
+
+    @staticmethod
+    def _assistant_error_after(messages: tuple[MessagePayload, ...], found_at: int) -> ErrorPayload | None:
+        return next(
+            (
+                message.info.error
+                for message in reversed(messages[found_at + 1 :])
+                if message.info.role == "assistant" and message.info.error is not None
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _raise_prompt_error(error: ErrorPayload | None, directory: Path, session_id: str) -> None:
+        if error is None:
+            return
+        message = error.data.message.strip()[:500] or "OpenCode assistant failed"
+        logger.error(
+            "OpenCode prompt failed",
+            session=session_id,
+            directory=str(directory.resolve()),
+            error_type=error.name,
+            retryable=error.data.is_retryable,
+            error_message=message,
+        )
+        raise RuntimeError(f"OpenCode session {session_id} failed: {error.name}: {message}")
 
     def _directory(self, directory: Path) -> dict[str, str]:
         return {"x-opencode-directory": str(directory.resolve()), "Content-Type": "application/json"}

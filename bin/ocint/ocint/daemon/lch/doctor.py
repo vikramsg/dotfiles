@@ -14,11 +14,13 @@ from pydantic import BaseModel, ConfigDict
 from ocint.daemon.config import DaemonConfig, DaemonContext, LifecycleConfig
 from ocint.daemon.db import current_daemon_head_revision
 from ocint.daemon.lch.provision import (
+    OpenCodeSourceConfig,
     RestrictedOpenCodeConfig,
     StaticOpenCodePolicy,
     discovery_environment,
     load_policy,
     policy_resource_path,
+    restricted_agent_config,
 )
 from ocint.daemon.lch.systemd import CommandRunner, SystemdLifecycle, service_text, timer_text
 from ocint.daemon.logging import daemon_log_settings
@@ -168,7 +170,14 @@ def _opencode_diagnostics(
         if not _owned_regular(config.opencode.config_file, 0o600):
             raise ValueError("effective OpenCode config must be user-owned, regular, non-symlink, and mode 0600")
         effective = RestrictedOpenCodeConfig.model_validate_json(config.opencode.config_file.read_text())
-        policy_matches = policy is not None and _effective_policy_matches(effective, policy, config.worktree_root)
+        source_path = context.config_home / "opencode" / "opencode.json"
+        source = OpenCodeSourceConfig.model_validate_json(source_path.read_text())
+        policy_matches = policy is not None and _effective_policy_matches(
+            effective,
+            policy,
+            config.worktree_root,
+            source.agent.build.options.service_tier,
+        )
         result.append(
             Diagnostic(
                 name="opencode.effective_config",
@@ -569,13 +578,14 @@ def _effective_policy_matches(
     effective: RestrictedOpenCodeConfig,
     policy: StaticOpenCodePolicy,
     worktree_root: Path,
+    service_tier: str | None,
 ) -> bool:
     return (
         effective.schema_url == policy.schema_url
         and effective.share == policy.share
         and effective.instructions == policy.instructions
         and effective.plugin == policy.plugin
-        and effective.agent == policy.agent
+        and effective.agent == restricted_agent_config(service_tier)
         and effective.lsp == policy.lsp
         and effective.formatter == policy.formatter
         and effective.permission.model_copy(update={"external_directory": {"*": "deny"}}) == policy.permission
