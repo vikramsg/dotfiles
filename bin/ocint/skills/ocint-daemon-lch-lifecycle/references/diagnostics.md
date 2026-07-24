@@ -44,12 +44,14 @@ systemctl --user stop ocint-daemon.timer ocint-daemon.service
 uv tool uninstall ocint
 just --justfile bin/ocint/justfile install
 ocint daemon lch provision
-ocint daemon doctor --json
+ocint daemon lch status
+systemctl --user list-timers ocint-daemon.timer --no-pager
 ```
 
 `provision` installs and enables the timer. Database migration occurs on daemon
-startup, so a pre-start doctor can report the previous migration. Start one
-cycle and check the migration again before diagnosing it as a migration failure.
+startup, so a pre-start doctor can report the previous migration. Do not run a
+manual migration to make doctor green. Wait for the timer-triggered daemon cycle,
+then check migration state again.
 
 ## Create And Trigger An Issue
 
@@ -62,10 +64,45 @@ ISSUE_URL=$(gh issue create --repo "$REPOSITORY" --title "<title>" --body "<requ
 ISSUE_NUMBER=${ISSUE_URL##*/}
 gh issue view "$ISSUE_NUMBER" --repo "$REPOSITORY" --json number,title,state,author,labels,url
 gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --add-label ocint
+systemctl --user list-timers ocint-daemon.timer --no-pager
+```
+
+Record `REPOSITORY`, `ISSUE_URL`, `ISSUE_NUMBER`, and the timer's next trigger
+immediately. Wait for that trigger and confirm the service start timestamp came
+from the timer invocation.
+
+## Acceptance Anti-Patterns
+
+Do not use these commands to advance a normal LCH acceptance run:
+
+```bash
+ocint daemon migrate
+systemctl --user start ocint-daemon.service
 systemctl --user start --no-block ocint-daemon.service
 ```
 
-Record `REPOSITORY`, `ISSUE_URL`, and `ISSUE_NUMBER` immediately.
+They bypass behavior that the exercise is intended to validate:
+
+| Command | Hidden failure |
+| --- | --- |
+| `ocint daemon migrate` | Daemon startup may not run or may fail to migrate. |
+| Manual service start | The timer may be disabled, misconfigured, or unable to trigger the service. |
+
+If the expected timer deadline passes without a service start, diagnose the
+timer rather than manually starting the service:
+
+```bash
+ocint daemon lch status
+systemctl --user status ocint-daemon.timer --no-pager
+systemctl --user list-timers ocint-daemon.timer --no-pager
+systemctl --user cat ocint-daemon.timer
+systemctl --user cat ocint-daemon.service
+loginctl show-user "$USER" --property=Linger
+```
+
+A manual migration or service start is permitted only as an explicitly approved
+diagnostic bypass after the corresponding failure is recorded. Report that the
+bypassed acceptance criterion remains unverified.
 
 ## LCH And Logs
 
@@ -84,6 +121,9 @@ Expected service states:
 | `activating/start` | The oneshot daemon is currently running. |
 | `failed` | Inspect daemon logs and `systemctl --user status`. |
 | Timer `active/waiting` | Future lifecycle invocations remain scheduled. |
+
+For a successful automation check, the timer's recorded trigger must be followed
+by a service start without a manual start command.
 
 Useful daemon log milestones are `daemon cycle started`, `task created`, `job
 scheduled`, `job started`, each `job stage`, `pull_request`, `task addressed`,
