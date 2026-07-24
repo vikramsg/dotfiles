@@ -40,6 +40,10 @@ class TokenRunner:
         self.environments.append(environment)
         return self.run(arguments)
 
+    def run_interactive(self, arguments: Sequence[str], environment: Mapping[str, str]) -> None:
+        _ = (arguments, environment)
+        raise AssertionError("not used")
+
 
 @dataclass
 class DiscoveryRunner:
@@ -58,7 +62,9 @@ class DiscoveryRunner:
         if command[-2:] == ("daemon", "--help"):
             return CommandResult(stdout="Commands:\n  run\n  doctor\n  lch\n")
         if command[-3:] == ("daemon", "lch", "--help"):
-            return CommandResult(stdout="Commands:\n  provision\n  install\n  uninstall\n  status\n  logs\n")
+            return CommandResult(
+                stdout="Commands:\n  attach\n  install\n  lifecycle\n  list\n  logs\n  provision\n  status\n  uninstall\n"
+            )
         if command[0] == "loginctl":
             return CommandResult(stdout="yes\n")
         if command[0] == "systemctl":
@@ -112,6 +118,10 @@ class DiscoveryRunner:
         if command[-1] == "--version":
             return CommandResult(stdout=f"{self.version}\n")
         raise AssertionError(command)
+
+    def run_interactive(self, arguments: Sequence[str], environment: Mapping[str, str]) -> None:
+        _ = (arguments, environment)
+        raise AssertionError("not used")
 
 
 @dataclass

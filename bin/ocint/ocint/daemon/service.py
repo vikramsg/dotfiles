@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from enum import StrEnum
 from pathlib import Path
-from shlex import join
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
@@ -160,12 +159,6 @@ def authorize(request: WorkRequest, config: DaemonConfig) -> None:
     repository = config.repository(request.repository)
     if repository.actors and request.actor not in repository.actors:
         raise PermissionError(f"actor is not allowed for {request.repository}: {request.actor}")
-
-
-def attach_command(job: Job) -> str:
-    if not job.session_id or job.worktree_path is None or not job.server_url:
-        return ""
-    return join(["opencode", "attach", job.server_url, "--dir", str(job.worktree_path), "--session", job.session_id])
 
 
 def prompt_action(observation: PromptObservation) -> PromptDecision:

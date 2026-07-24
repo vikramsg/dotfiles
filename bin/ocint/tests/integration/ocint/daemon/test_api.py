@@ -7,16 +7,23 @@ from ocint.daemon.api import create_api_router
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
 from ocint.daemon.repository import ControlRepository
+from ocint.daemon.service import SessionCheckpoint, WorktreeCheckpoint
+
+
+class FakeOpenCodeConnection:
+    server_url = "http://127.0.0.1:4097"
+    username = "opencode"
+    password = "ephemeral-password"
 
 
 @pytest.mark.asyncio
-async def test_api_requires_bearer_and_supports_submit_list_status(tmp_path: Path) -> None:
+async def test_api_protects_jobs_and_live_attachment_with_bearer_authentication(tmp_path: Path) -> None:
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
     repository = ControlRepository(engine)
     app = FastAPI()
-    app.include_router(create_api_router(repository, repository.submit, "secret"))
+    app.include_router(create_api_router(repository, repository.submit, "secret", FakeOpenCodeConnection()))
 
     # WHEN
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://daemon.test") as client:
@@ -28,8 +35,20 @@ async def test_api_requires_bearer_and_supports_submit_list_status(tmp_path: Pat
             headers=headers,
             json={"idempotency_key": "key", "actor": "actor", "repository": "repo", "prompt": "work"},
         )
+        job_id = submitted.json()["id"]
+        repository.checkpoint(
+            job_id,
+            WorktreeCheckpoint(path=tmp_path / "worktree", branch=f"ocint/{job_id}", base_revision="base"),
+        )
+        repository.checkpoint(
+            job_id,
+            SessionCheckpoint(session_id="session", server_url=FakeOpenCodeConnection.server_url),
+        )
+        repository.claim(job_id)
         listed = await client.get("/api/jobs", headers=headers)
-        job_status = await client.get(f"/api/jobs/{submitted.json()['id']}", headers=headers)
+        job_status = await client.get(f"/api/jobs/{job_id}", headers=headers)
+        denied_attach = await client.get(f"/api/jobs/{job_id}/attach")
+        attachment = await client.get(f"/api/jobs/{job_id}/attach", headers=headers)
         removed = await client.get("/", headers=headers)
 
     # THEN
@@ -37,5 +56,14 @@ async def test_api_requires_bearer_and_supports_submit_list_status(tmp_path: Pat
     assert health.json() == {"status": "ready"}
     assert submitted.status_code == 202
     assert listed.json() == [job_status.json()]
+    assert "password" not in job_status.json()
+    assert denied_attach.status_code == 401
+    assert attachment.json() == {
+        "server_url": "http://127.0.0.1:4097",
+        "username": "opencode",
+        "password": "ephemeral-password",
+        "directory": str(tmp_path / "worktree"),
+        "session_id": "session",
+    }
     assert removed.status_code == 404
     engine.dispose()

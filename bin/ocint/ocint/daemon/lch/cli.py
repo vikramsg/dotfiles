@@ -1,12 +1,20 @@
+import asyncio
+import subprocess
 from pathlib import Path
 
+import aiohttp
 import click
+from sqlalchemy.exc import NoResultFound
 
 from ocint.daemon.config import DaemonContext
+from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.lch.provision import discover, provision
-from ocint.daemon.lch.render import render_status
+from ocint.daemon.lch.render import render_job, render_jobs, render_status
+from ocint.daemon.lch.service import attach_to_job
 from ocint.daemon.lch.systemd import SubprocessRunner, SystemdLifecycle, SystemdPaths, installed_ocint
 from ocint.daemon.logging import daemon_log_settings
+from ocint.daemon.models import OpenCodeAttachment
+from ocint.daemon.repository import ControlRepository
 
 
 def lifecycle(context: DaemonContext) -> SystemdLifecycle:
@@ -53,12 +61,62 @@ def uninstall_command(context: DaemonContext) -> None:
     lifecycle(context).uninstall()
 
 
-@lch.command("status")
+@lch.command("lifecycle")
 @click.pass_obj
-def status_command(context: DaemonContext) -> None:
+def lifecycle_command(context: DaemonContext) -> None:
     config = context.config()
     log_settings = daemon_log_settings(context.state_home, config.logging)
     context.output.display(render_status(lifecycle(context).status(log_settings.path), config))
+
+
+@lch.command("list")
+@click.pass_obj
+def list_command(context: DaemonContext) -> None:
+    config = context.config()
+    if not config.database_path.is_file():
+        raise click.ClickException(f"daemon database does not exist: {config.database_path}")
+    engine = create_daemon_engine(config.database_path)
+    try:
+        context.output.display(render_jobs(ControlRepository(engine).list()))
+    finally:
+        engine.dispose()
+
+
+@lch.command("status")
+@click.argument("job_id")
+@click.pass_obj
+def job_status_command(context: DaemonContext, job_id: str) -> None:
+    config = context.config()
+    if not config.database_path.is_file():
+        raise click.ClickException(f"daemon database does not exist: {config.database_path}")
+    engine = create_daemon_engine(config.database_path)
+    try:
+        try:
+            job = ControlRepository(engine).get(job_id)
+        except NoResultFound as error:
+            raise click.ClickException(f"daemon job not found: {job_id}") from error
+        context.output.display(render_job(job))
+    finally:
+        engine.dispose()
+
+
+@lch.command("attach")
+@click.argument("job_id")
+@click.pass_obj
+def attach_command(context: DaemonContext, job_id: str) -> None:
+    managed = lifecycle(context)
+    try:
+        attachment = asyncio.run(_attachment(context, managed.api_token(), job_id))
+        attach_to_job(
+            attachment,
+            context.config().opencode.executable,
+            context.environment,
+            managed.runner,
+        )
+    except subprocess.CalledProcessError as error:
+        raise click.ClickException(f"opencode attach exited with status {error.returncode}") from error
+    except (aiohttp.ClientError, RuntimeError) as error:
+        raise click.ClickException(str(error)) from error
 
 
 @lch.command("logs")
@@ -78,3 +136,17 @@ def logs_command(context: DaemonContext, lines: int, follow: bool) -> None:
         raise click.ClickException(str(error)) from error
     except KeyboardInterrupt:
         return
+
+
+async def _attachment(context: DaemonContext, token: str, job_id: str) -> OpenCodeAttachment:
+    config = context.config()
+    host = "127.0.0.1" if config.api.host in {"0.0.0.0", "::"} else config.api.host
+    url = f"http://{host}:{config.api.port}/api/jobs/{job_id}/attach"
+    async with (
+        aiohttp.ClientSession(headers={"Authorization": f"Bearer {token}"}) as client,
+        client.get(url) as response,
+    ):
+        if response.status >= 400:
+            payload = await response.json()
+            raise RuntimeError(f"daemon HTTP {response.status}: {payload.get('detail', 'attach failed')}")
+        return OpenCodeAttachment.model_validate(await response.json())

@@ -37,16 +37,23 @@ class SignalFreeServer(uvicorn.Server):
         yield
 
 
-def test_submit_requires_explicit_github_actor() -> None:
+def test_job_inspection_commands_are_exposed_only_through_lch() -> None:
     # GIVEN
     runner = CliRunner()
 
     # WHEN
-    result = runner.invoke(main, ["daemon", "submit", "repo", "prompt"])
+    daemon_help = runner.invoke(main, ["daemon", "--help"])
+    lch_help = runner.invoke(main, ["daemon", "lch", "--help"])
 
     # THEN
-    assert result.exit_code == 2
-    assert "Missing option '--actor'" in result.output
+    assert daemon_help.exit_code == 0
+    assert not {"health", "submit", "list", "status"}.intersection(
+        line.strip().split(maxsplit=1)[0] for line in daemon_help.output.splitlines() if line.startswith("  ")
+    )
+    assert lch_help.exit_code == 0
+    assert {"attach", "lifecycle", "list", "status"}.issubset(
+        line.strip().split(maxsplit=1)[0] for line in lch_help.output.splitlines() if line.startswith("  ")
+    )
 
 
 @pytest.mark.asyncio

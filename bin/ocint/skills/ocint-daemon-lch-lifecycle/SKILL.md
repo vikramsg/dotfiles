@@ -107,7 +107,7 @@ GitHub issue number
 Inspect layers in this order:
 
 1. **GitHub:** issue state, label, author, comments, and repository.
-2. **LCH:** timer schedule, service state, migration, daemon health, and logs.
+2. **LCH:** timer schedule, service state, migration, durable job status, and logs.
 3. **Daemon database:** mapping, eligibility, message classification, task,
    attempt, job state, stage, checkpoints, refusal, and error.
 4. **Worktree and Git:** local changes, commits, branch, remote branch, and push.

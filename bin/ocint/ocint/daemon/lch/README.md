@@ -5,14 +5,17 @@
 ```text
 provision -> discover and validate -> write private config -> install units
 install   -> validate existing config/env -> reload -> enable --now timer
-status    -> report timer schedule, service result, and log path
+lifecycle -> report timer schedule, service result, and log path
+list      -> list durable jobs directly from SQLite
+status    -> show one durable job by ID
+attach    -> authenticate and attach to one live OpenCode session
 logs      -> read the private rotating daemon log (--lines, --follow)
 uninstall -> disable/stop -> remove only units -> reload
 ```
 
-LCH owns these service operations only. The outer daemon command context loads
-and validates `daemon.toml`, then passes resolved lifecycle and logging policy
-into the LCH adapter.
+LCH owns local daemon operations. The outer daemon command context loads and
+validates `daemon.toml`, then passes resolved paths and policy into the adapter.
+Job list and status read durable SQLite state even while the service is inactive.
 
 It generates exactly:
 
@@ -37,6 +40,18 @@ Provision must run from the target Git checkout root. It discovers GitHub, Git,
 SSH, and OpenCode values, validates every input and destination before writes,
 and uses only `gh auth token --hostname github.com` for the existing GitHub
 token. See the [complete workflow](../../../docs/daemon/workflow.md).
+
+Live attachment is different from offline inspection:
+
+```text
+daemon.env API token -> authenticated loopback request -> ephemeral password
+                                                        |
+                                                        v
+                                              opencode attach process
+```
+
+The OpenCode password is never persisted. Read the
+[security reference](../../../docs/daemon/security.md) for the complete flow.
 
 Uninstall preserves configuration, credentials, auth symlink, database, logs,
 mirrors, and worktrees. It never performs full cleanup or database deletion.

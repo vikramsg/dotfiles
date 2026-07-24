@@ -15,7 +15,8 @@ gh auth status
 gh repo view --json nameWithOwner,defaultBranchRef
 ocint daemon config --path
 ocint daemon doctor --json
-ocint daemon lch status
+ocint daemon lch lifecycle
+ocint daemon lch list
 systemctl --user status ocint-daemon.timer --no-pager
 systemctl --user status ocint-daemon.service --no-pager
 systemctl --user list-timers ocint-daemon.timer --no-pager
@@ -70,7 +71,8 @@ Record `REPOSITORY`, `ISSUE_URL`, and `ISSUE_NUMBER` immediately.
 ## LCH And Logs
 
 ```bash
-ocint daemon lch status
+ocint daemon lch lifecycle
+ocint daemon lch list
 ocint daemon lch logs --lines 200
 systemctl --user status ocint-daemon.service --no-pager
 systemctl --user status ocint-daemon.timer --no-pager
@@ -177,6 +179,20 @@ execution -> validation -> commit -> push -> pull_request -> complete
 The worktree and session checkpoints can be populated while the stage remains
 `execution`. Use `updated_at`, logs, and OpenCode state to distinguish active
 work from a stuck request.
+
+For one discovered job, prefer the supported status command before querying
+SQLite manually:
+
+```bash
+ocint daemon lch status "$JOB_ID"
+```
+
+If the job is running and has a live session, attach without reading any
+credential file directly:
+
+```bash
+ocint daemon lch attach "$JOB_ID"
+```
 
 ## Worktree And Publication
 

@@ -21,7 +21,6 @@ from ocint.daemon.service import (
     WorkRequest,
     Worktree,
     WorktreeCheckpoint,
-    attach_command,
     prompt_action,
 )
 
@@ -292,38 +291,6 @@ def test_prompt_decision_matrix(observation: PromptObservation, expected: Prompt
 
     # THEN
     assert decision is expected
-
-
-def test_attach_command_uses_runtime_path() -> None:
-    # GIVEN
-    job = Job(
-        id="job",
-        idempotency_key="key",
-        actor=GitHubLogin("actor"),
-        repository="repo",
-        prompt="work",
-        state=JobState.RUNNING,
-        stage=JobStage.EXECUTION,
-        session_id="session",
-        server_url="http://localhost",
-        worktree_path=Path("/tmp/work"),
-        branch="ocint/job",
-        base_revision="base",
-        prompt_intended=True,
-        prompt_submitted=True,
-        commit_sha="",
-        pushed=False,
-        pull_request_url="",
-        error="",
-        created_at="now",
-        updated_at="now",
-    )
-
-    # WHEN
-    command = attach_command(job)
-
-    # THEN
-    assert command == "opencode attach http://localhost --dir /tmp/work --session session"
 
 
 @pytest.mark.asyncio
