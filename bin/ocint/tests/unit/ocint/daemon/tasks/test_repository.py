@@ -6,8 +6,8 @@ import pytest
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
 from ocint.daemon.models import GitHubLogin
-from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import WorkRequest
+from ocint.daemon.pull_request_job import PullRequestJobRequest
+from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
 from ocint.daemon.tasks.models import (
     FailedTaskRetry,
     MessageClassification,
@@ -272,7 +272,7 @@ def test_successor_claim_does_not_create_an_empty_task(repository: TaskRepositor
 
 def test_competing_retry_claims_attach_one_durable_attempt(repository: TaskRepository) -> None:
     # GIVEN
-    control = ControlRepository(repository.engine)
+    control = PullRequestJobRepository(repository.engine)
     thread = repository.upsert_thread("github:owner/repo:5", "Title")
     repository.upsert_message(
         thread.id,
@@ -285,7 +285,7 @@ def test_competing_retry_claims_attach_one_durable_attempt(repository: TaskRepos
     current = repository.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert current is not None
     failed = control.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="failed", actor=GitHubLogin("alice"), repository="repo", title="Title", prompt="first"
         )
     )
@@ -299,7 +299,7 @@ def test_competing_retry_claims_attach_one_durable_attempt(repository: TaskRepos
     assert isinstance(competing, FailedTaskRetry)
     retry = control.retry(
         failed,
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="retry", actor=GitHubLogin("alice"), repository="repo", title="Title", prompt="first"
         ),
     )

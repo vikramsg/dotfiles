@@ -20,6 +20,10 @@ Documentation:
 - [Security and attach authentication](../../docs/daemon/security.md)
 - [systemd lifecycle surface](lch/README.md)
 
+`pull_request_job/` owns the durable end-to-end workflow. `git/` and
+`opencode/` are independent sibling adapters, while `api.py` remains the single
+inbound FastAPI adapter and `cli.py` composes their narrow facades.
+
 The package intentionally contains no custom HTTP server, scheduler polling
 loop, Slack integration, distributed worker protocol, generic lifecycle
 framework, or compatibility credential fallback. `lch/` owns the concrete

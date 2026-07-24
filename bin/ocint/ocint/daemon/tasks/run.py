@@ -4,15 +4,17 @@ from typing import Protocol
 
 from ocint.daemon.logging import get_logger
 from ocint.daemon.models import (
-    Job,
-    JobState,
     MessageClassification,
     ObservedMessage,
     ReplyOutcome,
     ReplyRequest,
     ThreadObservations,
     ThreadOrigin,
-    WorkRequest,
+)
+from ocint.daemon.pull_request_job import (
+    PullRequestJob,
+    PullRequestJobRequest,
+    PullRequestJobState,
 )
 from ocint.daemon.tasks.models import (
     FailedTaskRetry,
@@ -36,18 +38,19 @@ class ThreadSource(Protocol):
     async def reply(self, request: ReplyRequest) -> ObservedMessage: ...
 
 
-class TaskExecutor(Protocol):
-    def accept(self, request: WorkRequest) -> Job: ...
-    def accept_retry(self, previous: Job, request: WorkRequest) -> Job: ...
+class PullRequestJobs(Protocol):
+    def accept(self, request: PullRequestJobRequest) -> PullRequestJob: ...
+    def accept_retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob: ...
     def schedule_accepted(self, job_id: str) -> None: ...
-    def submit(self, request: WorkRequest) -> Job: ...
-    def retry(self, previous: Job, request: WorkRequest) -> Job: ...
-    def get(self, job_id: str) -> Job: ...
+    def submit(self, request: PullRequestJobRequest) -> PullRequestJob: ...
+    def retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob: ...
+    def get(self, job_id: str) -> PullRequestJob: ...
+    def reusable(self, candidate_ids: tuple[str, ...]) -> PullRequestJob | None: ...
     def abandon(self, job_id: str, reason: str) -> None: ...
 
 
 class TaskCoordinator:
-    def __init__(self, source: ThreadSource, repository: TaskRepository, executor: TaskExecutor) -> None:
+    def __init__(self, source: ThreadSource, repository: TaskRepository, executor: PullRequestJobs) -> None:
         self.source = source
         self.repository = repository
         self.executor = executor
@@ -56,7 +59,7 @@ class TaskCoordinator:
         await self._ingest_observations()
         for thread in self.repository.threads():
             current = self.repository.unresolved(thread.id)
-            previous: Job | None = None
+            previous: PullRequestJob | None = None
             if not thread.eligible:
                 self._skip_ineligible(current)
                 continue
@@ -68,8 +71,7 @@ class TaskCoordinator:
                 predecessor = 0 if latest is None else latest.id
                 current = self.repository.create_pending(thread.id, kind, predecessor)
                 if current is not None:
-                    reusable_job_id = self.repository.reusable_job_id(thread.id)
-                    previous = self.executor.get(reusable_job_id) if reusable_job_id else None
+                    previous = self.executor.reusable(self.repository.reusable_job_ids(thread.id))
                     logger.info("task created", task=current.id, thread=thread.id, kind=current.kind.value)
             if current is not None and not self.repository.latest_job_id(current.id):
                 self._start(thread, current, previous)
@@ -84,9 +86,9 @@ class TaskCoordinator:
         job_id = self.repository.latest_job_id(current.id)
         if job_id:
             job = self.executor.get(job_id)
-            if job.state is JobState.RUNNING:
+            if job.state is PullRequestJobState.RUNNING:
                 return
-            if job.state is JobState.QUEUED:
+            if job.state is PullRequestJobState.QUEUED:
                 self.executor.abandon(job.id, "source thread is no longer eligible")
         reason = "source thread is no longer eligible"
         self.repository.set_state(current.id, TaskState.SKIPPED, reason)
@@ -97,9 +99,9 @@ class TaskCoordinator:
         if not job_id:
             return current
         job = self.executor.get(job_id)
-        if job.state in {JobState.QUEUED, JobState.RUNNING}:
+        if job.state in {PullRequestJobState.QUEUED, PullRequestJobState.RUNNING}:
             return current
-        if job.state is JobState.COMPLETED:
+        if job.state is PullRequestJobState.COMPLETED:
             await self._complete(current, job)
             return None
         if job.publication_refusal:
@@ -118,14 +120,14 @@ class TaskCoordinator:
             return claim.task
         return None
 
-    def _start(self, thread: Thread, task: Task, previous: Job | None) -> None:
+    def _start(self, thread: Thread, task: Task, previous: PullRequestJob | None) -> None:
         attempt = self.repository.attempt_count(task.id) + 1
         request = self._request(thread, task, attempt)
         job = self.executor.submit(request) if previous is None else self.executor.retry(previous, request)
         self.repository.attach_job(task.id, job.id)
         logger.info("task job scheduled", task=task.id, thread=thread.id, job=job.id)
 
-    def _retry_claimed(self, thread: Thread, claim: FailedTaskRetry, previous: Job) -> None:
+    def _retry_claimed(self, thread: Thread, claim: FailedTaskRetry, previous: PullRequestJob) -> None:
         request = self._request(thread, claim.task, claim.attempt)
         job = self.executor.accept_retry(previous, request)
         attachment = self.repository.attach_claimed_job(claim.task.id, claim.attempt, job.id)
@@ -135,13 +137,13 @@ class TaskCoordinator:
         elif attachment is RetryAttachment.REJECTED:
             self.executor.abandon(job.id, "task is no longer current")
 
-    def _request(self, thread: Thread, task: Task, attempt: int) -> WorkRequest:
+    def _request(self, thread: Thread, task: Task, attempt: int) -> PullRequestJobRequest:
         if not thread.title:
             raise RuntimeError(f"source thread {thread.id} has no work title")
         messages = self.repository.actionable_messages(thread.id)
         task_messages = self.repository.task_messages(task.id)
         actor = task_messages[-1].actor
-        return WorkRequest(
+        return PullRequestJobRequest(
             idempotency_key=(f"thread-task:model-v2:source:{thread.source_id}:task:{task.id}:attempt:{attempt}"),
             actor=actor,
             repository=thread.configured_repository,
@@ -186,7 +188,7 @@ class TaskCoordinator:
                         response.source_created_at,
                     )
 
-    async def _complete(self, task: Task, job: Job) -> None:
+    async def _complete(self, task: Task, job: PullRequestJob) -> None:
         if not isinstance(job.origin, ThreadOrigin):
             raise RuntimeError(f"task {task.id} completed with a direct-origin job")
         if not job.pull_request_url:

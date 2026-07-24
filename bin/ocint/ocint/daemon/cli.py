@@ -2,8 +2,8 @@ import asyncio
 import json
 import os
 import secrets
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
 import click
@@ -14,8 +14,8 @@ from ocint._models import CliContext
 from ocint.daemon import logging as daemon_logging
 from ocint.daemon.api import create_api_router
 from ocint.daemon.config import DaemonConfig, DaemonContext, LoggingConfig
-from ocint.daemon.db import create_daemon_engine, current_daemon_head_revision, migrate_daemon_db
-from ocint.daemon.git import GitManager
+from ocint.daemon.db import current_daemon_head_revision, migrate_daemon_db
+from ocint.daemon.git import GitRuntimeConfig, create_git_manager
 from ocint.daemon.github import (
     GitHubGateway,
     GitHubRepositoryPolicies,
@@ -23,12 +23,17 @@ from ocint.daemon.github import (
     open_github_service,
 )
 from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle
-from ocint.daemon.opencode import OpenCodeClient
-from ocint.daemon.repository import ControlRepository
+from ocint.daemon.models import GitRepository
+from ocint.daemon.opencode import OpenCodeRuntimeConfig, create_opencode_client
+from ocint.daemon.pull_request_job import (
+    PullRequestJobConfig,
+    RepositoryPolicy,
+    SchedulerPolicy,
+    create_pull_request_job_runner,
+    open_pull_request_job_store,
+)
 from ocint.daemon.run import serve_bounded, wait_for_idle
-from ocint.daemon.service import JobExecutor
-from ocint.daemon.tasks import TaskCoordinator
-from ocint.daemon.tasks.repository import TaskRepository
+from ocint.daemon.tasks import open_task_coordinator
 
 logger = daemon_logging.get_logger("cli")
 
@@ -102,14 +107,13 @@ def run_command(context: DaemonContext) -> None:
         daemon_logging.close()
 
 
-def create_daemon_app(context: DaemonContext, github: GitHubGateway) -> DaemonApplication:
+@contextmanager
+def open_daemon_app(context: DaemonContext, github: GitHubGateway) -> Iterator[DaemonApplication]:
     config = context.config()
     api_token = context.settings.api_token.get_secret_value()
     if not api_token:
         raise ValueError("OCINT_DAEMON_API_TOKEN is required")
     migrate_daemon_db(config.database_path)
-    engine = create_daemon_engine(config.database_path)
-    repository = ControlRepository(engine)
     validation_environment = {
         "PATH": context.settings.execution_path,
         "LANG": context.settings.execution_lang,
@@ -120,68 +124,82 @@ def create_daemon_app(context: DaemonContext, github: GitHubGateway) -> DaemonAp
         "LANG": context.settings.execution_lang,
         "GIT_TERMINAL_PROMPT": "0",
     }
-    git = GitManager(
-        config.mirror_root,
-        config.worktree_root,
-        validation_environment,
-        git_environment,
-        config.git.ssh_executable,
-        config.git.identity_file,
-        config.git.known_hosts_file,
-        config.scheduler.command_timeout_seconds,
-        config.scheduler.command_output_bytes,
+    git = create_git_manager(
+        GitRuntimeConfig(
+            mirror_root=config.mirror_root,
+            worktree_root=config.worktree_root,
+            validation_environment=validation_environment,
+            git_environment=git_environment,
+            transport=config.git,
+            timeout_seconds=config.scheduler.command_timeout_seconds,
+            output_bytes=config.scheduler.command_output_bytes,
+        )
     )
-    opencode = OpenCodeClient(
-        str(config.opencode.server_url),
-        config.opencode.username,
-        secrets.token_urlsafe(32),
-        config.opencode.request_timeout_seconds,
-        config.scheduler.job_timeout_seconds,
-        config.opencode.expected_version,
-        config.opencode.executable,
-        config.opencode.config_file,
-        config.opencode.xdg_config_home,
-        config.opencode.xdg_data_home,
-        config.opencode.startup_timeout_seconds,
-        config.opencode.shutdown_timeout_seconds,
-        context.settings.execution_path,
-        context.settings.execution_lang,
+    opencode = create_opencode_client(
+        OpenCodeRuntimeConfig(
+            service=config.opencode,
+            password=secrets.token_urlsafe(32),
+            execution_timeout_seconds=config.scheduler.job_timeout_seconds,
+            process_path=context.settings.execution_path,
+            process_lang=context.settings.execution_lang,
+        )
     )
-    tasks = TaskRepository(engine)
-    executor = JobExecutor(config, repository, opencode, git, github)
-    coordinator = TaskCoordinator(github, tasks, executor)
-    shutdown_event = asyncio.Event()
-
-    @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        logger.info("OpenCode startup started", executable=str(config.opencode.executable))
-        await opencode.start()
-        logger.info("OpenCode startup completed", version=config.opencode.expected_version)
-        try:
-            pending = executor.recover()
-            logger.info("task reconciliation started")
-            await coordinator.reconcile()
-            logger.info("task reconciliation completed")
-            executor.schedule_pending(pending)
-            logger.info("daemon ready", api_port=config.api.port)
-            idle_task = asyncio.create_task(
-                wait_for_idle(executor, config.idle_timeout_seconds, shutdown_event, coordinator)
+    job_config = PullRequestJobConfig(
+        repositories=tuple(
+            RepositoryPolicy(
+                git_repository=GitRepository(
+                    name=item.name,
+                    remote_url=item.remote_url,
+                    default_branch=item.default_branch,
+                ),
+                github_repository=item.github_repository,
+                author_name=item.author_name,
+                author_email=item.author_email,
+                actors=item.actors,
+                checks=item.checks,
             )
-            try:
-                yield
-            finally:
-                idle_task.cancel()
-                await asyncio.gather(idle_task, return_exceptions=True)
-                await executor.close()
-        finally:
-            logger.info("OpenCode shutdown started")
-            await opencode.close()
-            logger.info("OpenCode shutdown completed")
-            engine.dispose()
+            for item in config.repositories
+        ),
+        scheduler=SchedulerPolicy(
+            capacity=config.scheduler.capacity,
+            job_timeout_seconds=config.scheduler.job_timeout_seconds,
+            shutdown_timeout_seconds=config.scheduler.shutdown_timeout_seconds,
+        ),
+    )
+    with open_pull_request_job_store(config.database_path) as repository:
+        executor = create_pull_request_job_runner(job_config, repository, opencode, git, github)
+        with open_task_coordinator(config.database_path, github, executor) as coordinator:
+            shutdown_event = asyncio.Event()
 
-    app = FastAPI(title="ocint daemon", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    app.include_router(create_api_router(repository, executor.submit, api_token, opencode))
-    return DaemonApplication(app=app, config=config, shutdown_event=shutdown_event)
+            @asynccontextmanager
+            async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+                logger.info("OpenCode startup started", executable=str(config.opencode.executable))
+                await opencode.start()
+                logger.info("OpenCode startup completed", version=config.opencode.expected_version)
+                try:
+                    pending = executor.recover()
+                    logger.info("task reconciliation started")
+                    await coordinator.reconcile()
+                    logger.info("task reconciliation completed")
+                    executor.schedule_pending(pending)
+                    logger.info("daemon ready", api_port=config.api.port)
+                    idle_task = asyncio.create_task(
+                        wait_for_idle(executor, config.idle_timeout_seconds, shutdown_event, coordinator)
+                    )
+                    try:
+                        yield
+                    finally:
+                        idle_task.cancel()
+                        await asyncio.gather(idle_task, return_exceptions=True)
+                        await executor.close()
+                finally:
+                    logger.info("OpenCode shutdown started")
+                    await opencode.close()
+                    logger.info("OpenCode shutdown completed")
+
+            app = FastAPI(title="ocint daemon", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+            app.include_router(create_api_router(repository, executor.submit, api_token, opencode))
+            yield DaemonApplication(app=app, config=config, shutdown_event=shutdown_event)
 
 
 async def _run_daemon(context: DaemonContext) -> None:
@@ -189,7 +207,6 @@ async def _run_daemon(context: DaemonContext) -> None:
     token = context.settings.github_token.get_secret_value()
     if not token:
         raise ValueError("OCINT_DAEMON_GITHUB_TOKEN is required")
-    migrate_daemon_db(config.database_path)
     repositories = GitHubRepositoryPolicies(
         root=[
             GitHubRepositoryPolicy(
@@ -201,10 +218,10 @@ async def _run_daemon(context: DaemonContext) -> None:
         ]
     )
     async with open_github_service(config.github, repositories, token, config.database_path) as github:
-        application = create_daemon_app(context, github)
-        await serve_bounded(
-            application.app,
-            application.config.api.host,
-            application.config.api.port,
-            application.shutdown_event,
-        )
+        with open_daemon_app(context, github) as application:
+            await serve_bounded(
+                application.app,
+                application.config.api.host,
+                application.config.api.port,
+                application.shutdown_event,
+            )

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
-from ocint.daemon.cli import create_daemon_app
+from ocint.daemon.cli import open_daemon_app
 from ocint.daemon.config import DaemonContext, DaemonSettings
 from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.models import (
@@ -13,9 +13,9 @@ from ocint.daemon.models import (
     PublicationResult,
     ReplyRequest,
     ThreadObservations,
-    WorkRequest,
 )
-from ocint.daemon.repository import ControlRepository
+from ocint.daemon.pull_request_job import PullRequestJobRequest
+from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
 from ocint.presentation import default_cli_context
 
 
@@ -56,10 +56,10 @@ agent_actor = "maintainer"
 ''')
     migrate_daemon_db(database)
     engine = create_daemon_engine(database)
-    repository = ControlRepository(engine)
+    repository = PullRequestJobRepository(engine)
     jobs = [
         repository.submit(
-            WorkRequest(
+            PullRequestJobRequest(
                 idempotency_key=f"key-{number}",
                 actor=GitHubLogin("maintainer"),
                 repository="repo",
@@ -121,8 +121,11 @@ agent_actor = "maintainer"
 ''')
 
     # WHEN / THEN
-    with pytest.raises(ValueError, match="API_TOKEN"):
-        create_daemon_app(
+    with (
+        pytest.raises(ValueError, match="API_TOKEN"),
+        open_daemon_app(
             DaemonContext.create(default_cli_context().output, tmp_path, {}, DaemonSettings(config=config)),
             FakeGitHubGateway(),
-        )
+        ),
+    ):
+        pass

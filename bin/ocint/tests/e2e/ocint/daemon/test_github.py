@@ -4,10 +4,11 @@ from pathlib import Path
 
 import pytest
 from alembic import command
-from ocint.daemon.config import DaemonConfig, GitConfig, GitHubConfig, OpenCodeConfig, RepositoryConfig
+from ocint.daemon.config import DaemonConfig, GitHubConfig, RepositoryConfig
 from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
 from ocint.daemon.db.schema import metadata
+from ocint.daemon.git import GitConfig
 from ocint.daemon.github import GitHubRepositoryPolicy
 from ocint.daemon.github.models import (
     GitHubComment,
@@ -20,21 +21,20 @@ from ocint.daemon.github.models import (
 )
 from ocint.daemon.github.repository import GitHubRepository
 from ocint.daemon.github.service import GitHubContext, GitHubService, marker
-from ocint.daemon.models import (
-    GitHubLogin,
-    Job,
-    PublicationRequest,
-    RefusedPublication,
-    ThreadOrigin,
+from ocint.daemon.models import GitHubLogin, PublicationRequest, RefusedPublication, ThreadOrigin
+from ocint.daemon.opencode import OpenCodeConfig
+from ocint.daemon.pull_request_job import (
+    PullRequestJob,
+    PullRequestJobRequest,
+    PullRequestJobState,
 )
-from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import (
+from ocint.daemon.pull_request_job.models import (
     PublicationRefusalCheckpoint,
     PullRequestCheckpoint,
     SessionCheckpoint,
-    WorkRequest,
     WorktreeCheckpoint,
 )
+from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
 from ocint.daemon.tasks import TaskCoordinator, TaskState
 from ocint.daemon.tasks.models import MessageClassification
 from ocint.daemon.tasks.repository import TaskRepository
@@ -93,32 +93,36 @@ class FakeGitHubTransport:
 
 @dataclass
 class RecordingExecutor:
-    repository: ControlRepository
-    submitted: list[Job] = field(default_factory=list)
-    retried: list[Job] = field(default_factory=list)
+    repository: PullRequestJobRepository
+    submitted: list[PullRequestJob] = field(default_factory=list)
+    retried: list[PullRequestJob] = field(default_factory=list)
     scheduled: list[str] = field(default_factory=list)
 
-    def accept(self, request: WorkRequest) -> Job:
+    def accept(self, request: PullRequestJobRequest) -> PullRequestJob:
         return self.repository.submit(request)
 
-    def accept_retry(self, previous: Job, request: WorkRequest) -> Job:
+    def accept_retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
         return self.repository.retry(previous, request)
 
     def schedule_accepted(self, job_id: str) -> None:
         self.scheduled.append(job_id)
 
-    def submit(self, request: WorkRequest) -> Job:
+    def submit(self, request: PullRequestJobRequest) -> PullRequestJob:
         job = self.repository.submit(request)
         self.submitted.append(job)
         return job
 
-    def retry(self, previous: Job, request: WorkRequest) -> Job:
+    def retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
         job = self.repository.retry(previous, request)
         self.retried.append(job)
         return job
 
-    def get(self, job_id: str) -> Job:
+    def get(self, job_id: str) -> PullRequestJob:
         return self.repository.get(job_id)
+
+    def reusable(self, candidate_ids: tuple[str, ...]) -> PullRequestJob | None:
+        candidates = (self.repository.get(job_id) for job_id in candidate_ids)
+        return next((job for job in candidates if job.state is PullRequestJobState.COMPLETED), None)
 
     def abandon(self, job_id: str, reason: str) -> None:
         self.repository.fail(job_id, reason)
@@ -129,7 +133,7 @@ async def test_closed_owned_pull_request_is_refused_and_task_transition_is_coord
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
-    control = ControlRepository(engine)
+    control = PullRequestJobRepository(engine)
     tasks = TaskRepository(engine)
     transport = FakeGitHubTransport(
         GitHubIssue(
@@ -196,7 +200,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
-    control = ControlRepository(engine)
+    control = PullRequestJobRepository(engine)
     tasks = TaskRepository(engine)
     config = DaemonConfig(
         database_path=tmp_path / "control.sqlite",
@@ -364,7 +368,7 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
-    control = ControlRepository(engine)
+    control = PullRequestJobRepository(engine)
     tasks = TaskRepository(engine)
     config = DaemonConfig(
         database_path=tmp_path / "control.sqlite",
@@ -480,7 +484,7 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
     engine.dispose()
     migrate_daemon_db(database)
     engine = create_daemon_engine(database)
-    control = ControlRepository(engine)
+    control = PullRequestJobRepository(engine)
     tasks = TaskRepository(engine)
     config = DaemonConfig(
         database_path=database,

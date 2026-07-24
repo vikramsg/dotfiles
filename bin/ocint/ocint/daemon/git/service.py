@@ -5,9 +5,9 @@ import shlex
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from ocint.daemon.config import RepositoryConfig
+from ocint.daemon.git.config import GitRuntimeConfig
 from ocint.daemon.logging import get_logger
-from ocint.daemon.service import Worktree
+from ocint.daemon.models import GitRepository, Worktree
 
 logger = get_logger("git")
 
@@ -15,26 +15,18 @@ logger = get_logger("git")
 class GitManager:
     def __init__(
         self,
-        mirror_root: Path,
-        worktree_root: Path,
-        validation_environment: Mapping[str, str],
-        git_environment: Mapping[str, str],
-        ssh_executable: Path,
-        identity_file: Path,
-        known_hosts_file: Path,
-        timeout_seconds: int,
-        output_bytes: int,
+        config: GitRuntimeConfig,
     ) -> None:
-        self.mirror_root = mirror_root.resolve()
-        self.worktree_root = worktree_root.resolve()
-        self.validation_environment = dict(validation_environment)
-        self.git_environment = dict(git_environment)
-        expanded_identity = identity_file.expanduser()
+        self.mirror_root = config.mirror_root.resolve()
+        self.worktree_root = config.worktree_root.resolve()
+        self.validation_environment = dict(config.validation_environment)
+        self.git_environment = dict(config.git_environment)
+        expanded_identity = config.transport.identity_file.expanduser()
         if expanded_identity.is_symlink():
             raise ValueError(f"SSH identity must be a regular mode-0600 file: {expanded_identity}")
         identity = expanded_identity.resolve()
-        known_hosts = known_hosts_file.expanduser().resolve()
-        executable = ssh_executable.expanduser().resolve()
+        known_hosts = config.transport.known_hosts_file.expanduser().resolve()
+        executable = config.transport.ssh_executable.expanduser().resolve()
         if not executable.is_file() or not os.access(executable, os.X_OK):
             raise ValueError(f"SSH executable must be executable: {executable}")
         if not identity.is_file() or identity.stat().st_mode & 0o777 != 0o600:
@@ -52,11 +44,11 @@ class GitManager:
             )
         )
         self.network_git_environment = {**self.git_environment, "GIT_SSH_COMMAND": command}
-        self.timeout_seconds = timeout_seconds
-        self.output_bytes = output_bytes
+        self.timeout_seconds = config.timeout_seconds
+        self.output_bytes = config.output_bytes
         self.repository_locks: dict[str, asyncio.Lock] = {}
 
-    async def provision(self, repository: RepositoryConfig, job_id: str) -> Worktree:
+    async def provision(self, repository: GitRepository, job_id: str) -> Worktree:
         if not re.fullmatch(r"[A-Za-z0-9._-]+", repository.name):
             raise ValueError(f"unsafe repository name: {repository.name}")
         if job_id in {".", ".."} or not re.fullmatch(r"[A-Za-z0-9._-]+", job_id):
@@ -65,7 +57,7 @@ class GitManager:
         async with lock:
             return await self._provision(repository, job_id)
 
-    async def _provision(self, repository: RepositoryConfig, job_id: str) -> Worktree:
+    async def _provision(self, repository: GitRepository, job_id: str) -> Worktree:
         self.mirror_root.mkdir(parents=True, exist_ok=True)
         self.worktree_root.mkdir(parents=True, exist_ok=True)
         mirror = self.mirror_root / f"{repository.name}.git"

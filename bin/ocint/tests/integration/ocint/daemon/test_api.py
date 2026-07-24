@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from ocint.daemon.api import create_api_router
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
-from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import SessionCheckpoint, WorktreeCheckpoint
+from ocint.daemon.pull_request_job.models import SessionCheckpoint, WorktreeCheckpoint
+from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
 
 
 class FakeOpenCodeConnection:
@@ -21,7 +21,7 @@ async def test_api_protects_jobs_and_live_attachment_with_bearer_authentication(
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
-    repository = ControlRepository(engine)
+    repository = PullRequestJobRepository(engine)
     app = FastAPI()
     app.include_router(create_api_router(repository, repository.submit, "secret", FakeOpenCodeConnection()))
 

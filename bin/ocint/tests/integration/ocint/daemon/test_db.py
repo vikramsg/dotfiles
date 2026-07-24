@@ -5,8 +5,9 @@ import pytest
 from alembic import command
 from ocint.daemon.db import create_daemon_engine, downgrade_daemon_db, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
-from ocint.daemon.models import GitHubLogin, MessageClassification, WorkRequest
-from ocint.daemon.repository import ControlRepository
+from ocint.daemon.models import GitHubLogin, MessageClassification
+from ocint.daemon.pull_request_job import PullRequestJobRequest
+from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
 from ocint.daemon.tasks.models import TaskKind
 from ocint.daemon.tasks.repository import TaskRepository
 from sqlalchemy import text
@@ -134,7 +135,7 @@ def test_job_title_migration_downgrades_with_attached_task(tmp_path: Path) -> No
     database = tmp_path / "control.sqlite"
     migrate_daemon_db(database)
     engine = create_daemon_engine(database)
-    control = ControlRepository(engine)
+    control = PullRequestJobRepository(engine)
     tasks = TaskRepository(engine)
     thread = tasks.upsert_thread("source:thread", "Work title", "repo", True)
     tasks.upsert_message(
@@ -148,7 +149,7 @@ def test_job_title_migration_downgrades_with_attached_task(tmp_path: Path) -> No
     task = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert task is not None
     job = control.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="job",
             actor=GitHubLogin("actor"),
             repository="repo",

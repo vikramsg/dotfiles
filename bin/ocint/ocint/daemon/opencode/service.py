@@ -9,7 +9,8 @@ import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from ocint.daemon.logging import get_logger
-from ocint.daemon.service import PromptObservation
+from ocint.daemon.models import PromptObservation
+from ocint.daemon.opencode.config import OpenCodeRuntimeConfig
 
 logger = get_logger("opencode")
 
@@ -73,38 +74,26 @@ class OpenCodePromptState(BaseModel):
 class OpenCodeClient:
     def __init__(
         self,
-        server_url: str,
-        username: str,
-        password: str,
-        request_timeout_seconds: int,
-        execution_timeout_seconds: int,
-        expected_version: str,
-        executable: Path,
-        config_file: Path,
-        xdg_config_home: Path,
-        xdg_data_home: Path,
-        startup_timeout_seconds: int,
-        shutdown_timeout_seconds: int,
-        process_path: str,
-        process_lang: str,
+        config: OpenCodeRuntimeConfig,
     ) -> None:
-        self.server_url = server_url.rstrip("/")
-        self.username = username
-        self.password = password
-        token = base64.b64encode(f"{username}:{password}".encode()).decode()
+        service = config.service
+        self.server_url = str(service.server_url).rstrip("/")
+        self.username = service.username
+        self.password = config.password
+        token = base64.b64encode(f"{self.username}:{self.password}".encode()).decode()
         self.headers = {"Authorization": f"Basic {token}"}
-        self.request_timeout = aiohttp.ClientTimeout(total=request_timeout_seconds)
-        self.request_timeout_seconds = request_timeout_seconds
-        self.execution_timeout_seconds = execution_timeout_seconds
-        self.expected_version = expected_version
-        self.executable = executable
-        self.config_file = config_file
-        self.xdg_config_home = xdg_config_home
-        self.xdg_data_home = xdg_data_home
-        self.startup_timeout_seconds = startup_timeout_seconds
-        self.shutdown_timeout_seconds = shutdown_timeout_seconds
-        self.process_path = process_path
-        self.process_lang = process_lang
+        self.request_timeout = aiohttp.ClientTimeout(total=service.request_timeout_seconds)
+        self.request_timeout_seconds = service.request_timeout_seconds
+        self.execution_timeout_seconds = config.execution_timeout_seconds
+        self.expected_version = service.expected_version
+        self.executable = service.executable
+        self.config_file = service.config_file
+        self.xdg_config_home = service.xdg_config_home
+        self.xdg_data_home = service.xdg_data_home
+        self.startup_timeout_seconds = service.startup_timeout_seconds
+        self.shutdown_timeout_seconds = service.shutdown_timeout_seconds
+        self.process_path = config.process_path
+        self.process_lang = config.process_lang
         self.client: aiohttp.ClientSession | None = None
         self.process: asyncio.subprocess.Process | None = None
 

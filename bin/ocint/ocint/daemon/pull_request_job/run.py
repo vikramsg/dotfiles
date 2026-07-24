@@ -1,177 +1,49 @@
 from __future__ import annotations
 
 import asyncio
-from enum import StrEnum
-from pathlib import Path
-from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict
-
-from ocint.daemon.config import DaemonConfig, RepositoryConfig
 from ocint.daemon.logging import get_logger
 from ocint.daemon.models import (
-    Job,
-    JobStage,
-    JobState,
     PublicationRequest,
-    PublicationResult,
     PublishedPublication,
     RefusedPublication,
-    WorkRequest,
+    Worktree,
 )
+from ocint.daemon.pull_request_job.config import PullRequestJobConfig
+from ocint.daemon.pull_request_job.contracts import (
+    GitGateway,
+    OpenCodeGateway,
+    PullRequestJobStore,
+    PullRequestPublisher,
+)
+from ocint.daemon.pull_request_job.models import (
+    CommitCheckpoint,
+    PromptIntentCheckpoint,
+    PromptSubmittedCheckpoint,
+    PublicationRefusalCheckpoint,
+    PullRequestCheckpoint,
+    PullRequestJob,
+    PullRequestJobRequest,
+    PullRequestJobStage,
+    PullRequestJobState,
+    PushCheckpoint,
+    SessionCheckpoint,
+    StageCheckpoint,
+    WorktreeCheckpoint,
+)
+from ocint.daemon.pull_request_job.service import PromptDecision, authorize, prompt_action
 
 logger = get_logger("service")
 
 
-class PromptDecision(StrEnum):
-    SUBMIT = "submit"
-    WAIT = "wait"
-    ADVANCE = "advance"
-
-
-class Worktree(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    path: Path
-    branch: str
-    base_revision: str
-
-
-class PromptObservation(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    found: bool
-    completed: bool
-    active: bool
-
-
-class WorktreeCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["worktree"] = "worktree"
-    path: Path
-    branch: str
-    base_revision: str
-
-
-class SessionCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["session"] = "session"
-    session_id: str
-    server_url: str
-
-
-class PromptIntentCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["prompt_intent"] = "prompt_intent"
-
-
-class PromptSubmittedCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["prompt_submitted"] = "prompt_submitted"
-
-
-class StageCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["stage"] = "stage"
-    stage: JobStage
-
-
-class CommitCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["commit"] = "commit"
-    sha: str
-
-
-class PushCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["push"] = "push"
-    revision: str
-
-
-class PullRequestCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["pull_request"] = "pull_request"
-    url: str
-
-
-class PublicationRefusalCheckpoint(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["publication_refusal"] = "publication_refusal"
-    reason: str
-
-
-type Checkpoint = (
-    WorktreeCheckpoint
-    | SessionCheckpoint
-    | PromptIntentCheckpoint
-    | PromptSubmittedCheckpoint
-    | StageCheckpoint
-    | CommitCheckpoint
-    | PushCheckpoint
-    | PullRequestCheckpoint
-    | PublicationRefusalCheckpoint
-)
-
-
-class JobStore(Protocol):
-    def submit(self, request: WorkRequest) -> Job: ...
-    def retry(self, previous: Job, request: WorkRequest) -> Job: ...
-    def claim(self, job_id: str) -> Job | None: ...
-    def pending_ids(self) -> list[str]: ...
-    def get(self, job_id: str) -> Job: ...
-    def checkpoint(self, job_id: str, checkpoint: Checkpoint) -> Job: ...
-    def complete(self, job_id: str) -> Job: ...
-    def fail(self, job_id: str, error: str) -> Job: ...
-    def requeue(self, job_id: str) -> None: ...
-    def reconcile(self) -> int: ...
-
-
-class OpenCode(Protocol):
-    server_url: str
-
-    async def create(self, directory: Path, identity: str) -> str: ...
-    async def observe_prompt(self, directory: Path, session_id: str, text: str) -> PromptObservation: ...
-    async def prompt(self, directory: Path, session_id: str, text: str) -> None: ...
-    async def wait_for_completion(self, directory: Path, session_id: str, text: str) -> None: ...
-
-
-class Git(Protocol):
-    async def provision(self, repository: RepositoryConfig, job_id: str) -> Worktree: ...
-    async def validate(self, worktree: Worktree, checks: tuple[tuple[str, ...], ...]) -> None: ...
-    async def commit(self, worktree: Worktree, message: str, author_name: str, author_email: str) -> str: ...
-    async def push(self, worktree: Worktree) -> None: ...
-
-
-class PullRequestPublisher(Protocol):
-    async def publish(self, request: PublicationRequest) -> PublicationResult: ...
-
-
-def authorize(request: WorkRequest, config: DaemonConfig) -> None:
-    repository = config.repository(request.repository)
-    if repository.actors and request.actor not in repository.actors:
-        raise PermissionError(f"actor is not allowed for {request.repository}: {request.actor}")
-
-
-def prompt_action(observation: PromptObservation) -> PromptDecision:
-    if observation.completed:
-        return PromptDecision.ADVANCE
-    if observation.found and observation.active:
-        return PromptDecision.WAIT
-    return PromptDecision.SUBMIT
-
-
-class JobExecutor:
+class PullRequestJobRunner:
     def __init__(
-        self, config: DaemonConfig, store: JobStore, opencode: OpenCode, git: Git, publisher: PullRequestPublisher
+        self,
+        config: PullRequestJobConfig,
+        store: PullRequestJobStore,
+        opencode: OpenCodeGateway,
+        git: GitGateway,
+        publisher: PullRequestPublisher,
     ) -> None:
         self.config = config
         self.store = store
@@ -195,16 +67,16 @@ class JobExecutor:
 
     def schedule_pending(self, job_ids: list[str]) -> None:
         for job_id in job_ids:
-            if self.store.get(job_id).state is JobState.QUEUED:
+            if self.store.get(job_id).state is PullRequestJobState.QUEUED:
                 self.schedule(job_id)
 
-    def submit(self, request: WorkRequest) -> Job:
+    def submit(self, request: PullRequestJobRequest) -> PullRequestJob:
         job = self.accept(request)
-        if job.state is JobState.QUEUED:
+        if job.state is PullRequestJobState.QUEUED:
             self.schedule(job.id)
         return job
 
-    def accept(self, request: WorkRequest) -> Job:
+    def accept(self, request: PullRequestJobRequest) -> PullRequestJob:
         authorize(request, self.config)
         job = self.store.submit(request)
         self.activity_generation += 1
@@ -212,24 +84,28 @@ class JobExecutor:
         return job
 
     def schedule_accepted(self, job_id: str) -> None:
-        if self.store.get(job_id).state is JobState.QUEUED:
+        if self.store.get(job_id).state is PullRequestJobState.QUEUED:
             self.schedule(job_id)
 
-    def retry(self, previous: Job, request: WorkRequest) -> Job:
+    def retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
         job = self.accept_retry(previous, request)
-        if job.state is JobState.QUEUED:
+        if job.state is PullRequestJobState.QUEUED:
             self.schedule(job.id)
         logger.info("job retry scheduled", previous_job=previous.id, job=job.id, repository=job.repository)
         return job
 
-    def accept_retry(self, previous: Job, request: WorkRequest) -> Job:
+    def accept_retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
         authorize(request, self.config)
         job = self.store.retry(previous, request)
         self.activity_generation += 1
         return job
 
-    def get(self, job_id: str) -> Job:
+    def get(self, job_id: str) -> PullRequestJob:
         return self.store.get(job_id)
+
+    def reusable(self, candidate_ids: tuple[str, ...]) -> PullRequestJob | None:
+        candidates = (self.store.get(job_id) for job_id in candidate_ids)
+        return next((job for job in candidates if job.state is PullRequestJobState.COMPLETED), None)
 
     def abandon(self, job_id: str, reason: str) -> None:
         self.store.fail(job_id, reason)
@@ -303,7 +179,7 @@ class JobExecutor:
         repository = self.config.repository(job.repository)
         if job.worktree_path is None:
             logger.info("job stage started", job=job.id, stage="worktree")
-            worktree = await self.git.provision(repository, job.id)
+            worktree = await self.git.provision(repository.git_repository, job.id)
             job = self.store.checkpoint(
                 job.id,
                 WorktreeCheckpoint(
@@ -315,8 +191,8 @@ class JobExecutor:
             logger.info("job stage completed", job=job.id, stage="worktree", branch=worktree.branch)
         else:
             worktree = Worktree(path=job.worktree_path, branch=job.branch, base_revision=job.base_revision)
-        if job.stage is JobStage.EXECUTION:
-            logger.info("job stage started", job=job.id, stage=JobStage.EXECUTION.value)
+        if job.stage is PullRequestJobStage.EXECUTION:
+            logger.info("job stage started", job=job.id, stage=PullRequestJobStage.EXECUTION.value)
             if not job.session_id:
                 session_id = await self.opencode.create(worktree.path, f"ocint:{job.id}")
                 job = self.store.checkpoint(
@@ -330,30 +206,30 @@ class JobExecutor:
                 job = self.store.checkpoint(job.id, PromptSubmittedCheckpoint())
             if action is not PromptDecision.ADVANCE:
                 await self.opencode.wait_for_completion(worktree.path, job.session_id, job.prompt)
-            job = self.store.checkpoint(job.id, StageCheckpoint(stage=JobStage.VALIDATION))
-            logger.info("job stage completed", job=job.id, stage=JobStage.EXECUTION.value)
-        if job.stage is JobStage.VALIDATION:
-            logger.info("job stage started", job=job.id, stage=JobStage.VALIDATION.value)
+            job = self.store.checkpoint(job.id, StageCheckpoint(stage=PullRequestJobStage.VALIDATION))
+            logger.info("job stage completed", job=job.id, stage=PullRequestJobStage.EXECUTION.value)
+        if job.stage is PullRequestJobStage.VALIDATION:
+            logger.info("job stage started", job=job.id, stage=PullRequestJobStage.VALIDATION.value)
             await self.git.validate(worktree, repository.checks)
-            job = self.store.checkpoint(job.id, StageCheckpoint(stage=JobStage.COMMIT))
-            logger.info("job stage completed", job=job.id, stage=JobStage.VALIDATION.value)
-        if job.stage is JobStage.COMMIT:
-            logger.info("job stage started", job=job.id, stage=JobStage.COMMIT.value)
+            job = self.store.checkpoint(job.id, StageCheckpoint(stage=PullRequestJobStage.COMMIT))
+            logger.info("job stage completed", job=job.id, stage=PullRequestJobStage.VALIDATION.value)
+        if job.stage is PullRequestJobStage.COMMIT:
+            logger.info("job stage started", job=job.id, stage=PullRequestJobStage.COMMIT.value)
             commit = await self.git.commit(worktree, job.title, repository.author_name, repository.author_email)
             job = self.store.checkpoint(job.id, CommitCheckpoint(sha=commit))
-            logger.info("job stage completed", job=job.id, stage=JobStage.COMMIT.value, commit=commit)
-        if job.stage is JobStage.PUSH:
-            logger.info("job stage started", job=job.id, stage=JobStage.PUSH.value)
+            logger.info("job stage completed", job=job.id, stage=PullRequestJobStage.COMMIT.value, commit=commit)
+        if job.stage is PullRequestJobStage.PUSH:
+            logger.info("job stage started", job=job.id, stage=PullRequestJobStage.PUSH.value)
             await self.git.push(worktree)
             job = self.store.checkpoint(job.id, PushCheckpoint(revision=job.commit_sha))
-            logger.info("job stage completed", job=job.id, stage=JobStage.PUSH.value, branch=worktree.branch)
-        if job.stage is JobStage.PULL_REQUEST:
-            logger.info("job stage started", job=job.id, stage=JobStage.PULL_REQUEST.value)
+            logger.info("job stage completed", job=job.id, stage=PullRequestJobStage.PUSH.value, branch=worktree.branch)
+        if job.stage is PullRequestJobStage.PULL_REQUEST:
+            logger.info("job stage started", job=job.id, stage=PullRequestJobStage.PULL_REQUEST.value)
             result = await self.publisher.publish(
                 PublicationRequest(
                     repository=repository.github_repository,
                     branch=worktree.branch,
-                    base=repository.default_branch,
+                    base=repository.git_repository.default_branch,
                     title=job.title,
                     body="Automated by ocint daemon.",
                     origin=job.origin,
@@ -365,6 +241,8 @@ class JobExecutor:
             if not isinstance(result, PublishedPublication):
                 raise RuntimeError("unsupported publication result")
             self.store.checkpoint(job.id, PullRequestCheckpoint(url=result.url))
-            logger.info("job stage completed", job=job.id, stage=JobStage.PULL_REQUEST.value, pull_request=result.url)
+            logger.info(
+                "job stage completed", job=job.id, stage=PullRequestJobStage.PULL_REQUEST.value, pull_request=result.url
+            )
         self.store.complete(job.id)
         logger.info("job completed", job=job.id, repository=job.repository)

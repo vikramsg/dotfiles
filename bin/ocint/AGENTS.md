@@ -91,6 +91,7 @@ assert tasks.actionable_messages(thread.id) == expected
 
 - Prefer concrete types. Construct them wherever appropriate. 
 - Do not use `tuple` or `dict` or `object` or `Any`. Create or convert to concrete types.
+- Do not gate type checking using `if TYPE_CHECKING:`. This suggests that something was misused.
 
 ### Documentation and Code Comments
 

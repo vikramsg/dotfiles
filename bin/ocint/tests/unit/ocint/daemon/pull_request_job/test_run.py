@@ -1,28 +1,39 @@
 import asyncio
+import builtins
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
 import pytest
-from ocint.daemon.config import DaemonConfig, RepositoryConfig
-from ocint.daemon.models import GitHubLogin, Job, JobStage, JobState, PublicationRequest, PublishedPublication
-from ocint.daemon.service import (
+from ocint.daemon.models import (
+    GitHubLogin,
+    GitRepository,
+    PromptObservation,
+    PublicationRequest,
+    PublishedPublication,
+    RefusedPublication,
+    Worktree,
+)
+from ocint.daemon.pull_request_job import (
+    PullRequestJob,
+    PullRequestJobConfig,
+    PullRequestJobRequest,
+    PullRequestJobStage,
+    PullRequestJobState,
+)
+from ocint.daemon.pull_request_job.models import (
     Checkpoint,
     CommitCheckpoint,
-    JobExecutor,
-    PromptDecision,
     PromptIntentCheckpoint,
-    PromptObservation,
     PromptSubmittedCheckpoint,
+    PublicationRefusalCheckpoint,
     PullRequestCheckpoint,
     PushCheckpoint,
     SessionCheckpoint,
     StageCheckpoint,
-    WorkRequest,
-    Worktree,
     WorktreeCheckpoint,
-    prompt_action,
 )
+from ocint.daemon.pull_request_job.run import PullRequestJobRunner
 
 
 class GitFailure(StrEnum):
@@ -32,22 +43,22 @@ class GitFailure(StrEnum):
 
 @dataclass
 class StatefulJobStore:
-    jobs: list[Job] = field(default_factory=list)
+    jobs: builtins.list[PullRequestJob] = field(default_factory=list)
     reconciled: int = 0
 
-    def submit(self, request: WorkRequest) -> Job:
+    def submit(self, request: PullRequestJobRequest) -> PullRequestJob:
         for job in self.jobs:
             if job.idempotency_key == request.idempotency_key:
                 return job
-        job = Job(
+        job = PullRequestJob(
             id=f"job-{len(self.jobs) + 1}",
             idempotency_key=request.idempotency_key,
             actor=request.actor,
             repository=request.repository,
             title=request.title,
             prompt=request.prompt,
-            state=JobState.QUEUED,
-            stage=JobStage.EXECUTION,
+            state=PullRequestJobState.QUEUED,
+            stage=PullRequestJobStage.EXECUTION,
             session_id="",
             server_url="",
             worktree_path=None,
@@ -65,7 +76,7 @@ class StatefulJobStore:
         self.jobs.append(job)
         return job
 
-    def retry(self, previous: Job, request: WorkRequest) -> Job:
+    def retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
         job = self.submit(request).model_copy(
             update={
                 "session_id": previous.session_id,
@@ -78,24 +89,27 @@ class StatefulJobStore:
         self.save(job)
         return job
 
-    def claim(self, job_id: str) -> Job | None:
+    def claim(self, job_id: str) -> PullRequestJob | None:
         job = self.get(job_id)
-        if job.state is not JobState.QUEUED:
+        if job.state is not PullRequestJobState.QUEUED:
             return None
-        claimed = job.model_copy(update={"state": JobState.RUNNING})
+        claimed = job.model_copy(update={"state": PullRequestJobState.RUNNING})
         self.save(claimed)
         return claimed
 
-    def pending_ids(self) -> list[str]:
-        return [job.id for job in self.jobs if job.state is JobState.QUEUED]
+    def pending_ids(self) -> builtins.list[str]:
+        return [job.id for job in self.jobs if job.state is PullRequestJobState.QUEUED]
 
-    def get(self, job_id: str) -> Job:
+    def get(self, job_id: str) -> PullRequestJob:
         for job in self.jobs:
             if job.id == job_id:
                 return job
         raise ValueError(f"job not found: {job_id}")
 
-    def checkpoint(self, job_id: str, checkpoint: Checkpoint) -> Job:
+    def list(self, limit: int = 100) -> builtins.list[PullRequestJob]:
+        return self.jobs[:limit]
+
+    def checkpoint(self, job_id: str, checkpoint: Checkpoint) -> PullRequestJob:
         job = self.get(job_id)
         match checkpoint:
             case WorktreeCheckpoint(path=path, branch=branch, base_revision=base_revision):
@@ -111,39 +125,41 @@ class StatefulJobStore:
             case StageCheckpoint(stage=stage):
                 updated = job.model_copy(update={"stage": stage})
             case CommitCheckpoint(sha=sha):
-                updated = job.model_copy(update={"stage": JobStage.PUSH, "commit_sha": sha})
+                updated = job.model_copy(update={"stage": PullRequestJobStage.PUSH, "commit_sha": sha})
             case PushCheckpoint(revision=revision):
                 updated = job.model_copy(
-                    update={"stage": JobStage.PULL_REQUEST, "pushed": True, "base_revision": revision}
+                    update={"stage": PullRequestJobStage.PULL_REQUEST, "pushed": True, "base_revision": revision}
                 )
             case PullRequestCheckpoint(url=url):
-                updated = job.model_copy(update={"stage": JobStage.COMPLETE, "pull_request_url": url})
+                updated = job.model_copy(update={"stage": PullRequestJobStage.COMPLETE, "pull_request_url": url})
+            case PublicationRefusalCheckpoint(reason=reason):
+                updated = job.model_copy(update={"publication_refusal": reason})
         self.save(updated)
         return updated
 
-    def complete(self, job_id: str) -> Job:
-        job = self.get(job_id).model_copy(update={"state": JobState.COMPLETED})
+    def complete(self, job_id: str) -> PullRequestJob:
+        job = self.get(job_id).model_copy(update={"state": PullRequestJobState.COMPLETED})
         self.save(job)
         return job
 
-    def fail(self, job_id: str, error: str) -> Job:
-        job = self.get(job_id).model_copy(update={"state": JobState.FAILED, "error": error})
+    def fail(self, job_id: str, error: str) -> PullRequestJob:
+        job = self.get(job_id).model_copy(update={"state": PullRequestJobState.FAILED, "error": error})
         self.save(job)
         return job
 
     def requeue(self, job_id: str) -> None:
-        self.save(self.get(job_id).model_copy(update={"state": JobState.QUEUED}))
+        self.save(self.get(job_id).model_copy(update={"state": PullRequestJobState.QUEUED}))
 
     def reconcile(self) -> int:
         reconciled = 0
         for job in list(self.jobs):
-            if job.state is JobState.RUNNING:
+            if job.state is PullRequestJobState.RUNNING:
                 self.requeue(job.id)
                 reconciled += 1
         self.reconciled += reconciled
         return reconciled
 
-    def save(self, updated: Job) -> None:
+    def save(self, updated: PullRequestJob) -> None:
         for index, job in enumerate(self.jobs):
             if job.id == updated.id:
                 self.jobs[index] = updated
@@ -189,7 +205,7 @@ class StatefulGit:
     calls: list[str] = field(default_factory=list)
     commit_messages: list[str] = field(default_factory=list)
 
-    async def provision(self, repository: RepositoryConfig, job_id: str) -> Worktree:
+    async def provision(self, repository: GitRepository, job_id: str) -> Worktree:
         _ = repository
         self.calls.append("provision")
         path = self.root / job_id
@@ -224,6 +240,12 @@ class StatefulGitHub:
         return PublishedPublication(url="https://example.test/pull/1")
 
 
+class RefusingGitHub:
+    async def publish(self, request: PublicationRequest) -> RefusedPublication:
+        _ = request
+        return RefusedPublication()
+
+
 @dataclass
 class CapacityGit(StatefulGit):
     gate: asyncio.Event = field(default_factory=asyncio.Event)
@@ -231,7 +253,7 @@ class CapacityGit(StatefulGit):
     active: int = 0
     maximum_active: int = 0
 
-    async def provision(self, repository: RepositoryConfig, job_id: str) -> Worktree:
+    async def provision(self, repository: GitRepository, job_id: str) -> Worktree:
         self.active += 1
         self.maximum_active = max(self.maximum_active, self.active)
         if self.active == 2:
@@ -242,34 +264,24 @@ class CapacityGit(StatefulGit):
 
 
 @pytest.fixture
-def daemon_config(tmp_path: Path) -> DaemonConfig:
-    return DaemonConfig.model_validate(
+def daemon_config(tmp_path: Path) -> PullRequestJobConfig:
+    return PullRequestJobConfig.model_validate(
         {
-            "database_path": tmp_path / "control.sqlite",
-            "mirror_root": tmp_path / "mirrors",
-            "worktree_root": tmp_path / "worktrees",
             "repositories": [
                 {
-                    "name": "repo",
-                    "remote_url": "git@example.test:owner/repo.git",
+                    "git_repository": {
+                        "name": "repo",
+                        "remote_url": "git@example.test:owner/repo.git",
+                        "default_branch": "main",
+                    },
                     "github_repository": "owner/repo",
                     "author_name": "Agent",
                     "author_email": "agent@example.test",
                     "actors": ["allowed"],
+                    "checks": [],
                 }
             ],
             "scheduler": {"capacity": 2, "job_timeout_seconds": 1, "shutdown_timeout_seconds": 1},
-            "opencode": {
-                "config_file": tmp_path / "opencode-xdg" / "opencode" / "opencode.json",
-                "xdg_config_home": tmp_path / "opencode-xdg",
-                "xdg_data_home": tmp_path / "data",
-            },
-            "git": {
-                "ssh_executable": tmp_path / "ssh",
-                "identity_file": tmp_path / "identity",
-                "known_hosts_file": tmp_path / "known_hosts",
-            },
-            "github": {"agent_actor": "maintainer"},
         }
     )
 
@@ -279,37 +291,19 @@ def job_store() -> StatefulJobStore:
     return StatefulJobStore()
 
 
-@pytest.mark.parametrize(
-    ("observation", "expected"),
-    [
-        (PromptObservation(found=True, completed=True, active=False), PromptDecision.ADVANCE),
-        (PromptObservation(found=True, completed=False, active=True), PromptDecision.WAIT),
-        (PromptObservation(found=True, completed=False, active=False), PromptDecision.SUBMIT),
-        (PromptObservation(found=False, completed=False, active=False), PromptDecision.SUBMIT),
-        (PromptObservation(found=False, completed=False, active=True), PromptDecision.SUBMIT),
-    ],
-)
-def test_prompt_decision_matrix(observation: PromptObservation, expected: PromptDecision) -> None:
-    # GIVEN
-    decision = prompt_action(observation)
-
-    # THEN
-    assert decision is expected
-
-
 @pytest.mark.asyncio
 async def test_executor_runs_every_stage_and_persists_result(
-    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
 ) -> None:
     # GIVEN
     opencode = StatefulOpenCode()
     git = StatefulGit(tmp_path / "worktrees")
     github = StatefulGitHub()
-    executor = JobExecutor(daemon_config, job_store, opencode, git, github)
+    executor = PullRequestJobRunner(daemon_config, job_store, opencode, git, github)
 
     # WHEN
     job = executor.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="full",
             actor=GitHubLogin("allowed"),
             repository="repo",
@@ -326,7 +320,7 @@ async def test_executor_runs_every_stage_and_persists_result(
     assert github.calls == ["pull_request"]
     assert git.commit_messages == ["ocint: Human-readable change"]
     assert [request.title for request in github.requests] == ["ocint: Human-readable change"]
-    assert completed.state is JobState.COMPLETED
+    assert completed.state is PullRequestJobState.COMPLETED
     assert completed.worktree_path == tmp_path / "worktrees" / job.id
     assert isinstance(completed.worktree_path, Path)
     assert completed.commit_sha == "commit-sha"
@@ -336,10 +330,10 @@ async def test_executor_runs_every_stage_and_persists_result(
 
 @pytest.mark.asyncio
 async def test_executor_marks_stage_failure_terminal(
-    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
 ) -> None:
     # GIVEN
-    executor = JobExecutor(
+    executor = PullRequestJobRunner(
         daemon_config,
         job_store,
         StatefulOpenCode(),
@@ -349,7 +343,7 @@ async def test_executor_marks_stage_failure_terminal(
 
     # WHEN
     job = executor.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="failure",
             actor=GitHubLogin("allowed"),
             repository="repo",
@@ -361,26 +355,31 @@ async def test_executor_marks_stage_failure_terminal(
 
     # THEN
     failed = job_store.get(job.id)
-    assert failed.state is JobState.FAILED
+    assert failed.state is PullRequestJobState.FAILED
     assert failed.error == "validation failed"
 
 
 @pytest.mark.parametrize(
     ("stage", "expected_git", "expected_opencode", "expected_github"),
     [
-        (JobStage.EXECUTION, ["validate", "commit", "push"], ["observe", "prompt", "wait"], ["pull_request"]),
-        (JobStage.VALIDATION, ["validate", "commit", "push"], [], ["pull_request"]),
-        (JobStage.COMMIT, ["commit", "push"], [], ["pull_request"]),
-        (JobStage.PUSH, ["push"], [], ["pull_request"]),
-        (JobStage.PULL_REQUEST, [], [], ["pull_request"]),
+        (
+            PullRequestJobStage.EXECUTION,
+            ["validate", "commit", "push"],
+            ["observe", "prompt", "wait"],
+            ["pull_request"],
+        ),
+        (PullRequestJobStage.VALIDATION, ["validate", "commit", "push"], [], ["pull_request"]),
+        (PullRequestJobStage.COMMIT, ["commit", "push"], [], ["pull_request"]),
+        (PullRequestJobStage.PUSH, ["push"], [], ["pull_request"]),
+        (PullRequestJobStage.PULL_REQUEST, [], [], ["pull_request"]),
     ],
 )
 @pytest.mark.asyncio
 async def test_start_resumes_only_unfinished_stage(
     tmp_path: Path,
-    daemon_config: DaemonConfig,
+    daemon_config: PullRequestJobConfig,
     job_store: StatefulJobStore,
-    stage: JobStage,
+    stage: PullRequestJobStage,
     expected_git: list[str],
     expected_opencode: list[str],
     expected_github: list[str],
@@ -389,7 +388,7 @@ async def test_start_resumes_only_unfinished_stage(
     worktree = tmp_path / f"worktree-{stage.value}"
     worktree.mkdir()
     job = job_store.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key=stage.value,
             actor=GitHubLogin("allowed"),
             repository="repo",
@@ -398,14 +397,14 @@ async def test_start_resumes_only_unfinished_stage(
         )
     )
     job_store.checkpoint(job.id, WorktreeCheckpoint(path=worktree, branch=f"ocint/{job.id}", base_revision="base"))
-    if stage is JobStage.EXECUTION:
+    if stage is PullRequestJobStage.EXECUTION:
         job_store.checkpoint(job.id, SessionCheckpoint(session_id="session", server_url="http://opencode.test"))
     else:
         job_store.checkpoint(job.id, StageCheckpoint(stage=stage))
     opencode = StatefulOpenCode()
     git = StatefulGit(tmp_path / "managed")
     github = StatefulGitHub()
-    executor = JobExecutor(daemon_config, job_store, opencode, git, github)
+    executor = PullRequestJobRunner(daemon_config, job_store, opencode, git, github)
 
     # WHEN
     await executor.start()
@@ -415,16 +414,16 @@ async def test_start_resumes_only_unfinished_stage(
     assert git.calls == expected_git
     assert opencode.calls == expected_opencode
     assert github.calls == expected_github
-    assert job_store.get(job.id).state is JobState.COMPLETED
+    assert job_store.get(job.id).state is PullRequestJobState.COMPLETED
 
 
 @pytest.mark.asyncio
 async def test_start_recovers_running_job(
-    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
 ) -> None:
     # GIVEN
     job = job_store.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="recovery",
             actor=GitHubLogin("allowed"),
             repository="repo",
@@ -433,7 +432,7 @@ async def test_start_recovers_running_job(
         )
     )
     job_store.claim(job.id)
-    executor = JobExecutor(
+    executor = PullRequestJobRunner(
         daemon_config, job_store, StatefulOpenCode(), StatefulGit(tmp_path / "worktrees"), StatefulGitHub()
     )
 
@@ -443,7 +442,7 @@ async def test_start_recovers_running_job(
 
     # THEN
     assert job_store.reconciled == 1
-    assert job_store.get(job.id).state is JobState.COMPLETED
+    assert job_store.get(job.id).state is PullRequestJobState.COMPLETED
 
 
 @pytest.mark.parametrize(
@@ -456,7 +455,7 @@ async def test_start_recovers_running_job(
 @pytest.mark.asyncio
 async def test_restart_recovers_interrupted_prompt_without_duplicating_active_prompt(
     tmp_path: Path,
-    daemon_config: DaemonConfig,
+    daemon_config: PullRequestJobConfig,
     job_store: StatefulJobStore,
     active: bool,
     expected_calls: list[str],
@@ -465,7 +464,7 @@ async def test_restart_recovers_interrupted_prompt_without_duplicating_active_pr
     worktree = tmp_path / "interrupted-worktree"
     worktree.mkdir()
     job = job_store.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="interrupted",
             actor=GitHubLogin("allowed"),
             repository="repo",
@@ -479,7 +478,7 @@ async def test_restart_recovers_interrupted_prompt_without_duplicating_active_pr
     job_store.checkpoint(job.id, PromptSubmittedCheckpoint())
     job_store.claim(job.id)
     opencode = StatefulOpenCode(observations=[PromptObservation(found=True, completed=False, active=active)])
-    executor = JobExecutor(
+    executor = PullRequestJobRunner(
         daemon_config,
         job_store,
         opencode,
@@ -495,18 +494,18 @@ async def test_restart_recovers_interrupted_prompt_without_duplicating_active_pr
     assert opencode.calls == expected_calls
     assert opencode.calls.count("prompt") == (0 if active else 1)
     assert job_store.reconciled == 1
-    assert job_store.get(job.id).state is JobState.COMPLETED
+    assert job_store.get(job.id).state is PullRequestJobState.COMPLETED
 
 
 @pytest.mark.asyncio
 async def test_duplicate_idempotent_submission_executes_once(
-    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
 ) -> None:
     # GIVEN
     opencode = StatefulOpenCode(block_wait=True)
     git = StatefulGit(tmp_path / "worktrees")
-    executor = JobExecutor(daemon_config, job_store, opencode, git, StatefulGitHub())
-    request = WorkRequest(
+    executor = PullRequestJobRunner(daemon_config, job_store, opencode, git, StatefulGitHub())
+    request = PullRequestJobRequest(
         idempotency_key="duplicate",
         actor=GitHubLogin("allowed"),
         repository="repo",
@@ -526,17 +525,17 @@ async def test_duplicate_idempotent_submission_executes_once(
     assert opencode.calls == ["create", "observe", "prompt", "wait"]
     opencode.wait_gate.set()
     await executor.close()
-    assert job_store.get(first.id).state is JobState.COMPLETED
+    assert job_store.get(first.id).state is PullRequestJobState.COMPLETED
 
 
 @pytest.mark.asyncio
 async def test_terminal_idempotent_submission_is_not_scheduled_again(
-    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
 ) -> None:
     # GIVEN
     git = StatefulGit(tmp_path / "worktrees")
-    executor = JobExecutor(daemon_config, job_store, StatefulOpenCode(), git, StatefulGitHub())
-    request = WorkRequest(
+    executor = PullRequestJobRunner(daemon_config, job_store, StatefulOpenCode(), git, StatefulGitHub())
+    request = PullRequestJobRequest(
         idempotency_key="terminal",
         actor=GitHubLogin("allowed"),
         repository="repo",
@@ -552,7 +551,7 @@ async def test_terminal_idempotent_submission_is_not_scheduled_again(
 
     # THEN
     assert duplicate.id == completed.id
-    assert job_store.get(completed.id).state is JobState.COMPLETED
+    assert job_store.get(completed.id).state is PullRequestJobState.COMPLETED
     assert executor.is_idle
     assert git.calls == ["provision", "validate", "commit", "push"]
     await executor.close()
@@ -560,13 +559,13 @@ async def test_terminal_idempotent_submission_is_not_scheduled_again(
 
 @pytest.mark.asyncio
 async def test_job_timeout_marks_job_failed(
-    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
 ) -> None:
     # GIVEN
     daemon_config = daemon_config.model_copy(
         update={"scheduler": daemon_config.scheduler.model_copy(update={"shutdown_timeout_seconds": 3})}
     )
-    executor = JobExecutor(
+    executor = PullRequestJobRunner(
         daemon_config,
         job_store,
         StatefulOpenCode(block_wait=True),
@@ -576,7 +575,7 @@ async def test_job_timeout_marks_job_failed(
 
     # WHEN
     job = executor.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="timeout",
             actor=GitHubLogin("allowed"),
             repository="repo",
@@ -588,20 +587,20 @@ async def test_job_timeout_marks_job_failed(
 
     # THEN
     failed = job_store.get(job.id)
-    assert failed.state is JobState.FAILED
+    assert failed.state is PullRequestJobState.FAILED
     assert failed.error == "job timed out"
 
 
 @pytest.mark.asyncio
 async def test_executor_honors_capacity_without_polling(
-    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
 ) -> None:
     # GIVEN
     git = CapacityGit(tmp_path / "worktrees")
-    executor = JobExecutor(daemon_config, job_store, StatefulOpenCode(), git, StatefulGitHub())
+    executor = PullRequestJobRunner(daemon_config, job_store, StatefulOpenCode(), git, StatefulGitHub())
     for number in range(3):
         executor.submit(
-            WorkRequest(
+            PullRequestJobRequest(
                 idempotency_key=f"capacity-{number}",
                 actor=GitHubLogin("allowed"),
                 repository="repo",
@@ -615,21 +614,23 @@ async def test_executor_honors_capacity_without_polling(
 
     # THEN
     assert git.maximum_active == 2
-    assert len([job for job in job_store.jobs if job.state is JobState.QUEUED]) == 1
+    assert len([job for job in job_store.jobs if job.state is PullRequestJobState.QUEUED]) == 1
     git.gate.set()
     await executor.close()
 
 
 def test_submission_enforces_actor_authorization(
-    daemon_config: DaemonConfig, job_store: StatefulJobStore, tmp_path: Path
+    daemon_config: PullRequestJobConfig, job_store: StatefulJobStore, tmp_path: Path
 ) -> None:
     # GIVEN
-    executor = JobExecutor(daemon_config, job_store, StatefulOpenCode(), StatefulGit(tmp_path), StatefulGitHub())
+    executor = PullRequestJobRunner(
+        daemon_config, job_store, StatefulOpenCode(), StatefulGit(tmp_path), StatefulGitHub()
+    )
 
     # WHEN / THEN
     with pytest.raises(PermissionError, match="not allowed"):
         executor.submit(
-            WorkRequest(
+            PullRequestJobRequest(
                 idempotency_key="denied",
                 actor=GitHubLogin("denied"),
                 repository="repo",
@@ -639,18 +640,54 @@ def test_submission_enforces_actor_authorization(
         )
 
 
+def test_reusable_selects_first_completed_candidate(
+    daemon_config: PullRequestJobConfig, job_store: StatefulJobStore, tmp_path: Path
+) -> None:
+    # GIVEN
+    runner = PullRequestJobRunner(daemon_config, job_store, StatefulOpenCode(), StatefulGit(tmp_path), StatefulGitHub())
+    completed = job_store.submit(
+        PullRequestJobRequest(
+            idempotency_key="completed",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Completed",
+            prompt="work",
+        )
+    )
+    failed = job_store.submit(
+        PullRequestJobRequest(
+            idempotency_key="failed",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Failed",
+            prompt="work",
+        )
+    )
+    job_store.complete(completed.id)
+    job_store.fail(failed.id, "failed")
+
+    # WHEN
+    reusable = runner.reusable((failed.id, completed.id))
+
+    # THEN
+    assert reusable is not None
+    assert reusable.id == completed.id
+
+
 @pytest.mark.asyncio
 async def test_shutdown_timeout_requeues_active_job(
-    tmp_path: Path, daemon_config: DaemonConfig, job_store: StatefulJobStore
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
 ) -> None:
     # GIVEN
     daemon_config = daemon_config.model_copy(
         update={"scheduler": daemon_config.scheduler.model_copy(update={"job_timeout_seconds": 10})}
     )
     opencode = StatefulOpenCode(block_wait=True)
-    executor = JobExecutor(daemon_config, job_store, opencode, StatefulGit(tmp_path / "worktrees"), StatefulGitHub())
+    executor = PullRequestJobRunner(
+        daemon_config, job_store, opencode, StatefulGit(tmp_path / "worktrees"), StatefulGitHub()
+    )
     job = executor.submit(
-        WorkRequest(
+        PullRequestJobRequest(
             idempotency_key="shutdown",
             actor=GitHubLogin("allowed"),
             repository="repo",
@@ -658,7 +695,7 @@ async def test_shutdown_timeout_requeues_active_job(
             prompt="work",
         )
     )
-    while job_store.get(job.id).state is not JobState.RUNNING:
+    while job_store.get(job.id).state is not PullRequestJobState.RUNNING:
         await asyncio.sleep(0)
 
     # WHEN
@@ -666,5 +703,37 @@ async def test_shutdown_timeout_requeues_active_job(
 
     # THEN
     current = job_store.get(job.id)
-    assert current.state is JobState.QUEUED
-    assert current.stage is JobStage.EXECUTION
+    assert current.state is PullRequestJobState.QUEUED
+    assert current.stage is PullRequestJobStage.EXECUTION
+
+
+@pytest.mark.asyncio
+async def test_refused_publication_persists_refusal_and_fails_job(
+    tmp_path: Path, daemon_config: PullRequestJobConfig, job_store: StatefulJobStore
+) -> None:
+    # GIVEN
+    runner = PullRequestJobRunner(
+        daemon_config,
+        job_store,
+        StatefulOpenCode(),
+        StatefulGit(tmp_path / "worktrees"),
+        RefusingGitHub(),
+    )
+
+    # WHEN
+    submitted = runner.submit(
+        PullRequestJobRequest(
+            idempotency_key="refused",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Refused publication",
+            prompt="change",
+        )
+    )
+    await runner.wait_until_idle()
+
+    # THEN
+    failed = job_store.get(submitted.id)
+    assert failed.state is PullRequestJobState.FAILED
+    assert failed.publication_refusal == "owned_pull_request_closed"
+    assert failed.error == "owned pull request is closed or merged"

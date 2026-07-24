@@ -1,3 +1,4 @@
+import re
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal, Protocol
@@ -13,20 +14,21 @@ class LogRotation(Protocol):
     def backup_count(self) -> int: ...
 
 
-class JobState(StrEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
+class GitRepository(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
+    name: str
+    remote_url: str
+    default_branch: str = "main"
 
-class JobStage(StrEnum):
-    EXECUTION = "execution"
-    VALIDATION = "validation"
-    COMMIT = "commit"
-    PUSH = "push"
-    PULL_REQUEST = "pull_request"
-    COMPLETE = "complete"
+    @field_validator("remote_url")
+    @classmethod
+    def validate_ssh_remote(cls, value: str) -> str:
+        scp_style = re.fullmatch(r"[^@\s/:]+@[^\s/:]+:.+", value)
+        ssh_url = re.fullmatch(r"ssh://(?:[^@/\s]+@)?[^/:\s]+(?::[0-9]+)?/.+", value)
+        if scp_style is None and ssh_url is None:
+            raise ValueError("repository remote_url must use SSH (git@host:path or ssh://host/path)")
+        return value
 
 
 class GitHubLogin(RootModel[str]):
@@ -82,6 +84,22 @@ class ThreadObservations(RootModel[list[ThreadObservation]]):
     model_config = ConfigDict(frozen=True)
 
 
+class Worktree(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    path: Path
+    branch: str
+    base_revision: str
+
+
+class PromptObservation(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    found: bool
+    completed: bool
+    active: bool
+
+
 class DirectOrigin(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -97,42 +115,6 @@ class ThreadOrigin(BaseModel):
 
 
 type WorkOrigin = Annotated[DirectOrigin | ThreadOrigin, Field(discriminator="kind")]
-
-
-class WorkRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    idempotency_key: str = Field(min_length=1)
-    actor: GitHubLogin
-    repository: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    prompt: str = Field(min_length=1)
-    origin: WorkOrigin = Field(default_factory=DirectOrigin)
-
-    @field_validator("title")
-    @classmethod
-    def normalize_title(cls, value: str) -> str:
-        title = value.strip()
-        summary = title[6:] if title.casefold().startswith("ocint:") else title
-        summary = summary.strip()
-        if not summary:
-            raise ValueError("work title must contain text after the ocint prefix")
-        return f"ocint: {summary}"
-
-
-class ReplyOutcome(StrEnum):
-    ADDRESSED = "addressed"
-    UNAUTHORIZED = "unauthorized"
-    CLOSED_PULL_REQUEST = "closed-pr"
-
-
-class ReplyRequest(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    source_thread_id: str = Field(min_length=1)
-    source_anchor_id: str = Field(min_length=1)
-    outcome: ReplyOutcome
-    text: str = Field(min_length=1)
 
 
 class PublicationRequest(BaseModel):
@@ -163,32 +145,19 @@ class RefusedPublication(BaseModel):
 type PublicationResult = Annotated[PublishedPublication | RefusedPublication, Field(discriminator="status")]
 
 
-class Job(BaseModel):
+class ReplyOutcome(StrEnum):
+    ADDRESSED = "addressed"
+    UNAUTHORIZED = "unauthorized"
+    CLOSED_PULL_REQUEST = "closed-pr"
+
+
+class ReplyRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    id: str
-    idempotency_key: str
-    actor: GitHubLogin
-    repository: str
-    title: str
-    prompt: str
-    state: JobState
-    stage: JobStage
-    session_id: str
-    server_url: str
-    worktree_path: Path | None
-    branch: str
-    base_revision: str
-    prompt_intended: bool
-    prompt_submitted: bool
-    commit_sha: str
-    pushed: bool
-    pull_request_url: str
-    error: str
-    origin: WorkOrigin = Field(default_factory=DirectOrigin)
-    publication_refusal: str = ""
-    created_at: str
-    updated_at: str
+    source_thread_id: str = Field(min_length=1)
+    source_anchor_id: str = Field(min_length=1)
+    outcome: ReplyOutcome
+    text: str = Field(min_length=1)
 
 
 class OpenCodeAttachment(BaseModel):

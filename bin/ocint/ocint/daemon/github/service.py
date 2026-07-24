@@ -59,7 +59,7 @@ class GitHubService(BaseModel):
 
     `open_github_service` constructs this concrete service and yields it to the
     daemon CLI. The CLI injects the same instance into `TaskCoordinator` as its
-    consumer-owned `ThreadSource` protocol and into `JobExecutor` as its
+    consumer-owned `ThreadSource` protocol and into `PullRequestJobRunner` as its
     consumer-owned `PullRequestPublisher` protocol. Neither consumer imports or
     constructs this class. GitHub exchanges typed DTOs and never accesses task
     models, task repositories, or task state.
