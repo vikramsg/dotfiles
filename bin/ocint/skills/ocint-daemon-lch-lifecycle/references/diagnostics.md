@@ -115,6 +115,9 @@ systemctl --user status ocint-daemon.service --no-pager
 systemctl --user status ocint-daemon.timer --no-pager
 ```
 
+`ocint daemon lch lifecycle` reports systemd lifecycle state, while
+`ocint daemon lch status JOB_ID` reports one durable job.
+
 Expected service states:
 
 | State | Meaning |
