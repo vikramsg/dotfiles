@@ -15,5 +15,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("job") as batch:
-        batch.drop_column("title")
+    op.drop_column("job", "title")

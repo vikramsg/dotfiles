@@ -5,6 +5,10 @@ import pytest
 from alembic import command
 from ocint.daemon.db import create_daemon_engine, downgrade_daemon_db, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
+from ocint.daemon.models import GitHubLogin, MessageClassification, WorkRequest
+from ocint.daemon.repository import ControlRepository
+from ocint.daemon.tasks.models import TaskKind
+from ocint.daemon.tasks.repository import TaskRepository
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -122,4 +126,46 @@ def test_migrated_message_source_identity_is_global(tmp_path: Path) -> None:
                     "VALUES (2, 2, 'message:1', 'bob', 'actionable', 'two', 'source-time', 'now', 'now')"
                 )
             )
+    engine.dispose()
+
+
+def test_job_title_migration_downgrades_with_attached_task(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    migrate_daemon_db(database)
+    engine = create_daemon_engine(database)
+    control = ControlRepository(engine)
+    tasks = TaskRepository(engine)
+    thread = tasks.upsert_thread("source:thread", "Work title", "repo", True)
+    tasks.upsert_message(
+        thread.id,
+        "source:message",
+        GitHubLogin("actor"),
+        MessageClassification.ACTIONABLE,
+        "work",
+        "2026-07-24T00:00:00Z",
+    )
+    task = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
+    assert task is not None
+    job = control.submit(
+        WorkRequest(
+            idempotency_key="job",
+            actor=GitHubLogin("actor"),
+            repository="repo",
+            title="Work title",
+            prompt="work",
+        )
+    )
+    tasks.attach_job(task.id, job.id)
+    engine.dispose()
+
+    # WHEN
+    command.downgrade(alembic_config(database), "20260724_decouple_github_source_state")
+
+    # THEN
+    engine = create_daemon_engine(database)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT job_id FROM task_job")).scalar_one() == job.id
+        columns = connection.execute(text("PRAGMA table_info(job)")).mappings()
+        assert "title" not in {str(column["name"]) for column in columns}
     engine.dispose()
