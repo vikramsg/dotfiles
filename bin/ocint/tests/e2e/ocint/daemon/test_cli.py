@@ -54,6 +54,17 @@ def test_job_inspection_commands_are_exposed_only_through_lch() -> None:
     assert {"attach", "lifecycle", "list", "status"}.issubset(
         line.strip().split(maxsplit=1)[0] for line in lch_help.output.splitlines() if line.startswith("  ")
     )
+    for description in (
+        "Attach to a running job's OpenCode session.",
+        "Install and enable the daemon systemd timer.",
+        "Show timer and service lifecycle status.",
+        "List recent daemon jobs.",
+        "Read or follow the daemon log.",
+        "Discover configuration and provision the daemon.",
+        "Show detailed status for one daemon job.",
+        "Remove systemd units while preserving daemon state.",
+    ):
+        assert description in lch_help.output
 
 
 @pytest.mark.asyncio

@@ -57,33 +57,43 @@ agent_actor = "maintainer"
     migrate_daemon_db(database)
     engine = create_daemon_engine(database)
     repository = ControlRepository(engine)
-    job = repository.submit(
-        WorkRequest(
-            idempotency_key="key",
-            actor=GitHubLogin("maintainer"),
-            repository="repo",
-            title="Job title",
-            prompt="work",
+    jobs = [
+        repository.submit(
+            WorkRequest(
+                idempotency_key=f"key-{number}",
+                actor=GitHubLogin("maintainer"),
+                repository="repo",
+                title=f"Job title {number}",
+                prompt="work",
+            )
         )
-    )
+        for number in range(12)
+    ]
     engine.dispose()
     runner = CliRunner()
     environment = {"OCINT_DAEMON_CONFIG": str(config)}
 
     # WHEN
     listed = runner.invoke(main, ["daemon", "lch", "list"], env=environment)
-    status = runner.invoke(main, ["daemon", "lch", "status", job.id], env=environment)
+    expanded = runner.invoke(main, ["daemon", "lch", "list", "--limit", "12"], env=environment)
+    invalid = runner.invoke(main, ["daemon", "lch", "list", "--limit", "0"], env=environment)
+    status = runner.invoke(main, ["daemon", "lch", "status", jobs[-1].id], env=environment)
 
     # THEN
     assert listed.exit_code == 0, listed.output
-    assert job.id in listed.output
+    assert jobs[0].id not in listed.output
+    assert jobs[1].id not in listed.output
+    assert all(job.id in listed.output for job in jobs[2:])
     assert "queued" in listed.output
-    assert "ocint: Job title" in listed.output
+    assert expanded.exit_code == 0, expanded.output
+    assert all(job.id in expanded.output for job in jobs)
+    assert invalid.exit_code == 2
+    assert "x>=1" in invalid.output
     assert status.exit_code == 0, status.output
     assert "Daemon job status" in status.output
-    assert job.id in status.output
+    assert jobs[-1].id in status.output
     assert "repo" in status.output
-    assert "ocint: Job title" in status.output
+    assert "ocint: Job title 11" in status.output
 
 
 def test_app_factory_requires_api_token_before_state_creation(tmp_path: Path) -> None:

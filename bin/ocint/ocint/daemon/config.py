@@ -51,7 +51,7 @@ class LifecycleConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     startup_delay_seconds: int = Field(default=60, ge=1)
-    inactive_interval_seconds: int = Field(default=900, ge=1)
+    inactive_interval_seconds: int = Field(default=600, ge=1)
 
 
 class LoggingConfig(BaseModel):
