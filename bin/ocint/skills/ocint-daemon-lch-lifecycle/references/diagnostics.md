@@ -45,7 +45,7 @@ systemctl --user stop ocint-daemon.timer ocint-daemon.service
 uv tool uninstall ocint
 just --justfile bin/ocint/justfile install
 ocint daemon lch provision
-ocint daemon lch status
+ocint daemon lch lifecycle
 systemctl --user list-timers ocint-daemon.timer --no-pager
 ```
 
@@ -93,7 +93,7 @@ If the expected timer deadline passes without a service start, diagnose the
 timer rather than manually starting the service:
 
 ```bash
-ocint daemon lch status
+ocint daemon lch lifecycle
 systemctl --user status ocint-daemon.timer --no-pager
 systemctl --user list-timers ocint-daemon.timer --no-pager
 systemctl --user cat ocint-daemon.timer
