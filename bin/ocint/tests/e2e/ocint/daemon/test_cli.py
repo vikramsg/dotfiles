@@ -473,9 +473,9 @@ agent_actor = "maintainer"
     executable = binary_directory / "ocint"
     executable.write_text(
         "#!/bin/sh\n"
-        "if [ \"$1 $2\" = \"daemon --help\" ]; then\n"
+        'if [ "$1 $2" = "daemon --help" ]; then\n'
         "  printf 'Commands:\\n  run\\n  doctor\\n  lch\\n'\n"
-        "elif [ \"$1 $2 $3\" = \"daemon lch --help\" ]; then\n"
+        'elif [ "$1 $2 $3" = "daemon lch --help" ]; then\n'
         "  printf 'Commands:\\n  apply\\n  attach\\n  lifecycle\\n  list\\n  logs\\n  setup\\n  status\\n  uninstall\\n'\n"
         "fi\n"
     )
@@ -508,9 +508,7 @@ agent_actor = "maintainer"
     assert "OpenCode configuration: reused;" in result.output
 
 
-def test_setup_rejects_incompatible_path_binary_before_writes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_setup_rejects_incompatible_path_binary_before_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # GIVEN
     binary_directory = tmp_path / "bin"
     binary_directory.mkdir()

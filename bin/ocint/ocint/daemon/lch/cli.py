@@ -229,8 +229,7 @@ def _report_install(
     modified: bool,
 ) -> None:
     context.output.write(
-        f"Configuration: {configuration_outcome}; path={context.config_path}; "
-        f"modified={'yes' if modified else 'no'}",
+        f"Configuration: {configuration_outcome}; path={context.config_path}; modified={'yes' if modified else 'no'}",
         nl=True,
     )
     context.output.write(

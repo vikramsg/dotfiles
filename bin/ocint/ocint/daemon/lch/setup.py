@@ -449,7 +449,9 @@ def discover(
 def setup(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> None:
     paths = discovery.paths
     if paths.configuration.exists():
-        raise click.ClickException(f"daemon configuration already exists and will not be overwritten: {paths.configuration}")
+        raise click.ClickException(
+            f"daemon configuration already exists and will not be overwritten: {paths.configuration}"
+        )
     config = discovered_daemon_config(discovery, (LifecycleConfig(), LoggingConfig()))
     for directory in (
         paths.config_home / "ocint",
