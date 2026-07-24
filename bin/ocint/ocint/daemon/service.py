@@ -6,68 +6,28 @@ from pathlib import Path
 from shlex import join
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from ocint.daemon.config import DaemonConfig, RepositoryConfig
 from ocint.daemon.logging import get_logger
+from ocint.daemon.models import (
+    Job,
+    JobStage,
+    JobState,
+    PublicationRequest,
+    PublicationResult,
+    PublishedPublication,
+    RefusedPublication,
+    WorkRequest,
+)
 
 logger = get_logger("service")
-
-
-class JobState(StrEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-class JobStage(StrEnum):
-    EXECUTION = "execution"
-    VALIDATION = "validation"
-    COMMIT = "commit"
-    PUSH = "push"
-    PULL_REQUEST = "pull_request"
-    COMPLETE = "complete"
 
 
 class PromptDecision(StrEnum):
     SUBMIT = "submit"
     WAIT = "wait"
     ADVANCE = "advance"
-
-
-class WorkRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    idempotency_key: str = Field(min_length=1)
-    actor: str = Field(min_length=1)
-    repository: str = Field(min_length=1)
-    prompt: str = Field(min_length=1)
-
-
-class Job(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    id: str
-    idempotency_key: str
-    actor: str
-    repository: str
-    prompt: str
-    state: JobState
-    stage: JobStage
-    session_id: str
-    server_url: str
-    worktree_path: Path | None
-    branch: str
-    base_revision: str
-    prompt_intended: bool
-    prompt_submitted: bool
-    commit_sha: str
-    pushed: bool
-    pull_request_url: str
-    error: str
-    created_at: str
-    updated_at: str
 
 
 class Worktree(BaseModel):
@@ -143,6 +103,13 @@ class PullRequestCheckpoint(BaseModel):
     url: str
 
 
+class PublicationRefusalCheckpoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["publication_refusal"] = "publication_refusal"
+    reason: str
+
+
 type Checkpoint = (
     WorktreeCheckpoint
     | SessionCheckpoint
@@ -152,6 +119,7 @@ type Checkpoint = (
     | CommitCheckpoint
     | PushCheckpoint
     | PullRequestCheckpoint
+    | PublicationRefusalCheckpoint
 )
 
 
@@ -184,8 +152,8 @@ class Git(Protocol):
     async def push(self, worktree: Worktree) -> None: ...
 
 
-class GitHub(Protocol):
-    async def publish(self, repository: str, branch: str, base: str, title: str, body: str, job_id: str) -> str: ...
+class PullRequestPublisher(Protocol):
+    async def publish(self, request: PublicationRequest) -> PublicationResult: ...
 
 
 def authorize(request: WorkRequest, config: DaemonConfig) -> None:
@@ -209,12 +177,14 @@ def prompt_action(observation: PromptObservation) -> PromptDecision:
 
 
 class JobExecutor:
-    def __init__(self, config: DaemonConfig, store: JobStore, opencode: OpenCode, git: Git, github: GitHub) -> None:
+    def __init__(
+        self, config: DaemonConfig, store: JobStore, opencode: OpenCode, git: Git, publisher: PullRequestPublisher
+    ) -> None:
         self.config = config
         self.store = store
         self.opencode = opencode
         self.git = git
-        self.github = github
+        self.publisher = publisher
         self.capacity = asyncio.Semaphore(config.scheduler.capacity)
         self.tasks: dict[str, asyncio.Task[None]] = {}
         self.completed = asyncio.Event()
@@ -388,15 +358,22 @@ class JobExecutor:
             logger.info("job stage completed", job=job.id, stage=JobStage.PUSH.value, branch=worktree.branch)
         if job.stage is JobStage.PULL_REQUEST:
             logger.info("job stage started", job=job.id, stage=JobStage.PULL_REQUEST.value)
-            url = await self.github.publish(
-                repository.github_repository,
-                worktree.branch,
-                repository.default_branch,
-                f"ocint: complete job {job.id}",
-                "Automated by ocint daemon.",
-                job.id,
+            result = await self.publisher.publish(
+                PublicationRequest(
+                    repository=repository.github_repository,
+                    branch=worktree.branch,
+                    base=repository.default_branch,
+                    title=f"ocint: complete job {job.id}",
+                    body="Automated by ocint daemon.",
+                    origin=job.origin,
+                )
             )
-            self.store.checkpoint(job.id, PullRequestCheckpoint(url=url))
-            logger.info("job stage completed", job=job.id, stage=JobStage.PULL_REQUEST.value, pull_request=url)
+            if isinstance(result, RefusedPublication):
+                self.store.checkpoint(job.id, PublicationRefusalCheckpoint(reason=result.reason))
+                raise RuntimeError("owned pull request is closed or merged")
+            if not isinstance(result, PublishedPublication):
+                raise RuntimeError("unsupported publication result")
+            self.store.checkpoint(job.id, PullRequestCheckpoint(url=result.url))
+            logger.info("job stage completed", job=job.id, stage=JobStage.PULL_REQUEST.value, pull_request=result.url)
         self.store.complete(job.id)
         logger.info("job completed", job=job.id, repository=job.repository)

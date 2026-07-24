@@ -4,9 +4,19 @@ from pathlib import Path
 import pytest
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
+from ocint.daemon.models import (
+    GitHubLogin,
+    Job,
+    ObservedMessage,
+    ObservedMessages,
+    ReplyRequest,
+    ThreadObservation,
+    ThreadObservations,
+    ThreadOrigin,
+)
 from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import Job, WorkRequest
-from ocint.daemon.tasks.models import MessageClassification, Task, TaskKind, TaskState
+from ocint.daemon.service import WorkRequest
+from ocint.daemon.tasks.models import MessageClassification, TaskKind, TaskState
 from ocint.daemon.tasks.repository import TaskRepository
 from ocint.daemon.tasks.run import TaskCoordinator
 
@@ -14,20 +24,13 @@ from ocint.daemon.tasks.run import TaskCoordinator
 @dataclass
 class FakeSource:
     eligible_state: bool
+    observations: ThreadObservations = field(default_factory=lambda: ThreadObservations(root=[]))
 
-    async def poll(self) -> None:
-        return None
+    async def observe(self) -> ThreadObservations:
+        return self.observations
 
-    async def complete_task(self, task: Task, job: Job) -> None:
-        _ = (task, job)
-
-    def eligible(self, thread_id: int) -> bool:
-        _ = thread_id
-        return self.eligible_state
-
-    def configured_repository(self, thread_id: int) -> str:
-        _ = thread_id
-        return "repo"
+    async def reply(self, request: ReplyRequest) -> ObservedMessage:
+        raise AssertionError(f"unexpected reply: {request}")
 
 
 @dataclass
@@ -63,13 +66,64 @@ class FakeExecutor:
 
 
 @pytest.mark.asyncio
+async def test_observations_are_ingested_before_task_work_is_scheduled(tmp_path: Path) -> None:
+    # GIVEN
+    engine = create_daemon_engine(tmp_path / "control.sqlite")
+    metadata.create_all(engine)
+    control = ControlRepository(engine)
+    tasks = TaskRepository(engine)
+    source = FakeSource(
+        True,
+        ThreadObservations(
+            root=[
+                ThreadObservation(
+                    source_id="github:owner/repo:5",
+                    configured_repository="repo",
+                    title="Make the change",
+                    eligible=True,
+                    messages=ObservedMessages(
+                        root=[
+                            ObservedMessage(
+                                source_id="github:owner/repo:issue:5",
+                                actor=GitHubLogin("alice"),
+                                classification=MessageClassification.ACTIONABLE,
+                                body="Issue body",
+                                source_created_at="2026-01-01T00:00:00Z",
+                            )
+                        ]
+                    ),
+                )
+            ]
+        ),
+    )
+    coordinator = TaskCoordinator(source, tasks, FakeExecutor(control))
+
+    # WHEN
+    unresolved = await coordinator.reconcile()
+
+    # THEN
+    thread = tasks.threads()[0]
+    task = tasks.unresolved(thread.id)
+    assert unresolved
+    assert thread.configured_repository == "repo"
+    assert thread.eligible
+    assert tasks.messages(thread.id)[0].body == "Issue body"
+    assert task is not None
+    job = control.get(tasks.latest_job_id(task.id))
+    assert isinstance(job.origin, ThreadOrigin)
+    assert job.origin.source_thread_id == thread.source_id
+    assert job.origin.source_anchor_id == "github:owner/repo:issue:5"
+    engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_ineligible_queued_job_is_abandoned_and_task_is_skipped(tmp_path: Path) -> None:
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
     control = ControlRepository(engine)
     tasks = TaskRepository(engine)
-    thread = tasks.upsert_thread("github:owner/repo:5", "Title")
+    thread = tasks.upsert_thread("github:owner/repo:5", "Title", "repo", False)
     tasks.upsert_message(
         thread.id,
         "github:owner/repo:issue:5",
@@ -80,7 +134,9 @@ async def test_ineligible_queued_job_is_abandoned_and_task_is_skipped(tmp_path: 
     )
     task = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert task is not None
-    job = control.submit(WorkRequest(idempotency_key="job", actor="alice", repository="repo", prompt="body"))
+    job = control.submit(
+        WorkRequest(idempotency_key="job", actor=GitHubLogin("alice"), repository="repo", prompt="body")
+    )
     tasks.attach_job(task.id, job.id)
     executor = FakeExecutor(control)
 
@@ -100,7 +156,7 @@ async def test_ineligible_running_job_remains_current_until_terminal(tmp_path: P
     metadata.create_all(engine)
     control = ControlRepository(engine)
     tasks = TaskRepository(engine)
-    thread = tasks.upsert_thread("github:owner/repo:5", "Title")
+    thread = tasks.upsert_thread("github:owner/repo:5", "Title", "repo", False)
     tasks.upsert_message(
         thread.id,
         "github:owner/repo:issue:5",
@@ -111,7 +167,9 @@ async def test_ineligible_running_job_remains_current_until_terminal(tmp_path: P
     )
     task = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert task is not None
-    job = control.submit(WorkRequest(idempotency_key="job", actor="alice", repository="repo", prompt="body"))
+    job = control.submit(
+        WorkRequest(idempotency_key="job", actor=GitHubLogin("alice"), repository="repo", prompt="body")
+    )
     control.claim(job.id)
     tasks.attach_job(task.id, job.id)
     executor = FakeExecutor(control)
@@ -140,7 +198,7 @@ async def test_competing_stale_reconciliation_schedules_one_successor(tmp_path: 
     metadata.create_all(engine)
     control = ControlRepository(engine)
     tasks = TaskRepository(engine)
-    thread = tasks.upsert_thread("github:owner/repo:5", "Title")
+    thread = tasks.upsert_thread("github:owner/repo:5", "Title", "repo", True)
     tasks.upsert_message(
         thread.id,
         "github:owner/repo:issue:5",
@@ -151,7 +209,9 @@ async def test_competing_stale_reconciliation_schedules_one_successor(tmp_path: 
     )
     current = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert current is not None
-    failed = control.submit(WorkRequest(idempotency_key="failed", actor="alice", repository="repo", prompt="body"))
+    failed = control.submit(
+        WorkRequest(idempotency_key="failed", actor=GitHubLogin("alice"), repository="repo", prompt="body")
+    )
     control.fail(failed.id, "failed")
     tasks.attach_job(current.id, failed.id)
     tasks.upsert_message(

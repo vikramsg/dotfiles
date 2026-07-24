@@ -1,12 +1,27 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 
 import aiohttp
-from pydantic import TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 
-from ocint.daemon.github.models import GitHubComment, GitHubIssue, GitHubPullRequest
+from ocint.daemon.github.models import (
+    GitHubComment,
+    GitHubComments,
+    GitHubIssue,
+    GitHubIssues,
+    GitHubPullRequest,
+    GitHubPullRequests,
+)
 
 
 class GitHubClient:
+    """Implement GitHub HTTP transport independently from service policy.
+
+    This adapter owns the aiohttp session, authentication headers, endpoint
+    paths, pagination, response validation, and transport failures. It contains
+    no authorization, persistence, task, or workflow policy. The package factory
+    constructs, starts, and closes it for the daemon lifecycle.
+    """
+
     def __init__(self, api_url: str, token: str) -> None:
         self.api_url = api_url.rstrip("/")
         self.headers = {
@@ -23,19 +38,19 @@ class GitHubClient:
         if self.client is not None:
             await self.client.close()
 
-    async def issues(self, repository: str, label: str) -> tuple[GitHubIssue, ...]:
+    async def issues(self, repository: str, label: str) -> GitHubIssues:
         values: list[GitHubIssue] = []
         async for payload in self._pages(f"/repos/{repository}/issues", {"state": "open", "labels": label}):
-            for item in TypeAdapter(tuple[GitHubIssue, ...]).validate_python(payload):
+            for item in TypeAdapter(list[GitHubIssue]).validate_python(payload):
                 if item.pull_request is None:
                     values.append(item)
-        return tuple(values)
+        return GitHubIssues(root=values)
 
-    async def comments(self, repository: str, number: int) -> tuple[GitHubComment, ...]:
+    async def comments(self, repository: str, number: int) -> GitHubComments:
         values: list[GitHubComment] = []
         async for payload in self._pages(f"/repos/{repository}/issues/{number}/comments"):
-            values.extend(TypeAdapter(tuple[GitHubComment, ...]).validate_python(payload))
-        return tuple(values)
+            values.extend(TypeAdapter(list[GitHubComment]).validate_python(payload))
+        return GitHubComments(root=values)
 
     async def pull_request(self, repository: str, number: int) -> GitHubPullRequest:
         async with self._session().get(f"{self.api_url}/repos/{repository}/pulls/{number}") as response:
@@ -59,8 +74,8 @@ class GitHubClient:
             params={"state": "open", "head": f"{owner}:{branch}", "base": base},
         ) as response:
             response.raise_for_status()
-            pulls = TypeAdapter(list[GitHubPullRequest]).validate_python(await response.json())
-        return pulls[0] if pulls else None
+            pulls = GitHubPullRequests.model_validate(await response.json())
+        return pulls.root[0] if pulls.root else None
 
     async def post_comment(self, repository: str, number: int, body: str) -> GitHubComment:
         async with self._session().post(
@@ -69,7 +84,7 @@ class GitHubClient:
             response.raise_for_status()
             return GitHubComment.model_validate(await response.json())
 
-    async def _pages(self, path: str, params: dict[str, str] | None = None) -> AsyncIterator[list[dict[str, str]]]:
+    async def _pages(self, path: str, params: Mapping[str, str] | None = None) -> AsyncIterator[JsonValue]:
         url = f"{self.api_url}{path}"
         query = {**(params or {}), "per_page": "100"}
         while url:

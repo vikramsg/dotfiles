@@ -17,11 +17,16 @@ default:
 test:
     {{uv_ocint}} pytest "{{justfile_directory()}}/tests"
 
+# Run module boundary checks
+tach:
+    uv run --directory "{{justfile_directory()}}" --package ocint --frozen tach check --exact
+
 # Run ocint static checks
 check:
     {{uv_ocint}} ruff check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
     {{uv_ocint}} ruff format --check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
     {{uv_ocint}} ty check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
+    @just --justfile "{{justfile()}}" tach
 
 # Install the OpenCode intelligence CLI
 install:

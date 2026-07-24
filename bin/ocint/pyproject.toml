@@ -22,6 +22,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "ruff",
+    "tach",
     "ty",
 ]
 
@@ -59,6 +60,7 @@ select = [
     "PT",
     "RUF",
     "SIM",
+    "TID",
     "UP",
 ]
 ignore = [
@@ -70,6 +72,9 @@ ignore = [
 "tests/**/*.py" = [
     "ARG001",
 ]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
 
 [tool.ty.environment]
 python-version = "3.14"

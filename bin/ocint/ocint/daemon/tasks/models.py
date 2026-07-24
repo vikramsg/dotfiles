@@ -1,12 +1,8 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, RootModel
 
-
-class MessageClassification(StrEnum):
-    ACTIONABLE = "actionable"
-    UNAUTHORIZED = "unauthorized"
-    AGENT_RESPONSE = "agent_response"
+from ocint.daemon.models import GitHubLogin, MessageClassification
 
 
 class TaskKind(StrEnum):
@@ -22,11 +18,17 @@ class TaskState(StrEnum):
     SKIPPED = "skipped"
 
 
+class TaskReason(StrEnum):
+    OWNED_PULL_REQUEST_CLOSED = "owned pull request is closed or merged"
+
+
 class Thread(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: int
     source_id: str
+    configured_repository: str = ""
+    eligible: bool = False
     title: str | None = None
 
 
@@ -36,7 +38,7 @@ class ThreadMessage(BaseModel):
     id: int
     thread_id: int
     source_id: str
-    actor: str
+    actor: GitHubLogin
     classification: MessageClassification
     body: str
     source_created_at: str
@@ -51,6 +53,14 @@ class Task(BaseModel):
     state: TaskState
     predecessor_task_id: int
     reason: str
+
+
+class Threads(RootModel[list[Thread]]):
+    model_config = ConfigDict(frozen=True)
+
+
+class ThreadMessages(RootModel[list[ThreadMessage]]):
+    model_config = ConfigDict(frozen=True)
 
 
 class SuccessorCreated(BaseModel):

@@ -1,0 +1,215 @@
+source_roots = ["."]
+exclude = ["tests/", "scripts/"]
+forbid_circular_dependencies = true
+
+[[modules]]
+path = "ocint.cli"
+depends_on = [
+  "ocint.ctx",
+  "ocint.daemon.cli",
+  "ocint.presentation",
+  "ocint.state",
+]
+
+[[modules]]
+path = "ocint.ctx"
+depends_on = [
+  "ocint.presentation",
+  "ocint.opencode",
+  "ocint._models",
+  "ocint._timeutil",
+  "ocint._sqlsafe",
+  "ocint._errors",
+]
+
+[[modules]]
+path = "ocint.daemon.models"
+depends_on = []
+
+[[modules]]
+path = "ocint.daemon.logging"
+depends_on = [
+  "ocint.daemon.models",
+]
+
+[[modules]]
+path = "ocint.daemon.db"
+depends_on = []
+
+[[modules]]
+path = "ocint.daemon.github.config"
+depends_on = [
+  "ocint.daemon.models",
+]
+
+[[modules]]
+path = "ocint.daemon.github.models"
+depends_on = [
+  "ocint.daemon.models",
+]
+
+[[modules]]
+path = "ocint.daemon.github.client"
+depends_on = [
+  "ocint.daemon.github.models",
+]
+
+[[modules]]
+path = "ocint.daemon.github.repository"
+depends_on = [
+  "ocint.daemon.github.models",
+  "ocint.daemon.db",
+]
+
+[[modules]]
+path = "ocint.daemon.github.service"
+depends_on = [
+  "ocint.daemon.github.config",
+  "ocint.daemon.github.models",
+  "ocint.daemon.github.repository",
+  "ocint.daemon.models",
+  "ocint.daemon.logging",
+]
+
+[[modules]]
+path = "ocint.daemon.github"
+depends_on = [
+  "ocint.daemon.github.config",
+  "ocint.daemon.github.models",
+  "ocint.daemon.github.client",
+  "ocint.daemon.github.repository",
+  "ocint.daemon.github.service",
+  "ocint.daemon.models",
+  "ocint.daemon.db",
+]
+
+[[modules]]
+path = "ocint.daemon.service"
+depends_on = [
+  "ocint.daemon.config",
+  "ocint.daemon.logging",
+  "ocint.daemon.models",
+]
+
+[[modules]]
+path = "ocint.daemon.tasks"
+depends_on = [
+  "ocint.daemon.logging",
+  "ocint.daemon.db",
+  "ocint.daemon.models",
+]
+
+[[modules]]
+path = "ocint.daemon.config"
+depends_on = [
+  "ocint.daemon.github",
+  "ocint.daemon.models",
+  "ocint._models",
+]
+
+[[modules]]
+path = "ocint.daemon.api"
+depends_on = [
+  "ocint.daemon.models",
+  "ocint.daemon.service",
+]
+
+[[modules]]
+path = "ocint.daemon.git"
+depends_on = [
+  "ocint.daemon.config",
+  "ocint.daemon.logging",
+  "ocint.daemon.service",
+]
+
+[[modules]]
+path = "ocint.daemon.opencode"
+depends_on = [
+  "ocint.daemon.logging",
+  "ocint.daemon.service",
+]
+
+[[modules]]
+path = "ocint.daemon.repository"
+depends_on = [
+  "ocint.daemon.db",
+  "ocint.daemon.models",
+  "ocint.daemon.service",
+]
+
+[[modules]]
+path = "ocint.daemon.run"
+depends_on = [
+  "ocint.daemon.logging",
+]
+
+[[modules]]
+path = "ocint.daemon.lch"
+depends_on = [
+  "ocint.daemon.config",
+  "ocint.daemon.db",
+  "ocint.daemon.github",
+  "ocint.daemon.logging",
+  "ocint.daemon.models",
+  "ocint.presentation",
+]
+
+[[modules]]
+path = "ocint.daemon.cli"
+depends_on = [
+  "ocint._models",
+  "ocint.daemon.api",
+  "ocint.daemon.config",
+  "ocint.daemon.db",
+  "ocint.daemon.git",
+  "ocint.daemon.github",
+  "ocint.daemon.lch",
+  "ocint.daemon.logging",
+  "ocint.daemon.models",
+  "ocint.daemon.opencode",
+  "ocint.daemon.repository",
+  "ocint.daemon.run",
+  "ocint.daemon.service",
+  "ocint.daemon.tasks",
+]
+
+[[modules]]
+path = "ocint.daemon"
+depends_on = []
+
+[[modules]]
+path = "ocint.state"
+depends_on = [
+  "ocint.presentation",
+  "ocint.opencode",
+  "ocint._models",
+  "ocint._timeutil",
+]
+
+[[modules]]
+path = "ocint.presentation"
+depends_on = [
+  "ocint._models",
+]
+
+[[modules]]
+path = "ocint.opencode"
+depends_on = [
+  "ocint._sqlsafe",
+]
+
+[[modules]]
+path = "ocint._models"
+depends_on = []
+
+[[modules]]
+path = "ocint._timeutil"
+depends_on = []
+
+[[modules]]
+path = "ocint._sqlsafe"
+depends_on = []
+
+[[modules]]
+path = "ocint._errors"
+depends_on = []

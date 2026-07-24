@@ -1,6 +1,8 @@
 import ast
 import json
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -42,29 +44,6 @@ def test_daemon_core_does_not_import_frameworks_or_concrete_adapters() -> None:
     assert imported.isdisjoint(prohibited)
 
 
-def test_daemon_core_import_direction_points_from_service_to_config() -> None:
-    # GIVEN
-    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-
-    # WHEN
-    config_tree = ast.parse((daemon / "config.py").read_text())
-    service_tree = ast.parse((daemon / "service.py").read_text())
-    config_imports = {
-        node.module for node in ast.walk(config_tree) if isinstance(node, ast.ImportFrom) and node.module is not None
-    }
-    service_imports = {
-        node.module for node in ast.walk(service_tree) if isinstance(node, ast.ImportFrom) and node.module is not None
-    }
-
-    # THEN
-    assert not any(module.startswith("ocint.daemon") for module in config_imports)
-    assert service_imports.intersection({"ocint.daemon.config"}) == {"ocint.daemon.config"}
-    assert not any(
-        module.startswith("ocint.daemon.") and module not in {"ocint.daemon.config", "ocint.daemon.logging"}
-        for module in service_imports
-    )
-
-
 def test_prohibited_legacy_daemon_modules_are_absent() -> None:
     # GIVEN
     daemon = Path(__file__).parents[2] / "ocint" / "daemon"
@@ -80,58 +59,51 @@ def test_prohibited_legacy_daemon_modules_are_absent() -> None:
     assert not (package / "systemd").exists()
 
 
-def test_daemon_logging_depends_on_the_log_rotation_contract() -> None:
+def test_github_config_import_does_not_initialize_runtime_modules() -> None:
     # GIVEN
-    logging_module = Path(__file__).parents[2] / "ocint" / "daemon" / "logging.py"
+    package = Path(__file__).parents[2]
+    script = """
+import json
+import sys
+import ocint.daemon.github.config
+names = [
+    "ocint.daemon.github.client",
+    "ocint.daemon.github.repository",
+    "ocint.daemon.github.service",
+    "ocint.daemon.github.integration",
+    "ocint.daemon.github.runtime",
+]
+print(json.dumps([name for name in names if name in sys.modules]))
+"""
 
     # WHEN
-    tree = ast.parse(logging_module.read_text())
-    imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None}
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=package,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
     # THEN
-    assert "ocint.daemon.models" in imports
-    assert "ocint.daemon.config" not in imports
+    assert json.loads(result.stdout) == []
 
 
-def test_production_uses_the_github_facade() -> None:
-    # GIVEN
-    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-    private = {
-        "ocint.daemon.github.client",
-        "ocint.daemon.github.models",
-        "ocint.daemon.github.repository",
-        "ocint.daemon.github.service",
-    }
-
-    # WHEN
-    imported: set[str] = set()
-    for module in daemon.rglob("*.py"):
-        if (daemon / "github") in module.parents:
-            continue
-        tree = ast.parse(module.read_text())
-        imported.update(
-            node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None
-        )
+def test_github_facade_exports_only_supported_api() -> None:
+    # GIVEN / WHEN
+    import ocint.daemon.github as github_api
 
     # THEN
-    assert imported.isdisjoint(private)
-    assert not (daemon / "github.py").exists()
-
-
-def test_task_core_is_provider_neutral() -> None:
-    # GIVEN
-    tasks = Path(__file__).parents[2] / "ocint" / "daemon" / "tasks"
-
-    # WHEN
-    imports = set()
-    for module in tasks.glob("*.py"):
-        tree = ast.parse(module.read_text())
-        imports.update(
-            node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None
-        )
-
-    # THEN
-    assert not any(module.startswith("ocint.daemon.github") for module in imports)
+    assert github_api.__all__ == [
+        "GitHubConfig",
+        "GitHubGateway",
+        "GitHubRepositoryPolicies",
+        "GitHubRepositoryPolicy",
+        "open_github_service",
+    ]
+    github = Path(__file__).parents[2] / "ocint" / "daemon" / "github"
+    assert not (github / "runtime.py").exists()
+    assert not (github / "integration.py").exists()
 
 
 def test_thread_core_contains_only_provider_neutral_identity_and_title() -> None:
@@ -146,7 +118,7 @@ def test_thread_core_contains_only_provider_neutral_identity_and_title() -> None
     }
 
     # THEN
-    assert fields == {"id", "source_id", "title"}
+    assert fields == {"id", "source_id", "configured_repository", "eligible", "title"}
 
 
 def test_daemon_artifacts_use_structural_pii_free_provisioning_examples() -> None:

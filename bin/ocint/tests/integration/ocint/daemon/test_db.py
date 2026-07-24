@@ -5,8 +5,6 @@ import pytest
 from alembic import command
 from ocint.daemon.db import create_daemon_engine, downgrade_daemon_db, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
-from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import WorkRequest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -41,9 +39,13 @@ def test_thread_model_migration_discards_workflow_rows_and_preserves_jobs(tmp_pa
     database = tmp_path / "control.sqlite"
     command.upgrade(alembic_config(database), "20260719_add_thread_execution_job")
     engine = create_daemon_engine(database)
-    jobs = ControlRepository(engine)
-    persisted = jobs.submit(WorkRequest(idempotency_key="keep", actor="alice", repository="repo", prompt="work"))
     with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO job VALUES ('preserved', 'keep', 'alice', 'repo', 'work', 'queued', 'execution', "
+                "'', '', '', '', '', 0, 0, '', 0, '', '', 'now', 'now')"
+            )
+        )
         connection.execute(
             text("INSERT INTO thread VALUES (1, 'repo', 'github', '5', 'alice', 1, '', 'Title', 'Body', 'now', 'now')")
         )
@@ -57,7 +59,7 @@ def test_thread_model_migration_discards_workflow_rows_and_preserves_jobs(tmp_pa
         connection.execute(text("INSERT INTO task_message VALUES (1, 1)"))
         connection.execute(
             text("INSERT INTO task_job VALUES (1, :job_id, 1)"),
-            {"job_id": persisted.id},
+            {"job_id": "preserved"},
         )
         connection.execute(text("INSERT INTO github_issue VALUES (1, 'owner/repo', 50, 5, 0, '')"))
         connection.execute(text("INSERT INTO github_issue_comment VALUES (10, 1, '')"))
@@ -69,7 +71,7 @@ def test_thread_model_migration_discards_workflow_rows_and_preserves_jobs(tmp_pa
     # THEN
     engine = create_daemon_engine(database)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT id FROM job")).scalar_one() == persisted.id
+        assert connection.execute(text("SELECT id FROM job")).scalar_one() == "preserved"
         for table in (
             "thread",
             "thread_message",
@@ -91,8 +93,18 @@ def test_migrated_message_source_identity_is_global(tmp_path: Path) -> None:
 
     # WHEN
     with engine.begin() as connection:
-        connection.execute(text("INSERT INTO thread (id, source_id, title) VALUES (1, 'thread:1', 'One')"))
-        connection.execute(text("INSERT INTO thread (id, source_id, title) VALUES (2, 'thread:2', 'Two')"))
+        connection.execute(
+            text(
+                "INSERT INTO thread (id, source_id, configured_repository, eligible, title) "
+                "VALUES (1, 'thread:1', 'repo', 1, 'One')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO thread (id, source_id, configured_repository, eligible, title) "
+                "VALUES (2, 'thread:2', 'repo', 1, 'Two')"
+            )
+        )
         connection.execute(
             text(
                 "INSERT INTO thread_message "
