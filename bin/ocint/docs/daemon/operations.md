@@ -9,7 +9,7 @@ Linux user-systemd lifecycle.
 provision        discover configuration and install the timer
 install          regenerate and enable existing user units
 lifecycle        show timer, service, schedule, and log state
-list             list durable jobs from SQLite
+list             list recent durable jobs from SQLite
 status JOB_ID    show one durable job
 attach JOB_ID    attach to that job's live OpenCode session
 logs             read or follow private rotating logs
@@ -30,12 +30,14 @@ bounded service is inactive and do not require API credentials.
 
 ```bash
 ocint daemon lch list
+ocint daemon lch list --limit 25
 ocint daemon lch status JOB_ID
 ```
 
-The list keeps full IDs copyable and includes each job's state, stage, and
-canonical work title. Detailed status includes the full title, repository,
-actor, session, worktree, branch, commit, pull request, and error.
+The list shows the 10 newest jobs by default. `--limit N` selects any positive
+number of recent jobs. It keeps full IDs copyable and includes each job's state,
+stage, and canonical work title. Detailed status includes the full title,
+repository, actor, session, worktree, branch, commit, pull request, and error.
 
 ## Attach
 

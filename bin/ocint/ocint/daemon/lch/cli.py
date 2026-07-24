@@ -35,12 +35,13 @@ def lifecycle(context: DaemonContext) -> SystemdLifecycle:
 
 @click.group()
 def lch() -> None:
-    """Provision and operate the user systemd lifecycle."""
+    """Provision and operate the local daemon."""
 
 
 @lch.command("provision")
 @click.pass_obj
 def provision_command(context: DaemonContext) -> None:
+    """Discover configuration and provision the daemon."""
     managed_lifecycle = lifecycle(context)
     managed_lifecycle.validate_host()
     managed_lifecycle.validate_executable(installed_ocint())
@@ -52,32 +53,44 @@ def provision_command(context: DaemonContext) -> None:
 @lch.command("install")
 @click.pass_obj
 def install_command(context: DaemonContext) -> None:
+    """Install and enable the daemon systemd timer."""
     lifecycle(context).install(installed_ocint(), context.config().lifecycle)
 
 
 @lch.command("uninstall")
 @click.pass_obj
 def uninstall_command(context: DaemonContext) -> None:
+    """Remove systemd units while preserving daemon state."""
     lifecycle(context).uninstall()
 
 
 @lch.command("lifecycle")
 @click.pass_obj
 def lifecycle_command(context: DaemonContext) -> None:
+    """Show timer and service lifecycle status."""
     config = context.config()
     log_settings = daemon_log_settings(context.state_home, config.logging)
     context.output.display(render_status(lifecycle(context).status(log_settings.path), config))
 
 
 @lch.command("list")
+@click.option(
+    "limit",
+    "--limit",
+    type=click.IntRange(min=1),
+    default=10,
+    show_default=True,
+    help="Maximum number of recent jobs to show.",
+)
 @click.pass_obj
-def list_command(context: DaemonContext) -> None:
+def list_command(context: DaemonContext, limit: int) -> None:
+    """List recent daemon jobs."""
     config = context.config()
     if not config.database_path.is_file():
         raise click.ClickException(f"daemon database does not exist: {config.database_path}")
     engine = create_daemon_engine(config.database_path)
     try:
-        context.output.display(render_jobs(ControlRepository(engine).list()))
+        context.output.display(render_jobs(ControlRepository(engine).list(limit=limit)))
     finally:
         engine.dispose()
 
@@ -86,6 +99,7 @@ def list_command(context: DaemonContext) -> None:
 @click.argument("job_id")
 @click.pass_obj
 def job_status_command(context: DaemonContext, job_id: str) -> None:
+    """Show detailed status for one daemon job."""
     config = context.config()
     if not config.database_path.is_file():
         raise click.ClickException(f"daemon database does not exist: {config.database_path}")
@@ -104,6 +118,7 @@ def job_status_command(context: DaemonContext, job_id: str) -> None:
 @click.argument("job_id")
 @click.pass_obj
 def attach_command(context: DaemonContext, job_id: str) -> None:
+    """Attach to a running job's OpenCode session."""
     managed = lifecycle(context)
     try:
         attachment = asyncio.run(_attachment(context, managed.api_token(), job_id))
@@ -124,6 +139,7 @@ def attach_command(context: DaemonContext, job_id: str) -> None:
 @click.option("follow", "--follow", is_flag=True)
 @click.pass_obj
 def logs_command(context: DaemonContext, lines: int, follow: bool) -> None:
+    """Read or follow the daemon log."""
     settings = daemon_log_settings(context.state_home, context.config().logging)
     managed = lifecycle(context)
     try:

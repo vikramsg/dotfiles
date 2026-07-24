@@ -111,8 +111,6 @@ Use the package justfile explicitly:
 ```sh
 just --justfile bin/ocint/justfile test
 just --justfile bin/ocint/justfile check
-# May require longer timeout, so prefer only during final verification checks
-just --justfile bin/ocint/justfile smoke
 ```
 
 ## Tree
