@@ -115,13 +115,15 @@ def health_command(context: DaemonContext) -> None:
 @click.argument("repository")
 @click.argument("prompt")
 @click.option("actor", "--actor", required=True)
+@click.option("title", "--title", required=True)
 @click.option("key", "--idempotency-key", default="")
 @click.pass_obj
-def submit_command(context: DaemonContext, repository: str, prompt: str, actor: str, key: str) -> None:
+def submit_command(context: DaemonContext, repository: str, prompt: str, actor: str, title: str, key: str) -> None:
     request = WorkRequest(
         idempotency_key=key or uuid.uuid4().hex,
         actor=GitHubLogin(actor),
         repository=repository,
+        title=title,
         prompt=prompt,
         origin=DirectOrigin(),
     )

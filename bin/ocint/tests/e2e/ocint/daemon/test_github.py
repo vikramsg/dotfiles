@@ -554,6 +554,7 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
     assert submitted.idempotency_key == ("thread-task:model-v2:source:github:example-org/project:100:task:1:attempt:1")
     assert tasks.latest_job_id(task.id) == submitted.id
     assert control.get("historical").error == "historical failure"
+    assert control.get("historical").title == "ocint: complete job historical"
     assert restarted_executor.submitted == []
     assert restarted_executor.retried == []
     assert restarted_executor.scheduled == []

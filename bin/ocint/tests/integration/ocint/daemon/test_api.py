@@ -26,7 +26,13 @@ async def test_api_requires_bearer_and_supports_submit_list_status(tmp_path: Pat
         submitted = await client.post(
             "/api/jobs",
             headers=headers,
-            json={"idempotency_key": "key", "actor": "actor", "repository": "repo", "prompt": "work"},
+            json={
+                "idempotency_key": "key",
+                "actor": "actor",
+                "repository": "repo",
+                "title": "Work title",
+                "prompt": "work",
+            },
         )
         listed = await client.get("/api/jobs", headers=headers)
         job_status = await client.get(f"/api/jobs/{submitted.json()['id']}", headers=headers)
@@ -36,6 +42,7 @@ async def test_api_requires_bearer_and_supports_submit_list_status(tmp_path: Pat
     assert denied.status_code == 401
     assert health.json() == {"status": "ready"}
     assert submitted.status_code == 202
+    assert submitted.json()["title"] == "Work title"
     assert listed.json() == [job_status.json()]
     assert removed.status_code == 404
     engine.dispose()

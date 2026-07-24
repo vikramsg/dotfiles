@@ -346,9 +346,7 @@ class JobExecutor:
             logger.info("job stage completed", job=job.id, stage=JobStage.VALIDATION.value)
         if job.stage is JobStage.COMMIT:
             logger.info("job stage started", job=job.id, stage=JobStage.COMMIT.value)
-            commit = await self.git.commit(
-                worktree, f"ocint: complete job {job.id}", repository.author_name, repository.author_email
-            )
+            commit = await self.git.commit(worktree, job.title, repository.author_name, repository.author_email)
             job = self.store.checkpoint(job.id, CommitCheckpoint(sha=commit))
             logger.info("job stage completed", job=job.id, stage=JobStage.COMMIT.value, commit=commit)
         if job.stage is JobStage.PUSH:
@@ -363,7 +361,7 @@ class JobExecutor:
                     repository=repository.github_repository,
                     branch=worktree.branch,
                     base=repository.default_branch,
-                    title=f"ocint: complete job {job.id}",
+                    title=job.title,
                     body="Automated by ocint daemon.",
                     origin=job.origin,
                 )

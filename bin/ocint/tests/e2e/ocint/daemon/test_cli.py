@@ -49,6 +49,18 @@ def test_submit_requires_explicit_github_actor() -> None:
     assert "Missing option '--actor'" in result.output
 
 
+def test_submit_requires_explicit_work_title() -> None:
+    # GIVEN
+    runner = CliRunner()
+
+    # WHEN
+    result = runner.invoke(main, ["daemon", "submit", "repo", "prompt", "--actor", "maintainer"])
+
+    # THEN
+    assert result.exit_code == 2
+    assert "Missing option '--title'" in result.output
+
+
 @pytest.mark.asyncio
 async def test_production_composition_completes_job_through_api(
     tmp_path: Path, unused_tcp_port_factory: Callable[[], int]
@@ -244,7 +256,13 @@ agent_actor = "automation-bot"
             await asyncio.sleep(0.02)
         async with client.post(
             f"http://127.0.0.1:{api_port}/api/jobs",
-            json={"idempotency_key": "production", "actor": "allowed", "repository": "repo", "prompt": "edit"},
+            json={
+                "idempotency_key": "production",
+                "actor": "allowed",
+                "repository": "repo",
+                "title": "Production change",
+                "prompt": "edit",
+            },
         ) as response:
             submitted = await response.json()
             assert response.status == 202

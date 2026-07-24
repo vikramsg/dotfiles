@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from aiohttp import web
 from ocint.daemon.opencode import OpenCodeClient
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class WirePart(BaseModel):
@@ -17,10 +17,23 @@ class WirePart(BaseModel):
     text: str
 
 
+class WireErrorData(BaseModel):
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+    message: str
+    is_retryable: bool = Field(alias="isRetryable")
+
+
+class WireError(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    name: str
+    data: WireErrorData
+
+
 class WireInfo(BaseModel):
     model_config = ConfigDict(frozen=True)
     role: str
     finish: str | None = None
+    error: WireError | None = None
 
 
 class WireMessage(BaseModel):
@@ -72,6 +85,24 @@ class OpenCodeHttpFake:
             WireMessage(
                 info=WireInfo(role="assistant"),
                 parts=[WirePart(type="tool", text="pending apply_patch")],
+            )
+        )
+
+    def fail(self, retryable: bool = False) -> None:
+        self.messages.append(
+            WireMessage(
+                info=WireInfo(
+                    role="assistant",
+                    finish="error",
+                    error=WireError(
+                        name="ProviderRequestError",
+                        data=WireErrorData(
+                            message="selected service tier was rejected",
+                            isRetryable=retryable,
+                        ),
+                    ),
+                ),
+                parts=[],
             )
         )
 
@@ -235,6 +266,74 @@ async def test_agent_execution_can_exceed_individual_request_timeout(
 
     # THEN
     assert not client.client.closed
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_assistant_error_fails_without_waiting_for_execution_timeout(
+    tmp_path: Path, opencode_server: OpenCodeHttpFake
+) -> None:
+    # GIVEN
+    opencode_server.fail()
+    client = OpenCodeClient(
+        f"http://127.0.0.1:{opencode_server.port}",
+        "opencode",
+        "ephemeral",
+        1,
+        30,
+        "1.17.20",
+        tmp_path / "opencode",
+        tmp_path / "config.json",
+        tmp_path / "isolated-config",
+        tmp_path / "existing-data",
+        1,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
+    )
+    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
+
+    # WHEN / THEN
+    with pytest.raises(
+        RuntimeError,
+        match="OpenCode session session failed: ProviderRequestError: selected service tier was rejected",
+    ):
+        await asyncio.wait_for(client.wait_for_completion(tmp_path, "session", "perform work"), 1)
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_active_retryable_assistant_error_remains_in_progress(
+    tmp_path: Path, opencode_server: OpenCodeHttpFake
+) -> None:
+    # GIVEN
+    opencode_server.fail(retryable=True)
+    opencode_server.session_status = "busy"
+    client = OpenCodeClient(
+        f"http://127.0.0.1:{opencode_server.port}",
+        "opencode",
+        "ephemeral",
+        1,
+        3,
+        "1.17.20",
+        tmp_path / "opencode",
+        tmp_path / "config.json",
+        tmp_path / "isolated-config",
+        tmp_path / "existing-data",
+        1,
+        1,
+        "/usr/bin:/bin",
+        "C.UTF-8",
+    )
+    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
+
+    # WHEN
+    observation = await client.observe_prompt(tmp_path, "session", "perform work")
+
+    # THEN
+    assert observation.found
+    assert observation.active
+    assert not observation.completed
     await client.close()
 
 

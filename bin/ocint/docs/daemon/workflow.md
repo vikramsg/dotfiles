@@ -61,6 +61,8 @@ a failure, correct it before creating work.
 4. Apply the `ocint` label.
 
 The issue author and commenters must be allowed by the provisioned actor policy.
+The issue title becomes the commit and pull-request title, so it must follow the
+target repository's pull-request title convention.
 At the next timer invocation, ocint reads the issue and its comments, performs
 the work, opens a pull request, and replies with its URL.
 

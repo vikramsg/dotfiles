@@ -28,13 +28,13 @@ def repository(tmp_path: Path) -> ControlRepository:
 def test_submit_is_idempotent_and_jobs_are_claimed_explicitly(repository: ControlRepository) -> None:
     # GIVEN
     first = repository.submit(
-        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", title="One", prompt="first")
     )
     duplicate = repository.submit(
-        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", title="One", prompt="first")
     )
     second = repository.submit(
-        WorkRequest(idempotency_key="two", actor=GitHubLogin("actor"), repository="repo", prompt="second")
+        WorkRequest(idempotency_key="two", actor=GitHubLogin("actor"), repository="repo", title="Two", prompt="second")
     )
 
     # WHEN
@@ -42,16 +42,45 @@ def test_submit_is_idempotent_and_jobs_are_claimed_explicitly(repository: Contro
 
     # THEN
     assert duplicate.id == first.id
+    assert first.title == "One"
     assert claimed is not None
     assert claimed.state is JobState.RUNNING
     assert repository.pending_ids() == [second.id]
     assert repository.claim(first.id) is None
 
 
+def test_retry_preserves_the_requested_work_title(repository: ControlRepository) -> None:
+    # GIVEN
+    previous = repository.submit(
+        WorkRequest(
+            idempotency_key="first",
+            actor=GitHubLogin("actor"),
+            repository="repo",
+            title="Human-readable title",
+            prompt="first",
+        )
+    )
+
+    # WHEN
+    retried = repository.retry(
+        previous,
+        WorkRequest(
+            idempotency_key="retry",
+            actor=GitHubLogin("actor"),
+            repository="repo",
+            title="Human-readable title",
+            prompt="follow-up",
+        ),
+    )
+
+    # THEN
+    assert retried.title == "Human-readable title"
+
+
 def test_reconcile_preserves_checkpoint(repository: ControlRepository) -> None:
     # GIVEN
     submitted = repository.submit(
-        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", title="One", prompt="first")
     )
     repository.claim(submitted.id)
     repository.checkpoint(submitted.id, CommitCheckpoint(sha="abc"))
@@ -70,7 +99,7 @@ def test_reconcile_preserves_checkpoint(repository: ControlRepository) -> None:
 def test_requeue_retains_stage_for_shutdown_resume(repository: ControlRepository) -> None:
     # GIVEN
     submitted = repository.submit(
-        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", title="One", prompt="first")
     )
     repository.claim(submitted.id)
     repository.checkpoint(submitted.id, StageCheckpoint(stage=JobStage.COMMIT))
@@ -87,7 +116,7 @@ def test_requeue_retains_stage_for_shutdown_resume(repository: ControlRepository
 def test_push_checkpoint_recovers_stage_and_baseline_atomically(repository: ControlRepository) -> None:
     # GIVEN
     submitted = repository.submit(
-        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="work")
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", title="One", prompt="work")
     )
     repository.checkpoint(
         submitted.id, WorktreeCheckpoint(path=Path("/worktree"), branch="ocint/job", base_revision="base")
@@ -109,7 +138,7 @@ def test_typed_checkpoints_preserve_paths_and_explicit_terminal_states(
 ) -> None:
     # GIVEN
     submitted = repository.submit(
-        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", title="One", prompt="first")
     )
     worktree_path = tmp_path / "worktree"
 
@@ -128,7 +157,7 @@ def test_typed_checkpoints_preserve_paths_and_explicit_terminal_states(
     completed = repository.complete(submitted.id)
 
     failed_job = repository.submit(
-        WorkRequest(idempotency_key="two", actor=GitHubLogin("actor"), repository="repo", prompt="second")
+        WorkRequest(idempotency_key="two", actor=GitHubLogin("actor"), repository="repo", title="Two", prompt="second")
     )
     failed = repository.fail(failed_job.id, "failed safely")
 
