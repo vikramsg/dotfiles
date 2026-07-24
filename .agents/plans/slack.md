@@ -142,7 +142,8 @@ Move GitHub issue behavior from the combined `GitHubService` into
 
 Add `channels/slack/`:
 
-- `config.py`: workspace, channel mappings, actors, completion reaction.
+- `config.py`: workspace, channel mappings, authorized users, completion
+  reaction.
 - `models.py`: Slack API DTOs and validated Slack IDs/timestamps/permalinks.
 - `client.py`: Slack Web API methods and Slack-specific error handling.
 - `service.py`: `SlackChannel`, polling translation, replies, completion,
@@ -442,7 +443,7 @@ completion_reaction = "white_check_mark"
 [[slack.channels]]
 channel_id = "C0123456789"
 repository = "dotfiles"
-actors = ["U0123456789"]
+authorized_users = ["U0123456789"]
 ```
 
 Validation must reject:
@@ -463,12 +464,13 @@ not require the variable.
 
 ## Slack App Provisioning
 
-Check in two manifests so requested scopes are reviewable:
+Check in one Slack app manifest so the private-channel permissions are
+reviewable:
 
-- `bin/ocint/config/slack-app-manifest.public.yaml`
-- `bin/ocint/config/slack-app-manifest.private.yaml`
+- `bin/ocint/config/slack-app-manifest.yaml`
 
-Public channel manifest:
+The manifest is the YAML definition pasted into Slack's **Create New App** ->
+**From an app manifest** flow:
 
 ```yaml
 _metadata:
@@ -485,7 +487,7 @@ features:
 oauth_config:
   scopes:
     bot:
-      - channels:history
+      - groups:history
       - chat:write
       - reactions:write
 
@@ -493,8 +495,6 @@ settings:
   socket_mode_enabled: false
   token_rotation_enabled: false
 ```
-
-The private manifest replaces `channels:history` with `groups:history`.
 
 Explicitly prohibit these scopes and features:
 
@@ -512,13 +512,9 @@ Explicitly prohibit these scopes and features:
 2. Select **Create New App**.
 3. Select **From an app manifest**.
 4. Select the Slack workspace that will contain the ocint channel.
-5. Choose YAML and paste one checked-in manifest:
-   - Use `slack-app-manifest.public.yaml` for public channels.
-   - Use `slack-app-manifest.private.yaml` for private channels.
+5. Choose YAML and paste `bin/ocint/config/slack-app-manifest.yaml`.
 6. Review the generated configuration before creation. Confirm that the bot
-   scopes are exactly:
-   - Public: `channels:history`, `chat:write`, `reactions:write`.
-   - Private: `groups:history`, `chat:write`, `reactions:write`.
+   scopes are exactly `groups:history`, `chat:write`, and `reactions:write`.
 7. Confirm Socket Mode is disabled and there are no event subscriptions,
    commands, request URLs, or interactive features.
 8. Select **Create**.
@@ -537,13 +533,33 @@ Explicitly prohibit these scopes and features:
    /invite @ocint
    ```
 
-3. Copy the workspace ID from Slack workspace details or the authenticated
-   `auth.test` result.
-4. Copy the channel ID from **View channel details**. Do not use the mutable
-   channel name.
-5. Copy each authorized user's member ID from **View profile** -> **More** ->
-   **Copy member ID**. Do not use display names or email addresses.
-6. Add those non-secret IDs and the repository mapping to `daemon.toml`:
+3. Provision the copied `xoxb-` token through the hidden prompt:
+
+   ```bash
+   ocint daemon lch slack-token
+   ```
+
+   The command calls Slack's `auth.test` endpoint and prints the authenticated
+   non-secret workspace ID, workspace name, bot user ID, and bot ID. Copy the
+   returned `workspace_id` value beginning with `T`; do not try to obtain it
+   from Slack workspace details.
+4. In Slack, select **Copy link** on the private channel. The value immediately
+   after `/archives/` is the immutable channel ID:
+
+   ```text
+   https://WORKSPACE.slack.com/archives/CHANNEL_ID
+   ```
+
+   Alternatively, open the channel in a browser. In a URL shaped like
+   `https://app.slack.com/client/WORKSPACE_ID/CHANNEL_ID`, the first ID is the
+   workspace and the second is the channel. Do not use the mutable channel
+   name.
+5. For each human who should be allowed to create or reopen tasks, open their
+   Slack profile and select **More** -> **Copy member ID**. The copied immutable
+   value begins with `U` or `W`. Do not use display names, email addresses, or
+   the bot user ID returned by `auth.test`.
+6. Paste those human member IDs into `authorized_users` and add the repository
+   mapping to `daemon.toml`:
 
    ```toml
    [slack]
@@ -553,16 +569,14 @@ Explicitly prohibit these scopes and features:
    [[slack.channels]]
    channel_id = "C0123456789"
    repository = "dotfiles"
-   actors = ["U0123456789"]
+   authorized_users = ["U0123456789", "W0123456789"]
    ```
 
-7. Provision the copied `xoxb-` token through the hidden prompt:
+   Every listed user may create root tasks and issue reopen requests in this
+   configured channel. An unlisted user receives the unauthorized response. An
+   empty list permits every human member of the channel.
 
-   ```bash
-   ocint daemon lch slack-token
-   ```
-
-8. Apply the updated configuration and verify credentials, workspace identity,
+7. Apply the updated configuration and verify credentials, workspace identity,
    bot identity, channel membership, and history access:
 
    ```bash
@@ -570,7 +584,7 @@ Explicitly prohibit these scopes and features:
    ocint daemon doctor
    ```
 
-9. If scopes are changed later, reinstall the Slack app to the workspace before
+8. If scopes are changed later, reinstall the Slack app to the workspace before
    rerunning `slack-token` and `doctor`.
 
 The manual invite is intentional least privilege. Do not request
@@ -594,8 +608,8 @@ Add `ocint daemon lch slack-token`. It must:
 
 1. Read the token through hidden stdin, never argv or normal output.
 2. Reject empty values and non-`xoxb-` token shape before network access.
-3. Validate `auth.test` and, when Slack is configured, require the configured
-   workspace ID.
+3. Validate `auth.test`, print only its non-secret workspace and bot identity,
+   and, when Slack is already configured, require the configured workspace ID.
 4. Atomically merge the assignment into `daemon.env`.
 5. Preserve ownership and mode `0600`.
 6. Render only `present`, `updated`, workspace ID, and non-secret status.
@@ -702,7 +716,7 @@ Tests:
 Changes:
 
 - Add Slack config, validated IDs, API DTOs, client, and facade.
-- Add Slack app manifests.
+- Add the private-channel Slack app manifest.
 - Implement `auth.test`, workspace validation, channel access probes, cursor
   pagination primitives, and 429 modeling.
 - Compose optional Slack lifecycle in CLI without message ingestion yet.
@@ -717,7 +731,7 @@ Tests:
 - Integration server verifies bearer header and request shapes.
 - `auth.test` mismatch and inaccessible channels fail before readiness.
 - Cursor pagination and `Retry-After` parse to typed outcomes.
-- Manifests contain exactly the approved scopes and no event configuration.
+- The manifest contains exactly the approved scopes and no event configuration.
 
 ### PR 4: Add Durable Slack Polling And Ingestion
 
@@ -808,7 +822,7 @@ Changes:
 Tests:
 
 - Example TOML validates.
-- App manifests parse and have exact scopes.
+- The app manifest parses and has the exact private-channel scopes.
 - Daemon schema smoke expects the new tables.
 - Full package test/check/smoke commands pass.
 
@@ -924,7 +938,7 @@ Update:
 - `bin/ocint/docs/daemon/operations.md`: polling, 429, access, and recovery.
 - `bin/ocint/docs/daemon/security.md`: Slack credential boundary and scopes.
 - `bin/ocint/config/daemon.example.toml`: non-secret Slack example.
-- Slack app manifests: public/private least-privilege setup.
+- Slack app manifest: private-channel least-privilege setup.
 
 Security documentation must show that only the Slack client receives the Slack
 token and that OpenCode, validation, Git, GitHub, attach, and subprocess tools do
@@ -936,11 +950,12 @@ not inherit it.
 2. Migrate an existing daemon database and verify GitHub parity after restart.
 3. Merge typed identity/publication ownership migration and verify existing PR
    reuse/refusal.
-4. Create the internal Slack app from the appropriate checked-in manifest.
+4. Create the internal Slack app from the checked-in private-channel manifest.
 5. Install the app and manually invite the bot to the target channel.
-6. Add Slack non-secret IDs and mappings to `daemon.toml`.
-7. Run `ocint daemon lch slack-token` and enter the `xoxb-` token through the
-   hidden prompt.
+6. Run `ocint daemon lch slack-token`, enter the `xoxb-` token through the
+   hidden prompt, and record the workspace ID returned by `auth.test`.
+7. Add that workspace ID plus the channel/user IDs and repository mapping to
+   `daemon.toml`.
 8. Run `ocint daemon lch apply`.
 9. Run `ocint daemon doctor` and require every Slack check to pass.
 10. Perform the live root/completion/closed/reopen smoke sequence.
@@ -1035,9 +1050,10 @@ plugin registry in this work.
 - Completed Slack roots are excluded from reply polling.
 - Explicit permalink reopening creates at most one follow-up and reuses prior
   execution context and PR ownership.
-- Unauthorized actors and bot messages cannot schedule work.
+- Unauthorized users and bot messages cannot schedule work.
 - Pagination, restart, and rate limiting are durable and tested.
-- Slack manifests contain only approved scopes and no event configuration.
+- The Slack manifest contains only approved private-channel scopes and no event
+  configuration.
 - Slack token provisioning is hidden, mode-0600, lossless, redacted, and isolated
   from unrelated subprocesses.
 - Tach, full tests, static checks, and daemon smoke all pass.
