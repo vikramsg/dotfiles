@@ -36,6 +36,13 @@ A package reinstall does not modify `daemon.toml` and does not require either
 command when the installed executable path is unchanged. Routine timer and job
 operation also requires neither command.
 
+## Run Acceptance Checks
+
+Before acceptance, run `ocint daemon doctor` and `ocint daemon lch lifecycle`,
+then wait for the systemd timer to invoke the daemon. Do not run
+`ocint daemon migrate` or manually start `ocint-daemon.service` during
+acceptance.
+
 ## Request Work
 
 Create an issue, describe the required repository change, and apply the `ocint`
