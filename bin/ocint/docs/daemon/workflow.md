@@ -41,7 +41,8 @@ operation also requires neither command.
 Before acceptance, run `ocint daemon doctor` and `ocint daemon lch lifecycle`,
 then wait for the systemd timer to invoke the daemon. Do not run
 `ocint daemon migrate` or manually start `ocint-daemon.service` during
-acceptance.
+acceptance. Acceptance succeeds when the daemon service exits successfully
+while the systemd timer remains active.
 
 ## Request Work
 
