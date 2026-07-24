@@ -1,18 +1,37 @@
 # Daemon Configuration
 
-Provisioning discovers repository-specific values and writes private managed
+Initial setup discovers repository-specific values and writes private managed
 configuration. The default path is `$XDG_CONFIG_HOME/ocint/daemon.toml`, falling
 back to `~/.config/ocint/daemon.toml`. `OCINT_DAEMON_CONFIG` overrides it.
 
 The tracked schema example is [`../../config/daemon.example.toml`](../../config/daemon.example.toml).
 
-## Provisioning
+## Setup And Ownership
 
-Run provisioning from the target Git checkout:
+Run initial setup from the target Git checkout:
 
 ```bash
-ocint daemon lch provision
+ocint daemon lch setup
 ocint daemon doctor
+```
+
+`daemon.toml` becomes user-owned after its first creation. Command behavior is
+deliberately asymmetric:
+
+```text
+daemon.toml absent  -> setup discovers values and creates it
+daemon.toml exists  -> setup reuses it byte-for-byte
+apply               -> reads it and regenerates systemd units only
+package reinstall   -> does not read or modify it
+uninstall           -> preserves it and all daemon state
+```
+
+Defaults apply only when `setup` first creates the file. Changing a default in
+Python does not migrate an explicit value already stored in `daemon.toml`. Edit
+the TOML and run the following command to apply lifecycle changes:
+
+```bash
+ocint daemon lch apply
 ```
 
 Discovery validates every input before its first write:
@@ -34,9 +53,10 @@ Discovery validates every input before its first write:
  atomically write managed files; auth remains a symlink
 ```
 
-Provision never starts OAuth or device login. It discovers the GitHub token with
+Setup never starts OAuth or device login. It discovers the GitHub token with
 `gh auth token --hostname github.com`, preserves an existing daemon API token,
-and regenerates the systemd units.
+and installs the systemd units. A later setup reuses the existing TOML without
+running discovery again.
 
 ## Root Settings
 
@@ -78,7 +98,7 @@ prefix before persistence and publication.
 | `scheduler.command_timeout_seconds` | `600` | Git and validation timeout |
 | `scheduler.command_output_bytes` | `65536` | Error-output limit |
 | `lifecycle.startup_delay_seconds` | `60` | Delay after user-manager startup |
-| `lifecycle.inactive_interval_seconds` | `900` | Delay after one invocation exits |
+| `lifecycle.inactive_interval_seconds` | `600` | Delay after one invocation exits |
 
 Capacity uses an `asyncio.Semaphore`; there is no scheduler polling loop.
 
@@ -114,9 +134,11 @@ bin/ocint/config/opencode.daemon.json -> packaged static policy
 bin/ocint/config/daemon.example.toml  -> generic schema example
 bin/ocint/docs/daemon.md              -> concise daemon index
 bin/ocint/docs/daemon/workflow.md     -> minimal operator workflow
-ocint/daemon/lch/provision.py         -> discovery + writes
+ocint/daemon/lch/setup.py             -> initial discovery + writes
 ocint/daemon/lch/doctor.py            -> redacted diagnostics
 ```
 
 Uninstall removes only generated user units. Configuration, credentials,
-database, logs, mirrors, and worktrees are preserved.
+database, logs, mirrors, and worktrees are preserved. Commands report the path,
+outcome, modification state, and relevant non-secret policy values for every
+artifact they handle.

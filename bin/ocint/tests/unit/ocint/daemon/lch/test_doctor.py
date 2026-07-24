@@ -12,7 +12,7 @@ from ocint.cli import main
 from ocint.daemon.config import DaemonContext, DaemonSettings
 from ocint.daemon.db import current_daemon_head_revision, migrate_daemon_db
 from ocint.daemon.lch.doctor import Diagnostic, DoctorReport, diagnose
-from ocint.daemon.lch.provision import OpenCodeSourceConfig, load_policy, restricted_opencode_config
+from ocint.daemon.lch.setup import OpenCodeSourceConfig, load_policy, restricted_opencode_config
 from ocint.daemon.lch.systemd import (
     CommandResult,
     SystemdLifecycle,

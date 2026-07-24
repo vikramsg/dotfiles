@@ -6,11 +6,11 @@ import aiohttp
 import click
 from sqlalchemy.exc import NoResultFound
 
-from ocint.daemon.config import DaemonContext
+from ocint.daemon.config import DaemonConfig, DaemonContext
 from ocint.daemon.db import create_daemon_engine
-from ocint.daemon.lch.provision import discover, provision
 from ocint.daemon.lch.render import render_job, render_jobs, render_status
 from ocint.daemon.lch.service import attach_to_job
+from ocint.daemon.lch.setup import discover, setup
 from ocint.daemon.lch.systemd import SubprocessRunner, SystemdLifecycle, SystemdPaths, installed_ocint
 from ocint.daemon.logging import daemon_log_settings
 from ocint.daemon.models import OpenCodeAttachment
@@ -38,30 +38,71 @@ def lch() -> None:
     """Provision and operate the local daemon."""
 
 
-@lch.command("provision")
+@lch.command("setup")
 @click.pass_obj
-def provision_command(context: DaemonContext) -> None:
-    """Discover configuration and provision the daemon."""
+def setup_command(context: DaemonContext) -> None:
+    """Create initial configuration and install the daemon."""
     managed_lifecycle = lifecycle(context)
+    executable = installed_ocint()
+    if context.config_path.exists():
+        config = context.config()
+        managed_lifecycle.install(executable, config.lifecycle)
+        _report_install(context, managed_lifecycle, config, executable, "reused", modified=False)
+        context.output.write(
+            f"Environment: reused; path={managed_lifecycle.paths.environment_file}; modified=no",
+            nl=True,
+        )
+        context.output.write(
+            f"OpenCode configuration: reused; path={config.opencode.config_file}; modified=no",
+            nl=True,
+        )
+        return
     managed_lifecycle.validate_host()
-    managed_lifecycle.validate_executable(installed_ocint())
+    managed_lifecycle.validate_executable(executable)
     discovered = discover(managed_lifecycle.runner, managed_lifecycle, Path.cwd(), context)
-    provision(discovered, managed_lifecycle, context)
-    context.output.write("ocint daemon provisioned; the systemd timer will start it", nl=True)
+    environment_existed = managed_lifecycle.paths.environment_file.exists()
+    opencode_config_existed = discovered.paths.effective_opencode_config.exists()
+    setup(discovered, managed_lifecycle)
+    config = context.config()
+    _report_install(context, managed_lifecycle, config, executable, "created", modified=True)
+    context.output.write(
+        f"Environment: {'updated' if environment_existed else 'created'}; "
+        f"path={managed_lifecycle.paths.environment_file}; secrets=redacted",
+        nl=True,
+    )
+    context.output.write(
+        f"OpenCode configuration: {'updated' if opencode_config_existed else 'created'}; "
+        f"path={config.opencode.config_file}; modified=yes",
+        nl=True,
+    )
 
 
-@lch.command("install")
+@lch.command("apply")
 @click.pass_obj
-def install_command(context: DaemonContext) -> None:
-    """Install and enable the daemon systemd timer."""
-    lifecycle(context).install(installed_ocint(), context.config().lifecycle)
+def apply_command(context: DaemonContext) -> None:
+    """Apply existing configuration to systemd units."""
+    managed_lifecycle = lifecycle(context)
+    config = context.config()
+    executable = installed_ocint()
+    managed_lifecycle.install(executable, config.lifecycle)
+    _report_install(context, managed_lifecycle, config, executable, "loaded", modified=False)
 
 
 @lch.command("uninstall")
 @click.pass_obj
 def uninstall_command(context: DaemonContext) -> None:
     """Remove systemd units while preserving daemon state."""
-    lifecycle(context).uninstall()
+    managed_lifecycle = lifecycle(context)
+    managed_lifecycle.uninstall()
+    context.output.write(
+        f"Systemd units: removed; service={managed_lifecycle.paths.service}; timer={managed_lifecycle.paths.timer}",
+        nl=True,
+    )
+    context.output.write(
+        f"Daemon state: preserved; config={context.config_path}; data={context.data_home / 'ocint'}; "
+        f"state={context.state_home / 'ocint'}",
+        nl=True,
+    )
 
 
 @lch.command("lifecycle")
@@ -122,6 +163,11 @@ def attach_command(context: DaemonContext, job_id: str) -> None:
     managed = lifecycle(context)
     try:
         attachment = asyncio.run(_attachment(context, managed.api_token(), job_id))
+        context.output.write(
+            f"Attachment: starting; job={job_id}; server={attachment.server_url}; "
+            f"session={attachment.session_id}; directory={attachment.directory}",
+            nl=True,
+        )
         attach_to_job(
             attachment,
             context.config().opencode.executable,
@@ -142,6 +188,11 @@ def logs_command(context: DaemonContext, lines: int, follow: bool) -> None:
     """Read or follow the daemon log."""
     settings = daemon_log_settings(context.state_home, context.config().logging)
     managed = lifecycle(context)
+    context.output.write(
+        f"Log: reading; path={settings.path}; lines={lines}; follow={'yes' if follow else 'no'}",
+        stderr=True,
+        nl=True,
+    )
     try:
         if follow:
             for text in managed.follow_logs(settings, lines):
@@ -166,3 +217,28 @@ async def _attachment(context: DaemonContext, token: str, job_id: str) -> OpenCo
             payload = await response.json()
             raise RuntimeError(f"daemon HTTP {response.status}: {payload.get('detail', 'attach failed')}")
         return OpenCodeAttachment.model_validate(await response.json())
+
+
+def _report_install(
+    context: DaemonContext,
+    managed: SystemdLifecycle,
+    config: DaemonConfig,
+    executable: Path,
+    configuration_outcome: str,
+    *,
+    modified: bool,
+) -> None:
+    context.output.write(
+        f"Configuration: {configuration_outcome}; path={context.config_path}; modified={'yes' if modified else 'no'}",
+        nl=True,
+    )
+    context.output.write(
+        f"Systemd service: regenerated; path={managed.paths.service}; executable={executable.resolve()}",
+        nl=True,
+    )
+    context.output.write(
+        f"Systemd timer: enabled; path={managed.paths.timer}; "
+        f"startup_delay_seconds={config.lifecycle.startup_delay_seconds}; "
+        f"inactive_interval_seconds={config.lifecycle.inactive_interval_seconds}",
+        nl=True,
+    )

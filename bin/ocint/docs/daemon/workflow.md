@@ -1,13 +1,40 @@
 # Daemon Workflow
 
-## Provision Once
+## Choose Setup Or Apply
 
-From the target repository root:
+```text
+Does daemon.toml exist?
+  |
+  +-- no  -> run lch setup
+  |
+  `-- yes
+       |
+       +-- edited TOML or need regenerated units -> run lch apply
+       |
+       `-- no configuration change -> run neither
+```
+
+Note: `daemon.toml` is usually at `XDG_HOME/.config/ocint/daemon.toml`.
+
+Run `setup` once, from the target repository root, to create initial
+configuration and install the systemd units:
 
 ```bash
-ocint daemon lch provision
+ocint daemon lch setup
 ocint daemon doctor
 ```
+
+Run `apply` after editing `daemon.toml` or when the systemd units must be
+regenerated:
+
+```bash
+ocint daemon lch apply
+ocint daemon lch lifecycle
+```
+
+A package reinstall does not modify `daemon.toml` and does not require either
+command when the installed executable path is unchanged. Routine timer and job
+operation also requires neither command.
 
 ## Request Work
 

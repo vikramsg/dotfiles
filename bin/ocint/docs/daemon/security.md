@@ -23,7 +23,7 @@ code as the daemon user.
 ```
 
 The API and GitHub tokens are persisted in
-`$XDG_CONFIG_HOME/ocint/daemon.env`. Provisioning requires that file to be a
+`$XDG_CONFIG_HOME/ocint/daemon.env`. Setup creates that file as a
 regular, user-owned mode-0600 file. It is sensitive, but it is not public and is
 never committed to the repository.
 

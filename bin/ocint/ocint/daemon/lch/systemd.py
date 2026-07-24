@@ -310,7 +310,7 @@ class SystemdLifecycle:
             raise RuntimeError(f"ocint executable does not expose daemon run, doctor, and lch: {resolved}")
         lch_help = self.runner.run((str(resolved), "daemon", "lch", "--help")).stdout
         lch_commands = {line.strip().split(maxsplit=1)[0] for line in lch_help.splitlines() if line.startswith("  ")}
-        required = {"provision", "install", "uninstall", "lifecycle", "list", "status", "attach", "logs"}
+        required = {"setup", "apply", "uninstall", "lifecycle", "list", "status", "attach", "logs"}
         if not required.issubset(lch_commands):
             raise RuntimeError(f"ocint executable does not expose the required daemon lch commands: {resolved}")
         return resolved

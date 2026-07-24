@@ -30,7 +30,7 @@ an unchanged idle interval. It is not a permanently running queue worker.
 | `git.py` | Mirrors, worktrees, checks, commits, and SSH pushes |
 | `github/` | Issue observation, authorization, replies, and pull requests |
 | `tasks/` | Provider-neutral thread, message, task, and retry coordination |
-| `lch/` | Linux user-systemd provisioning and local operator commands |
+| `lch/` | Linux user-systemd setup and local operator commands |
 | `db/` | SQLite policy, schema, and Alembic migrations |
 
 The CLI is the composition root. Services receive narrow protocols instead of

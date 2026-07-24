@@ -3,8 +3,8 @@
 `ocint daemon lch` is the concrete Linux user-systemd surface:
 
 ```text
-provision -> discover and validate -> write private config -> install units
-install   -> validate existing config/env -> reload -> enable --now timer
+setup     -> create config when absent; otherwise reuse it unchanged
+apply     -> validate existing config/env -> reload -> enable --now timer
 lifecycle -> report timer schedule, service result, and log path
 list      -> list durable jobs directly from SQLite
 status    -> show one durable job by ID
@@ -25,8 +25,8 @@ $XDG_CONFIG_HOME/systemd/user/ocint-daemon.service
 ```
 
 The timer renders daemon-owned `[lifecycle]` policy: its defaults are a
-60-second startup delay relative to user-manager startup and a 900-second
-inactive interval after each service invocation becomes inactive. Reinstalling
+60-second startup delay relative to user-manager startup and a 600-second
+inactive interval after each service invocation becomes inactive. Applying
 with `enable --now` can trigger immediately when the startup deadline has
 elapsed. User lingering is required, and the mode-0600
 `$XDG_CONFIG_HOME/ocint/daemon.env` must exist before installation.
@@ -36,10 +36,14 @@ events to `$XDG_STATE_HOME/ocint/daemon.log`. The daemon-owned `[logging]`
 policy defaults to 10 MiB through five mode-0600 backups. `logs --lines N` reads across those backups, while
 `logs --follow` follows the active file across rotation without using journald.
 
-Provision must run from the target Git checkout root. It discovers GitHub, Git,
+Initial setup must run from the target Git checkout root. It discovers GitHub, Git,
 SSH, and OpenCode values, validates every input and destination before writes,
 and uses only `gh auth token --hostname github.com` for the existing GitHub
 token. See the [complete workflow](../../../docs/daemon/workflow.md).
+
+After creation, `daemon.toml` is user-owned. Setup reuses it byte-for-byte,
+`apply` reads it without modifying it, and package reinstall and uninstall leave
+it untouched. Every command reports concrete non-secret paths and outcomes.
 
 Live attachment is different from offline inspection:
 

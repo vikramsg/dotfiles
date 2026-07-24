@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ocint.daemon.config import DaemonConfig, DaemonContext, LifecycleConfig
 from ocint.daemon.db import current_daemon_head_revision
-from ocint.daemon.lch.provision import (
+from ocint.daemon.lch.setup import (
     OpenCodeSourceConfig,
     RestrictedOpenCodeConfig,
     StaticOpenCodePolicy,

@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 import pytest
 from ocint.daemon.config import DaemonContext, DaemonSettings, LifecycleConfig, LoggingConfig
-from ocint.daemon.lch.provision import (
+from ocint.daemon.lch.setup import (
     OpenCodeSourceConfig,
     RestrictedOpenCodeConfig,
     daemon_toml,
@@ -18,9 +18,9 @@ from ocint.daemon.lch.provision import (
     existing_github_token,
     load_policy,
     policy_bytes,
-    provision,
     require_available_loopback_port,
     restricted_opencode_config,
+    setup,
     write_private_file,
 )
 from ocint.daemon.lch.systemd import CommandResult, SystemdLifecycle, SystemdPaths
@@ -63,7 +63,7 @@ class DiscoveryRunner:
             return CommandResult(stdout="Commands:\n  run\n  doctor\n  lch\n")
         if command[-3:] == ("daemon", "lch", "--help"):
             return CommandResult(
-                stdout="Commands:\n  attach\n  install\n  lifecycle\n  list\n  logs\n  provision\n  status\n  uninstall\n"
+                stdout="Commands:\n  apply\n  attach\n  lifecycle\n  list\n  logs\n  setup\n  status\n  uninstall\n"
             )
         if command[0] == "loginctl":
             return CommandResult(stdout="yes\n")
@@ -172,7 +172,7 @@ def discovery_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Discov
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
     monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
     monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
-    monkeypatch.setattr("ocint.daemon.lch.provision.require_available_loopback_port", lambda _port: None)
+    monkeypatch.setattr("ocint.daemon.lch.setup.require_available_loopback_port", lambda _port: None)
     paths = SystemdPaths(
         directory=config_home / "systemd" / "user",
         environment_file=config_home / "ocint" / "daemon.env",
@@ -363,7 +363,7 @@ def test_discovery_rejects_wrong_opencode_version_before_writes(discovery_fixtur
     assert not discovery_fixture.managed_config.exists()
 
 
-def test_provision_uses_only_the_validated_policy_and_provider_snapshot(
+def test_setup_uses_only_the_validated_policy_and_provider_snapshot(
     discovery_fixture: DiscoveryFixture,
 ) -> None:
     # GIVEN
@@ -380,7 +380,7 @@ def test_provision_uses_only_the_validated_policy_and_provider_snapshot(
     )
 
     # WHEN
-    provision(discovered, discovery_fixture.lifecycle, discovery_fixture.context)
+    setup(discovered, discovery_fixture.lifecycle)
 
     # THEN
     effective = discovered.paths.effective_opencode_config.read_text()
@@ -390,7 +390,7 @@ def test_provision_uses_only_the_validated_policy_and_provider_snapshot(
     assert 'expected_version = "1.17.20"' in discovered.paths.configuration.read_text()
 
 
-def test_reprovision_preserves_existing_lifecycle_and_logging_policy(
+def test_setup_refuses_to_overwrite_existing_configuration(
     discovery_fixture: DiscoveryFixture,
 ) -> None:
     # GIVEN
@@ -420,17 +420,12 @@ def test_reprovision_preserves_existing_lifecycle_and_logging_policy(
         discovery_fixture.context,
     )
 
-    # WHEN
-    provision(discovered, discovery_fixture.lifecycle, discovery_fixture.context)
+    original = discovery_fixture.context.config_path.read_bytes()
 
-    # THEN
-    rendered = discovered.paths.configuration.read_text()
-    assert "startup_delay_seconds = 75" in rendered
-    assert "inactive_interval_seconds = 901" in rendered
-    assert "max_bytes = 2048" in rendered
-    assert "backup_count = 2" in rendered
-    assert "OnStartupSec=75s" in discovery_fixture.lifecycle.paths.timer.read_text()
-    assert "OnUnitInactiveSec=901s" in discovery_fixture.lifecycle.paths.timer.read_text()
+    # WHEN / THEN
+    with pytest.raises(click.ClickException, match="will not be overwritten"):
+        setup(discovered, discovery_fixture.lifecycle)
+    assert discovery_fixture.context.config_path.read_bytes() == original
 
 
 def test_discovery_fails_before_writes_when_git_remote_does_not_match_gh(
