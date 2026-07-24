@@ -29,3 +29,7 @@ just all
     - `tmux`
     - `opencode`
     - `nvim`
+
+## Maintenance
+
+- [Stale document triage](docs/stale-document-triage.md)
