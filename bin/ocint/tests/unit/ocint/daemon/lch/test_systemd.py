@@ -26,7 +26,7 @@ class FakeRunner:
             return CommandResult(stdout=f"Commands:\n{commands}")
         if command[-3:] == ["daemon", "lch", "--help"]:
             return CommandResult(
-                stdout="Commands:\n  attach\n  install\n  lifecycle\n  list\n  logs\n  provision\n  status\n  uninstall\n"
+                stdout="Commands:\n  apply\n  attach\n  lifecycle\n  list\n  logs\n  setup\n  status\n  uninstall\n"
             )
         if command[0] == "loginctl":
             return CommandResult(stdout="yes\n")
@@ -79,7 +79,7 @@ def test_generated_timer_has_bounded_schedule() -> None:
 
     # THEN
     assert "OnStartupSec=1m" in rendered
-    assert "OnUnitInactiveSec=15m" in rendered
+    assert "OnUnitInactiveSec=10m" in rendered
     assert "Unit=ocint-daemon.service" in rendered
 
 

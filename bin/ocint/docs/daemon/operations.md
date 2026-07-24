@@ -6,8 +6,8 @@ Linux user-systemd lifecycle.
 ## Commands
 
 ```text
-provision        discover configuration and install the timer
-install          regenerate and enable existing user units
+setup            create initial configuration and install the timer
+apply            apply existing configuration to systemd units
 lifecycle        show timer, service, schedule, and log state
 list             list recent durable jobs from SQLite
 status JOB_ID    show one durable job
@@ -18,6 +18,21 @@ uninstall        remove only the generated user units
 
 `list` and `status` read the daemon database directly, so they work while the
 bounded service is inactive and do not require API credentials.
+
+## Command Outcomes
+
+Every LCH command emits data-bearing output. Mutation commands identify the
+artifact, outcome, path, and whether configuration changed; they never print a
+bare `done` or silently reuse configuration.
+
+```text
+Configuration: reused; path=~/.config/ocint/daemon.toml; modified=no
+Systemd service: regenerated; path=~/.config/systemd/user/ocint-daemon.service; executable=...
+Systemd timer: enabled; path=~/.config/systemd/user/ocint-daemon.timer; inactive_interval_seconds=600
+```
+
+Secrets are always redacted. Read-only commands return the requested lifecycle,
+job, attachment, or log data instead of a generic success message.
 
 ```text
  daemon.sqlite

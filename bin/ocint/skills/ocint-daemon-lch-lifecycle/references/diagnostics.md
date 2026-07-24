@@ -35,7 +35,7 @@ OPENCODE_LOG="$OPENCODE_DATA/opencode/log/opencode.log"
 Do not read `daemon.env` or `auth.json` during normal diagnosis. Doctor reports
 whether required credentials and auth links are present without exposing them.
 
-## Optional Reinstall And Provision
+## Optional Reinstall And Setup
 
 Use this only when installation itself is in scope. Stop the service and timer
 before removing the executable, but preserve all state files.
@@ -44,12 +44,14 @@ before removing the executable, but preserve all state files.
 systemctl --user stop ocint-daemon.timer ocint-daemon.service
 uv tool uninstall ocint
 just --justfile bin/ocint/justfile install
-ocint daemon lch provision
+ocint daemon lch setup
 ocint daemon lch status
 systemctl --user list-timers ocint-daemon.timer --no-pager
 ```
 
-`provision` installs and enables the timer. Database migration occurs on daemon
+`setup` creates missing configuration, preserves existing configuration, and
+installs or enables the timer. Use `ocint daemon lch apply` after deliberately
+editing existing TOML. Database migration occurs on daemon
 startup, so a pre-start doctor can report the previous migration. Do not run a
 manual migration to make doctor green. Wait for the timer-triggered daemon cycle,
 then check migration state again.

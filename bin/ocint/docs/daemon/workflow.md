@@ -1,11 +1,11 @@
 # Daemon Workflow
 
-## Provision Once
+## Setup Once
 
 From the target repository root:
 
 ```bash
-ocint daemon lch provision
+ocint daemon lch setup
 ocint daemon doctor
 ```
 

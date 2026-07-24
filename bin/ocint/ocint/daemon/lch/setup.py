@@ -446,9 +446,11 @@ def discover(
     )
 
 
-def provision(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle, context: DaemonContext) -> None:
+def setup(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> None:
     paths = discovery.paths
-    config = discovered_daemon_config(discovery, _existing_policy(context))
+    if paths.configuration.exists():
+        raise click.ClickException(f"daemon configuration already exists and will not be overwritten: {paths.configuration}")
+    config = discovered_daemon_config(discovery, (LifecycleConfig(), LoggingConfig()))
     for directory in (
         paths.config_home / "ocint",
         paths.data_home / "ocint",
@@ -634,16 +636,6 @@ def _existing_api_token(path: Path) -> str:
         if line.startswith("OCINT_DAEMON_API_TOKEN="):
             return line.partition("=")[2]
     return ""
-
-
-def _existing_policy(context: DaemonContext) -> tuple[LifecycleConfig, LoggingConfig]:
-    if not context.config_path.exists():
-        return (LifecycleConfig(), LoggingConfig())
-    try:
-        config = context.config()
-        return (config.lifecycle, config.logging)
-    except (OSError, ValueError) as error:
-        raise click.ClickException(f"existing daemon lifecycle/logging config is invalid: {error}") from error
 
 
 def discovered_daemon_config(

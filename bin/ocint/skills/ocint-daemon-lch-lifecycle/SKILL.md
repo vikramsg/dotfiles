@@ -35,7 +35,7 @@ SQL queries, expected states, and failure signatures.
 ## Lifecycle
 
 ```text
-install/provision
+setup/apply
        |
        v
 doctor + timer ready
@@ -60,7 +60,7 @@ GitHub mapping -> thread -> message -> task -> job
 
 Identify the repository, current revision, installed ocint executable, daemon
 configuration, and existing LCH state. Decide whether this run needs
-installation, reprovisioning, or only an already-installed lifecycle exercise.
+initial setup, configuration application, or only an already-installed lifecycle exercise.
 
 Do not reinstall by default. Reinstall only when the user asks to test package
 installation or when the installed executable is not the intended revision.
@@ -78,7 +78,7 @@ An occupied private OpenCode or API port is expected while the oneshot service
 is running. Interpret port diagnostics together with systemd state rather than
 calling an active daemon unhealthy solely because its ports are in use.
 
-After provisioning, a pre-start doctor can report the previous database
+After setup, a pre-start doctor can report the previous database
 revision. This is not a reason to migrate manually. Confirm that the timer is
 scheduled, wait for it to invoke the daemon, and then verify that daemon startup
 advanced the migration.
@@ -190,7 +190,7 @@ a running job may continue until terminal.
 Report:
 
 - repository, issue, job, branch, session, and PR identifiers;
-- install, provision, migration, timer, and service results;
+- setup, apply, migration, timer, and service results;
 - each lifecycle stage reached;
 - final task and job states;
 - created local and remote artifacts;

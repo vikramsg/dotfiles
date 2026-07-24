@@ -56,11 +56,11 @@ def test_job_inspection_commands_are_exposed_only_through_lch() -> None:
     )
     for description in (
         "Attach to a running job's OpenCode session.",
-        "Install and enable the daemon systemd timer.",
+        "Apply existing configuration to systemd units.",
         "Show timer and service lifecycle status.",
         "List recent daemon jobs.",
         "Read or follow the daemon log.",
-        "Discover configuration and provision the daemon.",
+        "Create initial configuration and install the daemon.",
         "Show detailed status for one daemon job.",
         "Remove systemd units while preserving daemon state.",
     ):
@@ -413,7 +413,7 @@ agent_actor = "automation-bot"
         await opencode_runner.cleanup()
 
 
-def test_lch_provision_is_discoverable() -> None:
+def test_lch_setup_and_apply_are_discoverable() -> None:
     # GIVEN
     runner = CliRunner()
 
@@ -422,11 +422,93 @@ def test_lch_provision_is_discoverable() -> None:
 
     # THEN
     assert result.exit_code == 0
-    assert "provision" in result.output
-    assert "install" in result.output
+    assert "setup" in result.output
+    assert "apply" in result.output
+    assert "provision" not in result.output
 
 
-def test_provision_rejects_incompatible_path_binary_before_writes(
+def test_setup_reuses_existing_configuration_and_reports_applied_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GIVEN
+    home = tmp_path / "home"
+    config_home = home / "config"
+    data_home = home / "data"
+    state_home = home / "state"
+    managed = config_home / "ocint"
+    managed.mkdir(parents=True)
+    environment_file = managed / "daemon.env"
+    environment_file.write_text("OCINT_DAEMON_API_TOKEN=api\nOCINT_DAEMON_GITHUB_TOKEN=github\n")
+    environment_file.chmod(0o600)
+    config = managed / "daemon.toml"
+    config.write_text(
+        f'''database_path = "{state_home / "ocint" / "daemon.sqlite"}"
+mirror_root = "{data_home / "ocint" / "mirrors"}"
+worktree_root = "{data_home / "ocint" / "worktrees"}"
+[[repositories]]
+name = "repo"
+remote_url = "git@example.test:owner/repo.git"
+github_repository = "owner/repo"
+author_name = "Agent"
+author_email = "agent@example.test"
+[lifecycle]
+startup_delay_seconds = 60
+inactive_interval_seconds = 600
+[opencode]
+executable = "{tmp_path / "opencode"}"
+config_file = "{managed / "opencode.json"}"
+xdg_config_home = "{managed / "opencode-xdg"}"
+xdg_data_home = "{data_home / "ocint" / "opencode-data"}"
+[git]
+ssh_executable = "/usr/bin/ssh"
+identity_file = "{tmp_path / "identity"}"
+known_hosts_file = "{tmp_path / "known_hosts"}"
+[github]
+agent_actor = "maintainer"
+'''
+    )
+    original = config.read_bytes()
+    binary_directory = tmp_path / "bin"
+    binary_directory.mkdir()
+    executable = binary_directory / "ocint"
+    executable.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1 $2\" = \"daemon --help\" ]; then\n"
+        "  printf 'Commands:\\n  run\\n  doctor\\n  lch\\n'\n"
+        "elif [ \"$1 $2 $3\" = \"daemon lch --help\" ]; then\n"
+        "  printf 'Commands:\\n  apply\\n  attach\\n  lifecycle\\n  list\\n  logs\\n  setup\\n  status\\n  uninstall\\n'\n"
+        "fi\n"
+    )
+    executable.chmod(0o755)
+    loginctl = binary_directory / "loginctl"
+    loginctl.write_text("#!/bin/sh\nprintf 'yes\\n'\n")
+    loginctl.chmod(0o755)
+    systemctl = binary_directory / "systemctl"
+    systemctl.write_text("#!/bin/sh\nexit 0\n")
+    systemctl.chmod(0o755)
+    monkeypatch.setenv("PATH", str(binary_directory))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USER", "tester")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+
+    # WHEN
+    result = CliRunner().invoke(main, ["daemon", "lch", "setup"])
+
+    # THEN
+    assert result.exit_code == 0, result.output
+    assert config.read_bytes() == original
+    assert f"Configuration: reused; path={config}; modified=no" in result.output
+    assert f"Environment: reused; path={environment_file}; modified=no" in result.output
+    assert "Systemd service: regenerated;" in result.output
+    assert f"executable={executable.resolve()}" in result.output
+    assert "Systemd timer: enabled;" in result.output
+    assert "inactive_interval_seconds=600" in result.output
+    assert "OpenCode configuration: reused;" in result.output
+
+
+def test_setup_rejects_incompatible_path_binary_before_writes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # GIVEN
@@ -441,7 +523,7 @@ def test_provision_rejects_incompatible_path_binary_before_writes(
     runner = CliRunner()
 
     # WHEN
-    result = runner.invoke(main, ["daemon", "lch", "provision"])
+    result = runner.invoke(main, ["daemon", "lch", "setup"])
 
     # THEN
     assert result.exit_code != 0
