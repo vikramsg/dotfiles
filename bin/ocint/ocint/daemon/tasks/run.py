@@ -136,6 +136,8 @@ class TaskCoordinator:
             self.executor.abandon(job.id, "task is no longer current")
 
     def _request(self, thread: Thread, task: Task, attempt: int) -> WorkRequest:
+        if not thread.title:
+            raise RuntimeError(f"source thread {thread.id} has no work title")
         messages = self.repository.actionable_messages(thread.id)
         task_messages = self.repository.task_messages(task.id)
         actor = task_messages[-1].actor
@@ -143,6 +145,7 @@ class TaskCoordinator:
             idempotency_key=(f"thread-task:model-v2:source:{thread.source_id}:task:{task.id}:attempt:{attempt}"),
             actor=actor,
             repository=thread.configured_repository,
+            title=thread.title,
             prompt=render_prompt(thread, messages),
             origin=ThreadOrigin(source_thread_id=thread.source_id, source_anchor_id=task_messages[-1].source_id),
         )

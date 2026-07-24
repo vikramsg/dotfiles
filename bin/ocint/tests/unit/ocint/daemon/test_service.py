@@ -45,6 +45,7 @@ class StatefulJobStore:
             idempotency_key=request.idempotency_key,
             actor=request.actor,
             repository=request.repository,
+            title=request.title,
             prompt=request.prompt,
             state=JobState.QUEUED,
             stage=JobStage.EXECUTION,
@@ -187,6 +188,7 @@ class StatefulGit:
     root: Path
     failure: GitFailure = GitFailure.NONE
     calls: list[str] = field(default_factory=list)
+    commit_messages: list[str] = field(default_factory=list)
 
     async def provision(self, repository: RepositoryConfig, job_id: str) -> Worktree:
         _ = repository
@@ -202,8 +204,9 @@ class StatefulGit:
             raise RuntimeError("validation failed")
 
     async def commit(self, worktree: Worktree, message: str, author_name: str, author_email: str) -> str:
-        _ = (worktree, message, author_name, author_email)
+        _ = (worktree, author_name, author_email)
         self.calls.append("commit")
+        self.commit_messages.append(message)
         return "commit-sha"
 
     async def push(self, worktree: Worktree) -> None:
@@ -214,10 +217,11 @@ class StatefulGit:
 @dataclass
 class StatefulGitHub:
     calls: list[str] = field(default_factory=list)
+    requests: list[PublicationRequest] = field(default_factory=list)
 
     async def publish(self, request: PublicationRequest) -> PublishedPublication:
-        _ = request
         self.calls.append("pull_request")
+        self.requests.append(request)
         return PublishedPublication(url="https://example.test/pull/1")
 
 
@@ -301,6 +305,7 @@ def test_attach_command_uses_runtime_path() -> None:
         idempotency_key="key",
         actor=GitHubLogin("actor"),
         repository="repo",
+        title="Work title",
         prompt="work",
         state=JobState.RUNNING,
         stage=JobStage.EXECUTION,
@@ -338,7 +343,13 @@ async def test_executor_runs_every_stage_and_persists_result(
 
     # WHEN
     job = executor.submit(
-        WorkRequest(idempotency_key="full", actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+        WorkRequest(
+            idempotency_key="full",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Human-readable change",
+            prompt="work",
+        )
     )
     await executor.close()
 
@@ -347,6 +358,8 @@ async def test_executor_runs_every_stage_and_persists_result(
     assert git.calls == ["provision", "validate", "commit", "push"]
     assert opencode.calls == ["create", "observe", "prompt", "wait"]
     assert github.calls == ["pull_request"]
+    assert git.commit_messages == ["Human-readable change"]
+    assert [request.title for request in github.requests] == ["Human-readable change"]
     assert completed.state is JobState.COMPLETED
     assert completed.worktree_path == tmp_path / "worktrees" / job.id
     assert isinstance(completed.worktree_path, Path)
@@ -370,7 +383,13 @@ async def test_executor_marks_stage_failure_terminal(
 
     # WHEN
     job = executor.submit(
-        WorkRequest(idempotency_key="failure", actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+        WorkRequest(
+            idempotency_key="failure",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Failure title",
+            prompt="work",
+        )
     )
     await executor.close()
 
@@ -404,7 +423,13 @@ async def test_start_resumes_only_unfinished_stage(
     worktree = tmp_path / f"worktree-{stage.value}"
     worktree.mkdir()
     job = job_store.submit(
-        WorkRequest(idempotency_key=stage.value, actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+        WorkRequest(
+            idempotency_key=stage.value,
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Resume title",
+            prompt="work",
+        )
     )
     job_store.checkpoint(job.id, WorktreeCheckpoint(path=worktree, branch=f"ocint/{job.id}", base_revision="base"))
     if stage is JobStage.EXECUTION:
@@ -433,7 +458,13 @@ async def test_start_recovers_running_job(
 ) -> None:
     # GIVEN
     job = job_store.submit(
-        WorkRequest(idempotency_key="recovery", actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+        WorkRequest(
+            idempotency_key="recovery",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Recovery title",
+            prompt="work",
+        )
     )
     job_store.claim(job.id)
     executor = JobExecutor(
@@ -468,7 +499,13 @@ async def test_restart_recovers_interrupted_prompt_without_duplicating_active_pr
     worktree = tmp_path / "interrupted-worktree"
     worktree.mkdir()
     job = job_store.submit(
-        WorkRequest(idempotency_key="interrupted", actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+        WorkRequest(
+            idempotency_key="interrupted",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Interrupted title",
+            prompt="work",
+        )
     )
     job_store.checkpoint(job.id, WorktreeCheckpoint(path=worktree, branch="ocint/interrupted", base_revision="base"))
     job_store.checkpoint(job.id, SessionCheckpoint(session_id="session", server_url="http://opencode.test"))
@@ -503,7 +540,13 @@ async def test_duplicate_idempotent_submission_executes_once(
     opencode = StatefulOpenCode(block_wait=True)
     git = StatefulGit(tmp_path / "worktrees")
     executor = JobExecutor(daemon_config, job_store, opencode, git, StatefulGitHub())
-    request = WorkRequest(idempotency_key="duplicate", actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+    request = WorkRequest(
+        idempotency_key="duplicate",
+        actor=GitHubLogin("allowed"),
+        repository="repo",
+        title="Duplicate title",
+        prompt="work",
+    )
 
     # WHEN
     first = executor.submit(request)
@@ -527,7 +570,13 @@ async def test_terminal_idempotent_submission_is_not_scheduled_again(
     # GIVEN
     git = StatefulGit(tmp_path / "worktrees")
     executor = JobExecutor(daemon_config, job_store, StatefulOpenCode(), git, StatefulGitHub())
-    request = WorkRequest(idempotency_key="terminal", actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+    request = WorkRequest(
+        idempotency_key="terminal",
+        actor=GitHubLogin("allowed"),
+        repository="repo",
+        title="Terminal title",
+        prompt="work",
+    )
     completed = executor.submit(request)
     await executor.wait_until_idle()
 
@@ -561,7 +610,13 @@ async def test_job_timeout_marks_job_failed(
 
     # WHEN
     job = executor.submit(
-        WorkRequest(idempotency_key="timeout", actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+        WorkRequest(
+            idempotency_key="timeout",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Timeout title",
+            prompt="work",
+        )
     )
     await executor.close()
 
@@ -581,7 +636,11 @@ async def test_executor_honors_capacity_without_polling(
     for number in range(3):
         executor.submit(
             WorkRequest(
-                idempotency_key=f"capacity-{number}", actor=GitHubLogin("allowed"), repository="repo", prompt="work"
+                idempotency_key=f"capacity-{number}",
+                actor=GitHubLogin("allowed"),
+                repository="repo",
+                title=f"Capacity title {number}",
+                prompt="work",
             )
         )
 
@@ -604,7 +663,13 @@ def test_submission_enforces_actor_authorization(
     # WHEN / THEN
     with pytest.raises(PermissionError, match="not allowed"):
         executor.submit(
-            WorkRequest(idempotency_key="denied", actor=GitHubLogin("denied"), repository="repo", prompt="work")
+            WorkRequest(
+                idempotency_key="denied",
+                actor=GitHubLogin("denied"),
+                repository="repo",
+                title="Denied title",
+                prompt="work",
+            )
         )
 
 
@@ -619,7 +684,13 @@ async def test_shutdown_timeout_requeues_active_job(
     opencode = StatefulOpenCode(block_wait=True)
     executor = JobExecutor(daemon_config, job_store, opencode, StatefulGit(tmp_path / "worktrees"), StatefulGitHub())
     job = executor.submit(
-        WorkRequest(idempotency_key="shutdown", actor=GitHubLogin("allowed"), repository="repo", prompt="work")
+        WorkRequest(
+            idempotency_key="shutdown",
+            actor=GitHubLogin("allowed"),
+            repository="repo",
+            title="Shutdown title",
+            prompt="work",
+        )
     )
     while job_store.get(job.id).state is not JobState.RUNNING:
         await asyncio.sleep(0)

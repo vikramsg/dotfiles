@@ -285,7 +285,9 @@ def test_competing_retry_claims_attach_one_durable_attempt(repository: TaskRepos
     current = repository.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert current is not None
     failed = control.submit(
-        WorkRequest(idempotency_key="failed", actor=GitHubLogin("alice"), repository="repo", prompt="first")
+        WorkRequest(
+            idempotency_key="failed", actor=GitHubLogin("alice"), repository="repo", title="Title", prompt="first"
+        )
     )
     control.fail(failed.id, "failed")
     repository.attach_job(current.id, failed.id)
@@ -297,7 +299,9 @@ def test_competing_retry_claims_attach_one_durable_attempt(repository: TaskRepos
     assert isinstance(competing, FailedTaskRetry)
     retry = control.retry(
         failed,
-        WorkRequest(idempotency_key="retry", actor=GitHubLogin("alice"), repository="repo", prompt="first"),
+        WorkRequest(
+            idempotency_key="retry", actor=GitHubLogin("alice"), repository="repo", title="Title", prompt="first"
+        ),
     )
     attached = repository.attach_claimed_job(current.id, first.attempt, retry.id)
     observed = repository.attach_claimed_job(current.id, competing.attempt, retry.id)

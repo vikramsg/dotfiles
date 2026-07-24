@@ -105,6 +105,7 @@ class WorkRequest(BaseModel):
     idempotency_key: str = Field(min_length=1)
     actor: GitHubLogin
     repository: str = Field(min_length=1)
+    title: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     origin: WorkOrigin = Field(default_factory=DirectOrigin)
 
@@ -159,6 +160,7 @@ class Job(BaseModel):
     idempotency_key: str
     actor: GitHubLogin
     repository: str
+    title: str
     prompt: str
     state: JobState
     stage: JobStage

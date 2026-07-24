@@ -21,6 +21,7 @@ class JobResponse(BaseModel):
     state: str
     stage: str
     repository: str
+    title: str
     session_id: str
     worktree_path: str
     attach_command: str
@@ -79,6 +80,7 @@ def response(item: Job) -> JobResponse:
         state=item.state.value,
         stage=item.stage.value,
         repository=item.repository,
+        title=item.title,
         session_id=item.session_id,
         worktree_path=str(item.worktree_path or ""),
         attach_command=attach_command(item),

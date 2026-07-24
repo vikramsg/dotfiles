@@ -378,6 +378,7 @@ Content-Type: application/json
   "idempotency_key": "daemon-bootstrap-v2-final",
   "actor": "maintainer",
   "repository": "repository",
+  "title": "docs: Explain daemon persistence",
   "prompt": "Create the requested documentation file only."
 }
 ```
@@ -404,6 +405,7 @@ Status responses contain:
   "state": "completed",
   "stage": "complete",
   "repository": "project",
+  "title": "docs: Explain daemon persistence",
   "session_id": "ses_example",
   "worktree_path": "$HOME/.local/share/ocint/worktrees/77ac...",
   "attach_command": "opencode attach http://127.0.0.1:4097 --dir $HOME/.local/share/ocint/worktrees/77ac... --session ses_example",
@@ -419,6 +421,7 @@ The equivalent CLI commands are:
 ocint daemon health
 ocint daemon submit repository "<prompt>" \
   --actor maintainer \
+  --title "docs: Explain daemon persistence" \
   --idempotency-key stable-key
 ocint daemon list
 ocint daemon status <job-id>
@@ -444,6 +447,12 @@ backfill:
         |
         v
 20260719_reset_thread_task_model
+        |
+        v
+20260724_decouple_github_source_state
+        |
+        v
+20260724_add_job_title
 ```
 
 The application schema contains the existing `job` table plus provider-neutral
@@ -452,7 +461,7 @@ thread/task tables and GitHub-owned mapping tables:
 | Column group | Fields |
 | --- | --- |
 | Identity | `id`, unique `idempotency_key` |
-| Request | `actor`, `repository`, `prompt` |
+| Request | `actor`, `repository`, `title`, `prompt` |
 | Lifecycle | `state`, `stage`, `error`, timestamps |
 | OpenCode | `session_id`, `server_url`, prompt checkpoints |
 | Workspace | `worktree_path`, `branch`, `base_revision` |
@@ -553,7 +562,7 @@ The daemon, not OpenCode, runs validation and publication:
 <configured validation commands>
 git add --all
 git -c user.name=<author> -c user.email=<email> \
-  commit --no-verify -m "ocint: complete job <job-id>"
+  commit --no-verify -m "<work-title>"
 git push --no-verify --set-upstream origin ocint/<job-id>
 ```
 
