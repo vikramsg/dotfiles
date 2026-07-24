@@ -54,6 +54,14 @@ number of recent jobs. It keeps full IDs copyable and includes each job's state,
 stage, and canonical work title. Detailed status includes the full title,
 repository, actor, session, worktree, branch, commit, pull request, and error.
 
+## Live Acceptance Correlation
+
+Give every live acceptance run a unique marker, such as
+`OCINT-LCH-20260724-GITHUB`, and include it in the initiating GitHub issue or
+task. Record the GitHub issue, task, durable job, branch, OpenCode session, and
+pull request identifiers so the run can be traced from intake through
+publication.
+
 ## Attach
 
 ```bash
