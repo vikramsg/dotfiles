@@ -358,8 +358,8 @@ async def test_executor_runs_every_stage_and_persists_result(
     assert git.calls == ["provision", "validate", "commit", "push"]
     assert opencode.calls == ["create", "observe", "prompt", "wait"]
     assert github.calls == ["pull_request"]
-    assert git.commit_messages == ["Human-readable change"]
-    assert [request.title for request in github.requests] == ["Human-readable change"]
+    assert git.commit_messages == ["ocint: Human-readable change"]
+    assert [request.title for request in github.requests] == ["ocint: Human-readable change"]
     assert completed.state is JobState.COMPLETED
     assert completed.worktree_path == tmp_path / "worktrees" / job.id
     assert isinstance(completed.worktree_path, Path)

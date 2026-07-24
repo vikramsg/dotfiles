@@ -170,6 +170,7 @@ option can be absent even when normal OpenCode requests succeed.
 Success requires all observable outcomes, not merely a completed process:
 
 - job state is `completed` and stage is `complete`;
+- the persisted job, commit, and PR titles equal `ocint: <issue title>`;
 - the expected commit is on the remote job branch;
 - a PR exists and the GitHub mapping stores its number and URL;
 - the issue contains the idempotent addressed reply;

@@ -390,6 +390,9 @@ Submission first commits the job transaction. Only after persistence succeeds
 does the executor create an asyncio task. If the process exits in that interval,
 the next startup schedules the persisted queued job.
 
+The daemon canonicalizes every submitted title as `ocint: <title>`. An existing
+case-insensitive `ocint:` prefix is normalized rather than duplicated.
+
 ### List And Status
 
 ```http

@@ -42,7 +42,7 @@ async def test_api_requires_bearer_and_supports_submit_list_status(tmp_path: Pat
     assert denied.status_code == 401
     assert health.json() == {"status": "ready"}
     assert submitted.status_code == 202
-    assert submitted.json()["title"] == "Work title"
+    assert submitted.json()["title"] == "ocint: Work title"
     assert listed.json() == [job_status.json()]
     assert removed.status_code == 404
     engine.dispose()

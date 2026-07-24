@@ -42,7 +42,7 @@ def test_submit_is_idempotent_and_jobs_are_claimed_explicitly(repository: Contro
 
     # THEN
     assert duplicate.id == first.id
-    assert first.title == "One"
+    assert first.title == "ocint: One"
     assert claimed is not None
     assert claimed.state is JobState.RUNNING
     assert repository.pending_ids() == [second.id]
@@ -74,7 +74,35 @@ def test_retry_preserves_the_requested_work_title(repository: ControlRepository)
     )
 
     # THEN
-    assert retried.title == "Human-readable title"
+    assert retried.title == "ocint: Human-readable title"
+
+
+def test_submit_canonicalizes_an_existing_ocint_title(repository: ControlRepository) -> None:
+    # GIVEN / WHEN
+    submitted = repository.submit(
+        WorkRequest(
+            idempotency_key="prefixed",
+            actor=GitHubLogin("actor"),
+            repository="repo",
+            title=" OCINT: Existing title ",
+            prompt="work",
+        )
+    )
+
+    # THEN
+    assert submitted.title == "ocint: Existing title"
+
+
+def test_work_request_rejects_an_empty_ocint_title() -> None:
+    # GIVEN / WHEN / THEN
+    with pytest.raises(ValueError, match="work title must contain text"):
+        WorkRequest(
+            idempotency_key="empty-title",
+            actor=GitHubLogin("actor"),
+            repository="repo",
+            title="ocint: ",
+            prompt="work",
+        )
 
 
 def test_reconcile_preserves_checkpoint(repository: ControlRepository) -> None:
