@@ -56,6 +56,26 @@ These instructions apply to `bin/ocint/`.
 ### Python testing conventions
 
 - Always prefer having tests work on fake data rather than mocking or patching.
+- Tests must verify meaningful application behavior, domain rules, or external contracts.
+- Do not test value assignment, third-party library behavior, implementation details, or incidental log text.
+- Fakes are encouraged as dependencies, but assertions must cover observable outcomes such as state transitions, authorization, persistence, generated requests, or errors.
+- If a test would still pass after the intended behavior is broken, it should not exist.
+
+Fake test:
+
+```python
+config = GitHubConfig(issue_label="ocint", agent_actor="bot")
+assert config.issue_label == "ocint"
+```
+
+Meaningful test:
+
+```python
+await poll_github(context)
+assert transport.requested_label == "ocint"
+assert tasks.actionable_messages(thread.id) == expected
+```
+
 - Test paths mirror production paths within each test layer.
 - Keep one canonical test module per production module per test layer.
 - Do not split scenarios into suffix modules such as `_safety`, `_errors`, `_edge_cases`, `_failures`, or `_happy_path`.
