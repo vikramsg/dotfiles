@@ -20,6 +20,7 @@ class JobResponse(BaseModel):
     state: str
     stage: str
     repository: str
+    title: str
     session_id: str
     worktree_path: str
     commit_sha: str
@@ -109,6 +110,7 @@ def response(item: Job) -> JobResponse:
         state=item.state.value,
         stage=item.stage.value,
         repository=item.repository,
+        title=item.title,
         session_id=item.session_id,
         worktree_path=str(item.worktree_path or ""),
         commit_sha=item.commit_sha,

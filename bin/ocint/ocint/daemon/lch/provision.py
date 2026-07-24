@@ -63,10 +63,41 @@ class OpenCodeProvider(BaseModel):
     models: Mapping[str, OpenCodeProviderModel] = Field(default_factory=dict)
 
 
+class OpenCodeSourceAgentOptions(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True, populate_by_name=True)
+    service_tier: str | None = Field(default=None, min_length=1, alias="serviceTier")
+
+
+class OpenCodeSourceBuildAgent(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+    options: OpenCodeSourceAgentOptions = Field(default_factory=OpenCodeSourceAgentOptions)
+
+
+class OpenCodeSourceAgents(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+    build: OpenCodeSourceBuildAgent = Field(default_factory=OpenCodeSourceBuildAgent)
+
+
 class OpenCodeSourceConfig(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
     model: str
     provider: Mapping[str, OpenCodeProvider]
+    agent: OpenCodeSourceAgents = Field(default_factory=OpenCodeSourceAgents)
+
+
+class RestrictedOpenCodeAgentOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+    service_tier: str = Field(min_length=1, alias="serviceTier")
+
+
+class RestrictedOpenCodeBuildAgent(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    options: RestrictedOpenCodeAgentOptions
+
+
+class RestrictedOpenCodeAgents(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    build: RestrictedOpenCodeBuildAgent | None = None
 
 
 class OpenCodePermission(BaseModel):
@@ -90,7 +121,7 @@ class StaticOpenCodePolicy(BaseModel):
     share: str
     instructions: list[str]
     plugin: list[str]
-    agent: Mapping[str, str]
+    agent: RestrictedOpenCodeAgents
     lsp: bool
     formatter: bool
     permission: OpenCodePermission
@@ -205,6 +236,7 @@ def restricted_opencode_config(
     provider_name: str,
     provider: OpenCodeProvider,
     worktree_root: Path,
+    service_tier: str | None = None,
 ) -> str:
     if not model_name_with_provider.startswith(f"{provider_name}/"):
         raise click.ClickException("selected OpenCode model does not match its provider")
@@ -223,12 +255,21 @@ def restricted_opencode_config(
         }
     )
     restricted = RestrictedOpenCodeConfig(
-        **policy.model_dump(by_alias=False, exclude={"permission"}),
+        **policy.model_dump(by_alias=False, exclude={"agent", "permission"}),
+        agent=restricted_agent_config(service_tier),
         model=model_name_with_provider,
         provider={provider_name: restricted_provider},
         permission=permission,
     )
     return restricted.model_dump_json(by_alias=True, exclude_none=True, indent=2) + "\n"
+
+
+def restricted_agent_config(service_tier: str | None) -> RestrictedOpenCodeAgents:
+    if service_tier is None:
+        return RestrictedOpenCodeAgents()
+    return RestrictedOpenCodeAgents(
+        build=RestrictedOpenCodeBuildAgent(options=RestrictedOpenCodeAgentOptions(serviceTier=service_tier))
+    )
 
 
 def write_private_file(path: Path, content: str) -> None:
@@ -365,7 +406,14 @@ def discover(
     if version != "1.17.20":
         raise click.ClickException(f"opencode 1.17.20 is required; found {version or 'no version'}")
     policy, payload = load_policy()
-    effective_payload = restricted_opencode_config(policy, source.model, provider_name, provider, paths.worktree_root)
+    effective_payload = restricted_opencode_config(
+        policy,
+        source.model,
+        provider_name,
+        provider,
+        paths.worktree_root,
+        source.agent.build.options.service_tier,
+    )
     lifecycle.validate_host()
     ocint_executable = lifecycle.validate_executable(installed_ocint())
     lifecycle.validate_lingering()

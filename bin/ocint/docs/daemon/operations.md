@@ -33,9 +33,9 @@ ocint daemon lch list
 ocint daemon lch status JOB_ID
 ```
 
-The list keeps full IDs copyable at normal terminal widths. Detailed status
-includes state, stage, repository, actor, session, worktree, branch, commit,
-pull request, and error.
+The list keeps full IDs copyable and includes each job's state, stage, and
+canonical work title. Detailed status includes the full title, repository,
+actor, session, worktree, branch, commit, pull request, and error.
 
 ## Attach
 

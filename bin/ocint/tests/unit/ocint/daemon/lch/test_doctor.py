@@ -102,7 +102,8 @@ def doctor_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DoctorFix
     source_config = config_home / "opencode" / "opencode.json"
     source_config.parent.mkdir()
     source_config.write_text(
-        '{"model":"example-provider/example-model","provider":{"example-provider":'
+        '{"model":"example-provider/example-model","agent":{"build":{"options":{"serviceTier":"priority"}}},'
+        '"provider":{"example-provider":'
         '{"models":{"example-model":{"id":"example-model","name":"Example"}}}}}'
     )
     selected = OpenCodeSourceConfig.model_validate_json(source_config.read_text())
@@ -116,6 +117,7 @@ def doctor_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DoctorFix
             "example-provider",
             selected.provider["example-provider"],
             data_home / "ocint" / "worktrees",
+            selected.agent.build.options.service_tier,
         )
     )
     effective.chmod(0o600)
@@ -321,6 +323,36 @@ def test_diagnose_rejects_unsafe_managed_files(doctor_fixture: DoctorFixture) ->
     assert not report.healthy
     failed = {item.name for item in report.diagnostics if item.required and not item.ok}
     assert {"env.path", "opencode.effective_config", "opencode.auth", "git.remote_author_ssh"}.issubset(failed)
+
+
+def test_diagnose_rejects_effective_service_tier_drift(doctor_fixture: DoctorFixture) -> None:
+    # GIVEN
+    effective = json.loads(doctor_fixture.effective.read_text())
+    effective["agent"]["build"]["options"]["serviceTier"] = "standard"
+    doctor_fixture.effective.write_text(json.dumps(effective))
+
+    # WHEN
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
+
+    # THEN
+    diagnostic = next(item for item in report.diagnostics if item.name == "opencode.effective_config")
+    assert not diagnostic.ok
+    assert "policy_preserved=False" in diagnostic.detail
+
+
+def test_diagnose_rejects_extra_effective_agent_policy(doctor_fixture: DoctorFixture) -> None:
+    # GIVEN
+    effective = json.loads(doctor_fixture.effective.read_text())
+    effective["agent"]["build"]["prompt"] = "unmanaged prompt"
+    doctor_fixture.effective.write_text(json.dumps(effective))
+
+    # WHEN
+    report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
+
+    # THEN
+    diagnostic = next(item for item in report.diagnostics if item.name == "opencode.effective_config")
+    assert not diagnostic.ok
+    assert diagnostic.detail
 
 
 def test_diagnose_reports_missing_managed_files(doctor_fixture: DoctorFixture) -> None:

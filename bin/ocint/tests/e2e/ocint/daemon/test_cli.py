@@ -251,7 +251,13 @@ agent_actor = "automation-bot"
             await asyncio.sleep(0.02)
         async with client.post(
             f"http://127.0.0.1:{api_port}/api/jobs",
-            json={"idempotency_key": "production", "actor": "allowed", "repository": "repo", "prompt": "edit"},
+            json={
+                "idempotency_key": "production",
+                "actor": "allowed",
+                "repository": "repo",
+                "title": "Production change",
+                "prompt": "edit",
+            },
         ) as response:
             submitted = await response.json()
             assert response.status == 202

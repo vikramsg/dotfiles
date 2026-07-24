@@ -130,6 +130,9 @@ The migration chain remains explicit:
         |
         v
 20260724_decouple_github_source_state
+        |
+        v
+20260724_add_job_title
 ```
 
 ## Jobs And Checkpoints
@@ -175,9 +178,12 @@ execution -> validation -> commit -> push -> PR verify/create -> response
                                                  batch addressed
 ```
 
-An idempotency key uniquely identifies a job. A repeated submission returns the
-existing row. Pull-request publication is independently idempotent by repository,
-head branch, and base branch.
+Each job persists a canonical human-readable title. GitHub work uses the issue
+title and normalizes it to `ocint: <issue title>` without duplicating an existing
+case-insensitive prefix. The daemon applies that value to the commit and pull
+request. An idempotency key uniquely identifies a job. A repeated submission
+returns the existing row. Pull-request publication is independently idempotent
+by repository, head branch, and base branch.
 
 ## Execution
 

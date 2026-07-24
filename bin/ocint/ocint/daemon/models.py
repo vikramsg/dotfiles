@@ -105,8 +105,19 @@ class WorkRequest(BaseModel):
     idempotency_key: str = Field(min_length=1)
     actor: GitHubLogin
     repository: str = Field(min_length=1)
+    title: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     origin: WorkOrigin = Field(default_factory=DirectOrigin)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        title = value.strip()
+        summary = title[6:] if title.casefold().startswith("ocint:") else title
+        summary = summary.strip()
+        if not summary:
+            raise ValueError("work title must contain text after the ocint prefix")
+        return f"ocint: {summary}"
 
 
 class ReplyOutcome(StrEnum):
@@ -159,6 +170,7 @@ class Job(BaseModel):
     idempotency_key: str
     actor: GitHubLogin
     repository: str
+    title: str
     prompt: str
     state: JobState
     stage: JobStage

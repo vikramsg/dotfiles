@@ -66,13 +66,13 @@ def render_jobs(jobs: list[Job]) -> Presentation:
         "Daemon jobs",
         data_table(
             "Recent jobs",
-            ("ID", "State", "Stage", "Repository"),
+            ("ID", "State", "Stage", "Title"),
             (
                 (
                     job.id,
                     job.state.value,
                     job.stage.value,
-                    job.repository,
+                    job.title,
                 )
                 for job in jobs
             ),
@@ -90,6 +90,7 @@ def render_job(job: Job) -> Presentation:
                 ("State", _job_state(job.state)),
                 ("Stage", job.stage.value),
                 ("Repository", job.repository),
+                ("Title", job.title),
                 ("Actor", str(job.actor)),
                 ("Created", job.created_at),
                 ("Updated", job.updated_at),

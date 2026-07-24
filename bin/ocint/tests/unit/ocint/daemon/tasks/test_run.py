@@ -111,6 +111,7 @@ async def test_observations_are_ingested_before_task_work_is_scheduled(tmp_path:
     assert task is not None
     job = control.get(tasks.latest_job_id(task.id))
     assert isinstance(job.origin, ThreadOrigin)
+    assert job.title == "ocint: Make the change"
     assert job.origin.source_thread_id == thread.source_id
     assert job.origin.source_anchor_id == "github:owner/repo:issue:5"
     engine.dispose()
@@ -135,7 +136,7 @@ async def test_ineligible_queued_job_is_abandoned_and_task_is_skipped(tmp_path: 
     task = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert task is not None
     job = control.submit(
-        WorkRequest(idempotency_key="job", actor=GitHubLogin("alice"), repository="repo", prompt="body")
+        WorkRequest(idempotency_key="job", actor=GitHubLogin("alice"), repository="repo", title="Title", prompt="body")
     )
     tasks.attach_job(task.id, job.id)
     executor = FakeExecutor(control)
@@ -168,7 +169,7 @@ async def test_ineligible_running_job_remains_current_until_terminal(tmp_path: P
     task = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert task is not None
     job = control.submit(
-        WorkRequest(idempotency_key="job", actor=GitHubLogin("alice"), repository="repo", prompt="body")
+        WorkRequest(idempotency_key="job", actor=GitHubLogin("alice"), repository="repo", title="Title", prompt="body")
     )
     control.claim(job.id)
     tasks.attach_job(task.id, job.id)
@@ -210,7 +211,9 @@ async def test_competing_stale_reconciliation_schedules_one_successor(tmp_path: 
     current = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
     assert current is not None
     failed = control.submit(
-        WorkRequest(idempotency_key="failed", actor=GitHubLogin("alice"), repository="repo", prompt="body")
+        WorkRequest(
+            idempotency_key="failed", actor=GitHubLogin("alice"), repository="repo", title="Title", prompt="body"
+        )
     )
     control.fail(failed.id, "failed")
     tasks.attach_job(current.id, failed.id)

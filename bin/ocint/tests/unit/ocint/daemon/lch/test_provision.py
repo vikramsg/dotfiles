@@ -476,7 +476,7 @@ def test_restricted_opencode_config_keeps_only_selected_provider_model(tmp_path:
   "model": "example-provider/example-model",
   "instructions": ["global-rules.md"],
   "plugin": ["global-plugin"],
-  "agent": {"build": {"prompt": "global-agent"}},
+  "agent": {"build": {"prompt": "global-agent", "options": {"serviceTier": "priority", "unsafe": "drop"}}},
   "provider": {
     "example-provider": {
       "options": {"baseURL": "https://example.test/openai/v1", "apiKey": "must-not-copy"},
@@ -505,6 +505,7 @@ def test_restricted_opencode_config_keeps_only_selected_provider_model(tmp_path:
         "example-provider",
         selected.provider["example-provider"],
         tmp_path / "worktrees",
+        selected.agent.build.options.service_tier,
     )
     restricted = RestrictedOpenCodeConfig.model_validate_json(rendered)
 
@@ -515,11 +516,13 @@ def test_restricted_opencode_config_keeps_only_selected_provider_model(tmp_path:
     assert restricted.provider["example-provider"].options.base_url == "https://example.test/openai/v1"
     assert restricted.instructions == []
     assert restricted.plugin == []
-    assert restricted.agent == {}
+    assert restricted.agent.build is not None
+    assert restricted.agent.build.options.service_tier == "priority"
     assert "must-not-copy" not in rendered
     assert "global-rules" not in rendered
     assert "global-plugin" not in rendered
     assert "global-agent" not in rendered
+    assert "unsafe" not in rendered
 
 
 def test_packaged_policy_is_the_authoritative_source_and_composition_preserves_it(tmp_path: Path) -> None:

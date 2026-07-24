@@ -64,6 +64,9 @@ Mirror and worktree roots must differ.
 
 Repository names are unique. An empty actor set permits any authenticated GitHub
 actor. Network Git always uses the configured SSH identity and known-hosts file.
+Issue titles must follow the target repository's commit and pull-request title
+convention. The daemon canonicalizes them with one case-insensitive `ocint:`
+prefix before persistence and publication.
 
 ## Scheduler And Lifecycle
 

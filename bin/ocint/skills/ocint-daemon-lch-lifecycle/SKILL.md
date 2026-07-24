@@ -27,6 +27,10 @@ SQL queries, expected states, and failure signatures.
   configuration unless the user requested it or approved cleanup.
 - If a command changes lifecycle state, capture the initial state and restore it
   after the exercise unless the user wants the new state retained.
+- Do not run `ocint daemon migrate` during an LCH acceptance exercise. Daemon
+  startup owns migration, and running it manually hides startup failures.
+- Do not manually start `ocint-daemon.service` when validating LCH automation.
+  The timer trigger is part of the behavior under test.
 
 ## Lifecycle
 
@@ -74,6 +78,11 @@ An occupied private OpenCode or API port is expected while the oneshot service
 is running. Interpret port diagnostics together with systemd state rather than
 calling an active daemon unhealthy solely because its ports are in use.
 
+After provisioning, a pre-start doctor can report the previous database
+revision. This is not a reason to migrate manually. Confirm that the timer is
+scheduled, wait for it to invoke the daemon, and then verify that daemon startup
+advanced the migration.
+
 ## 2. Create And Trigger Work
 
 Create a narrowly scoped issue whose requested result is a meaningful repository
@@ -84,10 +93,12 @@ After preflight:
 
 1. Apply the `ocint` label.
 2. Verify the issue is open, labelled, and authored by an allowed actor.
-3. Let the timer invoke the service, or start the oneshot service with
-   `systemctl --user start --no-block ocint-daemon.service` when immediate
-   observation is required.
+3. Record the timer's next trigger and wait for the timer to invoke the service.
 4. Do not start a second daemon process while the systemd service is active.
+
+If the timer misses its expected trigger, treat timer-to-service activation as
+the first broken transition. Inspect the timer, user manager, linger state, and
+unit files instead of bypassing the failure with a manual service start.
 
 ## 3. Trace State In Layers
 
@@ -119,6 +130,17 @@ Poll using persisted state or explicit completion signals. Do not rely only on
 fixed sleeps, and do not continuously stream logs when a targeted query will
 answer the question.
 
+## Diagnostic Bypasses
+
+Manual migration and service triggering are not normal lifecycle steps:
+
+- `ocint daemon migrate` bypasses daemon startup migration.
+- `systemctl --user start ocint-daemon.service` bypasses timer activation.
+
+Use either only when the user explicitly approves a diagnostic shortcut after
+the corresponding acceptance check has already failed. Record the bypass in the
+report and do not claim that migration startup or timer activation passed.
+
 ## 4. Diagnose The First Broken Transition
 
 Find the first transition whose input exists but output does not. Evidence from
@@ -148,6 +170,7 @@ option can be absent even when normal OpenCode requests succeed.
 Success requires all observable outcomes, not merely a completed process:
 
 - job state is `completed` and stage is `complete`;
+- the persisted job, commit, and PR titles equal `ocint: <issue title>`;
 - the expected commit is on the remote job branch;
 - a PR exists and the GitHub mapping stores its number and URL;
 - the issue contains the idempotent addressed reply;

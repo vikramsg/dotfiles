@@ -58,7 +58,13 @@ agent_actor = "maintainer"
     engine = create_daemon_engine(database)
     repository = ControlRepository(engine)
     job = repository.submit(
-        WorkRequest(idempotency_key="key", actor=GitHubLogin("maintainer"), repository="repo", prompt="work")
+        WorkRequest(
+            idempotency_key="key",
+            actor=GitHubLogin("maintainer"),
+            repository="repo",
+            title="Job title",
+            prompt="work",
+        )
     )
     engine.dispose()
     runner = CliRunner()
@@ -72,10 +78,12 @@ agent_actor = "maintainer"
     assert listed.exit_code == 0, listed.output
     assert job.id in listed.output
     assert "queued" in listed.output
+    assert "ocint: Job title" in listed.output
     assert status.exit_code == 0, status.output
     assert "Daemon job status" in status.output
     assert job.id in status.output
     assert "repo" in status.output
+    assert "ocint: Job title" in status.output
 
 
 def test_app_factory_requires_api_token_before_state_creation(tmp_path: Path) -> None:

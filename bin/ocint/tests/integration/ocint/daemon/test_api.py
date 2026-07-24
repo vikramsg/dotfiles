@@ -33,7 +33,13 @@ async def test_api_protects_jobs_and_live_attachment_with_bearer_authentication(
         submitted = await client.post(
             "/api/jobs",
             headers=headers,
-            json={"idempotency_key": "key", "actor": "actor", "repository": "repo", "prompt": "work"},
+            json={
+                "idempotency_key": "key",
+                "actor": "actor",
+                "repository": "repo",
+                "title": "Work title",
+                "prompt": "work",
+            },
         )
         job_id = submitted.json()["id"]
         repository.checkpoint(
@@ -55,6 +61,7 @@ async def test_api_protects_jobs_and_live_attachment_with_bearer_authentication(
     assert denied.status_code == 401
     assert health.json() == {"status": "ready"}
     assert submitted.status_code == 202
+    assert submitted.json()["title"] == "ocint: Work title"
     assert listed.json() == [job_status.json()]
     assert "password" not in job_status.json()
     assert denied_attach.status_code == 401

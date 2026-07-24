@@ -14,6 +14,9 @@ ocint daemon doctor
 Create an issue, describe the required repository change, and apply the `ocint`
 label. The next timer invocation performs the work and replies with a pull
 request.
+The issue title becomes the commit and pull-request summary. The daemon
+canonicalizes it as `ocint: <issue title>` and does not duplicate an existing
+case-insensitive `ocint:` prefix.
 
 ```text
 systemd timer -> labelled issue -> OpenCode worktree

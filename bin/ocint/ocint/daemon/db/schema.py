@@ -9,6 +9,7 @@ job = Table(
     Column("idempotency_key", String, nullable=False, unique=True),
     Column("actor", String, nullable=False),
     Column("repository", String, nullable=False),
+    Column("title", Text, nullable=False),
     Column("prompt", Text, nullable=False),
     Column("state", String, nullable=False),
     Column("stage", String, nullable=False),
