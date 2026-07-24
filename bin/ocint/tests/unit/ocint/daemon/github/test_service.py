@@ -1,4 +1,4 @@
-from ocint.daemon.github.runtime import marker
+from ocint.daemon.github.service import marker
 
 
 def test_marker_is_stable_and_outcome_specific() -> None:

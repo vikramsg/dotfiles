@@ -14,6 +14,7 @@ from click.testing import CliRunner
 from ocint.cli import main
 from ocint.daemon.cli import create_daemon_app
 from ocint.daemon.config import DaemonContext, DaemonSettings
+from ocint.daemon.github import GitHubRepositoryPolicies, GitHubRepositoryPolicy, open_github_service
 from ocint.daemon.logging import get_logger
 from ocint.presentation import default_cli_context
 from pydantic import SecretStr
@@ -34,6 +35,18 @@ class SignalFreeServer(uvicorn.Server):
     @contextmanager
     def capture_signals(self) -> Iterator[None]:
         yield
+
+
+def test_submit_requires_explicit_github_actor() -> None:
+    # GIVEN
+    runner = CliRunner()
+
+    # WHEN
+    result = runner.invoke(main, ["daemon", "submit", "repo", "prompt"])
+
+    # THEN
+    assert result.exit_code == 2
+    assert "Missing option '--actor'" in result.output
 
 
 @pytest.mark.asyncio
@@ -193,7 +206,26 @@ agent_actor = "automation-bot"
         execution_path=f"{transport}:{os.environ['PATH']}",
         execution_lang="C.UTF-8",
     )
-    app, _config = create_daemon_app(DaemonContext.create(default_cli_context().output, tmp_path, os.environ, settings))
+    daemon_context = DaemonContext.create(default_cli_context().output, tmp_path, os.environ, settings)
+    daemon_config = daemon_context.config()
+    github_manager = open_github_service(
+        daemon_config.github,
+        GitHubRepositoryPolicies(
+            root=[
+                GitHubRepositoryPolicy(
+                    name=repository.name,
+                    github_repository=repository.github_repository,
+                    actors=repository.actors,
+                )
+                for repository in daemon_config.repositories
+            ]
+        ),
+        "github-token",
+        daemon_config.database_path,
+    )
+    github = await github_manager.__aenter__()
+    application = create_daemon_app(daemon_context, github)
+    app = application.app
     server = SignalFreeServer(
         uvicorn.Config(app, host="127.0.0.1", port=api_port, log_config=None, access_log=False, lifespan="on")
     )
@@ -224,6 +256,7 @@ agent_actor = "automation-bot"
             await asyncio.sleep(0.02)
     server.should_exit = True
     await daemon
+    await github_manager.__aexit__(None, None, None)
 
     # THEN
     assert completed["state"] == "completed"

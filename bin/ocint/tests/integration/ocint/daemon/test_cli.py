@@ -3,7 +3,25 @@ from pathlib import Path
 import pytest
 from ocint.daemon.cli import create_daemon_app
 from ocint.daemon.config import DaemonContext, DaemonSettings
+from ocint.daemon.models import (
+    ObservedMessage,
+    PublicationRequest,
+    PublicationResult,
+    ReplyRequest,
+    ThreadObservations,
+)
 from ocint.presentation import default_cli_context
+
+
+class FakeGitHubGateway:
+    async def observe(self) -> ThreadObservations:
+        return ThreadObservations(root=[])
+
+    async def reply(self, request: ReplyRequest) -> ObservedMessage:
+        raise AssertionError(request)
+
+    async def publish(self, request: PublicationRequest) -> PublicationResult:
+        raise AssertionError(request)
 
 
 def test_app_factory_requires_api_token_before_state_creation(tmp_path: Path) -> None:
@@ -33,5 +51,6 @@ agent_actor = "maintainer"
     # WHEN / THEN
     with pytest.raises(ValueError, match="API_TOKEN"):
         create_daemon_app(
-            DaemonContext.create(default_cli_context().output, tmp_path, {}, DaemonSettings(config=config))
+            DaemonContext.create(default_cli_context().output, tmp_path, {}, DaemonSettings(config=config)),
+            FakeGitHubGateway(),
         )

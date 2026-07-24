@@ -1,3 +1,4 @@
+from ocint.daemon.models import GitHubLogin
 from ocint.daemon.tasks.models import MessageClassification, Thread, ThreadMessage
 from ocint.daemon.tasks.service import render_prompt
 
@@ -10,7 +11,7 @@ def test_render_prompt_includes_all_contributions_in_order() -> None:
             id=1,
             thread_id=1,
             source_id="github:owner/repo:issue:5",
-            actor="alice",
+            actor=GitHubLogin("alice"),
             classification=MessageClassification.ACTIONABLE,
             body="Issue body",
             source_created_at="2026-01-01T00:00:00Z",
@@ -19,7 +20,7 @@ def test_render_prompt_includes_all_contributions_in_order() -> None:
             id=2,
             thread_id=1,
             source_id="github:owner/repo:comment:12",
-            actor="bob",
+            actor=GitHubLogin("bob"),
             classification=MessageClassification.ACTIONABLE,
             body="second",
             source_created_at="2026-01-01T00:01:00Z",

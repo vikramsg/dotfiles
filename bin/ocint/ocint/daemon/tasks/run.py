@@ -3,8 +3,17 @@ from __future__ import annotations
 from typing import Protocol
 
 from ocint.daemon.logging import get_logger
-from ocint.daemon.models import Job, JobState
-from ocint.daemon.service import WorkRequest
+from ocint.daemon.models import (
+    Job,
+    JobState,
+    MessageClassification,
+    ObservedMessage,
+    ReplyOutcome,
+    ReplyRequest,
+    ThreadObservations,
+    ThreadOrigin,
+    WorkRequest,
+)
 from ocint.daemon.tasks.models import (
     FailedTaskRetry,
     RetryAttachment,
@@ -12,6 +21,7 @@ from ocint.daemon.tasks.models import (
     SuccessorExisting,
     Task,
     TaskKind,
+    TaskReason,
     TaskState,
     Thread,
 )
@@ -22,10 +32,8 @@ logger = get_logger("tasks")
 
 
 class ThreadSource(Protocol):
-    async def poll(self) -> None: ...
-    async def complete_task(self, task: Task, job: Job) -> None: ...
-    def eligible(self, thread_id: int) -> bool: ...
-    def configured_repository(self, thread_id: int) -> str: ...
+    async def observe(self) -> ThreadObservations: ...
+    async def reply(self, request: ReplyRequest) -> ObservedMessage: ...
 
 
 class TaskExecutor(Protocol):
@@ -45,11 +53,11 @@ class TaskCoordinator:
         self.executor = executor
 
     async def reconcile(self) -> bool:
-        await self.source.poll()
+        await self._ingest_observations()
         for thread in self.repository.threads():
             current = self.repository.unresolved(thread.id)
             previous: Job | None = None
-            if not self.source.eligible(thread.id):
+            if not thread.eligible:
                 self._skip_ineligible(current)
                 continue
             if current is not None:
@@ -66,7 +74,7 @@ class TaskCoordinator:
             if current is not None and not self.repository.latest_job_id(current.id):
                 self._start(thread, current, previous)
         return any(
-            self.source.eligible(thread.id) and self.repository.unresolved(thread.id) is not None
+            thread.eligible and self.repository.unresolved(thread.id) is not None
             for thread in self.repository.threads()
         )
 
@@ -92,7 +100,10 @@ class TaskCoordinator:
         if job.state in {JobState.QUEUED, JobState.RUNNING}:
             return current
         if job.state is JobState.COMPLETED:
-            await self.source.complete_task(current, job)
+            await self._complete(current, job)
+            return None
+        if job.publication_refusal:
+            await self._refuse_publication(current)
             return None
         reason = "superseded after new thread messages"
         claim = self.repository.claim_failed(current, reason)
@@ -131,6 +142,86 @@ class TaskCoordinator:
         return WorkRequest(
             idempotency_key=(f"thread-task:model-v2:source:{thread.source_id}:task:{task.id}:attempt:{attempt}"),
             actor=actor,
-            repository=self.source.configured_repository(thread.id),
+            repository=thread.configured_repository,
             prompt=render_prompt(thread, messages),
+            origin=ThreadOrigin(source_thread_id=thread.source_id, source_anchor_id=task_messages[-1].source_id),
+        )
+
+    async def _ingest_observations(self) -> None:
+        observations = await self.source.observe()
+        for observation in observations.root:
+            thread = self.repository.upsert_thread(
+                observation.source_id,
+                observation.title,
+                observation.configured_repository,
+                observation.eligible,
+            )
+            for observed in observation.messages.root:
+                message = self.repository.upsert_message(
+                    thread.id,
+                    observed.source_id,
+                    observed.actor,
+                    observed.classification,
+                    observed.body,
+                    observed.source_created_at,
+                )
+                if observed.classification is MessageClassification.UNAUTHORIZED:
+                    response = await self.source.reply(
+                        ReplyRequest(
+                            source_thread_id=thread.source_id,
+                            source_anchor_id=message.source_id,
+                            outcome=ReplyOutcome.UNAUTHORIZED,
+                            text=f"Actor @{observed.actor} is not authorized.",
+                        )
+                    )
+                    self.repository.upsert_message(
+                        thread.id,
+                        response.source_id,
+                        response.actor,
+                        response.classification,
+                        response.body,
+                        response.source_created_at,
+                    )
+
+    async def _complete(self, task: Task, job: Job) -> None:
+        if not isinstance(job.origin, ThreadOrigin):
+            raise RuntimeError(f"task {task.id} completed with a direct-origin job")
+        if not job.pull_request_url:
+            raise RuntimeError(f"task {task.id} completed without a pull request URL")
+        response = await self.source.reply(
+            ReplyRequest(
+                source_thread_id=job.origin.source_thread_id,
+                source_anchor_id=job.origin.source_anchor_id,
+                outcome=ReplyOutcome.ADDRESSED,
+                text=f"Issue addressed: {job.pull_request_url}\n\nTo make further changes, add a comment.",
+            )
+        )
+        self._ingest_reply(task.thread_id, response)
+        self.repository.set_state(task.id, TaskState.ADDRESSED)
+        logger.info("task addressed", task=task.id, thread=task.thread_id, pull_request=job.pull_request_url)
+
+    async def _refuse_publication(self, task: Task) -> None:
+        messages = self.repository.task_messages(task.id)
+        if not messages:
+            raise RuntimeError(f"task {task.id} has no messages")
+        thread = self.repository.thread(task.thread_id)
+        response = await self.source.reply(
+            ReplyRequest(
+                source_thread_id=thread.source_id,
+                source_anchor_id=messages[-1].source_id,
+                outcome=ReplyOutcome.CLOSED_PULL_REQUEST,
+                text="The owned pull request is closed or merged; no replacement will be created.",
+            )
+        )
+        self._ingest_reply(task.thread_id, response)
+        self.repository.set_state(task.id, TaskState.ERRORED, TaskReason.OWNED_PULL_REQUEST_CLOSED.value)
+
+    def _ingest_reply(self, thread_id: int, response: ObservedMessage) -> None:
+        self.repository.upsert_message(
+            thread_id,
+            response.source_id,
+            response.actor,
+            response.classification,
+            response.body,
+            response.source_created_at,
         )

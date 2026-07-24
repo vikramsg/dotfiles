@@ -12,6 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ocint._models import CliOutput
 from ocint.daemon.github import GitHubConfig
+from ocint.daemon.models import GitHubLogin
 
 
 class RepositoryConfig(BaseModel):
@@ -23,7 +24,7 @@ class RepositoryConfig(BaseModel):
     github_repository: str
     author_name: str
     author_email: str
-    actors: frozenset[str] = Field(default_factory=frozenset)
+    actors: frozenset[GitHubLogin] = frozenset()
     checks: tuple[tuple[str, ...], ...] = Field(default_factory=tuple)
 
     @field_validator("remote_url")

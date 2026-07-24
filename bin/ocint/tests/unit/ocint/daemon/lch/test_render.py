@@ -5,6 +5,7 @@ from pathlib import Path
 from ocint.daemon.config import DaemonConfig, GitConfig, GitHubConfig, OpenCodeConfig, RepositoryConfig
 from ocint.daemon.lch.render import render_status
 from ocint.daemon.lch.systemd import LifecycleStatus
+from ocint.daemon.models import GitHubLogin
 from rich.console import Console
 
 
@@ -43,7 +44,7 @@ def test_status_rendering_has_colored_sections_and_copyable_log_commands(tmp_pat
             xdg_config_home=tmp_path / "config",
             xdg_data_home=tmp_path / "data",
         ),
-        github=GitHubConfig(agent_actor="agent"),
+        github=GitHubConfig(agent_actor=GitHubLogin("agent")),
         git=GitConfig(
             ssh_executable=tmp_path / "ssh",
             identity_file=tmp_path / "identity",

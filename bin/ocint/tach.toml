@@ -38,11 +38,15 @@ depends_on = []
 
 [[modules]]
 path = "ocint.daemon.github.config"
-depends_on = []
+depends_on = [
+  "ocint.daemon.models",
+]
 
 [[modules]]
 path = "ocint.daemon.github.models"
-depends_on = []
+depends_on = [
+  "ocint.daemon.models",
+]
 
 [[modules]]
 path = "ocint.daemon.github.client"
@@ -65,24 +69,6 @@ depends_on = [
   "ocint.daemon.github.repository",
   "ocint.daemon.models",
   "ocint.daemon.logging",
-  "ocint.daemon.tasks",
-]
-
-[[modules]]
-path = "ocint.daemon.github.integration"
-depends_on = [
-  "ocint.daemon.github.service",
-  "ocint.daemon.models",
-  "ocint.daemon.tasks",
-]
-
-[[modules]]
-path = "ocint.daemon.github.runtime"
-depends_on = [
-  "ocint.daemon.github.client",
-  "ocint.daemon.github.integration",
-  "ocint.daemon.github.repository",
-  "ocint.daemon.github.service",
 ]
 
 [[modules]]
@@ -90,6 +76,11 @@ path = "ocint.daemon.github"
 depends_on = [
   "ocint.daemon.github.config",
   "ocint.daemon.github.models",
+  "ocint.daemon.github.client",
+  "ocint.daemon.github.repository",
+  "ocint.daemon.github.service",
+  "ocint.daemon.models",
+  "ocint.daemon.db",
 ]
 
 [[modules]]
@@ -104,7 +95,6 @@ depends_on = [
 path = "ocint.daemon.tasks"
 depends_on = [
   "ocint.daemon.logging",
-  "ocint.daemon.service",
   "ocint.daemon.db",
   "ocint.daemon.models",
 ]
@@ -113,6 +103,7 @@ depends_on = [
 path = "ocint.daemon.config"
 depends_on = [
   "ocint.daemon.github",
+  "ocint.daemon.models",
   "ocint._models",
 ]
 
@@ -159,6 +150,7 @@ depends_on = [
   "ocint.daemon.db",
   "ocint.daemon.github",
   "ocint.daemon.logging",
+  "ocint.daemon.models",
   "ocint.presentation",
 ]
 
@@ -171,9 +163,9 @@ depends_on = [
   "ocint.daemon.db",
   "ocint.daemon.git",
   "ocint.daemon.github",
-  "ocint.daemon.github.runtime",
   "ocint.daemon.lch",
   "ocint.daemon.logging",
+  "ocint.daemon.models",
   "ocint.daemon.opencode",
   "ocint.daemon.repository",
   "ocint.daemon.run",

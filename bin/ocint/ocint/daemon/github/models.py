@@ -1,9 +1,11 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
+
+from ocint.daemon.models import GitHubLogin
 
 
 class GitHubUser(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
-    login: str
+    login: GitHubLogin
 
 
 class GitHubRepositoryPolicy(BaseModel):
@@ -11,7 +13,11 @@ class GitHubRepositoryPolicy(BaseModel):
 
     name: str
     github_repository: str
-    actors: frozenset[str] = Field(default_factory=frozenset)
+    actors: frozenset[GitHubLogin] = frozenset()
+
+
+class GitHubRepositoryPolicies(RootModel[list[GitHubRepositoryPolicy]]):
+    model_config = ConfigDict(frozen=True)
 
 
 class GitHubPullReference(BaseModel):
@@ -56,11 +62,27 @@ class GitHubPullRequest(BaseModel):
     merged: bool = False
 
 
+class GitHubIssues(RootModel[list[GitHubIssue]]):
+    model_config = ConfigDict(frozen=True)
+
+
+class GitHubComments(RootModel[list[GitHubComment]]):
+    model_config = ConfigDict(frozen=True)
+
+
+class GitHubPullRequests(RootModel[list[GitHubPullRequest]]):
+    model_config = ConfigDict(frozen=True)
+
+
+class GitHubIssueIds(RootModel[list[int]]):
+    model_config = ConfigDict(frozen=True)
+
+
 class StoredIssue(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    thread_id: int
-    root_message_id: int
+    source_id: str
+    root_source_id: str
     configured_repository: str
     github_repository: str
     github_issue_id: int
@@ -73,11 +95,12 @@ class StoredIssue(BaseModel):
 class StoredComment(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    source_id: str
+    issue_source_id: str
     github_comment_id: int
-    message_id: int
     marker: str
 
 
 class CommentPage(BaseModel):
     model_config = ConfigDict(frozen=True)
-    comments: tuple[GitHubComment, ...] = Field(default_factory=tuple)
+    comments: GitHubComments = Field(default_factory=lambda: GitHubComments(root=[]))

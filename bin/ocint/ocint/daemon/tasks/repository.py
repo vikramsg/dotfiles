@@ -2,20 +2,21 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
-from sqlalchemy import Engine, Select, exists, insert, select, update
+from sqlalchemy import Engine, Select, and_, exists, insert, or_, select, update
 from sqlalchemy.engine import Connection, RowMapping
 
 from ocint.daemon.db.schema import job, task, task_job, task_message, thread, thread_message
+from ocint.daemon.models import GitHubLogin, JobState, MessageClassification
 from ocint.daemon.tasks.models import (
     FailedTaskClaim,
     FailedTaskRetry,
-    MessageClassification,
     RetryAttachment,
     SuccessorCreated,
     SuccessorExisting,
     SuccessorUnavailable,
     Task,
     TaskKind,
+    TaskReason,
     TaskState,
     Thread,
     ThreadMessage,
@@ -26,13 +27,31 @@ class TaskRepository:
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
 
-    def upsert_thread(self, source_id: str, title: str | None) -> Thread:
+    def upsert_thread(
+        self,
+        source_id: str,
+        title: str | None,
+        configured_repository: str = "",
+        eligible: bool = False,
+    ) -> Thread:
         with self.engine.begin() as connection:
             row = connection.execute(select(thread).where(thread.c.source_id == source_id)).mappings().one_or_none()
             if row is None:
-                connection.execute(insert(thread).values(source_id=source_id, title=title))
+                connection.execute(
+                    insert(thread).values(
+                        source_id=source_id,
+                        configured_repository=configured_repository,
+                        eligible=eligible,
+                        title=title,
+                    )
+                )
             else:
-                connection.execute(update(thread).where(thread.c.id == row["id"]).values(title=title))
+                resolved_title = title if title else row["title"]
+                connection.execute(
+                    update(thread)
+                    .where(thread.c.id == row["id"])
+                    .values(configured_repository=configured_repository, eligible=eligible, title=resolved_title)
+                )
             row = connection.execute(select(thread).where(thread.c.source_id == source_id)).mappings().one()
         return self._thread(row)
 
@@ -40,7 +59,7 @@ class TaskRepository:
         self,
         thread_id: int,
         source_id: str,
-        actor: str,
+        actor: GitHubLogin | str,
         classification: MessageClassification,
         body: str,
         source_created_at: str,
@@ -56,7 +75,7 @@ class TaskRepository:
                     insert(thread_message).values(
                         thread_id=thread_id,
                         source_id=source_id,
-                        actor=actor,
+                        actor=str(actor),
                         classification=classification.value,
                         body=body,
                         source_created_at=source_created_at,
@@ -69,7 +88,7 @@ class TaskRepository:
                     update(thread_message)
                     .where(thread_message.c.id == row["id"])
                     .values(
-                        actor=actor,
+                        actor=str(actor),
                         classification=classification.value,
                         body=body,
                         source_created_at=source_created_at,
@@ -218,8 +237,6 @@ class TaskRepository:
             return RetryAttachment.ATTACHED
 
     def reusable_job_id(self, thread_id: int) -> str:
-        from ocint.daemon.models import JobState
-
         with self.engine.connect() as connection:
             value = (
                 connection.execute(
@@ -301,7 +318,15 @@ class TaskRepository:
         covering = (
             select(task_message.c.message_id)
             .join(task, task.c.id == task_message.c.task_id)
-            .where(task.c.state.in_((TaskState.ADDRESSED.value, TaskState.UNRESOLVED.value)))
+            .where(
+                or_(
+                    task.c.state.in_((TaskState.ADDRESSED.value, TaskState.UNRESOLVED.value)),
+                    and_(
+                        task.c.state == TaskState.ERRORED.value,
+                        task.c.reason == TaskReason.OWNED_PULL_REQUEST_CLOSED.value,
+                    ),
+                )
+            )
         )
         return (
             select(thread_message)
@@ -387,7 +412,9 @@ class TaskRepository:
 
     @staticmethod
     def _message(row: RowMapping) -> ThreadMessage:
-        return ThreadMessage(**{field: row[field] for field in ThreadMessage.model_fields})
+        values = {field: row[field] for field in ThreadMessage.model_fields}
+        values["actor"] = GitHubLogin(str(row["actor"]))
+        return ThreadMessage(**values)
 
     @staticmethod
     def _task(row: RowMapping) -> Task:

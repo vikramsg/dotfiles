@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
-from ocint.daemon.models import JobStage, JobState
+from ocint.daemon.models import GitHubLogin, JobStage, JobState
 from ocint.daemon.repository import ControlRepository
 from ocint.daemon.service import (
     CommitCheckpoint,
@@ -27,9 +27,15 @@ def repository(tmp_path: Path) -> ControlRepository:
 
 def test_submit_is_idempotent_and_jobs_are_claimed_explicitly(repository: ControlRepository) -> None:
     # GIVEN
-    first = repository.submit(WorkRequest(idempotency_key="one", actor="actor", repository="repo", prompt="first"))
-    duplicate = repository.submit(WorkRequest(idempotency_key="one", actor="actor", repository="repo", prompt="first"))
-    second = repository.submit(WorkRequest(idempotency_key="two", actor="actor", repository="repo", prompt="second"))
+    first = repository.submit(
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+    )
+    duplicate = repository.submit(
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+    )
+    second = repository.submit(
+        WorkRequest(idempotency_key="two", actor=GitHubLogin("actor"), repository="repo", prompt="second")
+    )
 
     # WHEN
     claimed = repository.claim(first.id)
@@ -44,7 +50,9 @@ def test_submit_is_idempotent_and_jobs_are_claimed_explicitly(repository: Contro
 
 def test_reconcile_preserves_checkpoint(repository: ControlRepository) -> None:
     # GIVEN
-    submitted = repository.submit(WorkRequest(idempotency_key="one", actor="actor", repository="repo", prompt="first"))
+    submitted = repository.submit(
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+    )
     repository.claim(submitted.id)
     repository.checkpoint(submitted.id, CommitCheckpoint(sha="abc"))
 
@@ -61,7 +69,9 @@ def test_reconcile_preserves_checkpoint(repository: ControlRepository) -> None:
 
 def test_requeue_retains_stage_for_shutdown_resume(repository: ControlRepository) -> None:
     # GIVEN
-    submitted = repository.submit(WorkRequest(idempotency_key="one", actor="actor", repository="repo", prompt="first"))
+    submitted = repository.submit(
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+    )
     repository.claim(submitted.id)
     repository.checkpoint(submitted.id, StageCheckpoint(stage=JobStage.COMMIT))
 
@@ -76,7 +86,9 @@ def test_requeue_retains_stage_for_shutdown_resume(repository: ControlRepository
 
 def test_push_checkpoint_recovers_stage_and_baseline_atomically(repository: ControlRepository) -> None:
     # GIVEN
-    submitted = repository.submit(WorkRequest(idempotency_key="one", actor="actor", repository="repo", prompt="work"))
+    submitted = repository.submit(
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="work")
+    )
     repository.checkpoint(
         submitted.id, WorktreeCheckpoint(path=Path("/worktree"), branch="ocint/job", base_revision="base")
     )
@@ -96,7 +108,9 @@ def test_typed_checkpoints_preserve_paths_and_explicit_terminal_states(
     repository: ControlRepository, tmp_path: Path
 ) -> None:
     # GIVEN
-    submitted = repository.submit(WorkRequest(idempotency_key="one", actor="actor", repository="repo", prompt="first"))
+    submitted = repository.submit(
+        WorkRequest(idempotency_key="one", actor=GitHubLogin("actor"), repository="repo", prompt="first")
+    )
     worktree_path = tmp_path / "worktree"
 
     # WHEN
@@ -114,7 +128,7 @@ def test_typed_checkpoints_preserve_paths_and_explicit_terminal_states(
     completed = repository.complete(submitted.id)
 
     failed_job = repository.submit(
-        WorkRequest(idempotency_key="two", actor="actor", repository="repo", prompt="second")
+        WorkRequest(idempotency_key="two", actor=GitHubLogin("actor"), repository="repo", prompt="second")
     )
     failed = repository.fail(failed_job.id, "failed safely")
 

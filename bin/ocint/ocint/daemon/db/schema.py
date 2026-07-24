@@ -23,6 +23,10 @@ job = Table(
     Column("pushed", Integer, nullable=False),
     Column("pull_request_url", Text, nullable=False),
     Column("error", Text, nullable=False),
+    Column("origin_kind", String, nullable=False),
+    Column("origin_source_thread_id", String, nullable=False),
+    Column("origin_source_anchor_id", String, nullable=False),
+    Column("publication_refusal", String, nullable=False),
     Column("created_at", String, nullable=False),
     Column("updated_at", String, nullable=False),
 )
@@ -34,6 +38,8 @@ thread = Table(
     metadata,
     Column("id", Integer, primary_key=True),
     Column("source_id", String, nullable=False, unique=True),
+    Column("configured_repository", String, nullable=False),
+    Column("eligible", Integer, nullable=False),
     Column("title", Text),
 )
 
@@ -85,8 +91,8 @@ task_job = Table(
 github_issue = Table(
     "github_issue",
     metadata,
-    Column("thread_id", Integer, ForeignKey("thread.id"), primary_key=True),
-    Column("root_message_id", Integer, ForeignKey("thread_message.id"), nullable=False, unique=True),
+    Column("source_id", String, primary_key=True),
+    Column("root_source_id", String, nullable=False, unique=True),
     Column("configured_repository", String, nullable=False),
     Column("github_repository", String, nullable=False),
     Column("github_issue_id", Integer, nullable=False),
@@ -100,8 +106,9 @@ github_issue = Table(
 github_issue_comment = Table(
     "github_issue_comment",
     metadata,
-    Column("github_comment_id", Integer, primary_key=True),
-    Column("message_id", Integer, ForeignKey("thread_message.id"), nullable=False, unique=True),
+    Column("source_id", String, primary_key=True),
+    Column("issue_source_id", String, ForeignKey("github_issue.source_id"), nullable=False),
+    Column("github_comment_id", Integer, nullable=False, unique=True),
     Column("marker", String, nullable=False),
 )
 

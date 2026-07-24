@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, HttpUrl
 
+from ocint.daemon.models import GitHubLogin
+
 
 class GitHubConfig(BaseModel):
     """Configuration settings for GitHub polling and agent identity.
@@ -12,4 +14,4 @@ class GitHubConfig(BaseModel):
 
     api_url: HttpUrl = HttpUrl("https://api.github.com")
     issue_label: str = "ocint"
-    agent_actor: str
+    agent_actor: GitHubLogin

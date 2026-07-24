@@ -9,11 +9,32 @@ from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
 from ocint.daemon.db.schema import metadata
 from ocint.daemon.github import GitHubRepositoryPolicy
-from ocint.daemon.github.models import GitHubComment, GitHubIssue, GitHubPullRequest, GitHubUser
-from ocint.daemon.github.runtime import GitHubContext, GitHubIntegration, GitHubRepository, marker
-from ocint.daemon.models import Job
+from ocint.daemon.github.models import (
+    GitHubComment,
+    GitHubComments,
+    GitHubIssue,
+    GitHubIssues,
+    GitHubPullRequest,
+    GitHubRepositoryPolicies,
+    GitHubUser,
+)
+from ocint.daemon.github.repository import GitHubRepository
+from ocint.daemon.github.service import GitHubContext, GitHubService, marker
+from ocint.daemon.models import (
+    GitHubLogin,
+    Job,
+    PublicationRequest,
+    RefusedPublication,
+    ThreadOrigin,
+)
 from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import PullRequestCheckpoint, SessionCheckpoint, WorkRequest, WorktreeCheckpoint
+from ocint.daemon.service import (
+    PublicationRefusalCheckpoint,
+    PullRequestCheckpoint,
+    SessionCheckpoint,
+    WorkRequest,
+    WorktreeCheckpoint,
+)
 from ocint.daemon.tasks import TaskCoordinator, TaskState
 from ocint.daemon.tasks.models import MessageClassification
 from ocint.daemon.tasks.repository import TaskRepository
@@ -26,18 +47,26 @@ class FakeGitHubTransport:
     issue_comments: list[GitHubComment]
     posted: list[GitHubComment] = field(default_factory=list)
     eligible: bool = True
+    pull_state: str = "open"
+    pull_merged: bool = False
+    pull_requests_created: int = 0
 
-    async def issues(self, repository: str, label: str) -> tuple[GitHubIssue, ...]:
+    async def issues(self, repository: str, label: str) -> GitHubIssues:
         _ = (repository, label)
-        return (self.issue,) if self.eligible else ()
+        return GitHubIssues(root=[self.issue] if self.eligible else [])
 
-    async def comments(self, repository: str, number: int) -> tuple[GitHubComment, ...]:
+    async def comments(self, repository: str, number: int) -> GitHubComments:
         _ = (repository, number)
-        return tuple(chain(self.issue_comments, self.posted))
+        return GitHubComments(root=list(chain(self.issue_comments, self.posted)))
 
     async def pull_request(self, repository: str, number: int) -> GitHubPullRequest:
         _ = (repository, number)
-        return GitHubPullRequest(number=7, html_url="https://example.test/pull/7", state="open")
+        return GitHubPullRequest(
+            number=7,
+            html_url="https://example.test/pull/7",
+            state=self.pull_state,
+            merged=self.pull_merged,
+        )
 
     async def find_pull_request(self, repository: str, branch: str, base: str) -> GitHubPullRequest | None:
         _ = (repository, branch, base)
@@ -47,6 +76,7 @@ class FakeGitHubTransport:
         self, repository: str, branch: str, base: str, title: str, body: str
     ) -> GitHubPullRequest:
         _ = (repository, branch, base, title, body)
+        self.pull_requests_created += 1
         return GitHubPullRequest(number=7, html_url="https://example.test/pull/7", state="open")
 
     async def post_comment(self, repository: str, number: int, body: str) -> GitHubComment:
@@ -54,7 +84,7 @@ class FakeGitHubTransport:
         response = GitHubComment(
             id=900 + len(self.posted),
             body=body,
-            user=GitHubUser(login="maintainer"),
+            user=GitHubUser(login=GitHubLogin("maintainer")),
             created_at="2026-07-17T12:00:00Z",
         )
         self.posted.append(response)
@@ -95,6 +125,73 @@ class RecordingExecutor:
 
 
 @pytest.mark.asyncio
+async def test_closed_owned_pull_request_is_refused_and_task_transition_is_coordinator_owned(tmp_path: Path) -> None:
+    # GIVEN
+    engine = create_daemon_engine(tmp_path / "control.sqlite")
+    metadata.create_all(engine)
+    control = ControlRepository(engine)
+    tasks = TaskRepository(engine)
+    transport = FakeGitHubTransport(
+        GitHubIssue(
+            id=100,
+            number=5,
+            title="Make the change",
+            body="Issue body",
+            created_at="2026-07-17T09:00:00Z",
+            user=GitHubUser(login=GitHubLogin("maintainer")),
+        ),
+        [],
+    )
+    source = GitHubService(
+        context=GitHubContext(
+            config=GitHubConfig(agent_actor=GitHubLogin("automation-bot")),
+            repositories=GitHubRepositoryPolicies(
+                root=[
+                    GitHubRepositoryPolicy(
+                        name="dotfiles",
+                        github_repository="example-org/project",
+                        actors=frozenset((GitHubLogin("maintainer"),)),
+                    )
+                ]
+            ),
+            client=transport,
+            repository=GitHubRepository(engine),
+        )
+    )
+    executor = RecordingExecutor(control)
+    coordinator = TaskCoordinator(source, tasks, executor)
+    await coordinator.reconcile()
+    job = executor.submitted[0]
+    assert isinstance(job.origin, ThreadOrigin)
+    publication = PublicationRequest(
+        repository="example-org/project",
+        branch="ocint/job",
+        base="main",
+        title="Make the change",
+        body="Automated",
+        origin=job.origin,
+    )
+    await source.publish(publication)
+    transport.pull_state = "closed"
+
+    # WHEN
+    refusal = await source.publish(publication)
+    assert isinstance(refusal, RefusedPublication)
+    control.checkpoint(job.id, PublicationRefusalCheckpoint(reason=refusal.reason))
+    control.fail(job.id, "owned pull request is closed or merged")
+    await coordinator.reconcile()
+
+    # THEN
+    task = tasks.latest(tasks.threads()[0].id)
+    assert task is not None
+    assert task.state is TaskState.ERRORED
+    assert transport.pull_requests_created == 1
+    assert len(transport.posted) == 1
+    assert "no replacement will be created" in transport.posted[0].body
+    engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tmp_path: Path) -> None:
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
@@ -112,7 +209,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
                 github_repository="example-org/project",
                 author_name="ocint",
                 author_email="ocint@example.invalid",
-                actors=frozenset(("maintainer",)),
+                actors=frozenset((GitHubLogin("maintainer"),)),
             ),
         ),
         opencode=OpenCodeConfig(
@@ -125,7 +222,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
             identity_file=tmp_path / "identity",
             known_hosts_file=tmp_path / "known_hosts",
         ),
-        github=GitHubConfig(agent_actor="maintainer"),
+        github=GitHubConfig(agent_actor=GitHubLogin("maintainer")),
     )
     issue = GitHubIssue(
         id=100,
@@ -133,7 +230,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
         title="Make the change",
         body="Issue body",
         created_at="2026-07-17T09:00:00Z",
-        user=GitHubUser(login="maintainer"),
+        user=GitHubUser(login=GitHubLogin("maintainer")),
     )
     transport = FakeGitHubTransport(
         issue,
@@ -141,45 +238,46 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
             GitHubComment(
                 id=10,
                 body="not allowed",
-                user=GitHubUser(login="mallory"),
+                user=GitHubUser(login=GitHubLogin("mallory")),
                 created_at="2026-07-17T09:59:00Z",
             ),
             GitHubComment(
                 id=11,
                 body="initial context",
-                user=GitHubUser(login="maintainer"),
+                user=GitHubUser(login=GitHubLogin("maintainer")),
                 created_at="2026-07-17T10:00:00Z",
             ),
             GitHubComment(
                 id=14,
                 body=(f"agent result\n\n{marker('example-org/project', 5, 'addressed', 'comment:11')}"),
-                user=GitHubUser(login="maintainer"),
+                user=GitHubUser(login=GitHubLogin("maintainer")),
                 created_at="2026-07-17T10:00:30Z",
             ),
         ],
     )
-    repository_policies = (
-        GitHubRepositoryPolicy(
-            name="dotfiles",
-            github_repository="example-org/project",
-            actors=frozenset(("maintainer",)),
-        ),
+    repository_policies = GitHubRepositoryPolicies(
+        root=[
+            GitHubRepositoryPolicy(
+                name="dotfiles",
+                github_repository="example-org/project",
+                actors=frozenset((GitHubLogin("maintainer"),)),
+            ),
+        ]
     )
     context = GitHubContext(
         config=config.github,
         repositories=repository_policies,
         client=transport,
         repository=GitHubRepository(engine),
-        tasks=tasks,
     )
-    source = GitHubIntegration(context=context)
+    source = GitHubService(context=context)
     executor = RecordingExecutor(control)
     coordinator = TaskCoordinator(source, tasks, executor)
 
     # WHEN
     await coordinator.reconcile()
     messages_after_first_poll = tasks.messages(tasks.threads()[0].id)
-    await source.poll()
+    await coordinator.reconcile()
     messages_after_second_poll = tasks.messages(tasks.threads()[0].id)
     initial = executor.submitted[0]
     control.checkpoint(
@@ -191,7 +289,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
         GitHubComment(
             id=12,
             body="new direction",
-            user=GitHubUser(login="maintainer"),
+            user=GitHubUser(login=GitHubLogin("maintainer")),
             created_at="2026-07-17T10:01:00Z",
         )
     )
@@ -204,7 +302,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
         GitHubComment(
             id=13,
             body="second follow-up",
-            user=GitHubUser(login="maintainer"),
+            user=GitHubUser(login=GitHubLogin("maintainer")),
             created_at="2026-07-17T10:02:00Z",
         )
     )
@@ -279,7 +377,7 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
                 github_repository="example-org/project",
                 author_name="ocint",
                 author_email="ocint@example.invalid",
-                actors=frozenset(("maintainer",)),
+                actors=frozenset((GitHubLogin("maintainer"),)),
             ),
         ),
         opencode=OpenCodeConfig(
@@ -292,14 +390,16 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
             identity_file=tmp_path / "identity",
             known_hosts_file=tmp_path / "known_hosts",
         ),
-        github=GitHubConfig(agent_actor="maintainer"),
+        github=GitHubConfig(agent_actor=GitHubLogin("maintainer")),
     )
-    repository_policies = (
-        GitHubRepositoryPolicy(
-            name="dotfiles",
-            github_repository="example-org/project",
-            actors=frozenset(("maintainer",)),
-        ),
+    repository_policies = GitHubRepositoryPolicies(
+        root=[
+            GitHubRepositoryPolicy(
+                name="dotfiles",
+                github_repository="example-org/project",
+                actors=frozenset((GitHubLogin("maintainer"),)),
+            ),
+        ]
     )
     transport = FakeGitHubTransport(
         GitHubIssue(
@@ -308,7 +408,7 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
             title="Make the change",
             body="Issue body",
             created_at="2026-07-17T09:00:00Z",
-            user=GitHubUser(login="maintainer"),
+            user=GitHubUser(login=GitHubLogin("maintainer")),
         ),
         [],
     )
@@ -317,9 +417,8 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
         repositories=repository_policies,
         client=transport,
         repository=GitHubRepository(engine),
-        tasks=tasks,
     )
-    source = GitHubIntegration(context=context)
+    source = GitHubService(context=context)
     executor = RecordingExecutor(control)
     coordinator = TaskCoordinator(source, tasks, executor)
 
@@ -340,7 +439,7 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
     assert executor.retried == []
     assert len(transport.posted) == 1
     response = next(
-        message for message in tasks.messages(thread.id) if message.actor == "maintainer" and message.id != 1
+        message for message in tasks.messages(thread.id) if str(message.actor) == "maintainer" and message.id != 1
     )
     assert response.source_id == "github:example-org/project:comment:900"
     assert response.classification is MessageClassification.AGENT_RESPONSE
@@ -353,17 +452,14 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
     database = tmp_path / "control.sqlite"
     command.upgrade(alembic_config(database), "20260719_add_thread_execution_job")
     engine = create_daemon_engine(database)
-    control = ControlRepository(engine)
-    historical = control.submit(
-        WorkRequest(
-            idempotency_key="thread-task:1:attempt:1",
-            actor="maintainer",
-            repository="dotfiles",
-            prompt="historical",
-        )
-    )
-    control.fail(historical.id, "historical failure")
     with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO job VALUES ('historical', 'thread-task:1:attempt:1', 'maintainer', 'dotfiles', "
+                "'historical', 'failed', 'execution', '', '', '', '', '', 0, 0, '', 0, '', "
+                "'historical failure', 'now', 'now')"
+            )
+        )
         connection.execute(
             text(
                 "INSERT INTO thread VALUES (1, 'dotfiles', 'github', '100', 'maintainer', 1, '', 'Old', 'Old', 'now', 'now')"
@@ -379,7 +475,7 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
         connection.execute(text("INSERT INTO task_message VALUES (1, 1)"))
         connection.execute(
             text("INSERT INTO task_job VALUES (1, :job_id, 1)"),
-            {"job_id": historical.id},
+            {"job_id": "historical"},
         )
     engine.dispose()
     migrate_daemon_db(database)
@@ -397,7 +493,7 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
                 github_repository="example-org/project",
                 author_name="ocint",
                 author_email="ocint@example.invalid",
-                actors=frozenset(("maintainer",)),
+                actors=frozenset((GitHubLogin("maintainer"),)),
             ),
         ),
         opencode=OpenCodeConfig(
@@ -410,14 +506,16 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
             identity_file=tmp_path / "identity",
             known_hosts_file=tmp_path / "known_hosts",
         ),
-        github=GitHubConfig(agent_actor="maintainer"),
+        github=GitHubConfig(agent_actor=GitHubLogin("maintainer")),
     )
-    repository_policies = (
-        GitHubRepositoryPolicy(
-            name="dotfiles",
-            github_repository="example-org/project",
-            actors=frozenset(("maintainer",)),
-        ),
+    repository_policies = GitHubRepositoryPolicies(
+        root=[
+            GitHubRepositoryPolicy(
+                name="dotfiles",
+                github_repository="example-org/project",
+                actors=frozenset((GitHubLogin("maintainer"),)),
+            ),
+        ]
     )
     transport = FakeGitHubTransport(
         GitHubIssue(
@@ -426,7 +524,7 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
             title="Make the change",
             body="Issue body",
             created_at="2026-07-17T09:00:00Z",
-            user=GitHubUser(login="maintainer"),
+            user=GitHubUser(login=GitHubLogin("maintainer")),
         ),
         [],
     )
@@ -436,9 +534,8 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
         repositories=repository_policies,
         client=transport,
         repository=GitHubRepository(engine),
-        tasks=tasks,
     )
-    source = GitHubIntegration(context=context)
+    source = GitHubService(context=context)
     coordinator = TaskCoordinator(source, tasks, executor)
 
     # WHEN
@@ -453,10 +550,10 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
     assert task.id == 1
     assert len(executor.submitted) == 1
     submitted = executor.submitted[0]
-    assert submitted.id != historical.id
+    assert submitted.id != "historical"
     assert submitted.idempotency_key == ("thread-task:model-v2:source:github:example-org/project:100:task:1:attempt:1")
     assert tasks.latest_job_id(task.id) == submitted.id
-    assert control.get(historical.id).error == "historical failure"
+    assert control.get("historical").error == "historical failure"
     assert restarted_executor.submitted == []
     assert restarted_executor.retried == []
     assert restarted_executor.scheduled == []

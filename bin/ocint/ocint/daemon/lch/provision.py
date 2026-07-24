@@ -28,6 +28,7 @@ from ocint.daemon.config import (
 )
 from ocint.daemon.github import GitHubConfig
 from ocint.daemon.lch.systemd import CommandRunner, SystemdLifecycle, installed_ocint
+from ocint.daemon.models import GitHubLogin
 
 
 class OpenCodeProviderOptions(BaseModel):
@@ -614,7 +615,7 @@ def discovered_daemon_config(
                 github_repository=discovery.github_repository,
                 author_name=discovery.author.name,
                 author_email=discovery.author.email,
-                actors=frozenset((discovery.login,)),
+                actors=frozenset((GitHubLogin(discovery.login),)),
             ),
         ),
         lifecycle=lifecycle,
@@ -625,7 +626,7 @@ def discovered_daemon_config(
             xdg_config_home=paths.isolated_config_home,
             xdg_data_home=paths.isolated_data_home,
         ),
-        github=GitHubConfig(agent_actor=discovery.login),
+        github=GitHubConfig(agent_actor=GitHubLogin(discovery.login)),
         git=GitConfig(
             ssh_executable=discovery.ssh.executable,
             identity_file=discovery.ssh.identity_file,
@@ -649,7 +650,7 @@ default_branch = {quote(repository.default_branch)}
 github_repository = {quote(repository.github_repository)}
 author_name = {quote(repository.author_name)}
 author_email = {quote(repository.author_email)}
-actors = [{quote(next(iter(repository.actors)))}]
+actors = [{quote(str(next(iter(repository.actors))))}]
 checks = []
 
 [lifecycle]
@@ -672,7 +673,7 @@ startup_timeout_seconds = {config.opencode.startup_timeout_seconds}
 
 [github]
 issue_label = {quote(config.github.issue_label)}
-agent_actor = {quote(config.github.agent_actor)}
+agent_actor = {quote(str(config.github.agent_actor))}
 
 [git]
 ssh_executable = {quote(str(config.git.ssh_executable))}

@@ -7,17 +7,17 @@ from sqlalchemy import Engine, and_, insert, select, update
 from sqlalchemy.engine import RowMapping
 
 from ocint.daemon.db.schema import job
-from ocint.daemon.models import Job, JobStage, JobState
+from ocint.daemon.models import DirectOrigin, GitHubLogin, Job, JobStage, JobState, ThreadOrigin, WorkRequest
 from ocint.daemon.service import (
     Checkpoint,
     CommitCheckpoint,
     PromptIntentCheckpoint,
     PromptSubmittedCheckpoint,
+    PublicationRefusalCheckpoint,
     PullRequestCheckpoint,
     PushCheckpoint,
     SessionCheckpoint,
     StageCheckpoint,
-    WorkRequest,
     WorktreeCheckpoint,
 )
 
@@ -41,7 +41,7 @@ class ControlRepository:
                 insert(job).values(
                     id=identifier,
                     idempotency_key=request.idempotency_key,
-                    actor=request.actor,
+                    actor=str(request.actor),
                     repository=request.repository,
                     prompt=request.prompt,
                     state=JobState.QUEUED.value,
@@ -57,6 +57,14 @@ class ControlRepository:
                     pushed=0,
                     pull_request_url="",
                     error="",
+                    origin_kind=request.origin.kind,
+                    origin_source_thread_id=(
+                        request.origin.source_thread_id if isinstance(request.origin, ThreadOrigin) else ""
+                    ),
+                    origin_source_anchor_id=(
+                        request.origin.source_anchor_id if isinstance(request.origin, ThreadOrigin) else ""
+                    ),
+                    publication_refusal="",
                     created_at=now,
                     updated_at=now,
                 )
@@ -78,7 +86,7 @@ class ControlRepository:
                 insert(job).values(
                     id=identifier,
                     idempotency_key=request.idempotency_key,
-                    actor=request.actor,
+                    actor=str(request.actor),
                     repository=request.repository,
                     prompt=request.prompt,
                     state=JobState.QUEUED.value,
@@ -94,6 +102,14 @@ class ControlRepository:
                     pushed=0,
                     pull_request_url="",
                     error="",
+                    origin_kind=request.origin.kind,
+                    origin_source_thread_id=(
+                        request.origin.source_thread_id if isinstance(request.origin, ThreadOrigin) else ""
+                    ),
+                    origin_source_anchor_id=(
+                        request.origin.source_anchor_id if isinstance(request.origin, ThreadOrigin) else ""
+                    ),
+                    publication_refusal="",
                     created_at=now,
                     updated_at=now,
                 )
@@ -136,6 +152,8 @@ class ControlRepository:
                 columns.update(pushed=1, stage=JobStage.PULL_REQUEST.value, base_revision=revision)
             case PullRequestCheckpoint(url=url):
                 columns["pull_request_url"] = url
+            case PublicationRefusalCheckpoint(reason=reason):
+                columns["publication_refusal"] = reason
         with self.engine.begin() as connection:
             connection.execute(update(job).where(job.c.id == job_id).values(**columns))
         return self.get(job_id)
@@ -187,10 +205,18 @@ class ControlRepository:
 
     def _job(self, row: RowMapping) -> Job:
         path = str(row["worktree_path"])
+        origin = (
+            ThreadOrigin(
+                source_thread_id=str(row["origin_source_thread_id"]),
+                source_anchor_id=str(row["origin_source_anchor_id"]),
+            )
+            if str(row["origin_kind"]) == "thread"
+            else DirectOrigin()
+        )
         return Job(
             id=str(row["id"]),
             idempotency_key=str(row["idempotency_key"]),
-            actor=str(row["actor"]),
+            actor=GitHubLogin(str(row["actor"])),
             repository=str(row["repository"]),
             prompt=str(row["prompt"]),
             state=JobState(str(row["state"])),
@@ -206,6 +232,8 @@ class ControlRepository:
             pushed=bool(row["pushed"]),
             pull_request_url=str(row["pull_request_url"]),
             error=str(row["error"]),
+            origin=origin,
+            publication_refusal=str(row["publication_refusal"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )
