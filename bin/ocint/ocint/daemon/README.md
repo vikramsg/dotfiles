@@ -16,6 +16,7 @@ Documentation:
 - [Daemon documentation index](../../docs/daemon.md)
 - [Minimal pull-request workflow](../../docs/daemon/workflow.md)
 - [Operations and job inspection](../../docs/daemon/operations.md)
+- [Slack integration smoke test](../../docs/daemon/slack-integration-smoke.md)
 - [Architecture](../../docs/daemon/architecture.md)
 - [Security and attach authentication](../../docs/daemon/security.md)
 - [systemd lifecycle surface](lch/README.md)
