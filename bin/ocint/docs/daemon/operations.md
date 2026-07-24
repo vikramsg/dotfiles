@@ -110,7 +110,8 @@ worktree. Validation failures do not commit or push.
 ### Attach fails
 
 Confirm the job is `running`, has a session and worktree, and the service is
-active. Completed, failed, queued, and stale sessions are not attachable.
+active. HTTP 409 means the selected job no longer has a running OpenCode
+session. Completed, failed, queued, and stale sessions are not attachable.
 
 ### Git authentication fails
 
