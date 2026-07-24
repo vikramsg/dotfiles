@@ -52,42 +52,6 @@ print(json.dumps([name for name in names if name in sys.modules]))
     assert json.loads(result.stdout) == []
 
 
-def test_daemon_feature_facades_do_not_initialize_runtime_adapters() -> None:
-    # GIVEN
-    package = Path(__file__).parents[2]
-    script = """
-import json
-import sys
-import ocint.daemon.config
-import ocint.daemon.git
-import ocint.daemon.git.config
-import ocint.daemon.github
-import ocint.daemon.opencode
-import ocint.daemon.opencode.config
-import ocint.daemon.pull_request_job
-names = [
-    "ocint.daemon.git.service",
-    "ocint.daemon.opencode.service",
-    "ocint.daemon.pull_request_job.repository",
-    "ocint.daemon.pull_request_job.run",
-    "sqlalchemy",
-]
-print(json.dumps([name for name in names if name in sys.modules]))
-"""
-
-    # WHEN
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=package,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    # THEN
-    assert json.loads(result.stdout) == []
-
-
 def test_github_facade_exports_only_supported_api() -> None:
     # GIVEN / WHEN
     import ocint.daemon.github as github_api

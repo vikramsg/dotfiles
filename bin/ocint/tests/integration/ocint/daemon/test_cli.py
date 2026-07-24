@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from ocint.cli import main
-from ocint.daemon.cli import create_daemon_app
+from ocint.daemon.cli import open_daemon_app
 from ocint.daemon.config import DaemonContext, DaemonSettings
 from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.models import (
@@ -121,8 +121,11 @@ agent_actor = "maintainer"
 ''')
 
     # WHEN / THEN
-    with pytest.raises(ValueError, match="API_TOKEN"):
-        create_daemon_app(
+    with (
+        pytest.raises(ValueError, match="API_TOKEN"),
+        open_daemon_app(
             DaemonContext.create(default_cli_context().output, tmp_path, {}, DaemonSettings(config=config)),
             FakeGitHubGateway(),
-        )
+        ),
+    ):
+        pass

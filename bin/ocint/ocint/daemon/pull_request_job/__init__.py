@@ -1,6 +1,6 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 
 from ocint.daemon.models import (
     DirectOrigin,
@@ -25,14 +25,17 @@ from ocint.daemon.pull_request_job.models import (
     PullRequestJobState,
 )
 
-if TYPE_CHECKING:
-    from sqlalchemy import Engine
 
-
-def create_pull_request_job_repository(engine: Engine) -> PullRequestJobStore:
+@contextmanager
+def open_pull_request_job_store(database_path: Path) -> Iterator[PullRequestJobStore]:
+    from ocint.daemon.db import create_daemon_engine
     from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
 
-    return PullRequestJobRepository(engine)
+    engine = create_daemon_engine(database_path)
+    try:
+        yield PullRequestJobRepository(engine)
+    finally:
+        engine.dispose()
 
 
 def create_pull_request_job_runner(
@@ -63,6 +66,6 @@ __all__ = [
     "RepositoryPolicy",
     "SchedulerPolicy",
     "ThreadOrigin",
-    "create_pull_request_job_repository",
     "create_pull_request_job_runner",
+    "open_pull_request_job_store",
 ]

@@ -33,10 +33,23 @@ an unchanged idle interval. It is not a permanently running queue worker.
 | `db/` | SQLite policy, schema, and Alembic migrations |
 
 The CLI is the composition root. It translates the aggregate daemon config into
-the narrow `pull_request_job` policy and injects the Git, OpenCode, GitHub, and
-SQLite adapters. Runtime pull-request-job code never receives `DaemonConfig`.
+the narrow `pull_request_job` policy and injects the Git, OpenCode, and GitHub
+gateways. Runtime pull-request-job code never receives `DaemonConfig`.
+
+Feature facades expose configuration, gateway protocols, and construction
+functions. Their factories construct concrete implementations when called.
+Persistence factories receive the daemon database path and own their SQLAlchemy
+engines internally; callers never pass an engine through a feature API.
 
 ```text
+ cli.py
+   |
+   +--> Git facade factory
+   +--> OpenCode facade factory
+   +--> GitHub lifecycle factory
+   +--> pull-request-job store lifecycle
+   `--> task coordinator lifecycle
+
  api.py --------> pull_request_job <-------- tasks/
                        |
                        v
@@ -44,8 +57,6 @@ SQLite adapters. Runtime pull-request-job code never receives `DaemonConfig`.
                   ^     ^     ^
                   |     |     |
                git/ opencode/ github/
-
- cli.py ---- constructs and injects every concrete adapter ----^
 ```
 
 Tasks own `task_job` associations but do not query the physical `job` table.
@@ -96,7 +107,8 @@ The complete execution path remains visible in one diagram:
     +--> stop accepting HTTP requests
     +--> FastAPI lifespan waits for active jobs
     +--> cancel and requeue jobs after shutdown timeout
-    +--> close OpenCode and SQLite resources
+    +--> close OpenCode
+    `--> dispose feature-owned SQLite engines
 ```
 
 ## Startup

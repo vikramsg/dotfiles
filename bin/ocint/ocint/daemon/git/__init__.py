@@ -1,17 +1,20 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from ocint.daemon.git.config import GitConfig, GitRuntimeConfig
-
-if TYPE_CHECKING:
-    from ocint.daemon.git.service import GitManager
+from ocint.daemon.models import GitRepository, Worktree
 
 
-def create_git_manager(config: GitRuntimeConfig) -> GitManager:
+class GitGateway(Protocol):
+    async def provision(self, repository: GitRepository, job_id: str) -> Worktree: ...
+    async def validate(self, worktree: Worktree, checks: tuple[tuple[str, ...], ...]) -> None: ...
+    async def commit(self, worktree: Worktree, message: str, author_name: str, author_email: str) -> str: ...
+    async def push(self, worktree: Worktree) -> None: ...
+
+
+def create_git_manager(config: GitRuntimeConfig) -> GitGateway:
     from ocint.daemon.git.service import GitManager
 
     return GitManager(config)
 
 
-__all__ = ["GitConfig", "GitRuntimeConfig", "create_git_manager"]
+__all__ = ["GitConfig", "GitGateway", "GitRuntimeConfig", "create_git_manager"]

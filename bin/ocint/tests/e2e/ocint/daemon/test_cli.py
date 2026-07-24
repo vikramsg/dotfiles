@@ -12,7 +12,7 @@ import uvicorn
 from aiohttp import web
 from click.testing import CliRunner
 from ocint.cli import main
-from ocint.daemon.cli import create_daemon_app
+from ocint.daemon.cli import open_daemon_app
 from ocint.daemon.config import DaemonContext, DaemonSettings
 from ocint.daemon.github import GitHubRepositoryPolicies, GitHubRepositoryPolicy, open_github_service
 from ocint.daemon.logging import get_logger
@@ -242,44 +242,44 @@ agent_actor = "automation-bot"
         daemon_config.database_path,
     )
     github = await github_manager.__aenter__()
-    application = create_daemon_app(daemon_context, github)
-    app = application.app
-    server = SignalFreeServer(
-        uvicorn.Config(app, host="127.0.0.1", port=api_port, log_config=None, access_log=False, lifespan="on")
-    )
-    daemon = asyncio.create_task(server.serve())
+    with open_daemon_app(daemon_context, github) as application:
+        app = application.app
+        server = SignalFreeServer(
+            uvicorn.Config(app, host="127.0.0.1", port=api_port, log_config=None, access_log=False, lifespan="on")
+        )
+        daemon = asyncio.create_task(server.serve())
 
-    # WHEN
-    headers = {"Authorization": "Bearer api-token"}
-    async with aiohttp.ClientSession(headers=headers) as client:
-        for _attempt in range(100):
-            try:
-                async with client.get(f"http://127.0.0.1:{api_port}/health") as response:
-                    if response.status == 200:
-                        break
-            except aiohttp.ClientConnectorError:
-                pass
-            await asyncio.sleep(0.02)
-        async with client.post(
-            f"http://127.0.0.1:{api_port}/api/jobs",
-            json={
-                "idempotency_key": "production",
-                "actor": "allowed",
-                "repository": "repo",
-                "title": "Production change",
-                "prompt": "edit",
-            },
-        ) as response:
-            submitted = await response.json()
-            assert response.status == 202
-        for _attempt in range(500):
-            async with client.get(f"http://127.0.0.1:{api_port}/api/jobs/{submitted['id']}") as response:
-                completed = await response.json()
-            if completed["state"] in {"completed", "failed"}:
-                break
-            await asyncio.sleep(0.02)
-    server.should_exit = True
-    await daemon
+        # WHEN
+        headers = {"Authorization": "Bearer api-token"}
+        async with aiohttp.ClientSession(headers=headers) as client:
+            for _attempt in range(100):
+                try:
+                    async with client.get(f"http://127.0.0.1:{api_port}/health") as response:
+                        if response.status == 200:
+                            break
+                except aiohttp.ClientConnectorError:
+                    pass
+                await asyncio.sleep(0.02)
+            async with client.post(
+                f"http://127.0.0.1:{api_port}/api/jobs",
+                json={
+                    "idempotency_key": "production",
+                    "actor": "allowed",
+                    "repository": "repo",
+                    "title": "Production change",
+                    "prompt": "edit",
+                },
+            ) as response:
+                submitted = await response.json()
+                assert response.status == 202
+            for _attempt in range(500):
+                async with client.get(f"http://127.0.0.1:{api_port}/api/jobs/{submitted['id']}") as response:
+                    completed = await response.json()
+                if completed["state"] in {"completed", "failed"}:
+                    break
+                await asyncio.sleep(0.02)
+        server.should_exit = True
+        await daemon
     await github_manager.__aexit__(None, None, None)
 
     # THEN
