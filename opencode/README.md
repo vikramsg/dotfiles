@@ -2,6 +2,10 @@
 
 This repository tracks configuration and learnings about the `opencode` CLI agent.
 
+For a source-code study of how upstream OpenCode loads a global configuration
+without exposing the JSON file itself as a mutable global object, see
+[How OpenCode Contains a Global Configuration](architecture.md).
+
 ## Configuration Modes
 
 OpenCode operates based on the configuration defined in `opencode.json` (by default). This dictates the AI's permissions for reading, editing, and executing terminal commands.
