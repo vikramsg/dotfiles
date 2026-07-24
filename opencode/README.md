@@ -2,6 +2,10 @@
 
 This repository tracks configuration and learnings about the `opencode` CLI agent.
 
+## Architecture Research
+
+- [How OpenCode builds one global config schema without using one global runtime object](config-architecture.md)
+
 ## Configuration Modes
 
 OpenCode operates based on the configuration defined in `opencode.json` (by default). This dictates the AI's permissions for reading, editing, and executing terminal commands.
