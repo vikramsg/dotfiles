@@ -184,6 +184,7 @@ SELECT
   task.reason,
   task_job.attempt,
   job.id AS job_id,
+  job.title AS job_title,
   job.state AS job_state,
   job.stage,
   job.session_id,
@@ -241,6 +242,10 @@ Interpretation:
 | Remote branch, no mapped PR | Inspect publication stage and GitHub API failure. |
 | `publication_refusal` set | The owned PR was closed or merged and will not be replaced. |
 | PR URL set, unresolved task | Inspect completion reconciliation and issue reply. |
+
+For issue-driven work, `job_title`, the commit subject, and the PR title must
+all equal `ocint: <issue title>`. The prefix is case-normalized and must appear
+exactly once.
 
 ## OpenCode Diagnosis
 
