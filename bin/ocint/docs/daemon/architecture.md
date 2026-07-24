@@ -5,7 +5,7 @@ invocation, that invocation reconciles durable work, and the process exits after
 an unchanged idle interval. It is not a permanently running queue worker.
 
 ```text
- labelled GitHub issue
+ labelled GitHub issue or configured private Slack root
           |
           v
  GitHub observation -> durable thread/task -> durable job
@@ -28,6 +28,7 @@ an unchanged idle interval. It is not a permanently running queue worker.
 | `opencode/` | OpenCode-owned config plus the independent process, session, prompt, status, and SSE adapter |
 | `git/` | Git-owned config plus the independent mirror, worktree, validation, commit, and SSH push adapter |
 | `github/` | Issue observation, authorization, replies, and pull requests |
+| `slack/` | Private-channel polling, authorization, durable cursors/replies, reopen, and rate deferral |
 | `tasks/` | Provider-neutral thread, message, task, and retry coordination |
 | `lch/` | Linux user-systemd setup and local operator commands |
 | `db/` | SQLite policy, schema, and Alembic migrations |
@@ -46,7 +47,7 @@ engines internally; callers never pass an engine through a feature API.
    |
    +--> Git facade factory
    +--> OpenCode facade factory
-   +--> GitHub lifecycle factory
+   +--> GitHub publisher/source and optional Slack source factories
    +--> pull-request-job store lifecycle
    `--> task coordinator lifecycle
 
@@ -120,7 +121,7 @@ Before Uvicorn reports ready, the daemon:
 3. Migrates the daemon database.
 4. Starts a private OpenCode server and verifies its exact version.
 5. Returns interrupted `running` jobs to `queued` without resetting stages.
-6. Polls GitHub and reconciles durable tasks.
+6. Polls GitHub and configured private Slack channels, then reconciles durable tasks.
 7. Schedules persisted queued jobs.
 
 A startup failure prevents the API from becoming ready.
@@ -132,7 +133,7 @@ reads or migrates OpenCode's SQLite schema. SQLite connections enable foreign
 keys, WAL mode, and a busy timeout.
 
 ```text
- github_issue -> thread -> thread_message
+ provider mapping -> thread -> thread_message
                      |
                      `-> task -> task_message
                             `-> task_job -> job
@@ -141,6 +142,10 @@ keys, WAL mode, and a busy timeout.
 Messages are `actionable`, `unauthorized`, or `agent_response`. Task creation
 atomically claims all pending actionable messages. Agent responses are retained
 for idempotency but excluded from prompts.
+
+Slack channel watermarks begin at the configured inclusive `initial_oldest`
+boundary. Reply intent, completion closure, reopen aliases, and rate-limit defer
+deadlines are durable. Slack is a task source only; publication remains GitHub-owned.
 
 The migration chain remains explicit:
 

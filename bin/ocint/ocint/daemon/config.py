@@ -13,6 +13,7 @@ from ocint.daemon.git import GitConfig
 from ocint.daemon.github import GitHubConfig
 from ocint.daemon.models import GitHubLogin, GitRepository
 from ocint.daemon.opencode import OpenCodeConfig
+from ocint.daemon.slack import SlackConfig
 
 
 class RepositoryConfig(GitRepository):
@@ -69,6 +70,7 @@ class DaemonConfig(BaseModel):
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     github: GitHubConfig = Field(default_factory=GitHubConfig)
+    slack: SlackConfig | None = None
     git: GitConfig
     idle_timeout_seconds: int = Field(default=60, ge=1)
 
@@ -84,6 +86,10 @@ class DaemonConfig(BaseModel):
             raise ValueError("repository names must be unique")
         if self.mirror_root.resolve() == self.worktree_root.resolve():
             raise ValueError("mirror_root and worktree_root must differ")
+        if self.slack is not None:
+            unknown = {channel.repository for channel in self.slack.channels} - set(names)
+            if unknown:
+                raise ValueError(f"Slack channels reference unconfigured repositories: {', '.join(sorted(unknown))}")
         return self
 
     def repository(self, name: str) -> RepositoryConfig:
@@ -99,6 +105,7 @@ class DaemonSettings(BaseSettings):
     config: Path | None = Field(default=None, validation_alias="OCINT_DAEMON_CONFIG")
     api_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_API_TOKEN")
     github_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_GITHUB_TOKEN")
+    slack_bot_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_SLACK_BOT_TOKEN")
     xdg_config_home: Path | None = Field(
         default=None, validation_alias=AliasChoices("XDG_CONFIG_HOME", "OCINT_DAEMON_XDG_CONFIG_HOME")
     )

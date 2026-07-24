@@ -58,6 +58,45 @@ Setup never starts OAuth or device login. It discovers the GitHub token with
 and installs the systemd units. A later setup reuses the existing TOML without
 running discovery again.
 
+## Optional Private Slack Source
+
+Slack polling is enabled only when `[slack]` is present. Every configured
+channel is a private channel mapped to one configured repository:
+
+```toml
+[slack]
+workspace_id = "T01234567"
+completion_reaction = "white_check_mark"
+
+[[slack.channels]]
+channel_id = "C01234567"
+repository = "repository"
+authorized_users = ["U01234567"]
+initial_oldest = "1753380000.123456"
+```
+
+`authorized_users` contains Slack member IDs, not display names. Channel IDs
+must be unique. `initial_oldest` is an inclusive first-run boundary; set it to
+the timestamp of the prepared first root so older channel history cannot become
+work. Only configured channels are polled.
+
+Create the Slack app from
+[`../../config/slack-app-manifest.yaml`](../../config/slack-app-manifest.yaml).
+It requests exactly `groups:history`, `chat:write`, and `reactions:write`.
+Socket Mode, Events API subscriptions, slash commands, and public-channel
+history are not used.
+
+Install or rotate the bot token without putting it in argv:
+
+```bash
+ocint daemon lch slack-token
+# automation:
+printf '%s\n' "$SLACK_TOKEN" | ocint daemon lch slack-token
+```
+
+The hidden prompt validates `auth.test`, required scopes, and the configured
+workspace before atomically updating `daemon.env`.
+
 ## Root Settings
 
 | Setting | Meaning |
@@ -121,6 +160,7 @@ Logs are written to `$XDG_STATE_HOME/ocint/daemon.log`. Rotation defaults to
 | `OCINT_DAEMON_CONFIG` | Explicit TOML path |
 | `OCINT_DAEMON_API_TOKEN` | Bearer authentication for the control API |
 | `OCINT_DAEMON_GITHUB_TOKEN` | GitHub REST authentication |
+| `OCINT_DAEMON_SLACK_BOT_TOKEN` | Optional private-channel Slack bot authentication |
 | `PATH` | Executable discovery for managed commands |
 | `LANG` or `LC_ALL` | Managed command locale |
 
@@ -136,6 +176,7 @@ bin/ocint/docs/daemon.md              -> concise daemon index
 bin/ocint/docs/daemon/workflow.md     -> minimal operator workflow
 ocint/daemon/lch/setup.py             -> initial discovery + writes
 ocint/daemon/lch/doctor.py            -> redacted diagnostics
+bin/ocint/config/slack-app-manifest.yaml -> least-privilege private Slack app
 ```
 
 Uninstall removes only generated user units. Configuration, credentials,

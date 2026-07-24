@@ -46,6 +46,18 @@ api_url = "https://api.github.com"
 issue_label = "ocint"
 agent_actor = "GITHUB_LOGIN"
 
+# Slack is optional. Only configured private channels are polled. Create the app
+# from config/slack-app-manifest.yaml; Socket Mode and event delivery stay off.
+# [slack]
+# workspace_id = "T01234567"
+# completion_reaction = "white_check_mark"
+# [[slack.channels]]
+# channel_id = "C01234567"
+# repository = "repository"
+# authorized_users = ["U01234567"]
+# Inclusive first-run boundary. Set this to the prepared root message timestamp.
+# initial_oldest = "1753380000.000000"
+
 [git]
 ssh_executable = "/usr/bin/ssh"
 identity_file = "~/.ssh/id_ed25519"

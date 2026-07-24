@@ -7,6 +7,7 @@ from ocint.daemon.models import (
     PublicationRequest,
     PublishedPublication,
     RefusedPublication,
+    ThreadOrigin,
     Worktree,
 )
 from ocint.daemon.pull_request_job.config import PullRequestJobConfig
@@ -28,6 +29,7 @@ from ocint.daemon.pull_request_job.models import (
     PullRequestJobState,
     PushCheckpoint,
     SessionCheckpoint,
+    SourcePullRequestJobRequest,
     StageCheckpoint,
     WorktreeCheckpoint,
 )
@@ -83,6 +85,18 @@ class PullRequestJobRunner:
         logger.info("job accepted", job=job.id, repository=job.repository, actor=job.actor)
         return job
 
+    def submit_source(self, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        job = self.accept_source(request)
+        if job.state is PullRequestJobState.QUEUED:
+            self.schedule(job.id)
+        return job
+
+    def accept_source(self, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        job = self.store.submit(request.work)
+        self.activity_generation += 1
+        logger.info("source job accepted", job=job.id, repository=job.repository, actor=job.actor)
+        return job
+
     def schedule_accepted(self, job_id: str) -> None:
         if self.store.get(job_id).state is PullRequestJobState.QUEUED:
             self.schedule(job_id)
@@ -97,6 +111,18 @@ class PullRequestJobRunner:
     def accept_retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
         authorize(request, self.config)
         job = self.store.retry(previous, request)
+        self.activity_generation += 1
+        return job
+
+    def retry_source(self, previous: PullRequestJob, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        job = self.accept_source_retry(previous, request)
+        if job.state is PullRequestJobState.QUEUED:
+            self.schedule(job.id)
+        logger.info("source job retry scheduled", previous_job=previous.id, job=job.id, repository=job.repository)
+        return job
+
+    def accept_source_retry(self, previous: PullRequestJob, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        job = self.store.retry(previous, request.work)
         self.activity_generation += 1
         return job
 
@@ -225,6 +251,11 @@ class PullRequestJobRunner:
             logger.info("job stage completed", job=job.id, stage=PullRequestJobStage.PUSH.value, branch=worktree.branch)
         if job.stage is PullRequestJobStage.PULL_REQUEST:
             logger.info("job stage started", job=job.id, stage=PullRequestJobStage.PULL_REQUEST.value)
+            ownership = (
+                self.store.owned_pull_request(job.origin.source_thread_id, repository.github_repository)
+                if isinstance(job.origin, ThreadOrigin)
+                else None
+            )
             result = await self.publisher.publish(
                 PublicationRequest(
                     repository=repository.github_repository,
@@ -233,6 +264,7 @@ class PullRequestJobRunner:
                     title=job.title,
                     body="Automated by ocint daemon.",
                     origin=job.origin,
+                    owned_pull_request_number=ownership[0] if ownership else 0,
                 )
             )
             if isinstance(result, RefusedPublication):
@@ -240,6 +272,10 @@ class PullRequestJobRunner:
                 raise RuntimeError("owned pull request is closed or merged")
             if not isinstance(result, PublishedPublication):
                 raise RuntimeError("unsupported publication result")
+            if isinstance(job.origin, ThreadOrigin):
+                self.store.set_owned_pull_request(
+                    job.origin.source_thread_id, repository.github_repository, result.number, result.url
+                )
             self.store.checkpoint(job.id, PullRequestCheckpoint(url=result.url))
             logger.info(
                 "job stage completed", job=job.id, stage=PullRequestJobStage.PULL_REQUEST.value, pull_request=result.url

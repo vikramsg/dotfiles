@@ -1,10 +1,11 @@
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ocint.daemon.models import DirectOrigin, GitHubLogin, WorkOrigin
+from ocint.daemon.models import ActorIdentity, DirectOrigin, WorkOrigin
 
 
 class PullRequestJobState(StrEnum):
@@ -26,7 +27,7 @@ class PullRequestJobStage(StrEnum):
 class PullRequestJobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     idempotency_key: str = Field(min_length=1)
-    actor: GitHubLogin
+    actor: ActorIdentity
     repository: str = Field(min_length=1)
     title: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
@@ -43,11 +44,18 @@ class PullRequestJobRequest(BaseModel):
         return f"ocint: {summary}"
 
 
+@dataclass(frozen=True)
+class SourcePullRequestJobRequest:
+    """Internal source-authorized request that is never an HTTP payload model."""
+
+    work: PullRequestJobRequest
+
+
 class PullRequestJob(BaseModel):
     model_config = ConfigDict(frozen=True)
     id: str
     idempotency_key: str
-    actor: GitHubLogin
+    actor: ActorIdentity
     repository: str
     title: str
     prompt: str

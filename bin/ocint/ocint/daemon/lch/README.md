@@ -5,6 +5,7 @@
 ```text
 setup     -> create config when absent; otherwise reuse it unchanged
 apply     -> validate existing config/env -> reload -> enable --now timer
+slack-token -> validate and install a Slack bot token from hidden input
 lifecycle -> report timer schedule, service result, and log path
 list      -> list durable jobs directly from SQLite
 status    -> show one durable job by ID
@@ -44,6 +45,9 @@ token. See the [complete workflow](../../../docs/daemon/workflow.md).
 After creation, `daemon.toml` is user-owned. Setup reuses it byte-for-byte,
 `apply` reads it without modifying it, and package reinstall and uninstall leave
 it untouched. Every command reports concrete non-secret paths and outcomes.
+Token updates preserve unrelated `daemon.env` assignments and comments. The
+Slack token command accepts interactive hidden input or piped stdin and never
+places the token in argv or output.
 
 Live attachment is different from offline inspection:
 

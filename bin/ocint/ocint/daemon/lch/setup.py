@@ -291,6 +291,33 @@ def write_private_file(path: Path, content: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def upsert_private_environment(path: Path, assignments: Mapping[str, str]) -> None:
+    """Atomically update selected assignments while preserving every unrelated byte."""
+    if path.exists() and (path.is_symlink() or not _user_file(path, 0o600)):
+        raise click.ClickException(f"managed environment must be a user-owned regular mode-0600 file: {path}")
+    if any("\n" in value or "\r" in value for value in assignments.values()):
+        raise click.ClickException("environment values must be single-line")
+    content = path.read_bytes().decode() if path.exists() else ""
+    values = dict(assignments)
+    seen: set[str] = set()
+    rendered: list[str] = []
+    for line in content.splitlines(keepends=True):
+        name, separator, _value = line.rstrip("\r\n").partition("=")
+        if separator and name in values:
+            ending = line[len(line.rstrip("\r\n")) :]
+            rendered.append(f"{name}={values[name]}{ending}")
+            seen.add(name)
+        else:
+            rendered.append(line)
+    result = "".join(rendered)
+    missing = {name: value for name, value in values.items() if name not in seen}
+    if missing:
+        if result and not result.endswith(("\n", "\r")):
+            result += "\n"
+        result += "".join(f"{name}={value}\n" for name, value in missing.items())
+    write_private_file(path, result)
+
+
 def require_available_loopback_port(port: int) -> None:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
@@ -463,10 +490,16 @@ def setup(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> None:
         ensure_private_directory(directory)
     ensure_auth_symlink(discovery.opencode.auth_source, paths.isolated_data_home)
     current_api_token = _existing_api_token(paths.environment)
-    write_private_file(
+    slack_token = _existing_environment_value(paths.environment, "OCINT_DAEMON_SLACK_BOT_TOKEN")
+    assignments = {
+        "OCINT_DAEMON_API_TOKEN": current_api_token or secrets.token_urlsafe(48),
+        "OCINT_DAEMON_GITHUB_TOKEN": discovery.github_token,
+    }
+    if slack_token:
+        assignments["OCINT_DAEMON_SLACK_BOT_TOKEN"] = slack_token
+    upsert_private_environment(
         paths.environment,
-        f"OCINT_DAEMON_API_TOKEN={current_api_token or secrets.token_urlsafe(48)}\n"
-        f"OCINT_DAEMON_GITHUB_TOKEN={discovery.github_token}\n",
+        assignments,
     )
     write_private_file(
         paths.effective_opencode_config,
@@ -632,10 +665,14 @@ def _validate_managed_destinations(paths: ProvisionPaths, lifecycle: SystemdLife
 
 
 def _existing_api_token(path: Path) -> str:
+    return _existing_environment_value(path, "OCINT_DAEMON_API_TOKEN")
+
+
+def _existing_environment_value(path: Path, name: str) -> str:
     if not path.exists():
         return ""
     for line in path.read_text().splitlines():
-        if line.startswith("OCINT_DAEMON_API_TOKEN="):
+        if line.startswith(f"{name}="):
             return line.partition("=")[2]
     return ""
 

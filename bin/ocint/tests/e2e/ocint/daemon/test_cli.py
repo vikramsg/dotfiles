@@ -51,7 +51,7 @@ def test_job_inspection_commands_are_exposed_only_through_lch() -> None:
         line.strip().split(maxsplit=1)[0] for line in daemon_help.output.splitlines() if line.startswith("  ")
     )
     assert lch_help.exit_code == 0
-    assert {"attach", "lifecycle", "list", "status"}.issubset(
+    assert {"attach", "lifecycle", "list", "slack-token", "status"}.issubset(
         line.strip().split(maxsplit=1)[0] for line in lch_help.output.splitlines() if line.startswith("  ")
     )
     for description in (
@@ -61,6 +61,7 @@ def test_job_inspection_commands_are_exposed_only_through_lch() -> None:
         "List recent daemon jobs.",
         "Read or follow the daemon log.",
         "Create initial configuration and install the daemon.",
+        "Validate and install a Slack bot token from hidden input.",
         "Show detailed status for one daemon job.",
         "Remove systemd units while preserving daemon state.",
     ):
@@ -476,7 +477,7 @@ agent_actor = "maintainer"
         'if [ "$1 $2" = "daemon --help" ]; then\n'
         "  printf 'Commands:\\n  run\\n  doctor\\n  lch\\n'\n"
         'elif [ "$1 $2 $3" = "daemon lch --help" ]; then\n'
-        "  printf 'Commands:\\n  apply\\n  attach\\n  lifecycle\\n  list\\n  logs\\n  setup\\n  status\\n  uninstall\\n'\n"
+        "  printf 'Commands:\\n  apply\\n  attach\\n  lifecycle\\n  list\\n  logs\\n  setup\\n  slack-token\\n  status\\n  uninstall\\n'\n"
         "fi\n"
     )
     executable.chmod(0o755)

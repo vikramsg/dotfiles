@@ -15,6 +15,7 @@ from ocint.daemon.pull_request_job import (
     PullRequestJob,
     PullRequestJobRequest,
     PullRequestJobState,
+    SourcePullRequestJobRequest,
 )
 from ocint.daemon.tasks.models import (
     FailedTaskRetry,
@@ -38,12 +39,36 @@ class ThreadSource(Protocol):
     async def reply(self, request: ReplyRequest) -> ObservedMessage: ...
 
 
+class RoutedThreadSource(ThreadSource, Protocol):
+    @property
+    def source_prefix(self) -> str: ...
+
+
+class SourceRouter:
+    """Combine source observation while routing replies by globally-prefixed IDs."""
+
+    def __init__(self, sources: tuple[RoutedThreadSource, ...]) -> None:
+        self.sources = sources
+
+    async def observe(self) -> ThreadObservations:
+        observations = []
+        for source in self.sources:
+            observations.extend((await source.observe()).root)
+        return ThreadObservations(root=observations)
+
+    async def reply(self, request: ReplyRequest) -> ObservedMessage:
+        source = next((item for item in self.sources if request.source_thread_id.startswith(item.source_prefix)), None)
+        if source is None:
+            raise ValueError(f"no source route for {request.source_thread_id}")
+        return await source.reply(request)
+
+
 class PullRequestJobs(Protocol):
     def accept(self, request: PullRequestJobRequest) -> PullRequestJob: ...
-    def accept_retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob: ...
+    def accept_source_retry(self, previous: PullRequestJob, request: SourcePullRequestJobRequest) -> PullRequestJob: ...
     def schedule_accepted(self, job_id: str) -> None: ...
-    def submit(self, request: PullRequestJobRequest) -> PullRequestJob: ...
-    def retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob: ...
+    def submit_source(self, request: SourcePullRequestJobRequest) -> PullRequestJob: ...
+    def retry_source(self, previous: PullRequestJob, request: SourcePullRequestJobRequest) -> PullRequestJob: ...
     def get(self, job_id: str) -> PullRequestJob: ...
     def reusable(self, candidate_ids: tuple[str, ...]) -> PullRequestJob | None: ...
     def abandon(self, job_id: str, reason: str) -> None: ...
@@ -123,13 +148,18 @@ class TaskCoordinator:
     def _start(self, thread: Thread, task: Task, previous: PullRequestJob | None) -> None:
         attempt = self.repository.attempt_count(task.id) + 1
         request = self._request(thread, task, attempt)
-        job = self.executor.submit(request) if previous is None else self.executor.retry(previous, request)
+        source_request = SourcePullRequestJobRequest(work=request)
+        job = (
+            self.executor.submit_source(source_request)
+            if previous is None
+            else self.executor.retry_source(previous, source_request)
+        )
         self.repository.attach_job(task.id, job.id)
         logger.info("task job scheduled", task=task.id, thread=thread.id, job=job.id)
 
     def _retry_claimed(self, thread: Thread, claim: FailedTaskRetry, previous: PullRequestJob) -> None:
         request = self._request(thread, claim.task, claim.attempt)
-        job = self.executor.accept_retry(previous, request)
+        job = self.executor.accept_source_retry(previous, SourcePullRequestJobRequest(work=request))
         attachment = self.repository.attach_claimed_job(claim.task.id, claim.attempt, job.id)
         if attachment is RetryAttachment.ATTACHED:
             self.executor.schedule_accepted(job.id)

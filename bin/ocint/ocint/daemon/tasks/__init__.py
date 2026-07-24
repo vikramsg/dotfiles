@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ocint.daemon.tasks.models import MessageClassification, Task, TaskKind, TaskState, Thread, ThreadMessage
-from ocint.daemon.tasks.run import PullRequestJobs, TaskCoordinator, ThreadSource
+from ocint.daemon.tasks.run import PullRequestJobs, SourceRouter, TaskCoordinator, ThreadSource
 
 
 @contextmanager
@@ -26,6 +26,7 @@ def open_task_coordinator(
 
 __all__ = [
     "MessageClassification",
+    "SourceRouter",
     "Task",
     "TaskCoordinator",
     "TaskKind",

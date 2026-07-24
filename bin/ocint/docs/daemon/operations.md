@@ -7,6 +7,7 @@ Linux user-systemd lifecycle.
 
 ```text
 setup            create initial configuration and install the timer
+slack-token      validate and atomically install a hidden-input Slack bot token
 apply            apply existing configuration to systemd units
 lifecycle        show timer, service, schedule, and log state
 list             list recent durable jobs from SQLite
@@ -33,6 +34,11 @@ Systemd timer: enabled; path=~/.config/systemd/user/ocint-daemon.timer; inactive
 
 Secrets are always redacted. Read-only commands return the requested lifecycle,
 job, attachment, or log data instead of a generic success message.
+
+`slack-token` accepts the token only through Click's hidden prompt. Piped stdin
+supports automation; the token never appears in argv or command output. Existing
+comments, unknown assignments, and API/GitHub tokens in `daemon.env` are
+preserved byte-for-byte except for the selected assignment.
 
 ```text
  daemon.sqlite

@@ -5,6 +5,7 @@ import pytest
 from alembic import command
 from ocint.daemon.db import create_daemon_engine, downgrade_daemon_db, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
+from ocint.daemon.github.repository import GitHubRepository
 from ocint.daemon.models import GitHubLogin, MessageClassification
 from ocint.daemon.pull_request_job import PullRequestJobRequest
 from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
@@ -169,4 +170,48 @@ def test_job_title_migration_downgrades_with_attached_task(tmp_path: Path) -> No
         assert connection.execute(text("SELECT job_id FROM task_job")).scalar_one() == job.id
         columns = connection.execute(text("PRAGMA table_info(job)")).mappings()
         assert "title" not in {str(column["name"]) for column in columns}
+    engine.dispose()
+
+
+def test_slack_migration_preserves_workflow_and_backfills_pull_request_ownership(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    command.upgrade(alembic_config(database), "20260724_add_job_title")
+    engine = create_daemon_engine(database)
+    control = PullRequestJobRepository(engine)
+    tasks = TaskRepository(engine)
+    github = GitHubRepository(engine)
+    thread = tasks.upsert_thread("github:owner/repo:50", "Work title", "repo", True)
+    tasks.upsert_message(
+        thread.id, "github:owner/repo:issue:50", GitHubLogin("actor"), MessageClassification.ACTIONABLE, "work", "now"
+    )
+    task = tasks.create_pending(thread.id, TaskKind.INITIAL, 0)
+    assert task is not None
+    job = control.submit(
+        PullRequestJobRequest(
+            idempotency_key="job", actor=GitHubLogin("actor"), repository="repo", title="Work title", prompt="work"
+        )
+    )
+    tasks.attach_job(task.id, job.id)
+    issue = github.upsert_issue("github:owner/repo:50", "github:owner/repo:issue:50", "repo", "owner/repo", 50, 5, True)
+    github.set_pull_request(issue.source_id, 7, "https://example.test/pull/7")
+    engine.dispose()
+
+    # WHEN
+    migrate_daemon_db(database)
+
+    # THEN
+    engine = create_daemon_engine(database)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT COUNT(*) FROM task")).scalar_one() == 1
+        assert connection.execute(text("SELECT COUNT(*) FROM task_job")).scalar_one() == 1
+        assert connection.execute(text("SELECT COUNT(*) FROM github_issue")).scalar_one() == 1
+        assert connection.execute(
+            text("SELECT source_thread_id, repository, number, url FROM pull_request_ownership")
+        ).one() == (
+            "github:owner/repo:50",
+            "owner/repo",
+            7,
+            "https://example.test/pull/7",
+        )
     engine.dispose()

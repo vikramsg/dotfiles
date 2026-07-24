@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import sys
 from pathlib import Path
 
 import aiohttp
@@ -9,11 +10,12 @@ from sqlalchemy.exc import NoResultFound
 from ocint.daemon.config import DaemonConfig, DaemonContext
 from ocint.daemon.lch.render import render_job, render_jobs, render_status
 from ocint.daemon.lch.service import attach_to_job
-from ocint.daemon.lch.setup import discover, setup
+from ocint.daemon.lch.setup import discover, ensure_private_directory, setup, upsert_private_environment
 from ocint.daemon.lch.systemd import SubprocessRunner, SystemdLifecycle, SystemdPaths, installed_ocint
 from ocint.daemon.logging import daemon_log_settings
 from ocint.daemon.models import OpenCodeAttachment
 from ocint.daemon.pull_request_job import open_pull_request_job_store
+from ocint.daemon.slack import authenticate_slack_token, validate_configured_slack_token
 
 
 def lifecycle(context: DaemonContext) -> SystemdLifecycle:
@@ -85,6 +87,41 @@ def apply_command(context: DaemonContext) -> None:
     executable = installed_ocint()
     managed_lifecycle.install(executable, config.lifecycle)
     _report_install(context, managed_lifecycle, config, executable, "loaded", modified=False)
+
+
+@lch.command("slack-token")
+@click.pass_obj
+def slack_token_command(context: DaemonContext) -> None:
+    """Validate and install a Slack bot token from hidden input."""
+    token = _read_slack_token()
+    if not token.startswith("xoxb-"):
+        raise click.ClickException("Slack bot token must start with xoxb-")
+    try:
+        configured = context.config().slack if context.config_path.exists() else None
+        auth = asyncio.run(
+            validate_configured_slack_token(configured, token)
+            if configured is not None
+            else authenticate_slack_token(token)
+        )
+    except (aiohttp.ClientError, RuntimeError, ValueError) as error:
+        raise click.ClickException(str(error)) from error
+    environment = lifecycle(context).paths.environment_file
+    ensure_private_directory(environment.parent)
+    upsert_private_environment(environment, {"OCINT_DAEMON_SLACK_BOT_TOKEN": token})
+    context.output.write(
+        f"Slack token: status=installed; workspace={auth.team_id}; bot_user={auth.user_id}; "
+        f"bot_id={auth.bot_id or 'unavailable'}; secret=redacted",
+        nl=True,
+    )
+
+
+def _read_slack_token() -> str:
+    if sys.stdin.isatty():
+        return str(click.prompt("Slack bot token", hide_input=True, type=str)).strip()
+    token = sys.stdin.readline().strip()
+    if not token:
+        raise click.ClickException("Slack bot token is required on stdin")
+    return token
 
 
 @lch.command("uninstall")

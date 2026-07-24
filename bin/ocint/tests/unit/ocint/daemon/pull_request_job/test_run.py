@@ -46,6 +46,13 @@ class StatefulJobStore:
     jobs: builtins.list[PullRequestJob] = field(default_factory=list)
     reconciled: int = 0
 
+    def owned_pull_request(self, source_thread_id: str, repository: str) -> tuple[int, str] | None:
+        del source_thread_id, repository
+        return None
+
+    def set_owned_pull_request(self, source_thread_id: str, repository: str, number: int, url: str) -> None:
+        pass
+
     def submit(self, request: PullRequestJobRequest) -> PullRequestJob:
         for job in self.jobs:
             if job.idempotency_key == request.idempotency_key:
@@ -237,7 +244,7 @@ class StatefulGitHub:
     async def publish(self, request: PublicationRequest) -> PublishedPublication:
         self.calls.append("pull_request")
         self.requests.append(request)
-        return PublishedPublication(url="https://example.test/pull/1")
+        return PublishedPublication(url="https://example.test/pull/1", number=1)
 
 
 class RefusingGitHub:

@@ -6,8 +6,8 @@ from pathlib import Path
 from sqlalchemy import Engine, and_, insert, select, update
 from sqlalchemy.engine import RowMapping
 
-from ocint.daemon.db.schema import job
-from ocint.daemon.models import DirectOrigin, GitHubLogin, ThreadOrigin
+from ocint.daemon.db.schema import job, pull_request_ownership
+from ocint.daemon.models import ActorIdentity, DirectOrigin, ThreadOrigin
 from ocint.daemon.pull_request_job.models import (
     Checkpoint,
     CommitCheckpoint,
@@ -209,6 +209,34 @@ class PullRequestJobRepository:
             rows = connection.execute(select(job).order_by(job.c.created_at.desc()).limit(limit)).mappings().all()
         return [self._job(row) for row in rows]
 
+    def owned_pull_request(self, source_thread_id: str, repository: str) -> tuple[int, str] | None:
+        with self.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(pull_request_ownership).where(
+                        pull_request_ownership.c.source_thread_id == source_thread_id,
+                        pull_request_ownership.c.repository == repository,
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+        return (int(row["number"]), str(row["url"])) if row is not None else None
+
+    def set_owned_pull_request(self, source_thread_id: str, repository: str, number: int, url: str) -> None:
+        with self.engine.begin() as connection:
+            identity = (pull_request_ownership.c.source_thread_id == source_thread_id) & (
+                pull_request_ownership.c.repository == repository
+            )
+            if connection.execute(select(pull_request_ownership.c.source_thread_id).where(identity)).first() is None:
+                connection.execute(
+                    insert(pull_request_ownership).values(
+                        source_thread_id=source_thread_id, repository=repository, number=number, url=url
+                    )
+                )
+            else:
+                connection.execute(update(pull_request_ownership).where(identity).values(number=number, url=url))
+
     def _job(self, row: RowMapping) -> PullRequestJob:
         path = str(row["worktree_path"])
         origin = (
@@ -222,7 +250,7 @@ class PullRequestJobRepository:
         return PullRequestJob(
             id=str(row["id"]),
             idempotency_key=str(row["idempotency_key"]),
-            actor=GitHubLogin(str(row["actor"])),
+            actor=ActorIdentity(str(row["actor"])),
             repository=str(row["repository"]),
             title=str(row["title"]),
             prompt=str(row["prompt"]),

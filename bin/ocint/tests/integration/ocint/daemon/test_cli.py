@@ -16,10 +16,15 @@ from ocint.daemon.models import (
 )
 from ocint.daemon.pull_request_job import PullRequestJobRequest
 from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
+from ocint.daemon.slack import SlackAuth, SlackConfig
 from ocint.presentation import default_cli_context
 
 
 class FakeGitHubGateway:
+    @property
+    def source_prefix(self) -> str:
+        return "github:"
+
     async def observe(self) -> ThreadObservations:
         return ThreadObservations(root=[])
 
@@ -129,3 +134,70 @@ agent_actor = "maintainer"
         ),
     ):
         pass
+
+
+def test_slack_token_command_uses_hidden_stdin_and_preserves_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GIVEN
+    config_home = tmp_path / "config"
+    managed = config_home / "ocint"
+    managed.mkdir(parents=True)
+    config = managed / "daemon.toml"
+    config.write_text(
+        f'''database_path = "{tmp_path / "control.sqlite"}"
+mirror_root = "{tmp_path / "mirrors"}"
+worktree_root = "{tmp_path / "worktrees"}"
+[[repositories]]
+name = "repo"
+remote_url = "git@example.test:owner/repo.git"
+github_repository = "owner/repo"
+author_name = "Agent"
+author_email = "agent@example.test"
+[opencode]
+config_file = "{tmp_path / "opencode.json"}"
+xdg_config_home = "{tmp_path / "opencode-xdg"}"
+xdg_data_home = "{tmp_path / "data"}"
+[git]
+ssh_executable = "/usr/bin/ssh"
+identity_file = "{tmp_path / "identity"}"
+known_hosts_file = "{tmp_path / "known_hosts"}"
+[github]
+agent_actor = "maintainer"
+[slack]
+workspace_id = "T1"
+[[slack.channels]]
+channel_id = "C1"
+repository = "repo"
+authorized_users = ["U1"]
+initial_oldest = "1753380000.123456"
+'''
+    )
+    environment_file = managed / "daemon.env"
+    environment_file.write_text("# preserve\nOTHER=value\nOCINT_DAEMON_API_TOKEN=api\n")
+    environment_file.chmod(0o600)
+
+    async def validate(_config: SlackConfig, token: str) -> SlackAuth:
+        assert token == "xoxb-super-secret"
+        return SlackAuth(user_id="UBOT", bot_id="BBOT", team_id="T1")
+
+    monkeypatch.setattr("ocint.daemon.lch.cli.validate_configured_slack_token", validate)
+
+    # WHEN
+    result = CliRunner().invoke(
+        main,
+        ["daemon", "lch", "slack-token"],
+        input="xoxb-super-secret\n",
+        env={"OCINT_DAEMON_CONFIG": str(config), "XDG_CONFIG_HOME": str(config_home)},
+    )
+
+    # THEN
+    assert result.exit_code == 0, result.output
+    assert "xoxb-super-secret" not in result.output
+    assert "Warning" not in result.output
+    assert "Slack bot token:" not in result.output
+    assert "workspace=T1" in result.output
+    assert "bot_id=BBOT" in result.output
+    assert environment_file.read_text() == (
+        "# preserve\nOTHER=value\nOCINT_DAEMON_API_TOKEN=api\nOCINT_DAEMON_SLACK_BOT_TOKEN=xoxb-super-secret\n"
+    )

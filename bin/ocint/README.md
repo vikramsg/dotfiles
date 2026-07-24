@@ -12,6 +12,9 @@ Command groups:
 
 - `ocint state ...` provides OpenCode usage analytics.
 - `ocint ctx ...` searches and inspects local OpenCode history via a persistent index.
+- `ocint daemon ...` runs durable GitHub and optional private-channel Slack work through OpenCode.
+
+Daemon operator documentation starts at [`docs/daemon.md`](docs/daemon.md).
 
 ## Install
 

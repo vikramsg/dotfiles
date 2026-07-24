@@ -10,8 +10,47 @@ from ocint.daemon.config import (
     RepositoryConfig,
 )
 from ocint.daemon.opencode import OpenCodeConfig
+from ocint.daemon.slack import SlackConfig
 from ocint.presentation import default_cli_context
 from pydantic import ValidationError
+
+
+def test_slack_config_requires_safe_boundary_and_unique_channels() -> None:
+    # GIVEN
+    channel = {
+        "channel_id": "C1",
+        "repository": "repo",
+        "authorized_users": ["U1"],
+        "initial_oldest": "1753380000.123456",
+    }
+
+    # WHEN / THEN
+    config = SlackConfig.model_validate({"workspace_id": "T1", "channels": [channel]})
+    assert config.channels[0].authorized_users == frozenset(("U1",))
+    with pytest.raises(ValidationError, match="initial_oldest"):
+        SlackConfig.model_validate(
+            {
+                "workspace_id": "T1",
+                "channels": [{key: value for key, value in channel.items() if key != "initial_oldest"}],
+            }
+        )
+    with pytest.raises(ValidationError, match="unique"):
+        SlackConfig.model_validate({"workspace_id": "T1", "channels": [channel, channel]})
+
+
+def test_slack_manifest_is_private_polling_only() -> None:
+    # GIVEN
+    manifest = (Path(__file__).parents[4] / "config" / "slack-app-manifest.yaml").read_text()
+
+    # WHEN
+    scopes = {line.removeprefix("      - ").strip() for line in manifest.splitlines() if line.startswith("      - ")}
+
+    # THEN
+    assert scopes == {"groups:history", "chat:write", "reactions:write"}
+    assert "socket_mode_enabled: false" in manifest
+    assert "event_subscriptions" not in manifest
+    assert "slash_commands" not in manifest
+    assert "interactivity" not in manifest
 
 
 def test_config_resolves_repository_and_rejects_duplicate_names(tmp_path: Path) -> None:

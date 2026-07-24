@@ -13,7 +13,12 @@ from ocint.daemon.models import (
     ThreadObservations,
     ThreadOrigin,
 )
-from ocint.daemon.pull_request_job import PullRequestJob, PullRequestJobRequest, PullRequestJobState
+from ocint.daemon.pull_request_job import (
+    PullRequestJob,
+    PullRequestJobRequest,
+    PullRequestJobState,
+    SourcePullRequestJobRequest,
+)
 from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
 from ocint.daemon.tasks.models import MessageClassification, TaskKind, TaskState
 from ocint.daemon.tasks.repository import TaskRepository
@@ -43,17 +48,17 @@ class FakeExecutor:
     def accept(self, request: PullRequestJobRequest) -> PullRequestJob:
         return self.repository.submit(request)
 
-    def accept_retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
-        return self.repository.retry(previous, request)
+    def accept_source_retry(self, previous: PullRequestJob, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        return self.repository.retry(previous, request.work)
 
     def schedule_accepted(self, job_id: str) -> None:
         self.scheduled.append(job_id)
 
-    def submit(self, request: PullRequestJobRequest) -> PullRequestJob:
-        return self.repository.submit(request)
+    def submit_source(self, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        return self.repository.submit(request.work)
 
-    def retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
-        job = self.repository.retry(previous, request)
+    def retry_source(self, previous: PullRequestJob, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        job = self.repository.retry(previous, request.work)
         self.retried.append(job.id)
         self.retry_sources.append(previous.id)
         return job
