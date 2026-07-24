@@ -5,13 +5,11 @@ from pathlib import Path
 
 import pytest
 from ocint.daemon.config import DaemonConfig, RepositoryConfig
+from ocint.daemon.models import Job, JobStage, JobState
 from ocint.daemon.service import (
     Checkpoint,
     CommitCheckpoint,
-    Job,
     JobExecutor,
-    JobStage,
-    JobState,
     PromptDecision,
     PromptIntentCheckpoint,
     PromptObservation,

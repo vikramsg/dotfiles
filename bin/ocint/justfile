@@ -19,7 +19,7 @@ test:
 
 # Run module boundary checks
 tach:
-    uv run --directory "{{justfile_directory()}}" --package ocint --frozen tach check
+    uv run --directory "{{justfile_directory()}}" --package ocint --frozen tach check --exact
 
 # Run ocint static checks
 check:

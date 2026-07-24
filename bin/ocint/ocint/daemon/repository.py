@@ -7,12 +7,10 @@ from sqlalchemy import Engine, and_, insert, select, update
 from sqlalchemy.engine import RowMapping
 
 from ocint.daemon.db.schema import job
+from ocint.daemon.models import Job, JobStage, JobState
 from ocint.daemon.service import (
     Checkpoint,
     CommitCheckpoint,
-    Job,
-    JobStage,
-    JobState,
     PromptIntentCheckpoint,
     PromptSubmittedCheckpoint,
     PullRequestCheckpoint,

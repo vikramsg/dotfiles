@@ -10,24 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ocint.daemon.config import DaemonConfig, RepositoryConfig
 from ocint.daemon.logging import get_logger
+from ocint.daemon.models import Job, JobStage, JobState
 
 logger = get_logger("service")
-
-
-class JobState(StrEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-class JobStage(StrEnum):
-    EXECUTION = "execution"
-    VALIDATION = "validation"
-    COMMIT = "commit"
-    PUSH = "push"
-    PULL_REQUEST = "pull_request"
-    COMPLETE = "complete"
 
 
 class PromptDecision(StrEnum):
@@ -43,31 +28,6 @@ class WorkRequest(BaseModel):
     actor: str = Field(min_length=1)
     repository: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
-
-
-class Job(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    id: str
-    idempotency_key: str
-    actor: str
-    repository: str
-    prompt: str
-    state: JobState
-    stage: JobStage
-    session_id: str
-    server_url: str
-    worktree_path: Path | None
-    branch: str
-    base_revision: str
-    prompt_intended: bool
-    prompt_submitted: bool
-    commit_sha: str
-    pushed: bool
-    pull_request_url: str
-    error: str
-    created_at: str
-    updated_at: str
 
 
 class Worktree(BaseModel):
@@ -184,7 +144,7 @@ class Git(Protocol):
     async def push(self, worktree: Worktree) -> None: ...
 
 
-class GitHub(Protocol):
+class PullRequestPublisher(Protocol):
     async def publish(self, repository: str, branch: str, base: str, title: str, body: str, job_id: str) -> str: ...
 
 
@@ -209,12 +169,14 @@ def prompt_action(observation: PromptObservation) -> PromptDecision:
 
 
 class JobExecutor:
-    def __init__(self, config: DaemonConfig, store: JobStore, opencode: OpenCode, git: Git, github: GitHub) -> None:
+    def __init__(
+        self, config: DaemonConfig, store: JobStore, opencode: OpenCode, git: Git, publisher: PullRequestPublisher
+    ) -> None:
         self.config = config
         self.store = store
         self.opencode = opencode
         self.git = git
-        self.github = github
+        self.publisher = publisher
         self.capacity = asyncio.Semaphore(config.scheduler.capacity)
         self.tasks: dict[str, asyncio.Task[None]] = {}
         self.completed = asyncio.Event()
@@ -388,7 +350,7 @@ class JobExecutor:
             logger.info("job stage completed", job=job.id, stage=JobStage.PUSH.value, branch=worktree.branch)
         if job.stage is JobStage.PULL_REQUEST:
             logger.info("job stage started", job=job.id, stage=JobStage.PULL_REQUEST.value)
-            url = await self.github.publish(
+            url = await self.publisher.publish(
                 repository.github_repository,
                 worktree.branch,
                 repository.default_branch,

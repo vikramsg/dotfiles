@@ -11,6 +11,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, Secret
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ocint._models import CliOutput
+from ocint.daemon.github import GitHubConfig
 
 
 class RepositoryConfig(BaseModel):
@@ -84,14 +85,6 @@ class ApiConfig(BaseModel):
 
     host: str = "127.0.0.1"
     port: int = Field(default=8732, ge=1, le=65535)
-
-
-class GitHubConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    api_url: HttpUrl = HttpUrl("https://api.github.com")
-    issue_label: str = "ocint"
-    agent_actor: str
 
 
 class GitConfig(BaseModel):

@@ -8,11 +8,12 @@ from ocint.daemon.config import DaemonConfig, GitConfig, GitHubConfig, OpenCodeC
 from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
 from ocint.daemon.db.schema import metadata
+from ocint.daemon.github import GitHubRepositoryPolicy
 from ocint.daemon.github.models import GitHubComment, GitHubIssue, GitHubPullRequest, GitHubUser
-from ocint.daemon.github.repository import GitHubRepository
-from ocint.daemon.github.service import GitHubService
+from ocint.daemon.github.runtime import GitHubContext, GitHubIntegration, GitHubRepository, marker
+from ocint.daemon.models import Job
 from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import Job, PullRequestCheckpoint, SessionCheckpoint, WorkRequest, WorktreeCheckpoint
+from ocint.daemon.service import PullRequestCheckpoint, SessionCheckpoint, WorkRequest, WorktreeCheckpoint
 from ocint.daemon.tasks import TaskCoordinator, TaskState
 from ocint.daemon.tasks.models import MessageClassification
 from ocint.daemon.tasks.repository import TaskRepository
@@ -151,13 +152,27 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
             ),
             GitHubComment(
                 id=14,
-                body=(f"agent result\n\n{GitHubService.marker('example-org/project', 5, 'addressed', 'comment:11')}"),
+                body=(f"agent result\n\n{marker('example-org/project', 5, 'addressed', 'comment:11')}"),
                 user=GitHubUser(login="maintainer"),
                 created_at="2026-07-17T10:00:30Z",
             ),
         ],
     )
-    source = GitHubService(config, transport, GitHubRepository(engine), tasks)
+    repository_policies = (
+        GitHubRepositoryPolicy(
+            name="dotfiles",
+            github_repository="example-org/project",
+            actors=frozenset(("maintainer",)),
+        ),
+    )
+    context = GitHubContext(
+        config=config.github,
+        repositories=repository_policies,
+        client=transport,
+        repository=GitHubRepository(engine),
+        tasks=tasks,
+    )
+    source = GitHubIntegration(context=context)
     executor = RecordingExecutor(control)
     coordinator = TaskCoordinator(source, tasks, executor)
 
@@ -279,6 +294,13 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
         ),
         github=GitHubConfig(agent_actor="maintainer"),
     )
+    repository_policies = (
+        GitHubRepositoryPolicy(
+            name="dotfiles",
+            github_repository="example-org/project",
+            actors=frozenset(("maintainer",)),
+        ),
+    )
     transport = FakeGitHubTransport(
         GitHubIssue(
             id=100,
@@ -290,7 +312,14 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
         ),
         [],
     )
-    source = GitHubService(config, transport, GitHubRepository(engine), tasks)
+    context = GitHubContext(
+        config=config.github,
+        repositories=repository_policies,
+        client=transport,
+        repository=GitHubRepository(engine),
+        tasks=tasks,
+    )
+    source = GitHubIntegration(context=context)
     executor = RecordingExecutor(control)
     coordinator = TaskCoordinator(source, tasks, executor)
 
@@ -383,6 +412,13 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
         ),
         github=GitHubConfig(agent_actor="maintainer"),
     )
+    repository_policies = (
+        GitHubRepositoryPolicy(
+            name="dotfiles",
+            github_repository="example-org/project",
+            actors=frozenset(("maintainer",)),
+        ),
+    )
     transport = FakeGitHubTransport(
         GitHubIssue(
             id=100,
@@ -395,14 +431,20 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
         [],
     )
     executor = RecordingExecutor(control)
-    coordinator = TaskCoordinator(GitHubService(config, transport, GitHubRepository(engine), tasks), tasks, executor)
+    context = GitHubContext(
+        config=config.github,
+        repositories=repository_policies,
+        client=transport,
+        repository=GitHubRepository(engine),
+        tasks=tasks,
+    )
+    source = GitHubIntegration(context=context)
+    coordinator = TaskCoordinator(source, tasks, executor)
 
     # WHEN
     await coordinator.reconcile()
     restarted_executor = RecordingExecutor(control)
-    restarted = TaskCoordinator(
-        GitHubService(config, transport, GitHubRepository(engine), tasks), tasks, restarted_executor
-    )
+    restarted = TaskCoordinator(source, tasks, restarted_executor)
     await restarted.reconcile()
 
     # THEN

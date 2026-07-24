@@ -6,6 +6,14 @@ class GitHubUser(BaseModel):
     login: str
 
 
+class GitHubRepositoryPolicy(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    github_repository: str
+    actors: frozenset[str] = Field(default_factory=frozenset)
+
+
 class GitHubPullReference(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
     url: str = ""

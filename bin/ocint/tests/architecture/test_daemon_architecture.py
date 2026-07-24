@@ -1,6 +1,8 @@
 import ast
 import json
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -57,10 +59,11 @@ def test_daemon_core_import_direction_points_from_service_to_config() -> None:
     }
 
     # THEN
-    assert not any(module.startswith("ocint.daemon") for module in config_imports)
+    assert not any(module.startswith("ocint.daemon") and module != "ocint.daemon.github" for module in config_imports)
     assert service_imports.intersection({"ocint.daemon.config"}) == {"ocint.daemon.config"}
     assert not any(
-        module.startswith("ocint.daemon.") and module not in {"ocint.daemon.config", "ocint.daemon.logging"}
+        module.startswith("ocint.daemon.")
+        and module not in {"ocint.daemon.config", "ocint.daemon.logging", "ocint.daemon.models"}
         for module in service_imports
     )
 
@@ -101,6 +104,7 @@ def test_production_uses_the_github_facade() -> None:
         "ocint.daemon.github.models",
         "ocint.daemon.github.repository",
         "ocint.daemon.github.service",
+        "ocint.daemon.github.integration",
     }
 
     # WHEN
@@ -116,6 +120,45 @@ def test_production_uses_the_github_facade() -> None:
     # THEN
     assert imported.isdisjoint(private)
     assert not (daemon / "github.py").exists()
+
+
+def test_github_config_import_does_not_initialize_runtime_modules() -> None:
+    # GIVEN
+    package = Path(__file__).parents[2]
+    script = """
+import json
+import sys
+import ocint.daemon.github.config
+names = [
+    "ocint.daemon.github.client",
+    "ocint.daemon.github.repository",
+    "ocint.daemon.github.service",
+    "ocint.daemon.github.integration",
+    "ocint.daemon.github.runtime",
+]
+print(json.dumps([name for name in names if name in sys.modules]))
+"""
+
+    # WHEN
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=package,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    # THEN
+    assert json.loads(result.stdout) == []
+
+
+def test_github_runtime_facade_imports() -> None:
+    # GIVEN / WHEN
+    from ocint.daemon.github import runtime
+
+    # THEN
+    assert runtime.GitHubContext
+    assert runtime.GitHubIntegration
 
 
 def test_task_core_is_provider_neutral() -> None:

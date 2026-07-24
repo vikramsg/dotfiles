@@ -4,8 +4,9 @@ from pathlib import Path
 import pytest
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
+from ocint.daemon.models import Job
 from ocint.daemon.repository import ControlRepository
-from ocint.daemon.service import Job, WorkRequest
+from ocint.daemon.service import WorkRequest
 from ocint.daemon.tasks.models import MessageClassification, Task, TaskKind, TaskState
 from ocint.daemon.tasks.repository import TaskRepository
 from ocint.daemon.tasks.run import TaskCoordinator

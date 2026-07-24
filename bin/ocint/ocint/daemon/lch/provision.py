@@ -16,16 +16,17 @@ from urllib.parse import urlparse
 import click
 from pydantic import BaseModel, ConfigDict, Field
 
+# FIXME: lch importing feature config directly needs to be refactored.
 from ocint.daemon.config import (
     DaemonConfig,
     DaemonContext,
     GitConfig,
-    GitHubConfig,
     LifecycleConfig,
     LoggingConfig,
     OpenCodeConfig,
     RepositoryConfig,
 )
+from ocint.daemon.github import GitHubConfig
 from ocint.daemon.lch.systemd import CommandRunner, SystemdLifecycle, installed_ocint
 
 

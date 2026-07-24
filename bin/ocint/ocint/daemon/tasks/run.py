@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from typing import Protocol
 
 from ocint.daemon.logging import get_logger
-from ocint.daemon.service import Job, JobState, WorkRequest
+from ocint.daemon.models import Job, JobState
+from ocint.daemon.service import WorkRequest
 from ocint.daemon.tasks.models import (
     FailedTaskRetry,
     RetryAttachment,

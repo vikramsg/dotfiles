@@ -18,7 +18,8 @@ from ocint.daemon.api import create_api_router
 from ocint.daemon.config import DaemonConfig, DaemonContext, LoggingConfig
 from ocint.daemon.db import create_daemon_engine, current_daemon_head_revision, migrate_daemon_db
 from ocint.daemon.git import GitManager
-from ocint.daemon.github import GitHubClient, GitHubRepository, GitHubService
+from ocint.daemon.github import GitHubRepositoryPolicy
+from ocint.daemon.github.runtime import GitHubClient, GitHubContext, GitHubIntegration, GitHubRepository
 from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle
 from ocint.daemon.opencode import OpenCodeClient
 from ocint.daemon.repository import ControlRepository
@@ -184,9 +185,24 @@ def create_daemon_app(context: DaemonContext) -> tuple[FastAPI, DaemonConfig]:
     )
     github_client = GitHubClient(str(config.github.api_url), github_token)
     tasks = TaskRepository(engine)
-    github = GitHubService(config, github_client, GitHubRepository(engine), tasks)
-    executor = JobExecutor(config, repository, opencode, git, github)
-    coordinator = TaskCoordinator(github, tasks, executor)
+    repository_policies = tuple(
+        GitHubRepositoryPolicy(
+            name=repo.name,
+            github_repository=repo.github_repository,
+            actors=repo.actors,
+        )
+        for repo in config.repositories
+    )
+    github = GitHubContext(
+        config=config.github,
+        repositories=repository_policies,
+        client=github_client,
+        repository=GitHubRepository(engine),
+        tasks=tasks,
+    )
+    github_integration = GitHubIntegration(context=github)
+    executor = JobExecutor(config, repository, opencode, git, github_integration)
+    coordinator = TaskCoordinator(github_integration, tasks, executor)
     shutdown_event = asyncio.Event()
 
     @asynccontextmanager

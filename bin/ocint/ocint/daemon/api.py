@@ -6,7 +6,8 @@ from typing import Annotated, Protocol
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
 
-from ocint.daemon.service import Job, WorkRequest, attach_command
+from ocint.daemon.models import Job
+from ocint.daemon.service import WorkRequest, attach_command
 
 
 class HealthResponse(BaseModel):

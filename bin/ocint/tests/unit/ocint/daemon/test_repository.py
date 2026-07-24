@@ -3,11 +3,10 @@ from pathlib import Path
 import pytest
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
+from ocint.daemon.models import JobStage, JobState
 from ocint.daemon.repository import ControlRepository
 from ocint.daemon.service import (
     CommitCheckpoint,
-    JobStage,
-    JobState,
     PromptIntentCheckpoint,
     PromptSubmittedCheckpoint,
     PullRequestCheckpoint,

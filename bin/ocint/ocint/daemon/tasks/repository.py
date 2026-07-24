@@ -6,7 +6,6 @@ from sqlalchemy import Engine, Select, exists, insert, select, update
 from sqlalchemy.engine import Connection, RowMapping
 
 from ocint.daemon.db.schema import job, task, task_job, task_message, thread, thread_message
-from ocint.daemon.service import JobState
 from ocint.daemon.tasks.models import (
     FailedTaskClaim,
     FailedTaskRetry,
@@ -219,6 +218,8 @@ class TaskRepository:
             return RetryAttachment.ATTACHED
 
     def reusable_job_id(self, thread_id: int) -> str:
+        from ocint.daemon.models import JobState
+
         with self.engine.connect() as connection:
             value = (
                 connection.execute(
