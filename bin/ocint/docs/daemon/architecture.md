@@ -19,6 +19,10 @@ an unchanged idle interval. It is not a permanently running queue worker.
 
 ## Module Boundaries
 
+The [Open SWE Slack integration research](../research/open-swe-slack.md)
+documents a comparable provider-adapter design, its LangGraph persistence
+contracts, and the boundaries worth preserving if the daemon gains Slack input.
+
 | Module | Responsibility |
 | --- | --- |
 | `cli.py` | Click composition, concrete dependencies, and FastAPI lifespan |
