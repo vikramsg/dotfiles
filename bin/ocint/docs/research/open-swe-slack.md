@@ -44,6 +44,96 @@ LangGraph deployment loads that app through `langgraph.json`. See
 and
 [`langgraph.json`](https://github.com/langchain-ai/open-swe/blob/998b808484cad570890ea463cb5ff3c7d8cb43aa/langgraph.json#L1-L25).
 
+## Slack Connectivity Options
+
+Slack connectivity is not limited to webhooks and polling. For a modern Slack
+app, the Events API has two first-class, mutually exclusive inbound transports:
+
+| Option | Connection | Carries | Operational model |
+| --- | --- | --- | --- |
+| Events API with HTTP request URLs | Slack makes HTTPS `POST` requests to a public app endpoint | Subscribed events | Stateless receivers; verify each signature, acknowledge within three seconds, handle retries and deduplicate events |
+| Events API with Socket Mode | The app opens an outbound authenticated WebSocket to Slack | The same subscribed events, plus interactive payloads and slash commands | Long-running connection worker; acknowledge envelopes, reconnect when Slack refreshes URLs, and handle disconnects |
+| Web API | The app makes authenticated HTTPS calls to Slack | Point reads and writes | Used with either inbound transport; can read history or post/update messages |
+| Incoming webhook | The app posts JSON to a secret Slack URL | Outbound messages into one configured Slack destination | Simple write-only notification path; despite the name, it is incoming to Slack, not incoming to the app |
+| OIDC/OAuth | Browser redirects and HTTPS token exchange | Installation, authorization, or user identity | Control-plane authentication, not message/event delivery |
+
+The word "webhook" is easy to misread here. Developers often call Events API
+HTTP callbacks webhooks because Slack calls the app. Slack's named "Incoming
+Webhooks" product goes in the opposite direction: the app calls Slack to post a
+message. Open SWE uses Events API HTTP callbacks and the Web API; it does not use
+Slack Incoming Webhooks.
+
+Slack's [Events API documentation](https://docs.slack.dev/apis/events-api/)
+explicitly presents HTTP request URLs and Socket Mode as its two delivery
+choices. Interactive components and slash commands similarly use an HTTP
+request URL in HTTP mode or Socket Mode envelopes when Socket Mode is enabled.
+The old Real Time Messaging API is also WebSocket-based, but Slack marks it
+[legacy](https://docs.slack.dev/legacy/legacy-rtm-api/) and recommends Events
+API or Socket Mode for current apps.
+
+### What Socket Mode Is
+
+Socket Mode removes the need for a publicly reachable callback server:
+
+```text
+app -- HTTPS apps.connections.open + xapp token --> Slack
+app <-- temporary wss:// URL --------------------- Slack
+app == persistent authenticated WebSocket ======= Slack
+app <-- event/interactivity envelope ------------- Slack
+app -- acknowledgement with envelope_id --------> Slack
+```
+
+The app creates an app-level `xapp-...` token, calls
+`apps.connections.open`, and connects to the returned temporary `wss://` URL.
+Slack pushes Events API, Block Kit interaction, and slash-command envelopes down
+that connection. The app acknowledges each envelope by returning its
+`envelope_id`; it does not verify an HMAC signature for each payload because the
+WebSocket is already authenticated. URLs and connections refresh, so the app
+must maintain a reconnect loop. Slack allows multiple active connections, but
+any envelope may arrive on any one of them.
+
+Socket Mode is useful for local development, private networks, and corporate
+firewalls because the application only needs outbound connectivity. Its costs
+are a continuously running connection manager, reconnect and load-balancing
+logic, and a Slack restriction that Socket Mode apps cannot currently be listed
+in the public Slack Marketplace. Slack documents the complete lifecycle in
+[Using Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/).
+
+### Polling
+
+An app can periodically call Web API methods such as
+`conversations.history` and `conversations.replies`, but Slack does not present
+that as the alternative Events API transport. Polling has higher latency, spends
+API rate-limit budget when nothing changed, requires cursors/watermarks and
+deduplication, and does not naturally replace all event, interaction, slash
+command, app-lifecycle, or reaction delivery. It is appropriate for
+reconciliation and backfill, not as the default bot trigger mechanism. The
+[Web API](https://docs.slack.dev/apis/web-api/) is an authenticated HTTP RPC API
+for querying and changing workspace state.
+
+Open SWE does not poll. Slack pushes a trigger to its HTTP routes; only then does
+Open SWE call `conversations.info`, `conversations.replies`, and `users.info` to
+enrich that event with current context. Those are event-driven, on-demand Web
+API reads.
+
+### Why Open SWE Uses HTTP
+
+Open SWE chooses HTTP request URLs for both Events API and Block Kit
+interactivity:
+
+- Its manifest sets `socket_mode_enabled` to `false` and configures public
+  `/webhooks/slack` and `/webhooks/slack/interactivity` URLs.
+- Its FastAPI routes parse HTTP bodies and headers, verify Slack HMAC signatures,
+  answer URL verification, and enqueue background work.
+- It has no `SLACK_APP_TOKEN`, `apps.connections.open` call, WebSocket client,
+  envelope acknowledgement, or reconnect manager.
+
+Switching Open SWE to Socket Mode would preserve most code after event
+normalization, but would require a new inbound adapter. That adapter would
+unwrap and acknowledge Socket Mode envelopes, then call the existing Slack
+service functions. The current HTTP routes themselves cannot consume Socket
+Mode traffic.
+
 ## Event To Agent Flow
 
 ```text
