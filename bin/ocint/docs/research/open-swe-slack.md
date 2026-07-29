@@ -134,6 +134,81 @@ unwrap and acknowledge Socket Mode envelopes, then call the existing Slack
 service functions. The current HTTP routes themselves cannot consume Socket
 Mode traffic.
 
+### Ngrok And Callback Deployment
+
+Yes, a tunnel such as ngrok can expose Open SWE's callback routes without
+deploying the backend on a public host:
+
+```text
+Slack -> https://stable-name.ngrok.app/webhooks/slack
+              -> encrypted tunnel -> localhost:2024 -> Open SWE FastAPI
+```
+
+This is not hypothetical: Open SWE's installation guide starts
+`ngrok http 2024` before configuring Slack, GitHub, and Linear. It recommends a
+fixed ngrok URL so callback settings do not need to change after every restart.
+For production, however, the same guide says to deploy the backend on LangGraph
+Platform and replace ngrok URLs with the deployment's stable HTTPS URLs. See
+Open SWE's
+[local tunnel instructions](https://github.com/langchain-ai/open-swe/blob/998b808484cad570890ea463cb5ff3c7d8cb43aa/docs/INSTALLATION.md#L31-L43)
+and
+[production instructions](https://github.com/langchain-ai/open-swe/blob/998b808484cad570890ea463cb5ff3c7d8cb43aa/docs/INSTALLATION.md#L636-L657).
+
+A tunnel is a good fit for development, demonstrations, and a small internal
+deployment when inbound firewall changes are undesirable. It gives the existing
+HTTP implementation the smallest adoption cost and ngrok's inspector/replay
+tools improve webhook debugging. A production tunnel needs a stable reserved
+domain, supervised tunnel and backend processes, health monitoring, and an
+appropriate service plan. An ephemeral developer URL or a laptop process is not
+a production endpoint. Open SWE must continue verifying Slack's signing secret
+at the application boundary even if the tunnel offers its own
+[Slack webhook verification](https://ngrok.com/docs/integrations/webhooks/slack-webhooks/).
+
+### Latency And User Experience
+
+Ngrok does not make callbacks faster. It adds an edge and tunnel hop compared
+with a directly reachable deployment. Socket Mode avoids per-event HTTP setup
+through a persistent connection, but Slack characterizes HTTP's overhead as
+small and recommends HTTP request URLs for production reliability and simpler
+horizontal scaling. See Slack's
+[HTTP and Socket Mode comparison](https://docs.slack.dev/apis/events-api/comparing-http-socket-mode).
+
+The user-visible response time is approximately:
+
+```text
+Slack delivery
+  + callback acknowledgement
+  + queue/run dispatch
+  + repository and agent work
+  + outbound chat.postMessage
+```
+
+For an agent, repository and model work dominate. Transport choice normally
+changes only the first part. The better user experience comes from acknowledging
+the Slack delivery within three seconds, durably enqueueing work, immediately
+showing a reaction or assistant status, and posting incremental updates while
+the long-running work continues.
+
+Open SWE returns its accepted response only after it fetches channel context and
+resolves repository configuration. Those operations may call Slack and LangGraph
+over the network before `background_tasks.add_task`, so the current route is not
+a strict receive-and-ack boundary. A slow dependency can consume Slack's
+three-second acknowledgement budget regardless of whether ingress is direct,
+tunneled, or Socket Mode. A latency-focused revision should move all enrichment
+and repository resolution behind a durable queue, retaining only raw-body
+signature verification, minimal payload validation, event-ID deduplication, and
+enqueueing before the response.
+
+Recommended choices:
+
+| Situation | Recommendation |
+| --- | --- |
+| Local Open SWE development | Use ngrok with a stable development domain; it matches the existing routes and upstream guide |
+| Small internal trial behind NAT | A supervised stable tunnel is the quickest path; measure acknowledgement time and availability |
+| Normal production deployment | Use a stable public HTTPS endpoint close to the application runtime, as Open SWE and Slack recommend |
+| Production where inbound HTTPS is prohibited | Add a Socket Mode adapter and operate its persistent connection lifecycle |
+| Lowest perceived agent latency | Optimize immediate acknowledgement, durable dispatch, status/reaction feedback, and model/run startup rather than choosing a tunnel |
+
 ## Event To Agent Flow
 
 ```text
@@ -142,30 +217,30 @@ Slack event
    | POST /webhooks/slack
    | X-Slack-Signature + X-Slack-Request-Timestamp
    v
-verify signature -> classify mention/DM/reaction -> acknowledge immediately
-                                                   |
-                                                   v
-                                          FastAPI background task
-                                                   |
-                     conversations.info/replies + users.info
-                                                   |
-                                                   v
-                        normalize Slack context and resolve repository/user
-                                                   |
-                 UUID(MD5(channel_id + ":" + thread_ts))
-                                                   |
-                                                   v
-                     LangGraph thread metadata + durable agent run
-                                                   |
-                                                   v
-                 agent slack_* tools -> Slack Web API -> thread reply
+verify signature -> classify mention/DM/reaction
+   |
+   | conversations.info + repository resolution (before acknowledgement)
+   v
+schedule FastAPI background task -> return accepted
+   |
+   | conversations.replies + users.info
+   v
+normalize Slack context and resolve user
+   |
+   | UUID(MD5(channel_id + ":" + thread_ts))
+   v
+LangGraph thread metadata + durable agent run
+   |
+   v
+agent slack_* tools -> Slack Web API -> thread reply
 ```
 
 The event route first verifies Slack's HMAC signature and five-minute replay
 window. It handles Slack URL verification, reaction feedback, app mentions,
 DMs, selected untagged two-party replies, and ready-plan replies. Bot messages
-are rejected to prevent loops. The route returns an accepted response and puts
-the slower processing in a FastAPI background task. See
+are rejected to prevent loops. It resolves channel and repository context, then
+returns an accepted response and puts the remaining processing in a FastAPI
+background task. See
 [`slack_routes.py`](https://github.com/langchain-ai/open-swe/blob/998b808484cad570890ea463cb5ff3c7d8cb43aa/agent/webhooks/slack_routes.py#L11-L166)
 and the
 [signature verifier](https://github.com/langchain-ai/open-swe/blob/998b808484cad570890ea463cb5ff3c7d8cb43aa/agent/utils/slack.py#L116-L141).
