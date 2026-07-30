@@ -1,10 +1,3 @@
-1. Permission issues
-    * even after giving *.local permissions it keeps doing arbitrary permission questions
-2. Add a teaching agent. That does not read files and only answers based on idiomatic usage
-3. Create a plugin that auto approves any read/glob access to .local, .config... etc
-    * And auto denies everything else
-4. The implementer, since it creates tests first, always then creates backward compatiblity shims after
-
 ## 5.6
 
 - Too happy to invoke subagents
@@ -12,6 +5,8 @@
 - We need a build prompt that has sections about invoking subagents that have the same lessons as our orchestrator
   - Provide full context to implementation agent, especially if any decisions have already been made.
   - Ask it to provide all decisions that it did during implementation not already decided 
+- Need more control
+  - Planner should be smaller and always instruction to add implementation notes.md 
 
 ## Workflow
 
