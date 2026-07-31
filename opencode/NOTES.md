@@ -7,6 +7,7 @@
   - Ask it to provide all decisions that it did during implementation not already decided 
 - Need more control
   - Planner should be smaller and always instruction to add implementation notes.md 
+- docs, tickets everything leans how not what. Do not write a plan in a doc unless its specifically a plan
 
 ## Workflow
 

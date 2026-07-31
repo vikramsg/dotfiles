@@ -38,6 +38,7 @@
   {
     "context": "Terminal",
     "bindings": {
+      "shift-enter": ["terminal::SendText", "\u001b\r"],
       "ctrl-cmd-left": "workspace::ActivatePaneLeft",
       "ctrl-cmd-right": "workspace::ActivatePaneRight",
       "ctrl-cmd-up": "workspace::ActivatePaneUp",
