@@ -98,9 +98,6 @@ fi
 
 #########################################
 # OpenCode
-# Enable plan-file mode so Plan can maintain one session plan under .opencode/plans.
-alias opencode='OPENCODE_EXPERIMENTAL_PLAN_MODE=true command opencode'
-
 # OpenCode pinned version
 alias oc-ping="OPENCODE_DISABLE_AUTOUPDATE=1 npx -y opencode-ai@1.14.30"
 
