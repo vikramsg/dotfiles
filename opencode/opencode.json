@@ -18,7 +18,7 @@
     },
     "agent": {
         "build": {
-            "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}",
+            "prompt": "{file:./prompts/build.txt}\n\n{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}",
             "options": {
                 "serviceTier": "priority"
             }

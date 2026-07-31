@@ -68,7 +68,7 @@ The repo keeps active prompt files under `opencode/prompts/` and composes them
 from reusable layers:
 
 ```text
-Build   = base-gpt.txt + shared.txt
+Build   = build.txt + base-gpt.txt + shared.txt
 Discuss = base-gpt.txt + shared.txt + discuss.txt
 ```
 
@@ -78,7 +78,7 @@ The agent configuration uses multiple file substitutions in composition order:
 {
   "agent": {
     "build": {
-      "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}"
+      "prompt": "{file:./prompts/build.txt}\n\n{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}"
     },
     "plan": {
       "disable": true
@@ -93,9 +93,10 @@ The agent configuration uses multiple file substitutions in composition order:
 
 `base-gpt.txt` is the active copy of OpenCode's GPT provider prompt. It pins
 Build and Discuss to the same known base instead of making active configuration
-depend on the reference material under `docs/prompts/`. `shared.txt` contains
-cross-agent engineering preferences, while `discuss.txt` contains the strict
-read-only constraint and discussion behavior.
+depend on the reference material under `docs/prompts/`. `build.txt` identifies
+Build mode before the shared instructions and records new implementation
+decisions. `shared.txt` contains cross-agent engineering preferences, while
+`discuss.txt` contains the strict read-only constraint and discussion behavior.
 
 Prompt files are plain text and do not need YAML frontmatter. Frontmatter is only
 needed when defining an agent as a Markdown file under `agents/` or
