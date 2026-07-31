@@ -64,22 +64,38 @@ OpenCode has two separate plan-mode prompt layers that are easy to confuse:
 - `agent.plan.prompt` configures the plan agent's base system prompt.
 - The plan-mode reminder is injected separately by OpenCode when the active agent is `plan`.
 
-This repo configures the plan agent to use a copied GPT base prompt:
+This repo keeps active prompt files under `opencode/prompts/` and composes them
+from reusable layers:
+
+```text
+Build = base-gpt.txt + shared.txt
+Plan  = base-gpt.txt + shared.txt + plan-discussion.txt
+```
+
+The agent configuration uses multiple file substitutions in composition order:
 
 ```json
 {
   "agent": {
+    "build": {
+      "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}"
+    },
     "plan": {
-      "prompt": "{file:./prompts/plan-gpt.txt}",
-      "options": {
-        "serviceTier": "priority"
-      }
+      "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}\n\n{file:./prompts/plan-discussion.txt}"
     }
   }
 }
 ```
 
-The prompt file is plain text and does not need YAML frontmatter. Frontmatter is only needed when defining an agent as a Markdown file under `agents/` or `.opencode/agents/`.
+`base-gpt.txt` is the active copy of OpenCode's GPT provider prompt. The copy
+pins Build and Plan to the same known base instead of making active configuration
+depend on the reference material under `docs/prompts/`. `shared.txt` contains
+cross-agent engineering preferences, while `plan-discussion.txt` contains only
+Plan-specific discussion behavior.
+
+Prompt files are plain text and do not need YAML frontmatter. Frontmatter is only
+needed when defining an agent as a Markdown file under `agents/` or
+`.opencode/agents/`.
 
 Setting `agent.plan.prompt` replaces the provider-selected base prompt for the plan agent. It does not configure or remove OpenCode's synthetic plan reminders.
 

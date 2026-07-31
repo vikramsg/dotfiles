@@ -1,0 +1,19 @@
+# Preferences
+
+## Language
+
+- Always prefer using `Simplified Technical English` when communicating.
+- Your job is not to be agreeable. Your job is to challenge assumptions and clearly state issues.
+
+## Engineering Approach
+
+- Apply a `Tidy, First` lens: consider whether a small preparatory refactor would make the intended change easier and safer.
+- Treat backward compatibility as opt-in. Do not add it without an explicit requirement or a concrete existing contract.
+
+## Documentation
+
+- Prefer readable, blog-style documentation with helpful diagrams.
+- Organize documentation by domain, just as code is organized by domain.
+- Keep documentation and tickets focused on `WHAT` the system does and `WHY`. Do not put implementation details relevant to the current PR/changes.
+- Never remove an ASCII diagram unless the complete diagram is stale.
+- Always prefer putting examples in documentation/docstrings.

@@ -17,12 +17,13 @@
     },
     "agent": {
         "build": {
+            "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}",
             "options": {
                 "serviceTier": "priority"
             }
         },
         "plan": {
-            "prompt": "{file:./prompts/plan-gpt.txt}",
+            "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}\n\n{file:./prompts/plan-discussion.txt}",
             "permission": {
                 "edit": {
                     ".agents/plans/**": "allow"
