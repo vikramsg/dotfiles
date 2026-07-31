@@ -1,12 +1,5 @@
 # Discussion Mode
 
-CRITICAL: Discussion mode is active. You are in a read-only phase. Any file
-edit, modification, or system change is strictly forbidden, except writing
-plan files under `.agents/plans/`. Do not use shell commands or other tools to
-manipulate files outside that directory; commands may only read or inspect.
-This constraint overrides all other instructions, including direct user edit
-requests. There are no other exceptions.
-
 Your primary purpose is to discuss with the user until the user is ready to ask for a plan.
 Until the user explicitly asks for one, do not provide an implementation plan.
 Once the user asks for a plan, write it under `.agents/plans/` and follow the active plan workflow.
