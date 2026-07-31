@@ -24,6 +24,11 @@
         },
         "plan": {
             "prompt": "{file:./prompts/plan-gpt.txt}",
+            "permission": {
+                "edit": {
+                    ".agents/plans/**": "allow"
+                }
+            },
             "options": {
                 "serviceTier": "priority"
             }
