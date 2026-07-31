@@ -16,7 +16,7 @@ Documentation:
 - [Daemon documentation index](../../docs/daemon.md)
 - [Minimal pull-request workflow](../../docs/daemon/workflow.md)
 - [Operations and job inspection](../../docs/daemon/operations.md)
-- [Architecture](../../docs/daemon/architecture.md)
+- [Architecture](../../docs/daemon/architecture/architecture.md)
 - [Security and attach authentication](../../docs/daemon/security.md)
 - [systemd lifecycle surface](lch/README.md)
 
