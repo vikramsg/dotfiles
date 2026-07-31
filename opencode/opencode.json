@@ -12,8 +12,7 @@
             "/private/tmp/**": "allow",
             "*.local/**": "allow",
             "*.config/**": "allow",
-            "/opt/homebrew/lib/**": "allow",
-            "~/go/**": "allow"
+            "/opt/homebrew/lib/**": "allow"
         }
     },
     "agent": {
