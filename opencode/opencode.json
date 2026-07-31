@@ -29,7 +29,7 @@
         "discuss": {
             "description": "Discusses designs and writes implementation plans without modifying the system.",
             "mode": "primary",
-            "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}\n\n{file:./prompts/discuss.txt}",
+            "prompt": "{file:./prompts/plan.txt}\n\n{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}\n\n{file:./prompts/discuss.txt}",
             "permission": {
                 "question": "deny",
                 "plan_exit": "allow",
