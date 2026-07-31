@@ -1,6 +1,6 @@
 ---
 description: Answer my question without running a subtask/subagent 
-agent: plan 
+agent: discuss
 subtask: false
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: Provide a complete actionable implementation plan ready for a coding agent to use. 
-agent: plan 
+agent: discuss
 subtask: false
 ---
 $ARGUMENTS

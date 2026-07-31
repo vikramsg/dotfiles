@@ -57,19 +57,19 @@ But it is restricted by any denies etc settings in your workspace.
     "/private/tmp/**": "allow"
 ```
 
-## Configuring Plan mode
+## Configuring the Discuss agent
 
-OpenCode has two separate plan-mode prompt layers that are easy to confuse:
+This configuration disables OpenCode's built-in `plan` agent and uses a custom
+primary agent named `discuss`. `discuss` is the default agent and has Plan-like
+read-only permissions, with one exception: it may write plans under
+`.agents/plans/`.
 
-- `agent.plan.prompt` configures the plan agent's base system prompt.
-- The plan-mode reminder is injected separately by OpenCode when the active agent is `plan`.
-
-This repo keeps active prompt files under `opencode/prompts/` and composes them
+The repo keeps active prompt files under `opencode/prompts/` and composes them
 from reusable layers:
 
 ```text
-Build = base-gpt.txt + shared.txt
-Plan  = base-gpt.txt + shared.txt + plan-discussion.txt
+Build   = base-gpt.txt + shared.txt
+Discuss = base-gpt.txt + shared.txt + discuss.txt
 ```
 
 The agent configuration uses multiple file substitutions in composition order:
@@ -81,43 +81,29 @@ The agent configuration uses multiple file substitutions in composition order:
       "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}"
     },
     "plan": {
-      "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}\n\n{file:./prompts/plan-discussion.txt}"
+      "disable": true
+    },
+    "discuss": {
+      "mode": "primary",
+      "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}\n\n{file:./prompts/discuss.txt}"
     }
   }
 }
 ```
 
-`base-gpt.txt` is the active copy of OpenCode's GPT provider prompt. The copy
-pins Build and Plan to the same known base instead of making active configuration
+`base-gpt.txt` is the active copy of OpenCode's GPT provider prompt. It pins
+Build and Discuss to the same known base instead of making active configuration
 depend on the reference material under `docs/prompts/`. `shared.txt` contains
-cross-agent engineering preferences, while `plan-discussion.txt` contains only
-Plan-specific discussion behavior.
+cross-agent engineering preferences, while `discuss.txt` contains the strict
+read-only constraint and discussion behavior.
 
 Prompt files are plain text and do not need YAML frontmatter. Frontmatter is only
 needed when defining an agent as a Markdown file under `agents/` or
 `.opencode/agents/`.
 
-Setting `agent.plan.prompt` replaces the provider-selected base prompt for the plan agent. It does not configure or remove OpenCode's synthetic plan reminders.
-
-### Plan reminder
-
-In legacy plan mode, OpenCode injects a synthetic read-only reminder from upstream `packages/opencode/src/session/prompt/plan.txt` into the latest user message. This reminder is not controlled by `agent.plan.prompt`.
-
-Do not copy the built-in plan reminder into `agent.plan.prompt`. That duplicates plan-mode instructions and removes the normal provider base prompt for the plan agent.
-
-### Build-switch reminder
-
-When switching from `plan` to `build`, OpenCode injects a separate synthetic reminder from upstream `packages/opencode/src/session/prompt/build-switch.txt`:
-
-```txt
-<system-reminder>
-Your operational mode has changed from plan to build.
-You are no longer in read-only mode.
-You are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.
-</system-reminder>
-```
-
-This handoff reminder is also separate from `agent.plan.prompt`.
+OpenCode injects its synthetic Plan reminders only when the active agent is the
+built-in `plan` agent. Disabling that agent avoids conflicting reminders;
+`discuss.txt` defines the complete Discuss workflow instead.
 
 ## State
 
@@ -192,15 +178,15 @@ Bind left and right to cycle favorite models in `tui.json`:
 
 Favorite models are stored by OpenCode in local TUI state, not in `opencode.json`.
 
-## Dual Mode Models (Plan vs. Build)
+## Dual Mode Models (Discuss vs. Build)
 
-OpenCode utilizes a dual-mode workflow:
-1.  **Plan Mode (Read-Only):** The AI analyzes code and proposes a strategy.
-2.  **Build Mode (Execution):** The AI writes code and executes commands based on the approved plan.
+This configuration uses a dual-agent workflow:
+1.  **Discuss (Read-Only):** The AI analyzes and discusses the design. It writes a plan only when asked.
+2.  **Build (Execution):** The AI writes code and executes commands based on the approved plan.
 
 *(You can toggle between these modes instantly in the terminal by pressing the **Tab** key.)*
 
-You can optimize cost and performance by configuring different models for each mode within your `opencode.json` configuration file under the `"agent"` key.
+You can optimize cost and performance by configuring different models for each agent within your `opencode.json` configuration file under the `"agent"` key.
 
 ### Configuration Example
 To use a fast, inexpensive model for planning, and a more capable model for building, add the following to your configuration:
@@ -208,13 +194,14 @@ To use a fast, inexpensive model for planning, and a more capable model for buil
 ```json
 {
   "agent": {
-    "plan": {
+    "discuss": {
       "model": "anthropic/claude-3-haiku",
       "temperature": 0.1,
-      "tools": {
-        "write": false,
-        "edit": false,
-        "bash": false
+      "permission": {
+        "edit": {
+          "*": "deny",
+          ".agents/plans/**": "allow"
+        }
       }
     },
     "build": {
@@ -229,7 +216,8 @@ To use a fast, inexpensive model for planning, and a more capable model for buil
   }
 }
 ```
-*Note: Disabling the `write`, `edit`, and `bash` tools in Plan Mode ensures the AI cannot accidentally modify your system while planning.*
+The Discuss prompt also forbids shell-based modifications. The edit permission
+enforces the `.agents/plans/` exception at the tool level.
 
 ## Custom Instructions & Rules (`rules.md`)
 

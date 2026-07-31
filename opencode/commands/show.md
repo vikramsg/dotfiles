@@ -1,6 +1,6 @@
 ---
 description: Show me the main parts of the action plan 
-agent: plan 
+agent: discuss
 subtask: false
 ---
 
