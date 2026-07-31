@@ -1,8 +1,9 @@
 # ocint Daemon
 
-The ocint daemon turns authorized, labelled GitHub issues into validated pull
-requests. A systemd user timer starts one bounded invocation; the daemon drains
-durable work and exits after an unchanged idle interval.
+The ocint daemon turns authorized, labelled GitHub issues and optional private
+Slack channel messages into validated pull requests. GitHub remains the pull
+request publisher. A systemd user timer starts one bounded invocation; the
+daemon drains durable work and exits after an unchanged idle interval.
 
 ```text
  user systemd manager
@@ -15,7 +16,7 @@ durable work and exits after an unchanged idle interval.
    |
    `-- authenticated FastAPI server 127.0.0.1:8732
           |
-          +-- poll GitHub
+           +-- poll GitHub and configured private Slack channels
           +-- drain accepted issue work
           +-- wait for unchanged idle state
           `-- stop both servers and exit
@@ -35,7 +36,7 @@ durable work and exits after an unchanged idle interval.
 ## What It Owns
 
 - A durable, idempotent SQLite job queue.
-- GitHub issue and comment observation with actor authorization.
+- GitHub issue/comment and private Slack thread observation with source-owned authorization.
 - Managed Git mirrors, branches, and worktrees.
 - One private OpenCode server per daemon invocation.
 - Validation, commit, SSH push, pull-request publication, and issue replies.

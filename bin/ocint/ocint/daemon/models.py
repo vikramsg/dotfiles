@@ -31,7 +31,7 @@ class GitRepository(BaseModel):
         return value
 
 
-class GitHubLogin(RootModel[str]):
+class ActorIdentity(RootModel[str]):
     model_config = ConfigDict(frozen=True)
 
     @field_validator("root")
@@ -39,11 +39,15 @@ class GitHubLogin(RootModel[str]):
     def normalize(cls, value: str) -> str:
         login = value.strip().casefold()
         if not login:
-            raise ValueError("GitHub login cannot be empty")
+            raise ValueError("actor identity cannot be empty")
         return login
 
     def __str__(self) -> str:
         return self.root
+
+
+class GitHubLogin(ActorIdentity):
+    """Backward-compatible GitHub configuration identity."""
 
 
 class MessageClassification(StrEnum):
@@ -58,7 +62,7 @@ class ObservedMessage(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     source_id: str = Field(min_length=1)
-    actor: GitHubLogin
+    actor: ActorIdentity
     classification: MessageClassification
     body: str
     source_created_at: str = Field(min_length=1)
@@ -126,6 +130,7 @@ class PublicationRequest(BaseModel):
     title: str = Field(min_length=1)
     body: str
     origin: WorkOrigin
+    owned_pull_request_number: int = 0
 
 
 class PublishedPublication(BaseModel):
@@ -133,6 +138,7 @@ class PublishedPublication(BaseModel):
 
     status: Literal["published"] = "published"
     url: str = Field(min_length=1)
+    number: int = Field(gt=0)
 
 
 class RefusedPublication(BaseModel):

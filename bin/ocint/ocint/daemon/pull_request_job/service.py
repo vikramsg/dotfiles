@@ -13,7 +13,7 @@ class PromptDecision(StrEnum):
 
 def authorize(request: PullRequestJobRequest, config: PullRequestJobConfig) -> None:
     repository = config.repository(request.repository)
-    if repository.actors and request.actor not in repository.actors:
+    if repository.actors and str(request.actor) not in {str(actor) for actor in repository.actors}:
         raise PermissionError(f"actor is not allowed for {request.repository}: {request.actor}")
 
 

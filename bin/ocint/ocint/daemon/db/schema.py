@@ -113,5 +113,56 @@ github_issue_comment = Table(
     Column("marker", String, nullable=False),
 )
 
+pull_request_ownership = Table(
+    "pull_request_ownership",
+    metadata,
+    Column("source_thread_id", String, primary_key=True),
+    Column("repository", String, primary_key=True),
+    Column("number", Integer, nullable=False),
+    Column("url", Text, nullable=False),
+)
+
+slack_channel = Table(
+    "slack_channel",
+    metadata,
+    Column("channel_id", String, primary_key=True),
+    Column("watermark", String, nullable=False),
+    Column("retry_not_before", String, nullable=False),
+)
+
+slack_thread = Table(
+    "slack_thread",
+    metadata,
+    Column("channel_id", String, primary_key=True),
+    Column("root_ts", String, primary_key=True),
+    Column("workspace_id", String, nullable=False),
+    Column("logical_source_id", String, nullable=False),
+    Column("root_identity", Text, nullable=False, unique=True),
+    Column("configured_repository", String, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("authorized", Integer, nullable=False),
+    Column("closed", Integer, nullable=False),
+    Column("reopen_root", Integer, nullable=False),
+)
+
+slack_message = Table(
+    "slack_message",
+    metadata,
+    Column("channel_id", String, primary_key=True),
+    Column("ts", String, primary_key=True),
+    Column("root_ts", String, nullable=False),
+    Column("user_id", String, nullable=False),
+    Column("body", Text, nullable=False),
+    Column("classification", String, nullable=False),
+)
+
+slack_reply = Table(
+    "slack_reply",
+    metadata,
+    Column("idempotency_key", String, primary_key=True),
+    Column("channel_id", String, nullable=False),
+    Column("ts", String, nullable=False),
+)
+
 Index("ix_thread_message_classification", thread_message.c.thread_id, thread_message.c.classification)
 Index("ix_task_state", task.c.thread_id, task.c.state)

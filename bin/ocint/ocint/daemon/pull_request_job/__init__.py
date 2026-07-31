@@ -23,6 +23,7 @@ from ocint.daemon.pull_request_job.models import (
     PullRequestJobRequest,
     PullRequestJobStage,
     PullRequestJobState,
+    SourcePullRequestJobRequest,
 )
 
 
@@ -65,6 +66,7 @@ __all__ = [
     "RefusedPublication",
     "RepositoryPolicy",
     "SchedulerPolicy",
+    "SourcePullRequestJobRequest",
     "ThreadOrigin",
     "create_pull_request_job_runner",
     "open_pull_request_job_store",

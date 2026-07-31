@@ -52,8 +52,19 @@ systemd timer -> labelled issue -> OpenCode worktree
                            validate -> commit -> push
                                       |
                                       v
-                              pull request -> issue reply
+                               pull request -> issue reply
 ```
+
+For Slack, post a new root in a configured private channel. The first non-empty
+line is the work title and the complete root body is the prompt. Authorized
+thread replies become follow-up context. Unauthorized users receive a thread
+reply and never schedule work. Completion posts the pull-request reply, adds the
+configured reaction, and closes polling for that root.
+
+To continue a completed Slack thread, post a new authorized root containing
+exactly `reopen <copied-root-permalink>`. The target must be a uniquely closed
+root in the same workspace, channel, and configured repository. New replies on
+the reopened root become follow-up work.
 
 ## Inspect Or Attach
 
@@ -68,7 +79,7 @@ job to have a running OpenCode session.
 
 ## Request A Follow-Up
 
-Add an authorized comment to the same open issue. The next task reuses the
+Add an authorized GitHub comment or Slack thread reply. The next task reuses the
 existing session, worktree, branch, and open pull request.
 
 For command details and failures, read [operations](operations.md). For setup,

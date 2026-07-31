@@ -6,7 +6,7 @@ from sqlalchemy import Engine, Select, and_, exists, insert, or_, select, update
 from sqlalchemy.engine import Connection, RowMapping
 
 from ocint.daemon.db.schema import task, task_job, task_message, thread, thread_message
-from ocint.daemon.models import GitHubLogin, MessageClassification
+from ocint.daemon.models import ActorIdentity, MessageClassification
 from ocint.daemon.tasks.models import (
     FailedTaskClaim,
     FailedTaskRetry,
@@ -59,7 +59,7 @@ class TaskRepository:
         self,
         thread_id: int,
         source_id: str,
-        actor: GitHubLogin | str,
+        actor: ActorIdentity | str,
         classification: MessageClassification,
         body: str,
         source_created_at: str,
@@ -407,7 +407,7 @@ class TaskRepository:
     @staticmethod
     def _message(row: RowMapping) -> ThreadMessage:
         values = {field: row[field] for field in ThreadMessage.model_fields}
-        values["actor"] = GitHubLogin(str(row["actor"]))
+        values["actor"] = ActorIdentity(str(row["actor"]))
         return ThreadMessage(**values)
 
     @staticmethod

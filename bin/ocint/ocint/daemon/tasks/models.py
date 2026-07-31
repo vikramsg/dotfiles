@@ -2,7 +2,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, RootModel
 
-from ocint.daemon.models import GitHubLogin, MessageClassification
+from ocint.daemon.models import ActorIdentity, MessageClassification
 
 
 class TaskKind(StrEnum):
@@ -38,7 +38,7 @@ class ThreadMessage(BaseModel):
     id: int
     thread_id: int
     source_id: str
-    actor: GitHubLogin
+    actor: ActorIdentity
     classification: MessageClassification
     body: str
     source_created_at: str

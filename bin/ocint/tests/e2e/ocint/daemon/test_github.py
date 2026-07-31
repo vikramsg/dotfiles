@@ -27,6 +27,7 @@ from ocint.daemon.pull_request_job import (
     PullRequestJob,
     PullRequestJobRequest,
     PullRequestJobState,
+    SourcePullRequestJobRequest,
 )
 from ocint.daemon.pull_request_job.models import (
     PublicationRefusalCheckpoint,
@@ -101,19 +102,19 @@ class RecordingExecutor:
     def accept(self, request: PullRequestJobRequest) -> PullRequestJob:
         return self.repository.submit(request)
 
-    def accept_retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
-        return self.repository.retry(previous, request)
+    def accept_source_retry(self, previous: PullRequestJob, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        return self.repository.retry(previous, request.work)
 
     def schedule_accepted(self, job_id: str) -> None:
         self.scheduled.append(job_id)
 
-    def submit(self, request: PullRequestJobRequest) -> PullRequestJob:
-        job = self.repository.submit(request)
+    def submit_source(self, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        job = self.repository.submit(request.work)
         self.submitted.append(job)
         return job
 
-    def retry(self, previous: PullRequestJob, request: PullRequestJobRequest) -> PullRequestJob:
-        job = self.repository.retry(previous, request)
+    def retry_source(self, previous: PullRequestJob, request: SourcePullRequestJobRequest) -> PullRequestJob:
+        job = self.repository.retry(previous, request.work)
         self.retried.append(job)
         return job
 

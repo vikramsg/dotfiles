@@ -21,6 +21,7 @@ from ocint.daemon.lch.setup import (
     require_available_loopback_port,
     restricted_opencode_config,
     setup,
+    upsert_private_environment,
     write_private_file,
 )
 from ocint.daemon.lch.systemd import CommandResult, SystemdLifecycle, SystemdPaths
@@ -63,7 +64,7 @@ class DiscoveryRunner:
             return CommandResult(stdout="Commands:\n  run\n  doctor\n  lch\n")
         if command[-3:] == ("daemon", "lch", "--help"):
             return CommandResult(
-                stdout="Commands:\n  apply\n  attach\n  lifecycle\n  list\n  logs\n  setup\n  status\n  uninstall\n"
+                stdout="Commands:\n  apply\n  attach\n  lifecycle\n  list\n  logs\n  setup\n  slack-token\n  status\n  uninstall\n"
             )
         if command[0] == "loginctl":
             return CommandResult(stdout="yes\n")
@@ -390,6 +391,33 @@ def test_setup_uses_only_the_validated_policy_and_provider_snapshot(
     assert 'expected_version = "1.17.20"' in discovered.paths.configuration.read_text()
 
 
+def test_setup_losslessly_refreshes_managed_tokens(discovery_fixture: DiscoveryFixture) -> None:
+    # GIVEN
+    discovered = discover(
+        discovery_fixture.runner,
+        discovery_fixture.lifecycle,
+        discovery_fixture.checkout,
+        discovery_fixture.context,
+    )
+    discovered.paths.environment.parent.mkdir(parents=True)
+    original = (
+        "# operator comment\n"
+        "UNKNOWN_SETTING=preserve-me\n"
+        "OCINT_DAEMON_API_TOKEN=existing-api\n"
+        "OCINT_DAEMON_GITHUB_TOKEN=stale-github\n"
+        "OCINT_DAEMON_SLACK_BOT_TOKEN=xoxb-existing\n"
+    )
+    discovered.paths.environment.write_text(original)
+    discovered.paths.environment.chmod(0o600)
+
+    # WHEN
+    setup(discovered, discovery_fixture.lifecycle)
+
+    # THEN
+    assert discovered.paths.environment.read_text() == original.replace("stale-github", "github-secret")
+    assert stat.S_IMODE(discovered.paths.environment.stat().st_mode) == 0o600
+
+
 def test_setup_refuses_to_overwrite_existing_configuration(
     discovery_fixture: DiscoveryFixture,
 ) -> None:
@@ -574,6 +602,27 @@ def test_private_file_replacement_is_atomic_mode_0600_and_idempotent(tmp_path: P
     assert stat.S_IMODE(destination.stat().st_mode) == 0o600
     assert destination.read_text().startswith("OCINT_DAEMON_API_TOKEN=preserved\n")
     assert list(tmp_path.glob(".daemon.env.*")) == []
+
+
+def test_environment_upsert_preserves_comments_unknown_assignments_and_line_order(tmp_path: Path) -> None:
+    # GIVEN
+    destination = tmp_path / "daemon.env"
+    write_private_file(destination, "# keep this\nOTHER=value\nOCINT_DAEMON_API_TOKEN=old\n\n")
+
+    # WHEN
+    upsert_private_environment(
+        destination,
+        {
+            "OCINT_DAEMON_API_TOKEN": "new",
+            "OCINT_DAEMON_SLACK_BOT_TOKEN": "xoxb-secret",
+        },
+    )
+
+    # THEN
+    assert destination.read_text() == (
+        "# keep this\nOTHER=value\nOCINT_DAEMON_API_TOKEN=new\n\nOCINT_DAEMON_SLACK_BOT_TOKEN=xoxb-secret\n"
+    )
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o600
 
 
 def test_github_token_lookup_never_refreshes_authentication() -> None:

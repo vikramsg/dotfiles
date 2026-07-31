@@ -6,26 +6,35 @@ code as the daemon user.
 
 ## Credential Boundaries
 
-| Credential | API | OpenCode | Validation | Git | GitHub REST | LCH attach |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Daemon API token | yes | no | no | no | no | authenticates metadata request |
-| Ephemeral OpenCode password | client | server | no | no | no | live process environment |
-| SSH identity file | no | no | no | network only | no | no |
-| GitHub token | no | no | no | no | yes | no |
+| Credential | API | OpenCode | Validation | Git | GitHub REST | Slack | LCH |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Daemon API token | yes | no | no | no | no | no | attach metadata |
+| Ephemeral OpenCode password | client | server | no | no | no | no | live attach |
+| SSH identity file | no | no | no | network only | no | no | no |
+| GitHub token | no | no | no | no | yes | no | no |
+| Slack bot token | no | no | no | no | no | private polling/replies | hidden install |
 
 ```text
  daemon.env: API token --------> FastAPI and LCH attach authentication
  daemon.env: GitHub token -----> GitHub HTTP client only
+ daemon.env: Slack token ------> Slack HTTP client only
  auth.json symlink ------------> isolated OpenCode only
  SSH identity + known_hosts ---> network Git only
  ephemeral password -----------> daemon <-> OpenCode child
                                       `----> live attach process
 ```
 
-The API and GitHub tokens are persisted in
+The API, GitHub, and optional Slack tokens are persisted in
 `$XDG_CONFIG_HOME/ocint/daemon.env`. Setup creates that file as a
 regular, user-owned mode-0600 file. It is sensitive, but it is not public and is
 never committed to the repository.
+
+`ocint daemon lch slack-token` reads a token from a hidden prompt (or piped
+stdin), validates it, and atomically updates only its environment assignment.
+It prints workspace and bot identity but never the token. Slack uses HTTPS
+polling for configured private channels with exactly `groups:history`,
+`chat:write`, and `reactions:write`; there is no Socket Mode or inbound event
+endpoint.
 
 ## Live Attachment Authentication
 
@@ -76,7 +85,7 @@ receives `GIT_TERMINAL_PROMPT=0`. Network Git receives a constrained
 host checking.
 
 OpenCode receives isolated `HOME` and XDG paths plus its ephemeral server
-credentials. It must not receive the daemon API token, GitHub token, SSH agent,
+credentials. It must not receive the daemon API token, GitHub token, Slack token, SSH agent,
 or SSH identity.
 
 The interactive attach process receives the user's normal environment plus only

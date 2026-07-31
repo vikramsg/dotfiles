@@ -69,6 +69,10 @@ class GitHubService(BaseModel):
 
     context: GitHubContext
 
+    @property
+    def source_prefix(self) -> str:
+        return "github:"
+
     async def observe(self) -> ThreadObservations:
         observations: list[ThreadObservation] = []
         for configured in self.context.repositories.root:
@@ -175,11 +179,12 @@ class GitHubService(BaseModel):
             if isinstance(request.origin, ThreadOrigin)
             else None
         )
-        if issue is not None and issue.pull_request_number:
-            pull = await self.context.client.pull_request(request.repository, issue.pull_request_number)
+        owned_number = request.owned_pull_request_number or (issue.pull_request_number if issue is not None else 0)
+        if owned_number:
+            pull = await self.context.client.pull_request(request.repository, owned_number)
             if pull.state != "open" or pull.merged:
                 return RefusedPublication()
-            return PublishedPublication(url=pull.html_url)
+            return PublishedPublication(url=pull.html_url, number=pull.number)
         pull = await self.context.client.find_pull_request(request.repository, request.branch, request.base)
         if pull is None:
             pull = await self.context.client.create_pull_request(
@@ -187,7 +192,7 @@ class GitHubService(BaseModel):
             )
         if issue is not None:
             self.context.repository.set_pull_request(issue.source_id, pull.number, pull.html_url)
-        return PublishedPublication(url=pull.html_url)
+        return PublishedPublication(url=pull.html_url, number=pull.number)
 
 
 def marker(repository: str, issue: int, outcome: str, anchor: str | int) -> str:

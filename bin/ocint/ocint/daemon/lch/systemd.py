@@ -51,7 +51,13 @@ class SubprocessRunner:
 
     def run(self, arguments: Sequence[str]) -> CommandResult:
         environment = dict(os.environ)
-        for name in ("GH_TOKEN", "GITHUB_TOKEN", "OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN"):
+        for name in (
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
+            "OCINT_DAEMON_API_TOKEN",
+            "OCINT_DAEMON_GITHUB_TOKEN",
+            "OCINT_DAEMON_SLACK_BOT_TOKEN",
+        ):
             environment.pop(name, None)
         environment.update(self._noninteractive_environment())
         if "--follow" in arguments:
@@ -310,7 +316,7 @@ class SystemdLifecycle:
             raise RuntimeError(f"ocint executable does not expose daemon run, doctor, and lch: {resolved}")
         lch_help = self.runner.run((str(resolved), "daemon", "lch", "--help")).stdout
         lch_commands = {line.strip().split(maxsplit=1)[0] for line in lch_help.splitlines() if line.startswith("  ")}
-        required = {"setup", "apply", "uninstall", "lifecycle", "list", "status", "attach", "logs"}
+        required = {"setup", "apply", "uninstall", "lifecycle", "list", "status", "attach", "logs", "slack-token"}
         if not required.issubset(lch_commands):
             raise RuntimeError(f"ocint executable does not expose the required daemon lch commands: {resolved}")
         return resolved

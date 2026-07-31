@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shutil
@@ -24,6 +25,7 @@ from ocint.daemon.lch.setup import (
 )
 from ocint.daemon.lch.systemd import CommandRunner, SystemdLifecycle, service_text, timer_text
 from ocint.daemon.logging import daemon_log_settings
+from ocint.daemon.slack import check_slack_access
 
 
 class Diagnostic(BaseModel):
@@ -85,7 +87,11 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
 
     environment = lifecycle.paths.environment_file
     diagnostics.append(_private_file_diagnostic("env.path", environment))
-    names = ("OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN")
+    names = (
+        ("OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN", "OCINT_DAEMON_SLACK_BOT_TOKEN")
+        if config is not None and config.slack is not None
+        else ("OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN")
+    )
     present = _environment_presence(environment, names)
     for name in names:
         diagnostics.append(
@@ -152,6 +158,15 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
             )
         )
         diagnostics.append(_port_diagnostic("ports.api", config.api.port, occupied_allowed=service_active))
+        if config.slack is not None:
+            token = _environment_value(environment, "OCINT_DAEMON_SLACK_BOT_TOKEN")
+            try:
+                value = asyncio.run(check_slack_access(config.slack, token)) if token else "token missing"
+                diagnostics.append(Diagnostic(name="slack.access", required=True, ok=bool(token), value=value))
+            except Exception as error:
+                diagnostics.append(
+                    Diagnostic(name="slack.access", required=True, ok=False, value="unavailable", detail=str(error))
+                )
 
     repository = config.repositories[0].github_repository if config is not None else ""
     diagnostics.extend(_github_diagnostics(runner, context, repository))
@@ -463,6 +478,15 @@ def _environment_presence(path: Path, names: tuple[str, ...]) -> frozenset[str]:
         return frozenset()
     present = {line.partition("=")[0] for line in _read(path).splitlines() if "=" in line and line.partition("=")[2]}
     return frozenset(name for name in names if name in present)
+
+
+def _environment_value(path: Path, name: str) -> str:
+    if not _owned_regular(path, 0o600):
+        return ""
+    return next(
+        (line.partition("=")[2] for line in _read(path).splitlines() if line.partition("=")[0] == name),
+        "",
+    )
 
 
 def _private_file_diagnostic(name: str, path: Path) -> Diagnostic:

@@ -3,7 +3,7 @@ import json
 import os
 import secrets
 from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from pathlib import Path
 
 import click
@@ -33,7 +33,8 @@ from ocint.daemon.pull_request_job import (
     open_pull_request_job_store,
 )
 from ocint.daemon.run import serve_bounded, wait_for_idle
-from ocint.daemon.tasks import open_task_coordinator
+from ocint.daemon.slack import open_slack_service
+from ocint.daemon.tasks import SourceRouter, open_task_coordinator
 
 logger = daemon_logging.get_logger("cli")
 
@@ -108,7 +109,9 @@ def run_command(context: DaemonContext) -> None:
 
 
 @contextmanager
-def open_daemon_app(context: DaemonContext, github: GitHubGateway) -> Iterator[DaemonApplication]:
+def open_daemon_app(
+    context: DaemonContext, github: GitHubGateway, source: SourceRouter | None = None
+) -> Iterator[DaemonApplication]:
     config = context.config()
     api_token = context.settings.api_token.get_secret_value()
     if not api_token:
@@ -168,7 +171,7 @@ def open_daemon_app(context: DaemonContext, github: GitHubGateway) -> Iterator[D
     )
     with open_pull_request_job_store(config.database_path) as repository:
         executor = create_pull_request_job_runner(job_config, repository, opencode, git, github)
-        with open_task_coordinator(config.database_path, github, executor) as coordinator:
+        with open_task_coordinator(config.database_path, source or SourceRouter((github,)), executor) as coordinator:
             shutdown_event = asyncio.Event()
 
             @asynccontextmanager
@@ -217,11 +220,19 @@ async def _run_daemon(context: DaemonContext) -> None:
             for repository in config.repositories
         ]
     )
-    async with open_github_service(config.github, repositories, token, config.database_path) as github:
-        with open_daemon_app(context, github) as application:
+    async with AsyncExitStack() as stack:
+        github = await stack.enter_async_context(
+            open_github_service(config.github, repositories, token, config.database_path)
+        )
+        sources = [github]
+        if config.slack is not None:
+            slack_token = context.settings.slack_bot_token.get_secret_value()
+            if not slack_token:
+                raise ValueError("OCINT_DAEMON_SLACK_BOT_TOKEN is required when Slack is configured")
+            sources.append(
+                await stack.enter_async_context(open_slack_service(config.slack, slack_token, config.database_path))
+            )
+        with open_daemon_app(context, github, SourceRouter(tuple(sources))) as application:
             await serve_bounded(
-                application.app,
-                application.config.api.host,
-                application.config.api.port,
-                application.shutdown_event,
+                application.app, application.config.api.host, application.config.api.port, application.shutdown_event
             )
