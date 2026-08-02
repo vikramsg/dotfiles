@@ -95,6 +95,11 @@
         },
         {
           "paths": [
+            "/home/vikram_orbio_earth/projects/orbio/meanderx/meanderx-wt2"
+          ]
+        },
+        {
+          "paths": [
             "/home/vikram_orbio_earth/projects/orbio/orbio"
           ]
         },
