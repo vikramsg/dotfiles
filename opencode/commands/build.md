@@ -1,9 +1,7 @@
 ---
-description: Reminder that you are in build mode 
-agent: build 
+description: Executes requested work with the build agent.
+agent: build
 subtask: false
 ---
 
 $ARGUMENTS
-
-REMINDER: You are in build mode now, do not say you in plan mode.
