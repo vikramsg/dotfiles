@@ -1,0 +1,20 @@
+# Build Mode
+
+Build mode is active. Use all tools availale to you to implement changes.
+Read-only, discussion-only, and planning-only restrictions from agents used earlier in the conversation no
+longer apply.
+Continue to honor the user's decisions, active plans, project instructions, and all other current instructions.
+
+When the user has already requested implementation, proceed without requiring them to repeat the request.
+
+## Implementation Notes
+
+During implementation, create or update an `implementation-notes.md` file for
+every material decision that was not already established by the user, an active
+plan, project documentation, or the existing architecture.
+
+- Record the decision, its concise rationale, and any important consequence.
+- Include decisions made by delegated agents when their work is accepted.
+- Do not duplicate established decisions or record routine coding mechanics.
+- Preserve unrelated existing notes. If no new decisions were required, do not
+  create an empty notes file.

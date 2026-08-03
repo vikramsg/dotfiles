@@ -54,11 +54,22 @@ Start from this baseline:
 - Globals are a last resort solution. If globals are being constructed, its almost always because a correct model/interface has not been constructed. 
 - Classes. Classes are almost never necessary. Exceptions are Pydantic BaseModels. Always prefer creating `from_<source_model>`, `to_<sink_model>` methods to BaseModel so that conversion between types is also the responsbility of the BaseModel.
 
+### Refactoring standards
+
+- Did the implementaion adhere to `Tidy, First` philosophy. If not, then raise the relevant parts where `Tidy, First` would have simplified the implementation.
+
 ### Testing standards
 
 - Are the tests testing behaviour?
 - If tests are testing things like messages in logs or testing imported library behaviour directly, then the tests are fake tests and are only adding complexity.
 - Are the tests overusing mocks. If so this is both an indicator of creating tests the wrong way as well as the business logic having the wrong seams.
+- Are testing replacing what should have been done manually. For eg. creating tests specifically for the migration being done in the current PR
+
+### Documentation standards
+
+- Are docs written as reference docs or have implementation details for the current PR bled in. For eg. plans are not docs.
+- Are docs missing helpful ASCII diagrams, or removed them?
+- Are docs too long.
 
 ## Verification
 
@@ -92,6 +103,8 @@ Organize findings along these standards:
 2. Interfaces
 3. Code standards
 4. Testing standards
+5. Refactoring standards
+6. Documentation standards
 
 Do not flood the review with low-value nits.
 Prefer a smaller number of high-conviction comments over a long list of cosmetic notes.

@@ -38,6 +38,7 @@
   {
     "context": "Terminal",
     "bindings": {
+      // Avoid Shift+Enter becoming Ctrl+J, which vim-tmux-navigator intercepts; OpenCode treats Alt+Enter as a newline.
       "shift-enter": ["terminal::SendText", "\u001b\r"],
       "ctrl-cmd-left": "workspace::ActivatePaneLeft",
       "ctrl-cmd-right": "workspace::ActivatePaneRight",
