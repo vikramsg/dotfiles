@@ -1,3 +1,36 @@
+/*
+Use `experimental.chat.messages.transform` to
+
+1. Find the latest user message by scanning backward.
+2. Read its active mode from `user.info.agent`.
+3. Scan backward only before that user message for the nearest assistant.
+4. Read the preceding mode from `assistant.info.mode`, which matches the pinned
+   `@opencode-ai/plugin` 1.4.2 types.
+5. Select a reminder only for an exact, case-sensitive `discuss`/`build`
+   transition.
+6. Find the latest non-ignored, nonblank text part on the selected user message.
+7. Append two newlines and the selected reminder unless that reminder is already
+   present in any usable text part on the message.
+8. Return without mutation when history or usable text is missing.
+
+`experimental.chat.messages.transform` receives the complete
+message history at the same request stage needed for native-style reminders.
+
+Use these reminder contracts:
+
+```text
+<system-reminder>
+...
+</system-reminder>
+```
+
+```text
+<system-reminder>
+...
+</system-reminder>
+```
+*/
+
 import type { Hooks, Plugin } from "@opencode-ai/plugin";
 
 const BUILD_REMINDER = `<system-reminder>
