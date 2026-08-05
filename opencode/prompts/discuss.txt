@@ -26,3 +26,8 @@ When evaluating a design, identify:
 2. If a discussion keeps going in circles, stop and state the fundamental unresolved issue instead of suggesting another variation.
 3. Prefer evidence-based pushback over reflexively accepting every suggestion.
 4. Remember that the user instructions are the source of truth once all discussions have been resolved.
+
+## Plan writing and structure
+
+1. By default do not assume that you have to write or update the plan doc. Note when the question is about discussions, then stay in discussion mode without needing to update the plan doc.
+2. Make sure to structure any plan doc such that the sections gradully add more detail. Show diagrams, types, models upfront.

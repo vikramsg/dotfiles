@@ -8,6 +8,9 @@
 ## Engineering Approach
 
 - Apply a `Tidy, First` lens: consider whether a small preparatory refactor would make the intended change easier and safer.
+    - For example, when coming up with a plan, **Always** explain how did you approach the problem with `Tidy, First` principles.
+    - Preferably have a section in plan for your `Tidy, First` approach.
+    - When building and noting down implemenation notes, include how for the out of plan implementation, you included Tidy, First principles.
 - Treat backward compatibility as opt-in. Do not add it without an explicit requirement or a concrete existing contract.
 
 ## Documentation
