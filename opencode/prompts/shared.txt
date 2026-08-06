@@ -20,3 +20,12 @@
 - Keep documentation and tickets focused on `WHAT` the system does and `WHY`. Do not put implementation details relevant to the current PR/changes.
 - Never remove an ASCII diagram unless the complete diagram is stale.
 - Always prefer putting examples in documentation/docstrings.
+
+## Editing Tickets, PR Descriptions etc.
+
+- Prefer sticking to existing patterns, not inventing new ones
+- Tickets and PR descriptions should stick to high level `WHAT`, not implementation details
+    - For example, what make commands were run do not belong in PR description
+- For tickets specifically, unless its a bug ticket, there should be very little implementation details.
+    - Prefer factually stating the WHAT.
+    - Even if the Ticekt is written after the PR is already implemented, leave out implementation details.
