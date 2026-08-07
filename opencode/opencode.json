@@ -23,6 +23,12 @@
                 "serviceTier": "priority"
             }
         },
+        "explore": {
+            "model": "azure-cognitive-services/gpt-5.6-terra",
+            "options": {
+                "reasoningEffort": "medium"
+            }
+        },
         "plan": {
             "disable": true
         },
