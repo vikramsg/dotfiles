@@ -5,7 +5,7 @@
 Phase 1 connects Slack to one always-running coordinator OpenCode sandbox.
 
 ```text
-Slack private-channel thread
+Slack public-channel thread
           |
           | Events API
           v
@@ -29,15 +29,20 @@ Only the coordinator talks to Slack. Phase 1 has no repository execution
 sandbox. The coordinator can answer, research, and explain that repository work
 is needed, but it cannot trigger another OpenCode server or modify a repository.
 
-The acceptance test is fully autonomous. The existing Slack bot posts a marked
-test message, Slack delivers the real event through ngrok, the real coordinator
-OpenCode sandbox runs, and the coordinator answer appears in the Slack thread.
-No human posts a message or clicks anything during the test.
+The acceptance test is fully autonomous. An authorized test user posts a marked
+message with the User OAuth Token issued through the separate `ocint E2E actor`
+app. Slack delivers an app-authored `message.channels` event carrying the
+authorized user ID through ngrok. A test-only exact-probe classifier accepts only
+that event, the real coordinator OpenCode sandbox runs, and the production bot
+posts the answer in the Slack thread. No person manually posts or clicks during
+the test. Production classification still ignores every bot/app-authored event.
 
-This plan supersedes `.agents/plans/slack-events-api-smoke.md` and the previous
-version of this plan. External viability is already proven: Slack verified the
-static ngrok URL, the signing secret authenticated a real Slack request, and
-`message.groups` is subscribed.
+This plan supersedes the earlier Slack Events plan and the previous version of
+this plan. External viability is proven with persisted probe evidence: Slack
+verified the static ngrok URL, and the temporary signed receiver recorded both a
+human UI message and an xoxp app-authored message as valid `message.channels`
+callbacks with HTTP `200`. The earlier `message.groups` subscription was wrong
+because `C0955FD2FK4` is public.
 
 ## Corrected Architecture
 
@@ -156,7 +161,15 @@ Slack thread reply --------^                              |
 
 - An authorized human root creates a conversation and OpenCode session.
 - An authorized human thread reply creates another turn in the same session.
-- Turns are processed in source-message order.
+- A reply delivered before its root is stored without creating OpenCode work.
+  Its conversation remains `awaiting_root` until the authorized root arrives.
+- When the root arrives, the conversation becomes `active` and all stored
+  messages become turns in exact Slack timestamp order.
+- Orphan replies that never receive a root are expired after the configured
+  retention period without OpenCode work.
+- Turns are processed in source-message order. Slack timestamps are parsed into
+  an exact integer ordering key without floating-point conversion; immutable
+  provider message identity is the tie-breaker.
 - Only one turn runs at a time in Phase 1.
 - The final coordinator output returns to the Slack root thread.
 - Bot-authored messages are ignored in production to prevent loops.
@@ -216,6 +229,11 @@ busy timeout handle concurrent access. Phase 1 table ownership is explicit:
 - Both may insert normalized source messages through domain repositories.
 - No coordinator transaction claims or changes a task/job row.
 
+Phase 1 enforces its single-worker rule with one daemon-owned coordinator
+runtime lock. A second coordinator process fails before starting ingress or
+OpenCode. Database transitions still use conditional updates, but no lease or
+distributed-worker protocol is added until coordinator concurrency is required.
+
 Database migration is a shared database-management responsibility. Protect
 migrations with one daemon-owned filesystem lock so the timer and coordinator
 cannot run Alembic concurrently. Each process may call migration at startup, but
@@ -223,18 +241,30 @@ only one performs it at a time and all workers start after the lock is released.
 
 ## Tidy, First
 
-Perform only the preparation required for the new behavior:
+Perform only the preparation required to make the implemented behavior readable,
+observable, and safe before adding more behavior:
 
-1. **Database lifecycle:** put migration serialization in `daemon/db`, where
-   connection policy and Alembic already live. Do not put migration logic in
-   either workflow.
-2. **OpenCode response:** extend the current OpenCode facade to return a stable
-   assistant message ID and text. Existing PR jobs already submit and recover
-   prompts but discard the response.
-3. **Slack transport:** separate reusable Slack HTTP/authentication models from
-   polling orchestration. Remove Slack from timer-daemon source composition
-   before enabling coordinator events, preventing one Slack message from
-   entering both workflows.
+1. **Public-channel contract:** replace the incorrect private-channel
+   `message.groups`/`groups:history` contract with
+   `message.channels`/`channels:history`. Persist sanitized fixtures from both
+   proven callback shapes before changing translation tests.
+2. **Coordinator lifecycle:** move runtime lock ownership, OpenCode start/stop,
+   worker/ingress supervision, and bounded shutdown out of `daemon/cli.py` and
+   into the coordinator workflow facade. CLI remains the composition root but
+   delegates lifecycle to one exported operation.
+3. **Slack ingress:** replace the nested 60-line route closure with a cohesive
+   ingress owner in `daemon/slack/events.py`. It owns bounded body reading,
+   authentication, parsing, normalization, durable dispatch, acknowledgement,
+   and safe ingress logs.
+4. **Live harness:** move the live test under the normal `tests/` hierarchy,
+   gate it with a strict pytest marker, and reuse the production coordinator
+   application lifecycle instead of duplicating 400 lines of setup and cleanup.
+5. **Observability:** add safe structured logs at ingress, workflow, delivery,
+   retry, and lifecycle checkpoints before further rollout. Never log message
+   text, prompts, responses, raw envelopes, headers, signatures, or credentials.
+6. **Keep atomic work atomic:** do not split `CoordinatorRepository.ingest`,
+   migration locking, LCH discovery, or doctor aggregation only because they are
+   long. Their current transaction/security boundaries are cohesive.
 
 Do not refactor GitHub, Git, task, or pull-request-job behavior beyond removing
 the Slack polling adapter from their composition.
@@ -249,17 +279,17 @@ daemon/db/
 
 daemon/coordinator/
   - config.py       coordinator policy
-  - models.py       conversation, turn, delivery vocabulary
+  - models.py       normalized input, conversation, turn, delivery vocabulary
   - service.py      authorization, prompt, response chunking
   - repository.py   coordinator persistence operations
   - workspace.py    generated context workspace
-  - run.py          worker, recovery, lifecycle
-  - __init__.py     supported facade
+  - run.py          application lifecycle, worker, recovery, supervision
+  - __init__.py     supported facade and narrow adapter protocols
 
 daemon/slack/
   - config.py       workspace/channel authorization
   - models.py       Events API and Web API DTOs
-  - events.py       signed HTTP ingress
+  - events.py       cohesive signed HTTP ingress and acknowledgement owner
   - client.py       Slack Web API transport
   - service.py      Slack translation and reply delivery
   - __init__.py     supported facade
@@ -273,18 +303,20 @@ daemon/lch/
   - provisioning and diagnostics
 
 daemon/cli.py
-  - composition roots only
+  - resolve config/secrets, construct adapters, call feature workflow
 ```
 
 Dependency direction:
 
 ```text
-Slack ingress -> normalized coordinator input <- coordinator worker
-                                               |
-                                               +-> OpenCode contract
-                                               `-> Slack delivery contract
+Slack adapter -> coordinator-owned input and delivery ports
+                         |
+                         +-> OpenCode facade
+                         `-> daemon/db
 
-coordinator -> daemon/db
+CLI composition root -> coordinator + Slack + OpenCode
+
+coordinator -X-> slack
 coordinator -X-> tasks
 coordinator -X-> pull_request_job
 coordinator -X-> git
@@ -298,9 +330,15 @@ Enforce these boundaries with Tach, not duplicate AST tests.
 
 Add coordinator policy to the existing daemon TOML. Replace the polling-oriented
 root `[slack]` runtime configuration; backward compatibility is not required for
-this explicit architecture change.
+this explicit architecture change. The existing execution repository registry
+remains authoritative. Add safe descriptive metadata to those entries and
+generate `repositories.json` by projecting only name, description,
+`github_repository`, and `default_branch`. Do not create a second coordinator
+repository registry.
 
-Illustrative shape:
+The following is an additive excerpt; all existing required daemon, GitHub, Git,
+job OpenCode, mirror, worktree, and repository fields remain in the complete
+example TOML:
 
 ```toml
 database_path = "~/.local/state/ocint/daemon.sqlite"
@@ -333,26 +371,27 @@ executable = "/path/to/opencode"
 config_file = "~/.config/ocint/coordinator-opencode-xdg/opencode/opencode.json"
 xdg_config_home = "~/.config/ocint/coordinator-opencode-xdg"
 xdg_data_home = "~/.local/share/ocint/coordinator-opencode-data"
-
-[[coordinator.repositories]]
-name = "dotfiles"
-description = "Personal configuration for OpenCode, Neovim, tmux, and terminals."
-github_repository = "vikramsg/dotfiles"
-default_branch = "main"
 ```
+
+Each existing `[[repositories]]` entry gains a required safe `description`
+field. Coordinator workspace generation receives only the safe projection, not
+the complete execution configuration.
 
 Validation rules:
 
 - The coordinator workspace differs from mirrors and worktrees.
 - Coordinator and job OpenCode ports differ and are loopback-only.
 - Ingress is loopback-only and differs from control API port `8732`.
-- Slack channel IDs and repository catalogue names are unique.
+- Existing repository names remain unique and descriptions are non-empty.
 - Authorized-user sets are non-empty.
+- Phase 1 channels are public Slack channels; inbound events must have
+  `channel_type = "channel"`.
 - Slack workspace matches `auth.test`.
 - Response chunk size leaves room below Slack's 4,000-character recommendation.
 - Timeouts, body limits, and delivery intervals are positive.
 
-Credentials remain in the existing mode-0600 daemon environment file:
+Production credentials remain in the existing mode-0600 daemon environment
+file:
 
 ```text
 OCINT_DAEMON_SLACK_BOT_TOKEN
@@ -360,17 +399,52 @@ OCINT_DAEMON_SLACK_SIGNING_SECRET
 OCINT_NGROK_URL
 ```
 
-No package `.env` file is used.
+The live E2E actor token is intentionally separate in the mode-0600
+`~/.config/ocint/live-e2e.env` file:
 
-### OpenCode Version Prerequisite
+```text
+OCINT_E2E_SLACK_ACTOR_USER_TOKEN
+```
+
+The coordinator systemd units load only `daemon.env`. They never load the live
+test credential. No package `.env` file or token in tracked configuration is
+used.
+
+Slack channel visibility determines both subscription and OAuth scope:
+
+| Channel | Event | History scope | Phase 1 |
+| --- | --- | --- | --- |
+| Public | `message.channels` | `channels:history` | Supported |
+| Private | `message.groups` | `groups:history` | Documented, not configured |
+
+Do not request both scopes speculatively. Supporting a private channel later
+requires an explicit configuration/model change, manifest update, and live
+contract test.
+
+### External API Contract Prerequisite
 
 The VM currently runs OpenCode `1.18.15`, while existing daemon configuration
-requires `1.17.20`. Before coordinator implementation:
+requires `1.17.20`. Before finalizing the coordinator schema or implementing the
+worker, run focused contract tests against the real OpenCode `1.18.15` server and
+the configured Slack workspace:
 
-1. Verify current session/message/status/SSE behavior against `1.18.15`.
-2. Update the exact supported pin to `1.18.15` for both OpenCode runtimes.
-3. Keep exact startup version checks; do not accept an arbitrary version range.
-4. Re-run existing PR-job recovery tests.
+1. Verify whether prompt submission accepts a caller-selected deterministic user
+   `messageID`.
+2. Verify assistant messages expose stable IDs, the corresponding user
+   `parentID`, terminal status, ordered text parts, and distinguishable
+   interrupted state.
+3. Verify session/message/status/SSE behavior and capture sanitized JSON fixtures
+   for deterministic integration tests.
+4. Verify `conversations.replies` returns `client_msg_id` for bot-authored posts,
+   including paginated thread history.
+5. Verify what a repeated `chat.postMessage` with the same UUID
+   `client_msg_id` does: deduplicates, returns a recognizable error, or creates a
+   second message.
+6. Record the confirmed contracts in the OpenCode and Slack adapter tests. If a
+   required correlation or recovery contract is unavailable, stop and revise
+   this plan before creating the migration.
+7. Update the exact supported pin to `1.18.15` for both OpenCode runtimes, keep
+   exact startup checks, and re-run existing PR-job recovery tests.
 
 ## OpenCode Policy And Workspace
 
@@ -390,6 +464,11 @@ external_directory    denied
 question              denied
 plugins/MCP/LSP       disabled
 ```
+
+Expose this file through a package resource/symlink beside the existing daemon
+OpenCode policy, include it in wheel and sdist builds, and give LCH a distinct
+typed coordinator-policy loader. Installed LCH must not depend on a source-tree
+relative `config/` path.
 
 The OpenCode child receives only isolated HOME/XDG paths, OpenCode provider
 authentication, its ephemeral HTTP basic-auth values, PATH, and locale. It does
@@ -418,16 +497,62 @@ Request handling:
 6. Require the configured workspace.
 7. Answer signed `url_verification` requests with the challenge.
 8. Convert supported `event_callback` messages into normalized conversation
-   messages.
-9. Insert the event/message durably and atomically deduplicate it.
-10. Wake the worker and return `200` without calling OpenCode or Slack Web API.
+   messages. Phase 1 accepts `message.channels` with
+   `channel_type = "channel"`; other channel types are durably ignored.
+9. In one repository transaction, insert/deduplicate the provider event, insert
+   the logical message, create or update the conversation, and create all newly
+   eligible turns. Unsupported events commit only their ignored disposition.
+10. Commit before acknowledging. Worker wakeup is only a latency optimization;
+    the worker always queries durable ready state after startup and wakeup.
+11. Wake the worker and return `200` without calling OpenCode or Slack Web API.
 
 Slack requires a 2xx within three seconds. A database failure returns 5xx so
 Slack retries. Duplicate event or message identity returns `200` without another
-turn.
+turn. Reuse of a provider event ID with a different immutable fingerprint is
+logged as an identity conflict and never creates work.
+
+If durable dispatch exceeds the configured processing budget, return `503`
+immediately. Do not wait for the shielded thread before responding and do not
+wake the worker from the timed-out request. Observe and safely log the eventual
+background result; a late commit is recovered by durable-state scanning and the
+Slack retry deduplicates it.
 
 Do not store raw envelopes, signatures, deprecated verification tokens,
 authorization arrays, or request headers.
+
+## Observability
+
+The existing private rotating `daemon.log` remains the production log. Add
+structured events in the owning modules rather than enabling generic Uvicorn
+access logs or ngrok inspection in production.
+
+```text
+signed callback
+      |
+      +-> ingress authenticated / rejected
+      +-> event committed / deduplicated / ignored / timed out
+      +-> turn claimed / retried / completed
+      +-> OpenCode observed / submitted / completed
+      `-> Slack chunk intended / recovered / posted / retried
+```
+
+Required correlation fields where available:
+
+- `workspace`, `channel`, `thread`, `event`, and `message` at ingress;
+- `conversation`, `turn`, `state`, `retry_count`, and `error_type` in workflow;
+- `session` and managed user/assistant message IDs for OpenCode correlation;
+- `turn`, `chunk_index`, `client_message`, and `provider_message` for delivery;
+- `pid`, `host`, `port`, `exit_status`, and shutdown outcome for lifecycle.
+
+Never log Slack text, managed prompts, assistant responses, raw request bodies,
+headers, signatures, tokens, passwords, complete environments, ngrok URLs, or
+provider credentials. Rejections log only reason/status and safe request size.
+
+The live run configures a separate mode-0600
+`~/.local/state/ocint/live-e2e.log` and captures harness-owned ngrok output in a
+mode-0600 `live-e2e-ngrok.log`. Both include the unique probe ID as a correlation
+field, but no credentials or raw callback payload. Production ngrok inspection
+remains disabled.
 
 ## Shared Database And Persistence
 
@@ -644,8 +769,10 @@ workspace context, OpenCode data, credentials, and Slack messages.
 
 ## Autonomous Live E2E
 
-The production policy ignores bot messages. The live test uses the existing bot
-without adding a production test command or backdoor.
+The production policy accepts configured human users and ignores bot messages.
+The live test uses an authorized test user's xoxp token issued through the
+separate `ocint E2E actor` app, without adding a production test command or
+backdoor. The production bot remains the delivery client.
 
 ```text
 explicit live pytest
@@ -653,52 +780,88 @@ explicit live pytest
     +-> starts production coordinator factories
     +-> starts real OpenCode coordinator sandbox
     +-> starts ingress and ngrok
-    +-> injects one-use E2E actor policy for PROBE_ID
+    +-> authenticates production bot + authorized test user
+    +-> arms one exact test-only xoxp event policy
     |
-    +-> existing bot posts root with client_msg_id=PROBE_ID
-            |
-            v
-       real Slack event -> real coordinator -> real OpenCode
-            |
-            v
-       coordinator reply in real Slack thread
+    +-> test user's xoxp client posts root with client_msg_id=PROBE_ID
+             |
+             v
+        app-authored message.channels event -> real coordinator -> real OpenCode
+             |
+             v
+        production bot reply in real Slack thread
 ```
 
-The one-use E2E actor policy is injected only by test composition. It accepts an
-own-bot root only when its `client_msg_id` exactly matches the pre-armed probe
-ID. Production policy has no environment flag, message prefix, route, or branch
-that accepts bot work. Coordinator replies therefore remain ignored and cannot
-loop.
+The real callback probe established two distinct shapes:
 
-Place the explicit test outside the configured `tests/` discovery root:
+- Slack UI message: authorized `user`, no `bot_id`/`app_id`;
+- xoxp `chat.postMessage`: the same authorized `user` plus app-owned `bot_id`,
+  `app_id`, and the caller `client_msg_id`.
+
+Production uses its normal classifier, so the second shape remains `BOT` and is
+ignored. The live harness injects a one-use classifier only in test composition.
+It accepts one public-channel root when workspace, channel, authorized user,
+exact UUID `client_msg_id`, and exact prompt all match, and when `bot_id` and
+`app_id` are present. Slack retries of that exact event remain acceptable for
+repository deduplication. No environment switch, route, prefix, or production
+branch enables this policy. Production bot replies have a different app/user and
+client ID and remain ignored.
+
+Keep the live test in the canonical test hierarchy:
 
 ```text
-bin/ocint/live_tests/ocint/daemon/coordinator/test_slack.py
+bin/ocint/tests/live/ocint/daemon/coordinator/test_slack.py
 ```
 
-It is not a production `slack-events-smoke` subcommand.
+Mark it `@pytest.mark.live`. Default pytest options use strict markers and
+`-m "not live"`, so normal `pytest` and `just test` discover and deselect it.
+Running the file path without `-m live` also remains safe. It is not a production
+`slack-events-smoke` command.
+
+### E2E Actor Setup
+
+The separate app named `ocint E2E actor` was created from
+`config/slack-e2e-actor-manifest.yaml`. It grants user OAuth `chat:write` and was
+reinstalled so the configured authorized user has an xoxp User OAuth Token.
+Slack still marks API-authored posts with that app's `bot_id`/`app_id`; this is
+why the exact test-only classifier is required. The app has no event
+subscriptions, Socket Mode, or interactivity. The authorized user belongs to the
+public E2E channel. Store only the User OAuth Token as
+`OCINT_E2E_SLACK_ACTOR_USER_TOKEN` in mode-0600
+`~/.config/ocint/live-e2e.env`. Do not add that assignment to `daemon.env` or a
+systemd unit.
 
 ### Live Test Steps
 
 1. Fail fast unless production coordinator/ngrok units are inactive and ports
    `8733`, `4098`, and the static ngrok domain are free.
-2. Use the existing shared daemon database with a unique probe ID; never delete
+2. Source production credentials from mode-0600 `daemon.env` and the test user
+   token from separate mode-0600 `live-e2e.env`; never load the test token
+   through systemd or print it.
+3. Require the actor credential to be xoxp, authenticate both clients with
+   `auth.test`, require the configured workspace, and require the actor user to
+   appear in the channel's `authorized_users`.
+4. Use the existing shared daemon database with a unique probe ID; never delete
    or recreate the database.
-3. Start production coordinator composition with the one-use actor policy.
-4. Start the real coordinator OpenCode server and verify exact version/health.
-5. Start ngrok for the configured static URL.
-6. Post a root to `C0955FD2FK4` using the existing bot token and probe ID.
-7. Ask the coordinator to echo the probe ID and identify `dotfiles` from its
+5. Start the exported production coordinator application lifecycle with normal
+   configured-channel authorization and the exact test-only xoxp event
+   classifier, while keeping the production bot as the delivery client.
+6. Start the real coordinator OpenCode server and verify exact version/health.
+7. Start ngrok for the configured static URL.
+8. Post a root to the configured public channel using the authorized user's
+   Slack client and the probe ID as `client_msg_id`.
+9. Ask the coordinator to echo the probe ID and identify `dotfiles` from its
    repository catalogue.
-8. Wait for the real signed Slack event to appear in durable state.
-9. Resolve the conversation and turn through the probe event/client-message ID,
+10. Wait up to 90 seconds for the real signed Slack event to appear in durable
+    state, reporting callback status codes without request bodies or secrets.
+11. Resolve the conversation and turn through the probe event/client-message ID,
    then assert those probe-scoped rows contain a real OpenCode session ID and
    assistant message ID. Do not assert global row counts in the shared database.
-10. Poll real Slack replies and assert the original thread contains the probe ID
-    and `dotfiles` in the coordinator answer.
-11. Assert no new task, job, worktree, Git operation, or GitHub publication was
+12. Poll real Slack replies with the production bot and assert the original
+    thread contains the probe ID and `dotfiles` in the coordinator answer.
+13. Assert no new task, job, worktree, Git operation, or GitHub publication was
     created for the probe.
-12. Stop only ingress, ngrok, and OpenCode processes started by the test. Keep
+14. Stop only ingress, ngrok, OpenCode, and Slack clients started by the test. Keep
     the marked Slack thread and database rows as evidence.
 
 This proves the full path without waiting for a human Slack message.
@@ -723,7 +886,10 @@ tests.
 - raw-body Slack HMAC and case-insensitive headers;
 - timestamp freshness and body limits without `Content-Length`;
 - URL verification and workspace checks;
+- public `message.channels` translation and private `message.groups` rejection;
 - durable-before-ack and database-failure 5xx;
+- immediate `503` at the processing deadline without waiting for a blocked
+  ingest thread or waking the worker;
 - event/message deduplication;
 - Slack root/reply JSON, `client_msg_id`, reply lookup, and HTTP 429;
 - OpenCode assistant ID/text extraction and recovery states;
@@ -747,7 +913,8 @@ temporary schema to verify:
 - no task/job/execution dependency is invoked.
 
 Tests follow GIVEN/WHEN/THEN and keep one canonical module per production module
-at each test layer.
+at each test layer. Logging tests assert safe correlation fields and prohibited
+field absence, not incidental rendered log prose.
 
 ## Acceptance Criteria
 
@@ -755,6 +922,8 @@ at each test layer.
 
 - Slack can reach only `POST /slack/events` through ngrok.
 - Every accepted callback has a valid fresh Slack signature.
+- The configured public channel uses `message.channels` and `channels:history`;
+  private-channel permissions are not requested.
 - Events are durable before `200`; OpenCode and Slack replies happen later.
 - OpenCode and daemon control APIs remain private.
 - Slack, ngrok, GitHub, API, and SSH credentials are absent from coordinator
@@ -784,12 +953,35 @@ at each test layer.
 
 ### Autonomous E2E
 
-- Existing bot posts the probe without user intervention.
-- Slack sends the real event through ngrok.
+- The authorized test user's xoxp client posts the probe without manual user
+  intervention. Slack delivers the observed app-authored `message.channels`
+  shape with authorized user, app/bot IDs, and exact client message ID.
+- The User OAuth Token stays in `live-e2e.env`, outside daemon systemd
+  configuration.
+- `auth.test` proves the token belongs to the configured workspace and identifies
+  a user authorized for the configured channel.
+- The test-only classifier accepts only the exact prearmed xoxp event; production
+  classification continues ignoring all app/bot events.
+- Slack sends the signed event through ngrok.
 - Durable state proves the real coordinator OpenCode sandbox ran.
 - OpenCode reads `dotfiles` from coordinator context.
-- Slack receives the coordinator answer in the same thread.
+- The production bot delivers the coordinator answer in the same thread and its
+  own events remain ignored.
 - No task/job/repository execution is triggered.
+
+### Maintainability And Operations
+
+- `daemon/cli.py` resolves configuration and constructs adapters but does not own
+  coordinator process supervision, runtime locks, OpenCode lifecycle, or task
+  cancellation.
+- `daemon/slack/events.py` has one cohesive ingress owner; the FastAPI route is a
+  thin delegation.
+- The live test reuses the production application lifecycle and contains only
+  preflight, probe submission, evidence assertions, and test-specific cleanup.
+- Atomic repository and security-validation operations are not fragmented merely
+  to reduce line count.
+- Production logs expose enough safe correlation IDs to trace callback, turn,
+  OpenCode, delivery, retry, and shutdown without logging content or secrets.
 
 ## File Impact
 
@@ -808,24 +1000,29 @@ at each test layer.
 - `daemon/db/connection.py`: serialized migration lock.
 - `daemon/db/schema.py`: coordinator tables.
 - `daemon/db/migrations/versions/`: one additive coordinator revision.
-- `daemon/cli.py`: coordinator composition; remove Slack polling composition.
+- `daemon/cli.py`: thin coordinator composition; remove lifecycle supervision and
+  Slack polling composition.
 - `daemon/config.py`: aggregate coordinator config and environment settings.
 - `daemon/opencode/config.py`, `service.py`, `__init__.py`: exact version and
   response-bearing completion.
 - `daemon/slack/config.py`, `models.py`, `client.py`, `service.py`, `__init__.py`:
   event and delivery adapter responsibilities.
-- New `daemon/slack/events.py`: signed ingress.
+- New `daemon/slack/events.py`: cohesive signed ingress owner, deadline handling,
+  and safe structured callback logs.
 - `daemon/lch/systemd.py`, `setup.py`, `service.py`, `doctor.py`, `cli.py`: new
   units, workspace provisioning, diagnostics, and operations.
 - `bin/ocint/tach.toml`: coordinator dependency boundaries.
 - `bin/ocint/config/opencode.coordinator.json`: restricted coordinator policy.
 - `bin/ocint/config/daemon.example.toml`: coordinator configuration.
 - `bin/ocint/config/daemon.env.example`: Slack/ngrok environment documentation.
-- `bin/ocint/config/slack-app-manifest.yaml`: `message.groups` subscription.
+- `bin/ocint/config/slack-app-manifest.yaml`: public-channel
+  `message.channels` subscription and `channels:history` scope.
+- `bin/ocint/config/slack-e2e-actor-manifest.yaml`: test-user OAuth `chat:write` actor app.
+- `bin/ocint/config/live-e2e.env.example`: isolated live actor credential example.
 - `bin/ocint/justfile`: include coordinator tables in the exact daemon schema
   smoke assertion.
-- `bin/ocint/pyproject.toml`: include `live_tests` in static-check source roots
-  without adding it to default pytest discovery.
+- `bin/ocint/pyproject.toml`: register strict `live` marker and deselect it by
+  default while keeping all tests under `tests/`.
 
 ### Tests
 
@@ -834,8 +1031,10 @@ at each test layer.
 - Extend canonical Slack client, OpenCode service, DB, config, LCH, and
   architecture tests.
 - Add local coordinator E2E tests.
-- Add explicit live Slack/ngrok/OpenCode test under `live_tests/`, outside
-  default pytest discovery.
+- Add the explicit live Slack/ngrok/OpenCode test under `tests/live/`, marked
+  `live` and deselected by default.
+- Add sanitized real callback fixtures for public human UI and xoxp app-authored
+  `message.channels` events.
 
 ### Documentation
 
@@ -843,41 +1042,47 @@ at each test layer.
   diagrams, state and recovery.
 - Configuration: coordinator TOML, catalogue, Slack Events setup, environment.
 - Security: signatures, credential boundaries, OpenCode limitations.
+- Slack channel visibility: public/private event names, OAuth scopes, channel
+  type fields, and current public-only support.
 - Operations: coordinator/ngrok units, diagnostics, restart, E2E invocation.
-- ngrok: use `daemon.env`, static URL, dedicated service, no package `.env`.
+- ngrok: use `daemon.env`, static URL, dedicated service, and source the separate
+  `live-e2e.env` only for the explicit harness; no package `.env`.
 - Workflow/indexes: coordinator conversation and Phase 1 exclusions.
 
 ## Implementation Sequence
 
 1. Record worktree state and preserve unrelated/user edits.
-2. Add failing architecture and local E2E tests proving coordinator isolation and
-   Slack-to-coordinator behavior without jobs.
-3. Tidy database migration locking in `daemon/db`. Derive a persistent lock path
-   from the canonical database path, such as `daemon.sqlite.migrate.lock`; open
-   it without following symlinks, require a user-owned regular mode-0600 file,
-   take a blocking OS-level exclusive lock with `fcntl.flock`, run Alembic, then
-   release the lock without deleting the lock file. Verify simultaneous
-   migration attempts from separate processes preserve the database and produce
-   one migration head.
-4. Tidy OpenCode response extraction and update the exact `1.18.15` pin; run
-   existing job regression tests.
-5. Add coordinator config/models and generated context workspace/policy.
-6. Add coordinator tables to the shared schema/migration chain and implement
-   repository transactions/recovery.
-7. Add signed Slack ingress, normalized messages, and durable-before-ack.
-8. Add coordinator worker and one-thread/one-session OpenCode conversation.
-9. Add full response persistence, chunking, rate-aware Slack delivery, and
-   uncertain-delivery recovery.
-10. Remove Slack polling from timer-daemon composition while preserving old data.
-11. Add standalone coordinator command and bounded startup/shutdown.
-12. Add coordinator and ngrok systemd lifecycle and diagnostics.
-13. Update examples, Slack manifest, and documentation.
-14. Run focused tests, full checks, and existing GitHub/job regression tests.
-15. Stop manually running probe/ngrok processes, confirm production coordinator
-    units remain disabled, and run the autonomous live E2E.
-16. Review probe-scoped durable rows and the real Slack thread.
-17. Only after the live harness passes, enable the production coordinator and
-    ngrok units.
+2. Persist sanitized fixtures from the proven `message.channels` human and xoxp
+   callbacks; update Slack contract tests before production translation.
+3. Replace `message.groups`/`groups:history` with
+   `message.channels`/`channels:history` in manifest, access validation,
+   translation, examples, doctor, and documentation. Reject non-public channel
+   event types in Phase 1.
+4. Tidy coordinator process lifecycle out of `daemon/cli.py` into an exported
+   coordinator application context/workflow with injected delivery and generic
+   ingress dependencies. Preserve `coordinator -X-> slack` in Tach.
+5. Tidy `daemon/slack/events.py` into a cohesive ingress owner. Correct timeout
+   semantics so `503` returns within budget without awaiting the blocked thread.
+6. Add safe structured logs across ingress, runtime, OpenCode correlation,
+   delivery, retries, child exit, and bounded shutdown. Extend sensitive-field
+   architecture checks.
+7. Remove unused coordinator config types or wire them into the supported
+   application request; do not retain parallel unused policy models.
+8. Move the live test to `tests/live/`, register the strict marker/default
+   deselection, and reuse the production application context to remove duplicated
+   lifecycle code.
+9. Update actor setup and live policy for the observed xoxp callback shape. Keep
+   the policy test-only and exact-probe scoped.
+10. Update public/private Slack permission documentation, operations, security,
+    architecture diagrams, and implementation notes.
+11. Run focused tests, all 600+ deterministic tests, static checks, architecture,
+    schema smoke, package builds, and existing GitHub/job regressions.
+12. Stop temporary probe/ngrok windows, confirm production units are inactive,
+    and run the marker-gated autonomous live E2E in a newly created tmux window.
+13. Review probe-scoped durable rows, safe live logs, ngrok log, and the real
+    Slack thread.
+14. Only after live E2E and independent review pass, enable coordinator/ngrok,
+    verify restart recovery, commit, push, and open the PR.
 
 ## Verification
 
@@ -917,10 +1122,11 @@ Autonomous live E2E:
 ```bash
 set -a
 . "$HOME/.config/ocint/daemon.env"
+. "$HOME/.config/ocint/live-e2e.env"
 set +a
 uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
-  --package ocint --frozen pytest -s \
-  bin/ocint/live_tests/ocint/daemon/coordinator/test_slack.py
+  --package ocint --frozen pytest -m live -s \
+  bin/ocint/tests/live/ocint/daemon/coordinator/test_slack.py
 ```
 
 ## Rollout And Rollback
@@ -931,8 +1137,9 @@ Rollout:
 2. Generate and inspect coordinator context and OpenCode policy.
 3. Verify the existing GitHub timer daemon after Slack polling is disconnected.
 4. Keep production coordinator/ngrok units disabled and run the autonomous E2E
-   harness in `C0955FD2FK4`.
-5. Inspect probe-scoped evidence, then stop only harness-owned processes.
+   harness in public channel `C0955FD2FK4`.
+5. Inspect probe-scoped database evidence and mode-0600 live/ngrok logs, then stop
+   only harness-owned processes.
 6. Start coordinator systemd service.
 7. Start ngrok service against the already verified static domain.
 8. Verify production restart recovery before normal use.
@@ -954,8 +1161,10 @@ No rollback or test deletes a `.sqlite` or `.db` file.
   <https://docs.slack.dev/apis/events-api/>
 - Slack raw-body HMAC and replay protection:
   <https://docs.slack.dev/authentication/verifying-requests-from-slack/>
-- Private-channel `message.groups` event and `groups:history` scope:
-  <https://docs.slack.dev/reference/events/message.groups/>
+- Public-channel `message.channels` event and `channels:history` scope:
+  <https://docs.slack.dev/reference/events/message.channels/>
+- Private-channel comparison (`message.groups`/`groups:history`), not configured
+  in Phase 1: <https://docs.slack.dev/reference/events/message.groups/>
 - Slack message length and posting-rate guidance:
   <https://docs.slack.dev/reference/methods/chat.postMessage>
 - OpenCode server session/message/status/SSE APIs and basic authentication:
