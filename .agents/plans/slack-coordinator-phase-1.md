@@ -464,6 +464,8 @@ coordinator_turn
   id                       primary key
   event_id                 unique foreign key
   conversation_id          foreign key
+  source_order_at
+  source_order_tiebreaker
   state
   managed_prompt
   assistant_message_id
@@ -511,8 +513,12 @@ terminal error -> failed after safe response intent is persisted
 ```
 
 Persist intent before every external effect. One coordinator worker claims the
-oldest ready turn with an atomic transaction. Existing task/job claims remain
-independent.
+oldest ready turn with an atomic transaction. Convert provider timestamps to one
+canonical UTC ordering value at the provider boundary and use immutable provider
+message identity as the tie-breaker. A turn is claimable only when its
+conversation has no earlier non-terminal turn, including an earlier turn waiting
+for retry. This prevents a deferred first turn from being overtaken by a later
+Slack reply. Existing task/job claims remain independent.
 
 Migrations are additive. Preserve all existing Slack polling tables and data
 even after polling code is no longer composed. Never delete or recreate a
@@ -664,17 +670,18 @@ ID. Production policy has no environment flag, message prefix, route, or branch
 that accepts bot work. Coordinator replies therefore remain ignored and cannot
 loop.
 
-Place the explicit test outside default discovery:
+Place the explicit test outside the configured `tests/` discovery root:
 
 ```text
-bin/ocint/tests/live/ocint/daemon/coordinator/test_slack.py
+bin/ocint/live_tests/ocint/daemon/coordinator/test_slack.py
 ```
 
 It is not a production `slack-events-smoke` subcommand.
 
 ### Live Test Steps
 
-1. Fail fast unless ports `8733`, `4098`, and the static ngrok domain are free.
+1. Fail fast unless production coordinator/ngrok units are inactive and ports
+   `8733`, `4098`, and the static ngrok domain are free.
 2. Use the existing shared daemon database with a unique probe ID; never delete
    or recreate the database.
 3. Start production coordinator composition with the one-use actor policy.
@@ -684,8 +691,9 @@ It is not a production `slack-events-smoke` subcommand.
 7. Ask the coordinator to echo the probe ID and identify `dotfiles` from its
    repository catalogue.
 8. Wait for the real signed Slack event to appear in durable state.
-9. Assert one coordinator conversation and turn contain a real OpenCode session
-   ID and assistant message ID.
+9. Resolve the conversation and turn through the probe event/client-message ID,
+   then assert those probe-scoped rows contain a real OpenCode session ID and
+   assistant message ID. Do not assert global row counts in the shared database.
 10. Poll real Slack replies and assert the original thread contains the probe ID
     and `dotfiles` in the coordinator answer.
 11. Assert no new task, job, worktree, Git operation, or GitHub publication was
@@ -720,6 +728,8 @@ tests.
 - Slack root/reply JSON, `client_msg_id`, reply lookup, and HTTP 429;
 - OpenCode assistant ID/text extraction and recovery states;
 - serialized migrations and concurrent engines against one SQLite file;
+- simultaneous migrations from two separate processes using the same canonical
+  database-derived lock;
 - coordinator/ngrok systemd rendering and credential isolation.
 
 ### Local E2E
@@ -812,6 +822,10 @@ at each test layer.
 - `bin/ocint/config/daemon.example.toml`: coordinator configuration.
 - `bin/ocint/config/daemon.env.example`: Slack/ngrok environment documentation.
 - `bin/ocint/config/slack-app-manifest.yaml`: `message.groups` subscription.
+- `bin/ocint/justfile`: include coordinator tables in the exact daemon schema
+  smoke assertion.
+- `bin/ocint/pyproject.toml`: include `live_tests` in static-check source roots
+  without adding it to default pytest discovery.
 
 ### Tests
 
@@ -820,7 +834,8 @@ at each test layer.
 - Extend canonical Slack client, OpenCode service, DB, config, LCH, and
   architecture tests.
 - Add local coordinator E2E tests.
-- Add explicit live Slack/ngrok/OpenCode test outside default discovery.
+- Add explicit live Slack/ngrok/OpenCode test under `live_tests/`, outside
+  default pytest discovery.
 
 ### Documentation
 
@@ -837,7 +852,13 @@ at each test layer.
 1. Record worktree state and preserve unrelated/user edits.
 2. Add failing architecture and local E2E tests proving coordinator isolation and
    Slack-to-coordinator behavior without jobs.
-3. Tidy database migration locking in `daemon/db` and verify concurrent startup.
+3. Tidy database migration locking in `daemon/db`. Derive a persistent lock path
+   from the canonical database path, such as `daemon.sqlite.migrate.lock`; open
+   it without following symlinks, require a user-owned regular mode-0600 file,
+   take a blocking OS-level exclusive lock with `fcntl.flock`, run Alembic, then
+   release the lock without deleting the lock file. Verify simultaneous
+   migration attempts from separate processes preserve the database and produce
+   one migration head.
 4. Tidy OpenCode response extraction and update the exact `1.18.15` pin; run
    existing job regression tests.
 5. Add coordinator config/models and generated context workspace/policy.
@@ -852,8 +873,11 @@ at each test layer.
 12. Add coordinator and ngrok systemd lifecycle and diagnostics.
 13. Update examples, Slack manifest, and documentation.
 14. Run focused tests, full checks, and existing GitHub/job regression tests.
-15. Stop manually running probe/ngrok processes and run the autonomous live E2E.
-16. Review durable rows and the real Slack thread before declaring Phase 1 done.
+15. Stop manually running probe/ngrok processes, confirm production coordinator
+    units remain disabled, and run the autonomous live E2E.
+16. Review probe-scoped durable rows and the real Slack thread.
+17. Only after the live harness passes, enable the production coordinator and
+    ngrok units.
 
 ## Verification
 
@@ -896,7 +920,7 @@ set -a
 set +a
 uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
   --package ocint --frozen pytest -s \
-  bin/ocint/tests/live/ocint/daemon/coordinator/test_slack.py
+  bin/ocint/live_tests/ocint/daemon/coordinator/test_slack.py
 ```
 
 ## Rollout And Rollback
@@ -906,11 +930,12 @@ Rollout:
 1. Apply the shared additive migration without starting the coordinator worker.
 2. Generate and inspect coordinator context and OpenCode policy.
 3. Verify the existing GitHub timer daemon after Slack polling is disconnected.
-4. Start coordinator locally and verify database/OpenCode health.
-5. Start coordinator systemd service.
-6. Start ngrok service against the already verified static domain.
-7. Run the autonomous E2E in `C0955FD2FK4`.
-8. Verify restart recovery before normal use.
+4. Keep production coordinator/ngrok units disabled and run the autonomous E2E
+   harness in `C0955FD2FK4`.
+5. Inspect probe-scoped evidence, then stop only harness-owned processes.
+6. Start coordinator systemd service.
+7. Start ngrok service against the already verified static domain.
+8. Verify production restart recovery before normal use.
 
 Rollback:
 
