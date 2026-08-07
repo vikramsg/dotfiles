@@ -2,190 +2,289 @@
 
 ## Outcome
 
-Phase 1 creates one always-on coordinator sandbox that can hold a conversation
-with Slack through OpenCode.
+Phase 1 connects Slack to one always-running coordinator OpenCode sandbox.
 
 ```text
 Slack private-channel thread
           |
-          | signed Events API callback
+          | Events API
           v
-ngrok -> coordinator ingress on 127.0.0.1:8733
+ngrok -> signed Slack ingress
           |
-          | durable turn
+          | normalized conversation message
           v
-coordinator sandbox
-  - generated context workspace
+shared daemon database
+          |
+          v
+coordinator OpenCode sandbox
+  - fake/context workspace
   - repository catalogue
-  - private OpenCode HTTP server
-  - read and web-research tools
+  - web research
           |
-          | final assistant response
           v
-Slack reply in the original thread
+coordinator reply -> original Slack thread
 ```
 
-The coordinator is the only agent that communicates with Slack. There is no
-repository sandbox in Phase 1. The coordinator may explain that repository work
-is needed, but it cannot trigger, edit, commit, push, or publish anything.
+Only the coordinator talks to Slack. Phase 1 has no repository execution
+sandbox. The coordinator can answer, research, and explain that repository work
+is needed, but it cannot trigger another OpenCode server or modify a repository.
 
-This plan supersedes `.agents/plans/slack-events-api-smoke.md`. The external
-viability work from that plan is already complete: Slack has verified the
-static ngrok URL, `message.groups` is subscribed, and the configured signing
-secret has authenticated a real Slack request.
+The acceptance test is fully autonomous. The existing Slack bot posts a marked
+test message, Slack delivers the real event through ngrok, the real coordinator
+OpenCode sandbox runs, and the coordinator answer appears in the Slack thread.
+No human posts a message or clicks anything during the test.
 
-## Business Model
+This plan supersedes `.agents/plans/slack-events-api-smoke.md` and the previous
+version of this plan. External viability is already proven: Slack verified the
+static ngrok URL, the signing secret authenticated a real Slack request, and
+`message.groups` is subscribed.
 
-### Coordinator Sandbox
+## Corrected Architecture
 
-The coordinator sandbox is a generated context workspace, not a checkout of a
-target repository:
+### Polling And Events Are Input Mechanisms
+
+GitHub polling and Slack Events API delivery are two ways to discover messages.
+They are not different persistence domains:
 
 ```text
-coordinator workspace
+GitHub polling adapter ----\
+                            -> normalized input -> durable workflow
+Slack Events adapter ------/
+```
+
+Both use the existing daemon database infrastructure:
+
+```text
+                       daemon/db
+             connection, WAL, migrations, schema
+                          |
+             +------------+-------------+
+             |                          |
+   existing task/job repositories   coordinator repository
+```
+
+There is one SQLite file and one migration chain. Do not create a coordinator
+database.
+
+Phase 1 connects Slack events to the coordinator workflow. The existing GitHub
+polling and repository-job workflow remains operational. The normalized message
+model must not contain Slack transport concepts, so a later change can route
+GitHub-polled messages to the coordinator without changing coordinator state.
+That later routing is not part of Phase 1.
+
+### Repository Sandboxes Are OpenCode Runtimes
+
+The future Phase 2 sandbox is not another persistence system. It is an OpenCode
+HTTP server rooted in a repository workspace and configured with that
+repository's tools and permissions:
+
+```text
+coordinator OpenCode
+        |
+        | select target and send prompt
+        v
+repository OpenCode server + repository workspace
+        |
+        | result
+        v
+coordinator OpenCode -> Slack
+```
+
+Phase 2 adds sandbox selection and another OpenCode call. Do not add a
+delegation database, delegation table, queue, or speculative routing contract in
+Phase 1.
+
+## Coordinator Sandbox
+
+The Phase 1 sandbox is one private OpenCode HTTP server rooted in a generated
+fake repository/context workspace:
+
+```text
+~/.local/share/ocint/coordinator/
 ├── AGENTS.md
 └── repositories.json
 ```
 
-`AGENTS.md` defines the coordinator's role and Phase 1 limits.
-`repositories.json` lists the repositories that may become execution targets in
-later phases. Each entry contains a stable configured name, a human-readable
-description, the GitHub repository identity, and the default branch. It contains
-no credentials, local target-repository paths, author details, or SSH material.
+The workspace is not a checkout of `dotfiles` or another target repository.
 
-The workspace is called a sandbox because OpenCode is constrained to that
-directory and a restrictive tool policy. It is not an operating-system security
-sandbox; the process still runs as the daemon user. Phase 1 reduces that risk by
-denying shell execution, edits, and external-directory access and by giving the
-OpenCode child a credential-minimal environment.
+`AGENTS.md` defines the coordinator's role:
 
-### Conversation
+- It is the sole conversational agent for Slack.
+- It can answer questions and use web research.
+- It knows which repositories are available from `repositories.json`.
+- It cannot inspect or modify target repositories in Phase 1.
+- It must not claim that repository work has been completed.
+- If work is needed, it identifies the likely repository and objective and says
+  repository execution is not available yet.
+- It keeps responses concise and suitable for Slack.
+- It asks follow-up questions in its normal response, not through an interactive
+  OpenCode question tool.
 
-One physical Slack root thread maps to one OpenCode session:
+`repositories.json` contains only safe routing context:
 
-```text
-Slack root message -----> coordinator conversation -----> OpenCode session
-Slack thread reply -----^                               |
-                                                        v
-                                                accumulated context
+```json
+{
+  "repositories": [
+    {
+      "name": "dotfiles",
+      "description": "Personal configuration for OpenCode, Neovim, tmux, and terminals.",
+      "github_repository": "vikramsg/dotfiles",
+      "default_branch": "main"
+    }
+  ]
+}
 ```
 
-- An authorized human root creates the conversation and OpenCode session.
-- Authorized human replies in that Slack thread become later turns in the same
-  OpenCode session.
-- Turns are processed in Slack message order, one at a time.
-- Coordinator replies are posted to the Slack root thread.
-- Bot replies, message edits, deletions, file-only events, unsupported subtypes,
-  and messages outside configured channels are acknowledged and ignored.
-- Unauthorized actors are acknowledged and ignored without invoking OpenCode or
-  posting a response.
+It does not contain credentials, local target-repository paths, SSH remotes,
+author identities, or validation commands.
 
-### Future Repository Delegation
+The term sandbox describes the configured OpenCode boundary, not an operating-
+system sandbox. The process runs as the daemon user. Phase 1 limits exposure by
+denying shell commands, edits, external-directory access, plugins, and MCP while
+allowing reads inside the context workspace plus web search/fetch.
 
-Phase 2 will add a daemon-owned contract from the coordinator to a selected
-repository sandbox:
+## Conversation Model
+
+One Slack root thread maps to one coordinator OpenCode session:
 
 ```text
-coordinator -> delegation policy/router -> repository sandbox -> result
-     ^                                                      |
-     `---------------- synthesized Slack response -----------'
+Slack root ----------------> coordinator conversation ----> OpenCode session
+Slack thread reply --------^                              |
+                                                           v
+                                                   accumulated context
 ```
 
-Do not add that contract in Phase 1. There is not yet enough concrete behavior
-to define its request, progress, cancellation, or result model. The coordinator
-context should instead say that repository execution is unavailable and that it
-must clearly identify the likely repository and objective when work is needed.
-This preserves the seam without speculative code.
+- An authorized human root creates a conversation and OpenCode session.
+- An authorized human thread reply creates another turn in the same session.
+- Turns are processed in source-message order.
+- Only one turn runs at a time in Phase 1.
+- The final coordinator output returns to the Slack root thread.
+- Bot-authored messages are ignored in production to prevent loops.
+- Edits, deletions, file-only messages, unsupported subtypes, unconfigured
+  channels, and unauthorized actors are durably ignored without OpenCode work.
 
-## Process Architecture
+The normalized inbound model is transport-neutral:
 
-The current timer daemon is intentionally bounded and cannot own a continuously
-available webhook. Phase 1 adds a separate process:
+```text
+ConversationIdentity
+  provider
+  workspace
+  channel
+  thread
+
+ConversationMessage
+  provider_event_id
+  conversation_identity
+  message_id
+  actor_id
+  text
+  source_created_at
+```
+
+Slack constructs these values from event IDs and timestamps. The model does not
+contain Slack request headers, retry numbers, bot tokens, or raw envelopes.
+
+## Process Topology
+
+The existing timer daemon remains bounded for GitHub polling. Slack requires an
+always-available HTTP endpoint, so Phase 1 adds one separate process while both
+processes use the same database infrastructure and file:
 
 ```text
 ocint-daemon.timer
     `-> ocint-daemon.service (oneshot)
-          `-> existing GitHub task/job/worktree flow
+          +-> GitHub polling
+          `-> existing task/job/repository OpenCode flow
 
 ocint-coordinator.service (always on)
-    +-> FastAPI ingress: 127.0.0.1:8733
+    +-> Slack ingress: 127.0.0.1:8733
     +-> coordinator worker
-    `-> OpenCode child: 127.0.0.1:4098
+    `-> coordinator OpenCode: 127.0.0.1:4098
 
 ocint-coordinator-ngrok.service (always on)
     `-> static public URL -> 127.0.0.1:8733
+
+both application processes -> existing daemon.sqlite
 ```
 
-The coordinator service owns the lifespan of its OpenCode child. It starts the
-private server, verifies its exact version, recovers durable turns, starts the
-worker, then accepts Slack callbacks. During shutdown it stops accepting HTTP,
-allows the active turn a bounded grace period, leaves unfinished checkpoints
-recoverable, and closes OpenCode.
+SQLite WAL, short atomic transactions, uniqueness constraints, and the existing
+busy timeout handle concurrent access. Phase 1 table ownership is explicit:
 
-The ngrok service uses the configured `OCINT_NGROK_URL`, disables request
-inspection, and forwards only to the dedicated ingress port. It never forwards
-the daemon control API on `8732` or OpenCode on `4098`.
+- The timer process continues claiming task/job rows.
+- The coordinator process claims only coordinator conversation/turn/delivery
+  rows.
+- Both may insert normalized source messages through domain repositories.
+- No coordinator transaction claims or changes a task/job row.
+
+Database migration is a shared database-management responsibility. Protect
+migrations with one daemon-owned filesystem lock so the timer and coordinator
+cannot run Alembic concurrently. Each process may call migration at startup, but
+only one performs it at a time and all workers start after the lock is released.
 
 ## Tidy, First
 
-Make two small preparatory changes before adding coordinator behavior:
+Perform only the preparation required for the new behavior:
 
-1. Extend the OpenCode facade with a response-bearing conversation operation.
-   The current client can submit and wait but discards the assistant's identity
-   and text. Add an immutable completion result containing the terminal
-   assistant message ID and concatenated text parts. Preserve the existing PR
-   job methods and behavior.
-2. Separate Slack transport from polling workflow. Keep reusable Web API calls,
-   typed wire payloads, rate-limit errors, and authentication in `slack/`.
-   Remove Slack polling from timer-daemon composition before enabling inbound
-   events, so one Slack message cannot enter both the legacy task flow and the
-   coordinator flow.
+1. **Database lifecycle:** put migration serialization in `daemon/db`, where
+   connection policy and Alembic already live. Do not put migration logic in
+   either workflow.
+2. **OpenCode response:** extend the current OpenCode facade to return a stable
+   assistant message ID and text. Existing PR jobs already submit and recover
+   prompts but discard the response.
+3. **Slack transport:** separate reusable Slack HTTP/authentication models from
+   polling orchestration. Remove Slack from timer-daemon source composition
+   before enabling coordinator events, preventing one Slack message from
+   entering both workflows.
 
-Do not refactor GitHub, Git, task, or pull-request-job modules. The coordinator
-must not depend on them.
+Do not refactor GitHub, Git, task, or pull-request-job behavior beyond removing
+the Slack polling adapter from their composition.
 
 ## Module Ownership
 
 ```text
-daemon/cli.py
-  - Click composition roots
-  - constructs concrete coordinator dependencies
+daemon/db/
+  - one physical schema and migration chain
+  - engine/WAL/foreign-key/busy-timeout policy
+  - database mode and migration lock
 
 daemon/coordinator/
-  - config.py       coordinator-owned policy
-  - models.py       conversation, turn, response, delivery vocabulary
-  - service.py      authorization, prompts, response chunking
-  - repository.py   durable conversation and delivery operations
+  - config.py       coordinator policy
+  - models.py       conversation, turn, delivery vocabulary
+  - service.py      authorization, prompt, response chunking
+  - repository.py   coordinator persistence operations
   - workspace.py    generated context workspace
-  - run.py          recovery, worker, service lifespan
-  - db/             independent schema and migrations
+  - run.py          worker, recovery, lifecycle
   - __init__.py     supported facade
 
 daemon/slack/
-  - config.py       workspace and channel authorization
-  - models.py       Slack Events and Web API DTOs
-  - events.py       signed inbound HTTP adapter
-  - client.py       Slack Web API adapter
-  - service.py      provider translation and reply delivery
+  - config.py       workspace/channel authorization
+  - models.py       Events API and Web API DTOs
+  - events.py       signed HTTP ingress
+  - client.py       Slack Web API transport
+  - service.py      Slack translation and reply delivery
   - __init__.py     supported facade
 
 daemon/opencode/
-  - existing private HTTP/process adapter
-  - response-bearing completion contract
+  - private process/HTTP adapter
+  - response-bearing conversation operation
 
 daemon/lch/
   - coordinator and ngrok systemd lifecycle
-  - diagnostics and setup
+  - provisioning and diagnostics
+
+daemon/cli.py
+  - composition roots only
 ```
 
 Dependency direction:
 
 ```text
-Slack ingress -> coordinator contracts <- coordinator worker
-                       |
-                       +-> OpenCode conversation contract
-                       `-> Slack delivery contract
+Slack ingress -> normalized coordinator input <- coordinator worker
+                                               |
+                                               +-> OpenCode contract
+                                               `-> Slack delivery contract
 
+coordinator -> daemon/db
 coordinator -X-> tasks
 coordinator -X-> pull_request_job
 coordinator -X-> git
@@ -193,20 +292,21 @@ coordinator -X-> github
 coordinator -X-> daemon control API
 ```
 
-Enforce these boundaries with Tach. Do not add AST tests that duplicate Tach.
+Enforce these boundaries with Tach, not duplicate AST tests.
 
 ## Configuration
 
-Replace the polling-oriented root `[slack]` configuration with coordinator-owned
-configuration. Backward compatibility is not required because inbound Slack is
-an explicit architecture replacement.
+Add coordinator policy to the existing daemon TOML. Replace the polling-oriented
+root `[slack]` runtime configuration; backward compatibility is not required for
+this explicit architecture change.
 
 Illustrative shape:
 
 ```toml
+database_path = "~/.local/state/ocint/daemon.sqlite"
+
 [coordinator]
-database_path = "~/.local/state/ocint/coordinator.sqlite"
-workspace_root = "~/.local/share/ocint/coordinator-workspace"
+workspace_root = "~/.local/share/ocint/coordinator"
 turn_timeout_seconds = 1800
 shutdown_timeout_seconds = 30
 response_chunk_characters = 3500
@@ -243,17 +343,16 @@ default_branch = "main"
 
 Validation rules:
 
-- Coordinator database and workspace paths are distinct from daemon job state,
-  mirrors, and worktrees.
-- Ingress and both OpenCode ports are unique and loopback-only.
-- Slack channel IDs are unique and actor allowlists are non-empty.
-- Repository catalogue names are unique.
-- Configured Slack workspace must match `auth.test`.
-- Response chunk size stays below Slack's 4,000-character recommendation after
-  adding chunk numbering.
-- Request and lifecycle timeouts are positive and bounded.
+- The coordinator workspace differs from mirrors and worktrees.
+- Coordinator and job OpenCode ports differ and are loopback-only.
+- Ingress is loopback-only and differs from control API port `8732`.
+- Slack channel IDs and repository catalogue names are unique.
+- Authorized-user sets are non-empty.
+- Slack workspace matches `auth.test`.
+- Response chunk size leaves room below Slack's 4,000-character recommendation.
+- Timeouts, body limits, and delivery intervals are positive.
 
-Credentials stay in mode-0600 `$XDG_CONFIG_HOME/ocint/daemon.env`:
+Credentials remain in the existing mode-0600 daemon environment file:
 
 ```text
 OCINT_DAEMON_SLACK_BOT_TOKEN
@@ -261,55 +360,42 @@ OCINT_DAEMON_SLACK_SIGNING_SECRET
 OCINT_NGROK_URL
 ```
 
-The coordinator OpenCode password is generated in memory for each service
-process. It is never persisted or passed in argv.
+No package `.env` file is used.
 
 ### OpenCode Version Prerequisite
 
-The VM currently has OpenCode `1.18.15`, while existing daemon configuration is
-hard-pinned to `1.17.20`. Resolve this before coordinator implementation:
+The VM currently runs OpenCode `1.18.15`, while existing daemon configuration
+requires `1.17.20`. Before coordinator implementation:
 
-1. Run the existing OpenCode HTTP integration suite against the `1.18.15`
-   protocol shape.
-2. Update the exact supported version pin to `1.18.15` for both runtimes.
-3. Keep startup exact-match validation; do not accept arbitrary versions.
-4. Re-run existing pull-request-job tests to prove no job regression.
+1. Verify current session/message/status/SSE behavior against `1.18.15`.
+2. Update the exact supported pin to `1.18.15` for both OpenCode runtimes.
+3. Keep exact startup version checks; do not accept an arbitrary version range.
+4. Re-run existing PR-job recovery tests.
 
-## Coordinator Workspace And OpenCode Policy
+## OpenCode Policy And Workspace
 
-LCH setup/apply generates only coordinator-owned files under private
-directories. It writes atomically and never follows symlinks.
+LCH creates private coordinator directories and atomically generates `AGENTS.md`
+and `repositories.json`. It rejects symlinks and preserves mode `0700` on
+directories and `0600` on generated files.
 
-`AGENTS.md` documents WHAT the coordinator does and WHY:
-
-- It is the sole conversational coordinator for Slack.
-- It knows only the repository catalogue supplied in the workspace.
-- It can answer questions and perform web research.
-- It cannot modify repositories or claim repository work was completed.
-- When repository changes are needed, it identifies the likely repository and
-  objective and states that execution is unavailable in Phase 1.
-- It writes concise responses suitable for Slack.
-- It does not ask interactive questions through OpenCode's `question` tool; it
-  asks in its normal response so the next Slack turn supplies context.
-
-Use a dedicated `opencode.coordinator.json`:
+Add `config/opencode.coordinator.json` with this policy:
 
 ```text
-share                deny/disabled
-read/list/glob/grep  allow inside workspace
-websearch/webfetch   allow
-edit/write/patch     deny
-bash/shell           deny
-external_directory   deny
-question             deny
-plugins/MCP/LSP      disabled unless later required explicitly
+share                 disabled
+read/list/glob/grep   allowed inside coordinator workspace
+websearch/webfetch    allowed
+edit/write/patch      denied
+bash/shell            denied
+external_directory    denied
+question              denied
+plugins/MCP/LSP       disabled
 ```
 
-OpenCode receives only isolated HOME/XDG paths, its config and basic-auth
-credentials, PATH, and locale. It must not receive Slack, GitHub, daemon API,
-ngrok, SSH, or Git credentials.
+The OpenCode child receives only isolated HOME/XDG paths, OpenCode provider
+authentication, its ephemeral HTTP basic-auth values, PATH, and locale. It does
+not receive Slack, ngrok, GitHub, daemon API, SSH, or Git credentials.
 
-## Inbound Slack Contract
+## Slack Ingress
 
 The dedicated FastAPI app exposes only:
 
@@ -317,66 +403,67 @@ The dedicated FastAPI app exposes only:
 POST /slack/events
 ```
 
-It has no OpenAPI docs, control routes, attach route, cookies, or generic proxy.
+It has no docs, generic proxy, daemon control routes, session-attach route, or
+public OpenCode route.
 
-Request sequence:
+Request handling:
 
-1. Stream the raw body with a configured hard byte limit, including when
-   `Content-Length` is absent.
+1. Stream the raw body with a hard configured byte limit, even without
+   `Content-Length`.
 2. Require `X-Slack-Request-Timestamp` and `X-Slack-Signature`.
-3. Reject a timestamp outside the configured five-minute default window.
-4. Compute HMAC-SHA256 over `v0:{timestamp}:{raw_body}` using the signing secret.
-5. Compare signatures in constant time.
-6. Parse the authenticated body into typed Slack payloads.
-7. Require the configured workspace identity.
-8. Return a signed `url_verification` challenge without creating a turn.
-9. Normalize `event_callback` message events and durably insert them.
-10. Wake the worker and return `200` without waiting for OpenCode or Slack Web
-    API delivery.
+3. Reject timestamps outside the configured five-minute default.
+4. Compute `v0=` HMAC-SHA256 over the exact raw body and compare in constant
+   time.
+5. Parse only after authentication.
+6. Require the configured workspace.
+7. Answer signed `url_verification` requests with the challenge.
+8. Convert supported `event_callback` messages into normalized conversation
+   messages.
+9. Insert the event/message durably and atomically deduplicate it.
+10. Wake the worker and return `200` without calling OpenCode or Slack Web API.
 
-Slack requires a 2xx response within three seconds and retries failed delivery
-up to three times. If durable insertion fails, return a retryable 5xx. Duplicate
-`event_id` or message identity returns `200` without another turn.
+Slack requires a 2xx within three seconds. A database failure returns 5xx so
+Slack retries. Duplicate event or message identity returns `200` without another
+turn.
 
-Do not persist raw request envelopes, signatures, deprecated verification
-tokens, or authorization arrays. Persist only the normalized fields required to
-recover the conversation.
+Do not store raw envelopes, signatures, deprecated verification tokens,
+authorization arrays, or request headers.
 
-## Persistence
+## Shared Database And Persistence
 
-Use a separate coordinator SQLite database. This preserves the current daemon's
-single-process database ownership and prevents the timer daemon and always-on
-coordinator from sharing one control database.
+Add coordinator tables to the existing `daemon/db/schema.py` and linear Alembic
+migration chain:
 
 ```text
 coordinator_event
-  event_id              primary key
+  event_id                 primary key
+  provider
   workspace_id
   channel_id
-  message_ts
-  thread_ts
+  thread_id
+  message_id
   actor_id
-  bot_id
-  client_msg_id
   text
-  event_time
+  source_created_at
   disposition
   created_at
+  unique(provider, workspace_id, channel_id, message_id)
 
 coordinator_conversation
-  id                    primary key
+  id                       primary key
+  provider
   workspace_id
   channel_id
-  root_ts
+  thread_id
   opencode_session_id
   created_at
   updated_at
-  unique(workspace_id, channel_id, root_ts)
+  unique(provider, workspace_id, channel_id, thread_id)
 
 coordinator_turn
-  id                    primary key
-  event_id              unique foreign key
-  conversation_id       foreign key
+  id                       primary key
+  event_id                 unique foreign key
+  conversation_id          foreign key
   state
   managed_prompt
   assistant_message_id
@@ -387,329 +474,316 @@ coordinator_turn
   updated_at
 
 coordinator_delivery
-  turn_id               foreign key
+  turn_id                  foreign key
   chunk_index
-  client_msg_id         unique
+  client_msg_id            unique
   text
   state
-  slack_message_ts
+  provider_message_id
   retry_not_before
   primary key(turn_id, chunk_index)
 ```
 
-Also enforce uniqueness on `(workspace_id, channel_id, message_ts)` so Slack
-cannot create two turns through different event wrappers for one message.
+These tables share the physical database but remain coordinator-owned domain
+state. Existing generic database management does not become a god repository:
+
+- `daemon/db` owns schema, migrations, connection policy, and locks.
+- Coordinator repository owns coordinator queries and state transitions.
+- Task/job repositories continue owning task/job queries and transitions.
 
 Turn state:
 
 ```text
-received
-   |
-   v
-session_ready
-   |
-   v
-prompt_intended -> prompt_submitted -> response_ready
-                                          |
-                                          v
-                                      delivering
-                                          |
-                                          v
-                                      completed
+received -> session_ready -> prompt_intended -> prompt_submitted
+                                                |
+                                                v
+                                         response_ready
+                                                |
+                                                v
+                                           delivering
+                                                |
+                                                v
+                                           completed
 
 received -> ignored
-any recoverable state -> failed or retry_not_before
+recoverable state -> retry_not_before
+terminal error -> failed after safe response intent is persisted
 ```
 
-Persist intent before every external effect. Use transactions that claim one
-oldest turn at a time. Phase 1 has one worker globally; this makes per-thread
-ordering explicit without adding distributed locks.
+Persist intent before every external effect. One coordinator worker claims the
+oldest ready turn with an atomic transaction. Existing task/job claims remain
+independent.
 
-The coordinator database gets its own linear migration chain and connection
-factory with foreign keys, WAL, busy timeout, and mode-0600 enforcement. Never
-delete or recreate an existing database during setup, tests, rollback, or
-uninstall.
+Migrations are additive. Preserve all existing Slack polling tables and data
+even after polling code is no longer composed. Never delete or recreate a
+database file during setup, testing, rollback, or uninstall.
 
-## OpenCode Conversation Contract
+## OpenCode Conversation Adapter
 
-Add a narrow coordinator-owned protocol:
+Extend the existing OpenCode adapter with a response-bearing operation while
+preserving current job methods:
 
 ```text
 create_or_reuse_session(workspace, identity) -> session_id
-observe_prompt(workspace, session_id, exact_prompt) -> prompt state
-submit_prompt(workspace, session_id, exact_prompt)
-wait_for_completion(workspace, session_id, exact_prompt)
-completion(workspace, session_id, exact_prompt)
-    -> assistant_message_id + text
+observe exact managed prompt
+submit exact managed prompt
+wait for terminal assistant and idle session
+read completion -> assistant_message_id + text
 ```
 
-The concrete adapter reuses the existing OpenCode HTTP client. Extend message
-DTOs with stable message IDs and extract only terminal assistant text parts
-after the exact managed user prompt.
+Add stable message IDs to OpenCode wire models. Completion extraction finds the
+terminal assistant after the exact latest managed user prompt and concatenates
+its text parts in order. Tool output and internal reasoning are not sent to
+Slack.
 
-Managed prompts include immutable Slack identity metadata and the user text:
+Managed prompt:
 
 ```text
 Slack turn
-workspace: T...
-channel: C...
+workspace: <workspace id>
+channel: <channel id>
 thread: <root timestamp>
 message: <message timestamp>
-actor: U...
+actor: <actor id>
 
-<message text>
+<user text>
 ```
 
-On recovery:
+Recovery:
 
-- If the exact prompt is absent, submit it.
-- If present and active, wait.
-- If present and complete, extract the existing response.
-- If present but interrupted, resubmit only according to the existing OpenCode
-  prompt-recovery rule; never append a second logical turn silently.
-- Persist the assistant message ID and complete text before Slack delivery.
+- Prompt absent: submit after persisting intent.
+- Prompt present and active: wait.
+- Prompt present and complete: read the existing assistant response.
+- Prompt present but inactive/incomplete: use the existing interrupted-prompt
+  recovery rule without silently adding a second logical turn.
+- Persist assistant ID and full response before starting Slack delivery.
 
-Session titles use a deterministic identity derived from workspace, channel,
-and root timestamp. The coordinator database remains authoritative for the
-mapping; title lookup permits recovery if session creation succeeded before the
-mapping checkpoint.
+Session identity derives deterministically from provider/workspace/channel/root
+thread. The database mapping is authoritative; OpenCode title lookup recovers a
+session created before its checkpoint committed.
 
-## Slack Reply Delivery
+## Slack Response Delivery
 
-The Slack adapter posts only coordinator output into the originating root
-thread. Repository workers do not exist in Phase 1 and will never receive Slack
-credentials in later phases.
+Only coordinator output is delivered. Slack transport credentials remain in
+the Slack adapter and never enter OpenCode.
 
-### Oversized Responses
+Slack recommends at most 4,000 characters in `text`, truncates beyond 40,000,
+and generally permits one post per second per channel. Handle all response sizes
+without data loss:
 
-Slack recommends no more than 4,000 characters in `text` and truncates beyond
-40,000. Preserve the full coordinator response in SQLite, then split it into
-ordered messages before delivery:
+1. Persist the full OpenCode response.
+2. Split into chunks no larger than 3,500 characters including `[N/M]` numbering.
+3. Prefer paragraph, newline, then whitespace boundaries.
+4. Hard-split only when no boundary exists.
+5. Count Unicode code points, not bytes.
+6. Persist every chunk before posting the first.
+7. Post plain text with link/media unfurling disabled.
+8. Wait at least the configured per-channel interval between chunks.
 
-1. Use a 3,500-character maximum including an optional `[N/M]` prefix.
-2. Prefer paragraph, newline, then whitespace boundaries.
-3. Hard-split only when no boundary exists.
-4. Count Unicode code points, not encoded bytes.
-5. Post plain text with link/media unfurling disabled.
-6. Persist all chunks before posting the first one.
-7. Reconstructing chunk text from stored deliveries must reproduce the full
-   response exactly after removing numbering.
+Do not add file uploads or `files:write` in Phase 1. Ordered chunking preserves
+the complete answer with the existing Slack scope.
 
-Do not add file upload in Phase 1. Ordered chunking preserves all output without
-adding `files:write` or Slack's multi-step external upload lifecycle.
+Each chunk has a deterministic UUID `client_msg_id` based on turn and chunk
+index. If Slack may have accepted a post before the local checkpoint committed,
+recovery scans the thread for that ID and records the existing message rather
+than posting a duplicate.
 
-Slack generally permits one message per second per channel. Deliver chunks at
-the configured minimum interval. On HTTP 429, persist Slack's `Retry-After` and
-resume later. Do not sleep inside the webhook handler.
+On HTTP 429, persist `Retry-After` and resume later. Never sleep or post from the
+webhook request handler.
 
-Each delivery uses a deterministic UUID `client_msg_id` derived from turn ID
-and chunk index. If a crash occurs after Slack accepts a post but before the
-checkpoint commits, recovery scans the thread for that `client_msg_id` before
-posting again. Completed chunks are never resent.
+## Failure And Recovery
 
-## Failure And Recovery Policy
-
-- Invalid public requests: reject without persistence.
-- Valid unsupported Slack events: persist an ignored disposition and return
-  `200`.
-- Coordinator database unavailable: return 5xx so Slack retries.
-- OpenCode transient/network failure: retain the turn and retry with bounded
-  backoff.
-- OpenCode terminal error or turn timeout: persist a safe coordinator failure
-  response and deliver it once without provider details or credentials.
-- Slack network/5xx failure: retain deliveries for retry.
+- Invalid signature, stale timestamp, malformed authenticated body, or oversized
+  body: reject without state.
+- Valid unsupported event: record ignored disposition and return `200`.
+- Database unavailable: return 5xx for Slack retry.
+- OpenCode transient failure: retain turn and retry with bounded backoff.
+- OpenCode terminal failure or timeout: persist and deliver one safe coordinator
+  failure response without provider details.
+- Slack network/5xx failure: retain delivery for retry.
 - Slack 429: honor durable `Retry-After`.
 - Process restart: recover all non-terminal turns and deliveries in order.
-- OpenCode child exit: fail the service so systemd restarts the coordinator and
-  recovery reattaches to persisted sessions.
-- Shutdown timeout: cancel in-memory work without changing the last durable
-  checkpoint.
+- OpenCode child exit: fail the coordinator service; systemd restart recovers.
+- Shutdown timeout: cancel memory work without moving the durable checkpoint.
 
 ## Production Lifecycle
 
-Extend LCH setup/apply/uninstall/status/doctor for two new units while retaining
-the existing timer daemon:
+Add two user-systemd units while preserving the existing timer units.
 
 ### `ocint-coordinator.service`
 
 - `Type=simple`
-- loads the existing private `daemon.env`
+- `UMask=0077`
+- loads the existing `daemon.env`
 - runs `ocint daemon coordinator run`
 - restarts on failure with bounded delay
-- uses `UMask=0077`
 - starts after network availability
-- never prints credentials
+- starts ingress only after database migration and OpenCode health succeed
 
 ### `ocint-coordinator-ngrok.service`
 
-- starts after and requires the coordinator unit
-- runs the installed ngrok binary against port `8733`
-- requests `${OCINT_NGROK_URL}` explicitly
-- disables HTTP inspection to avoid retaining Slack payloads
-- loads only the environment needed for the public URL
+- requires and starts after the coordinator unit
+- forwards `${OCINT_NGROK_URL}` to `127.0.0.1:8733`
+- disables ngrok HTTP inspection to avoid payload retention
+- does not expose ports `8732`, `4098`, or `4040`
 - restarts on failure
 
-Doctor verifies configuration, file ownership/modes, Slack `auth.test`, channel
-access, signing-secret presence, ngrok config, exact OpenCode version, generated
-workspace policy, port separation, and systemd payloads. It does not print or
-send the signing secret merely to "test" it; real signed callback coverage is
-provided by the live E2E.
+LCH setup/apply/status/doctor/uninstall manages both units alongside the existing
+timer. Doctor validates config, private files, Slack `auth.test`, configured
+channel access, signing-secret presence, ngrok config, exact OpenCode version,
+workspace policy, port separation, migration head, and systemd payloads.
 
-Uninstall stops and removes coordinator/ngrok units but preserves configuration,
-workspace context, OpenCode data, coordinator database, daemon database, and
-credentials.
+Uninstall removes units but preserves the shared database, coordinator rows,
+workspace context, OpenCode data, credentials, and Slack messages.
 
-## Autonomous E2E Strategy
+## Autonomous Live E2E
 
-The acceptance test must not require a human Slack message. It uses the existing
-Slack app as an artificial test actor while production continues to ignore bot
-messages.
-
-### Test Shape
+The production policy ignores bot messages. The live test uses the existing bot
+without adding a production test command or backdoor.
 
 ```text
-opt-in live pytest
+explicit live pytest
     |
     +-> starts production coordinator factories
-    +-> starts real coordinator OpenCode server
-    +-> starts real ingress and ngrok static URL
-    +-> arms one in-memory E2E actor policy with PROBE_ID
+    +-> starts real OpenCode coordinator sandbox
+    +-> starts ingress and ngrok
+    +-> injects one-use E2E actor policy for PROBE_ID
     |
-    +-> existing bot chat.postMessage(client_msg_id=PROBE_ID)
+    +-> existing bot posts root with client_msg_id=PROBE_ID
             |
             v
-         real Slack
+       real Slack event -> real coordinator -> real OpenCode
             |
             v
-         real signed message.groups callback
-            |
-            v
-         coordinator -> real OpenCode -> Slack reply
-            |
-            v
-    assert durable and remote evidence
+       coordinator reply in real Slack thread
 ```
 
-The test injects a narrow actor-policy fake that accepts exactly one root message
-from the authenticated bot when its `client_msg_id` equals the pre-armed probe
-ID. This policy exists only in the live test composition. Production policy
-continues to ignore all bot-authored messages, so there is no test flag,
-environment backdoor, magic message prefix, or reply loop in production code.
+The one-use E2E actor policy is injected only by test composition. It accepts an
+own-bot root only when its `client_msg_id` exactly matches the pre-armed probe
+ID. Production policy has no environment flag, message prefix, route, or branch
+that accepts bot work. Coordinator replies therefore remain ignored and cannot
+loop.
 
-Put the test outside default pytest discovery at:
+Place the explicit test outside default discovery:
 
 ```text
 bin/ocint/tests/live/ocint/daemon/coordinator/test_slack.py
 ```
 
-It is invoked explicitly and constructs typed live settings from the already
-exported daemon environment. It does not add a production smoke subcommand.
+It is not a production `slack-events-smoke` subcommand.
 
-### Live Scenario
+### Live Test Steps
 
-1. Fail fast unless ports `8733`, `4098`, and ngrok's static domain are free.
-2. Use a dedicated persistent live-E2E coordinator database and workspace. Never
-   delete the database.
-3. Generate a probe UUID and arm the E2E actor policy.
-4. Start the real coordinator OpenCode runtime, worker, ingress, and ngrok.
-5. Post a root message to `C0955FD2FK4` with the existing bot token and probe ID.
-6. Ask the coordinator to return the probe ID and identify `dotfiles` from its
+1. Fail fast unless ports `8733`, `4098`, and the static ngrok domain are free.
+2. Use the existing shared daemon database with a unique probe ID; never delete
+   or recreate the database.
+3. Start production coordinator composition with the one-use actor policy.
+4. Start the real coordinator OpenCode server and verify exact version/health.
+5. Start ngrok for the configured static URL.
+6. Post a root to `C0955FD2FK4` using the existing bot token and probe ID.
+7. Ask the coordinator to echo the probe ID and identify `dotfiles` from its
    repository catalogue.
-7. Wait with a bounded timeout for the real Slack event receipt.
-8. Assert one conversation and one turn use a non-empty real OpenCode session.
-9. Assert the turn records a terminal assistant message ID and response.
-10. Poll `conversations.replies` and assert the bot reply is in the original
-    thread and contains both the probe ID and `dotfiles`.
-11. Assert no daemon task, job, worktree, Git, or GitHub publication API was
-    called by the coordinator composition.
-12. Stop only processes started by the test. Retain marked Slack messages and
-    durable E2E records as auditable evidence.
+8. Wait for the real signed Slack event to appear in durable state.
+9. Assert one coordinator conversation and turn contain a real OpenCode session
+   ID and assistant message ID.
+10. Poll real Slack replies and assert the original thread contains the probe ID
+    and `dotfiles` in the coordinator answer.
+11. Assert no new task, job, worktree, Git operation, or GitHub publication was
+    created for the probe.
+12. Stop only ingress, ngrok, and OpenCode processes started by the test. Keep
+    the marked Slack thread and database rows as evidence.
 
-The coordinator's own Slack reply also produces a real event. The E2E policy
-accepts only the armed root ID, and normal bot filtering ignores the reply.
+This proves the full path without waiting for a human Slack message.
 
-### Deterministic E2E And Integration Coverage
+## Deterministic Test Coverage
 
-The live LLM scenario proves transport and real OpenCode activation but must not
-carry all deterministic behavior assertions. Add local E2E coverage using a fake
-Slack transport and fake OpenCode gateway for:
+The live LLM test proves real integration but does not replace deterministic
+tests.
 
-- multi-turn session reuse;
-- duplicate event delivery;
-- restart after prompt submission;
-- restart during uncertain Slack delivery;
-- OpenCode failure and timeout;
-- a response longer than 8,000 characters producing ordered Slack chunks;
-- HTTP 429 during the middle chunk;
-- Unicode and hard-split boundaries;
-- bot-loop prevention;
-- absolute absence of task/job/execution calls.
+### Unit
 
-Integration tests use a real local FastAPI/ASGI boundary for Slack signatures
-and real local aiohttp fakes for Slack and OpenCode HTTP contracts.
+- authorization and bot filtering;
+- provider-neutral message construction;
+- deterministic session identity and prompts;
+- response chunking, Unicode boundaries, and exact reconstruction;
+- delivery scheduling and safe error text;
+- coordinator repository claims and state transitions;
+- generated workspace contents, permissions, and secret/path exclusion.
+
+### Integration
+
+- raw-body Slack HMAC and case-insensitive headers;
+- timestamp freshness and body limits without `Content-Length`;
+- URL verification and workspace checks;
+- durable-before-ack and database-failure 5xx;
+- event/message deduplication;
+- Slack root/reply JSON, `client_msg_id`, reply lookup, and HTTP 429;
+- OpenCode assistant ID/text extraction and recovery states;
+- serialized migrations and concurrent engines against one SQLite file;
+- coordinator/ngrok systemd rendering and credential isolation.
+
+### Local E2E
+
+Use fake Slack and fake OpenCode adapters with the real coordinator service and
+temporary schema to verify:
+
+- root then follow-up reuse one OpenCode session;
+- duplicate Slack retries create one turn and reply;
+- restart after prompt submission does not resubmit;
+- uncertain Slack delivery is recovered without duplication;
+- an 8,000+ character response produces ordered chunks;
+- 429 during a middle chunk resumes correctly;
+- bot reply events do not recurse;
+- no task/job/execution dependency is invoked.
+
+Tests follow GIVEN/WHEN/THEN and keep one canonical module per production module
+at each test layer.
 
 ## Acceptance Criteria
 
-### External And Security
+### Transport And Security
 
-- Slack reaches only `POST /slack/events` through the static ngrok URL.
-- Every accepted callback has a fresh, valid Slack signature.
-- Valid callbacks are durably recorded before the response.
-- Callback acknowledgement does not wait for OpenCode or Slack Web API work.
-- Slack, ngrok, GitHub, API, and SSH credentials are absent from the OpenCode
-  child environment and context workspace.
-- OpenCode and daemon control ports remain loopback-only and are not exposed by
-  ngrok.
+- Slack can reach only `POST /slack/events` through ngrok.
+- Every accepted callback has a valid fresh Slack signature.
+- Events are durable before `200`; OpenCode and Slack replies happen later.
+- OpenCode and daemon control APIs remain private.
+- Slack, ngrok, GitHub, API, and SSH credentials are absent from coordinator
+  OpenCode environment and workspace.
 
 ### Conversation
 
-- An authorized Slack root creates one coordinator conversation and one
-  OpenCode session.
-- Authorized Slack replies reuse that session and preserve turn order.
-- Every user-visible reply comes from the coordinator flow and returns to the
-  original Slack thread.
-- Bot replies cannot recursively create turns.
-- Phase 1 cannot create a repository job, worktree, commit, push, or PR.
+- An authorized Slack root creates one coordinator conversation and OpenCode
+  session.
+- Thread replies reuse that session and preserve order.
+- The coordinator is the only Slack-facing agent.
+- Bot replies cannot create recursive turns.
+- The coordinator can read the repository catalogue and perform web research.
+- Phase 1 cannot trigger repository OpenCode, tasks, jobs, Git, or publication.
 
-### Reliability
+### Persistence And Reliability
 
-- Slack retries do not duplicate events, prompts, or responses.
-- Coordinator restart resumes every non-terminal turn and delivery.
-- Full OpenCode output is persisted before delivery.
-- Responses over Slack's recommended size are delivered completely as ordered,
-  rate-limited, independently recoverable chunks.
-- All database migrations are additive and no database file is deleted.
+- One existing `daemon.sqlite` file and one migration chain serve both processes.
+- Database management remains shared infrastructure; domain repositories retain
+  their own state rules.
+- Concurrent process access is covered by WAL, short transactions, uniqueness,
+  busy timeout, and serialized migration.
+- Slack retries do not duplicate prompts or replies.
+- Restart resumes incomplete OpenCode and Slack delivery work.
+- Oversized responses are delivered completely as ordered chunks.
+- No database file is deleted or recreated.
 
-### Live E2E
+### Autonomous E2E
 
-- The existing bot autonomously posts the test root.
-- Slack delivers the real signed callback through ngrok.
-- Durable state proves that the coordinator OpenCode sandbox ran.
-- The coordinator identifies the `dotfiles` catalogue entry.
-- Slack receives the answer in the same thread.
-- No human posts or clicks anything during the test.
-
-## Test Matrix
-
-| Layer | Behavior |
-| --- | --- |
-| Unit: coordinator service | authorization, prompt construction, ignored events, session identity, chunking, delivery timing |
-| Unit: coordinator repository | atomic dedupe, turn claims, checkpoints, retries, ordered deliveries, restart recovery |
-| Unit: workspace | deterministic context, no secrets/paths, private mode, no symlink overwrite |
-| Integration: Slack ingress | raw-body HMAC, timestamp window, body limit, URL challenge, workspace checks, 2xx/4xx/5xx |
-| Integration: Slack client | JSON root/reply posts, deterministic client IDs, replies lookup, 429 and Retry-After |
-| Integration: OpenCode | exact prompt observation, assistant ID/text extraction, active/interrupted/error states |
-| Integration: lifecycle | coordinator/ngrok systemd payloads, environment isolation, install/apply/uninstall preservation |
-| E2E local | event -> coordinator -> OpenCode fake -> chunked Slack fake, including restart cases |
-| E2E live | existing bot -> Slack -> ngrok -> ingress -> real OpenCode -> Slack thread reply |
-| Architecture | coordinator cannot import tasks, PR jobs, Git, GitHub, or control API |
-
-All normal tests use fake data and GIVEN/WHEN/THEN. Keep one canonical test
-module per production module at each test layer.
+- Existing bot posts the probe without user intervention.
+- Slack sends the real event through ngrok.
+- Durable state proves the real coordinator OpenCode sandbox ran.
+- OpenCode reads `dotfiles` from coordinator context.
+- Slack receives the coordinator answer in the same thread.
+- No task/job/repository execution is triggered.
 
 ## File Impact
 
-### New Coordinator Domain
+### New Coordinator Package
 
 - `bin/ocint/ocint/daemon/coordinator/__init__.py`
 - `bin/ocint/ocint/daemon/coordinator/config.py`
@@ -718,96 +792,72 @@ module per production module at each test layer.
 - `bin/ocint/ocint/daemon/coordinator/repository.py`
 - `bin/ocint/ocint/daemon/coordinator/workspace.py`
 - `bin/ocint/ocint/daemon/coordinator/run.py`
-- `bin/ocint/ocint/daemon/coordinator/db/connection.py`
-- `bin/ocint/ocint/daemon/coordinator/db/schema.py`
-- `bin/ocint/ocint/daemon/coordinator/db/migrations/`
 
-### Existing Production Files
+### Existing Production
 
-- `daemon/cli.py`: add coordinator composition; remove Slack polling from timer
-  composition.
-- `daemon/config.py`: aggregate coordinator config and settings credentials.
-- `daemon/opencode/service.py`: stable assistant response extraction.
-- `daemon/opencode/config.py`, `daemon/opencode/__init__.py`: exact supported
-  version and completion facade.
-- `daemon/slack/config.py`: event workspace/channel policy.
-- `daemon/slack/models.py`: Events API and delivery DTOs.
-- `daemon/slack/events.py`: dedicated inbound adapter.
-- `daemon/slack/client.py`: root/reply posting, reply lookup, rate-limit details.
-- `daemon/slack/service.py`, `daemon/slack/repository.py`: remove polling workflow
-  ownership and retain only provider behavior still required by coordinator.
-- `daemon/slack/__init__.py`: supported event/delivery facade.
-- `daemon/lch/systemd.py`, `setup.py`, `service.py`, `doctor.py`, `cli.py`: two
-  long-running units, context provisioning, diagnostics, status, cleanup.
-- `bin/ocint/tach.toml`: enforce new module boundaries.
-- `bin/ocint/config/opencode.coordinator.json`: coordinator tool policy.
-- `bin/ocint/config/daemon.example.toml`: coordinator example.
-- `bin/ocint/config/daemon.env.example`: keep all runtime environment examples in
-  the private daemon environment file.
-- `bin/ocint/config/slack-app-manifest.yaml`: declare `message.groups` while
-  retaining Socket Mode off.
+- `daemon/db/connection.py`: serialized migration lock.
+- `daemon/db/schema.py`: coordinator tables.
+- `daemon/db/migrations/versions/`: one additive coordinator revision.
+- `daemon/cli.py`: coordinator composition; remove Slack polling composition.
+- `daemon/config.py`: aggregate coordinator config and environment settings.
+- `daemon/opencode/config.py`, `service.py`, `__init__.py`: exact version and
+  response-bearing completion.
+- `daemon/slack/config.py`, `models.py`, `client.py`, `service.py`, `__init__.py`:
+  event and delivery adapter responsibilities.
+- New `daemon/slack/events.py`: signed ingress.
+- `daemon/lch/systemd.py`, `setup.py`, `service.py`, `doctor.py`, `cli.py`: new
+  units, workspace provisioning, diagnostics, and operations.
+- `bin/ocint/tach.toml`: coordinator dependency boundaries.
+- `bin/ocint/config/opencode.coordinator.json`: restricted coordinator policy.
+- `bin/ocint/config/daemon.example.toml`: coordinator configuration.
+- `bin/ocint/config/daemon.env.example`: Slack/ngrok environment documentation.
+- `bin/ocint/config/slack-app-manifest.yaml`: `message.groups` subscription.
 
 ### Tests
 
-- Mirror every new coordinator production module under unit/integration tests.
-- Add `tests/integration/ocint/daemon/slack/test_events.py`.
-- Extend the canonical Slack client and OpenCode service integration tests.
-- Replace the old Slack-to-PR E2E expectation with Slack-to-coordinator behavior;
-  retain historical migration coverage for old tables.
-- Add the explicit live test outside default discovery.
-- Extend LCH, config, database, and architecture tests in their existing canonical
-  modules.
+- Mirror coordinator modules under unit/integration test paths.
+- Add canonical Slack events integration tests.
+- Extend canonical Slack client, OpenCode service, DB, config, LCH, and
+  architecture tests.
+- Add local coordinator E2E tests.
+- Add explicit live Slack/ngrok/OpenCode test outside default discovery.
 
 ### Documentation
 
-- `docs/daemon/architecture/architecture.md`: process, state, recovery, and
-  sandbox diagrams.
-- `docs/daemon/architecture/provider-interactions.md`: coordinator-only Slack
-  boundary.
-- `docs/daemon/configuration.md`: coordinator TOML, Slack app setup, repository
-  catalogue, and environment.
-- `docs/daemon/security.md`: signing, credential flow, context limitations, and
-  OpenCode isolation.
-- `docs/daemon/operations.md`: services, recovery, logs, diagnostics, and live
-  E2E invocation.
-- `docs/daemon/ngrok.md`: read `OCINT_NGROK_URL` from `daemon.env`, dedicated
-  systemd service, and no package `.env`.
-- `docs/daemon/workflow.md` and package indexes: coordinator conversation and
-  explicit Phase 1 limits.
+- Architecture: shared database, dual input mechanisms, process and sandbox
+  diagrams, state and recovery.
+- Configuration: coordinator TOML, catalogue, Slack Events setup, environment.
+- Security: signatures, credential boundaries, OpenCode limitations.
+- Operations: coordinator/ngrok units, diagnostics, restart, E2E invocation.
+- ngrok: use `daemon.env`, static URL, dedicated service, no package `.env`.
+- Workflow/indexes: coordinator conversation and Phase 1 exclusions.
 
 ## Implementation Sequence
 
-1. Record the current clean/dirty worktree and preserve all existing user edits.
-2. Add failing architecture tests for coordinator isolation and a failing local
-   E2E proving Slack-to-coordinator conversation with no job calls.
-3. Tidy the OpenCode adapter: update the exact version pin, add message IDs and
-   completion text, and prove existing PR job behavior remains unchanged.
-4. Add coordinator config/models and generate the private context workspace and
-   restrictive OpenCode policy.
-5. Add the separate coordinator database, migration chain, repository
-   transactions, and recovery tests.
-6. Add signed Slack ingress and deterministic event normalization. Prove body
-   limits, freshness, durable-before-ack, and deduplication.
-7. Add the single coordinator worker and one-thread/one-session behavior.
-8. Add complete response persistence, stable chunking, rate-aware Slack delivery,
-   and uncertain-delivery recovery.
-9. Remove Slack polling from timer-daemon composition and remove dead polling
-   behavior without dropping historical tables or data.
-10. Add the standalone coordinator command and its bounded startup/shutdown.
-11. Add coordinator and ngrok systemd units plus LCH setup/apply/status/doctor/
-    uninstall behavior.
-12. Update examples, Slack manifest, and documentation to match the implemented
-    architecture.
-13. Run focused unit/integration/local-E2E verification.
-14. Run the full package check and regression suite.
-15. Stop any manually running probe/ngrok processes, then run the autonomous live
-    E2E against the static Slack Request URL.
-16. Review durable evidence and the real Slack thread before declaring Phase 1
-    complete.
+1. Record worktree state and preserve unrelated/user edits.
+2. Add failing architecture and local E2E tests proving coordinator isolation and
+   Slack-to-coordinator behavior without jobs.
+3. Tidy database migration locking in `daemon/db` and verify concurrent startup.
+4. Tidy OpenCode response extraction and update the exact `1.18.15` pin; run
+   existing job regression tests.
+5. Add coordinator config/models and generated context workspace/policy.
+6. Add coordinator tables to the shared schema/migration chain and implement
+   repository transactions/recovery.
+7. Add signed Slack ingress, normalized messages, and durable-before-ack.
+8. Add coordinator worker and one-thread/one-session OpenCode conversation.
+9. Add full response persistence, chunking, rate-aware Slack delivery, and
+   uncertain-delivery recovery.
+10. Remove Slack polling from timer-daemon composition while preserving old data.
+11. Add standalone coordinator command and bounded startup/shutdown.
+12. Add coordinator and ngrok systemd lifecycle and diagnostics.
+13. Update examples, Slack manifest, and documentation.
+14. Run focused tests, full checks, and existing GitHub/job regression tests.
+15. Stop manually running probe/ngrok processes and run the autonomous live E2E.
+16. Review durable rows and the real Slack thread before declaring Phase 1 done.
 
-## Verification Commands
+## Verification
 
-Focused deterministic verification:
+Focused:
 
 ```bash
 uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
@@ -820,17 +870,17 @@ uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
   bin/ocint/tests/e2e/ocint/daemon/coordinator
 ```
 
-Architecture and lifecycle verification:
+Database, lifecycle, and architecture:
 
 ```bash
 uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
   --package ocint --frozen pytest \
-  bin/ocint/tests/architecture/test_daemon_architecture.py \
+  bin/ocint/tests/integration/ocint/daemon/test_db.py \
   bin/ocint/tests/unit/ocint/daemon/lch \
-  bin/ocint/tests/integration/ocint/daemon/test_db.py
+  bin/ocint/tests/architecture/test_daemon_architecture.py
 ```
 
-Full verification:
+Full:
 
 ```bash
 just --justfile bin/ocint/justfile test
@@ -838,9 +888,7 @@ just --justfile bin/ocint/justfile check
 just --justfile bin/ocint/justfile smoke-daemon
 ```
 
-Autonomous live E2E, with credentials exported from the private daemon
-environment and production coordinator/ngrok units stopped to avoid port/domain
-conflicts:
+Autonomous live E2E:
 
 ```bash
 set -a
@@ -855,40 +903,35 @@ uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
 
 Rollout:
 
-1. Apply additive coordinator migrations without starting the service.
-2. Generate and inspect the coordinator workspace and OpenCode policy.
-3. Verify the existing GitHub timer daemon after Slack polling is removed.
-4. Start the coordinator locally and validate OpenCode health.
-5. Start the coordinator systemd unit.
-6. Start the ngrok unit against the already verified static domain.
-7. Run the autonomous live E2E in `C0955FD2FK4`.
-8. Confirm service restart recovers a queued synthetic turn before normal use.
+1. Apply the shared additive migration without starting the coordinator worker.
+2. Generate and inspect coordinator context and OpenCode policy.
+3. Verify the existing GitHub timer daemon after Slack polling is disconnected.
+4. Start coordinator locally and verify database/OpenCode health.
+5. Start coordinator systemd service.
+6. Start ngrok service against the already verified static domain.
+7. Run the autonomous E2E in `C0955FD2FK4`.
+8. Verify restart recovery before normal use.
 
 Rollback:
 
-1. Stop and disable coordinator and ngrok units.
-2. Leave Slack Event Subscriptions configured; Slack retries will fail while the
-   endpoint is intentionally offline, or disable the subscription manually for
-   a prolonged rollback.
-3. Preserve coordinator database, workspace, OpenCode data, daemon database, and
-   credentials.
-4. Keep the existing GitHub timer daemon operational.
+1. Stop and disable coordinator/ngrok units.
+2. Disable Slack Event Subscriptions manually only for prolonged rollback.
+3. Preserve shared database and all coordinator rows.
+4. Preserve workspace, OpenCode data, environment credentials, and Slack
+   messages.
+5. Keep GitHub timer daemon operational.
 
-No rollback step deletes a `.sqlite` or `.db` file or removes Slack messages.
+No rollback or test deletes a `.sqlite` or `.db` file.
 
 ## Research Basis
 
-- Slack Events API requires a 2xx within three seconds, retries failed events,
-  and recommends asynchronous processing:
+- Slack Events API acknowledgment, retry, and asynchronous-processing contract:
   <https://docs.slack.dev/apis/events-api/>
-- Slack request authentication uses the raw body, a five-minute timestamp
-  window, HMAC-SHA256, and constant-time comparison:
+- Slack raw-body HMAC and replay protection:
   <https://docs.slack.dev/authentication/verifying-requests-from-slack/>
-- `message.groups` is the private-channel event and requires `groups:history`:
+- Private-channel `message.groups` event and `groups:history` scope:
   <https://docs.slack.dev/reference/events/message.groups/>
-- Slack recommends messages at or below 4,000 characters, truncates beyond
-  40,000, and generally permits one post per second per channel:
+- Slack message length and posting-rate guidance:
   <https://docs.slack.dev/reference/methods/chat.postMessage>
-- OpenCode exposes authenticated session, message, status, and SSE APIs from a
-  loopback `opencode serve` process:
+- OpenCode server session/message/status/SSE APIs and basic authentication:
   <https://opencode.ai/docs/server/>
