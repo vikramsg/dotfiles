@@ -4,6 +4,9 @@ The daemon is a bounded orchestration process. A systemd user timer starts one
 invocation, that invocation reconciles durable work, and the process exits after
 an unchanged idle interval. It is not a permanently running queue worker.
 
+See [Provider Interactions](provider-interactions.md) for the target call stack
+between provider-neutral task coordination and platform adapters.
+
 ```text
  labelled GitHub issue or configured private Slack root
           |
