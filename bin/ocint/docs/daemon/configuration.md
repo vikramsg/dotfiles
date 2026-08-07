@@ -83,8 +83,39 @@ work. Only configured channels are polled.
 Create the Slack app from
 [`../../config/slack-app-manifest.yaml`](../../config/slack-app-manifest.yaml).
 It requests exactly `groups:history`, `chat:write`, and `reactions:write`.
-Socket Mode, Events API subscriptions, slash commands, and public-channel
-history are not used.
+Socket Mode, slash commands, and public-channel history are not used.
+
+### Enable Events API Delivery
+
+Open [Your Slack Apps](https://api.slack.com/apps), select **ocint**, and
+configure the existing app:
+
+1. Open **Basic Information > App Credentials**. Copy the **Signing Secret** to
+   `OCINT_DAEMON_SLACK_SIGNING_SECRET` in the private mode-0600
+   `$XDG_CONFIG_HOME/ocint/daemon.env` file.
+2. Open [**Event Subscriptions**](https://api.slack.com/apps/A0BLGK5EY56/event-subscriptions?) and turn **Enable Events** on.
+3. Set **Request URL** to the configured `OCINT_NGROK_URL` followed by
+   `/slack/events`.
+4. Wait for Slack to mark the Request URL as **Verified**. Slack sends a signed
+   `url_verification` request to perform this check.
+5. Under **Subscribe to bot events**, add `message.groups` for configured
+   private channels.
+6. Save the changes and reinstall the app to the workspace if Slack requests
+   it.
+
+Display the Request URL without writing the assigned ngrok domain into tracked
+configuration:
+
+```bash
+set -a
+. "$XDG_CONFIG_HOME/ocint/daemon.env"
+set +a
+printf '%s/slack/events\n' "$OCINT_NGROK_URL"
+```
+
+The bot must be a member of each configured private channel. The Events API
+request URL is public, but every callback must pass Slack signature verification
+before the daemon accepts it.
 
 Install or rotate the bot token without putting it in argv:
 
