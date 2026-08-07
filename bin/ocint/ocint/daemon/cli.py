@@ -3,7 +3,7 @@ import json
 import os
 import secrets
 from collections.abc import AsyncIterator, Iterator
-from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
 import click
@@ -14,7 +14,20 @@ from ocint._models import CliContext
 from ocint.daemon import logging as daemon_logging
 from ocint.daemon.api import create_api_router
 from ocint.daemon.config import DaemonConfig, DaemonContext, LoggingConfig
-from ocint.daemon.db import current_daemon_head_revision, migrate_daemon_db
+from ocint.daemon.coordinator import (
+    ChannelAccess,
+    ConfiguredAuthorizationPolicy,
+    CoordinatorApplicationRequest,
+    CoordinatorRepository,
+    CoordinatorRuntime,
+    CoordinatorService,
+    CoordinatorWorkspace,
+    CoordinatorWorkspaceConfig,
+    OpenCodeCoordinatorAdapter,
+    RepositoryCatalogueEntry,
+    run_coordinator_application,
+)
+from ocint.daemon.db import create_daemon_engine, current_daemon_head_revision, migrate_daemon_db
 from ocint.daemon.git import GitRuntimeConfig, create_git_manager
 from ocint.daemon.github import (
     GitHubGateway,
@@ -22,7 +35,7 @@ from ocint.daemon.github import (
     GitHubRepositoryPolicy,
     open_github_service,
 )
-from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle
+from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle, validate_coordinator_runtime
 from ocint.daemon.models import GitRepository
 from ocint.daemon.opencode import OpenCodeRuntimeConfig, create_opencode_client
 from ocint.daemon.pull_request_job import (
@@ -32,8 +45,13 @@ from ocint.daemon.pull_request_job import (
     create_pull_request_job_runner,
     open_pull_request_job_store,
 )
-from ocint.daemon.run import serve_bounded, wait_for_idle
-from ocint.daemon.slack import open_slack_service
+from ocint.daemon.run import serve_bounded, serve_signal_free_ingress, wait_for_idle
+from ocint.daemon.slack import (
+    create_slack_events_app,
+    open_slack_coordinator_delivery,
+    production_slack_actor_policy,
+    validate_coordinator_slack_access,
+)
 from ocint.daemon.tasks import SourceRouter, open_task_coordinator
 
 logger = daemon_logging.get_logger("cli")
@@ -103,6 +121,28 @@ def run_command(context: DaemonContext) -> None:
         logger.info("daemon cycle completed")
     except BaseException:
         logger.exception("daemon cycle failed")
+        raise
+    finally:
+        daemon_logging.close()
+
+
+@daemon.group("coordinator")
+def coordinator_command() -> None:
+    """Run the durable Slack coordinator."""
+
+
+@coordinator_command.command("run")
+@click.pass_obj
+def coordinator_run_command(context: DaemonContext) -> None:
+    daemon_logging.configure(daemon_logging.daemon_log_settings(context.state_home, LoggingConfig()))
+    logger.info("coordinator started", pid=os.getpid())
+    try:
+        config = context.config()
+        daemon_logging.configure(daemon_logging.daemon_log_settings(context.state_home, config.logging))
+        asyncio.run(_run_coordinator(context))
+        logger.info("coordinator stopped")
+    except BaseException:
+        logger.exception("coordinator failed")
         raise
     finally:
         daemon_logging.close()
@@ -220,19 +260,105 @@ async def _run_daemon(context: DaemonContext) -> None:
             for repository in config.repositories
         ]
     )
-    async with AsyncExitStack() as stack:
-        github = await stack.enter_async_context(
-            open_github_service(config.github, repositories, token, config.database_path)
-        )
-        sources = [github]
-        if config.slack is not None:
-            slack_token = context.settings.slack_bot_token.get_secret_value()
-            if not slack_token:
-                raise ValueError("OCINT_DAEMON_SLACK_BOT_TOKEN is required when Slack is configured")
-            sources.append(
-                await stack.enter_async_context(open_slack_service(config.slack, slack_token, config.database_path))
-            )
-        with open_daemon_app(context, github, SourceRouter(tuple(sources))) as application:
+    async with open_github_service(config.github, repositories, token, config.database_path) as github:
+        with open_daemon_app(context, github, SourceRouter((github,))) as application:
             await serve_bounded(
                 application.app, application.config.api.host, application.config.api.port, application.shutdown_event
             )
+
+
+async def _run_coordinator(context: DaemonContext) -> None:
+    config = context.config()
+    coordinator = config.coordinator
+    bot_token = context.settings.slack_bot_token.get_secret_value()
+    signing_secret = context.settings.slack_signing_secret.get_secret_value()
+    if not bot_token:
+        raise ValueError("OCINT_DAEMON_SLACK_BOT_TOKEN is required")
+    if not signing_secret:
+        raise ValueError("OCINT_DAEMON_SLACK_SIGNING_SECRET is required")
+
+    validate_coordinator_runtime(context, config)
+    await validate_coordinator_slack_access(coordinator.slack, bot_token)
+    migrate_daemon_db(config.database_path)
+    workspace = CoordinatorWorkspace(
+        CoordinatorWorkspaceConfig(
+            root=coordinator.workspace_root,
+            repositories=tuple(
+                RepositoryCatalogueEntry(
+                    name=repository.name,
+                    description=repository.description,
+                    github_repository=repository.github_repository,
+                    default_branch=repository.default_branch,
+                )
+                for repository in config.repositories
+            ),
+        )
+    )
+    workspace.generate()
+
+    engine = create_daemon_engine(
+        config.database_path,
+        busy_timeout_ms=coordinator.ingress.database_busy_timeout_ms,
+    )
+    try:
+        repository = CoordinatorRepository(engine)
+        service = CoordinatorService(
+            ConfiguredAuthorizationPolicy(
+                tuple(
+                    ChannelAccess(
+                        workspace=coordinator.slack.workspace_id,
+                        channel=channel.channel_id,
+                        authorized_actors=channel.authorized_users,
+                    )
+                    for channel in coordinator.slack.channels
+                )
+            ),
+            coordinator.response_chunk_characters,
+            coordinator.safe_failure_text,
+        )
+        opencode = create_opencode_client(
+            OpenCodeRuntimeConfig(
+                service=coordinator.opencode,
+                password=secrets.token_urlsafe(32),
+                execution_timeout_seconds=coordinator.turn_timeout_seconds,
+                process_path=context.settings.execution_path,
+                process_lang=context.settings.execution_lang,
+            )
+        )
+        async with open_slack_coordinator_delivery(bot_token) as delivery:
+            runtime = CoordinatorRuntime(
+                repository,
+                service,
+                OpenCodeCoordinatorAdapter(opencode, coordinator.workspace_root),
+                delivery,
+                coordinator.workspace_root,
+                coordinator.retry_seconds,
+                coordinator.max_turn_retries,
+                coordinator.orphan_retention_seconds,
+                coordinator.slack_post_interval_seconds,
+            )
+            app = create_slack_events_app(
+                coordinator.ingress,
+                coordinator.slack.workspace_id,
+                signing_secret,
+                service.prepare,
+                repository.ingest,
+                production_slack_actor_policy(),
+                runtime.wake,
+            )
+
+            async def serve_ingress(shutdown: asyncio.Event) -> None:
+                await serve_signal_free_ingress(app, coordinator.ingress.host, coordinator.ingress.port, shutdown)
+
+            request = CoordinatorApplicationRequest(
+                runtime=runtime,
+                opencode=opencode,
+                ingress=serve_ingress,
+                ingress_host=coordinator.ingress.host,
+                ingress_port=coordinator.ingress.port,
+                runtime_lock=context.state_home / "ocint" / "coordinator.lock",
+                shutdown_timeout_seconds=coordinator.shutdown_timeout_seconds,
+            )
+            await run_coordinator_application(request)
+    finally:
+        engine.dispose()

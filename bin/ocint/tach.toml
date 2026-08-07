@@ -95,18 +95,29 @@ depends_on = [
 [[modules]]
 path = "ocint.daemon.slack"
 depends_on = [
+  "ocint.daemon.coordinator",
   "ocint.daemon.db",
+  "ocint.daemon.logging",
   "ocint.daemon.models",
+]
+
+[[modules]]
+path = "ocint.daemon.coordinator"
+depends_on = [
+  "ocint.daemon.db",
+  "ocint.daemon.logging",
+  "ocint.daemon.models",
+  "ocint.daemon.opencode",
 ]
 
 [[modules]]
 path = "ocint.daemon.config"
 depends_on = [
+  "ocint.daemon.coordinator",
   "ocint.daemon.github",
   "ocint.daemon.git",
   "ocint.daemon.models",
   "ocint.daemon.opencode",
-  "ocint.daemon.slack",
   "ocint._models",
 ]
 
@@ -164,6 +175,7 @@ depends_on = [
   "ocint._models",
   "ocint.daemon.api",
   "ocint.daemon.config",
+  "ocint.daemon.coordinator",
   "ocint.daemon.db",
   "ocint.daemon.git",
   "ocint.daemon.github",

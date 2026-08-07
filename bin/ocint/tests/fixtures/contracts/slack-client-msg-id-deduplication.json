@@ -1,0 +1,26 @@
+{
+  "client_msg_id": "772b8798-747a-44d2-94f8-60350a3cb9e0",
+  "chat_post_message": [
+    {
+      "ok": true,
+      "ts": "1786102300.739099"
+    },
+    {
+      "ok": true,
+      "ts": "1786102300.739099"
+    }
+  ],
+  "conversations_replies": {
+    "ok": true,
+    "messages": [
+      {
+        "ts": "1786102300.739099",
+        "client_msg_id": "772b8798-747a-44d2-94f8-60350a3cb9e0",
+        "bot_id": "B0BKQ75PZK3"
+      }
+    ],
+    "response_metadata": {
+      "next_cursor": ""
+    }
+  }
+}

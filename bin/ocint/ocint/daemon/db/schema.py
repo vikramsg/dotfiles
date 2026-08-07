@@ -164,5 +164,93 @@ slack_reply = Table(
     Column("ts", String, nullable=False),
 )
 
+coordinator_event = Table(
+    "coordinator_event",
+    metadata,
+    Column("event_id", String, primary_key=True),
+    Column("provider", String, nullable=False),
+    Column("workspace_id", String, nullable=False),
+    Column("channel_id", String, nullable=False),
+    Column("thread_id", String, nullable=False),
+    Column("message_id", String, nullable=False),
+    Column("actor_id", String, nullable=False),
+    Column("text", Text, nullable=False),
+    Column("source_created_at", String, nullable=False),
+    Column("source_order_at", Integer, nullable=False),
+    Column("message_kind", String, nullable=False),
+    Column("managed_prompt", Text, nullable=False),
+    Column("disposition", String, nullable=False),
+    Column("created_at", String, nullable=False),
+    UniqueConstraint("provider", "workspace_id", "channel_id", "message_id", name="uq_coordinator_event_message"),
+)
+
+coordinator_conversation = Table(
+    "coordinator_conversation",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("provider", String, nullable=False),
+    Column("workspace_id", String, nullable=False),
+    Column("channel_id", String, nullable=False),
+    Column("thread_id", String, nullable=False),
+    Column("state", String, nullable=False),
+    Column("opencode_session_id", String, nullable=False),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    UniqueConstraint(
+        "provider", "workspace_id", "channel_id", "thread_id", name="uq_coordinator_conversation_identity"
+    ),
+)
+
+coordinator_turn = Table(
+    "coordinator_turn",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("event_id", String, ForeignKey("coordinator_event.event_id"), nullable=False, unique=True),
+    Column("conversation_id", Integer, ForeignKey("coordinator_conversation.id"), nullable=False),
+    Column("source_order_at", Integer, nullable=False),
+    Column("source_order_tiebreaker", String, nullable=False),
+    Column("state", String, nullable=False),
+    Column("managed_prompt", Text, nullable=False),
+    Column("opencode_user_message_id", String, nullable=False, unique=True),
+    Column("assistant_message_id", String, nullable=False),
+    Column("response_text", Text, nullable=False),
+    Column("error", Text, nullable=False),
+    Column("retry_count", Integer, nullable=False),
+    Column("retry_not_before", String, nullable=False),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+coordinator_delivery = Table(
+    "coordinator_delivery",
+    metadata,
+    Column("turn_id", Integer, ForeignKey("coordinator_turn.id"), primary_key=True),
+    Column("chunk_index", Integer, primary_key=True),
+    Column("client_msg_id", String, nullable=False, unique=True),
+    Column("text", Text, nullable=False),
+    Column("state", String, nullable=False),
+    Column("provider_message_id", String, nullable=False),
+    Column("retry_count", Integer, nullable=False),
+    Column("retry_not_before", String, nullable=False),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+Index(
+    "ix_coordinator_event_conversation",
+    coordinator_event.c.provider,
+    coordinator_event.c.workspace_id,
+    coordinator_event.c.channel_id,
+    coordinator_event.c.thread_id,
+)
+Index(
+    "ix_coordinator_turn_ready",
+    coordinator_turn.c.state,
+    coordinator_turn.c.retry_not_before,
+    coordinator_turn.c.source_order_at,
+    coordinator_turn.c.source_order_tiebreaker,
+)
+Index("ix_coordinator_delivery_ready", coordinator_delivery.c.state, coordinator_delivery.c.retry_not_before)
+
 Index("ix_thread_message_classification", thread_message.c.thread_id, thread_message.c.classification)
 Index("ix_task_state", task.c.thread_id, task.c.state)

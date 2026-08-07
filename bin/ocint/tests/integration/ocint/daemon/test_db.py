@@ -1,4 +1,7 @@
+import os
 import stat
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -38,6 +41,122 @@ def test_migration_secures_existing_database_without_recreating_it(tmp_path: Pat
     # THEN
     assert database.stat().st_ino == inode
     assert stat.S_IMODE(database.stat().st_mode) == 0o600
+
+
+def test_migration_uses_persistent_canonical_private_lock(tmp_path: Path) -> None:
+    # GIVEN
+    canonical_directory = tmp_path / "canonical"
+    canonical_directory.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(canonical_directory, target_is_directory=True)
+    database = alias / "control.sqlite"
+
+    # WHEN
+    migrate_daemon_db(database)
+    lock = canonical_directory / "control.sqlite.migrate.lock"
+    metadata = lock.stat()
+    migrate_daemon_db(database)
+
+    # THEN
+    assert lock.is_file()
+    assert metadata.st_uid == os.getuid()
+    assert stat.S_IMODE(metadata.st_mode) == 0o600
+    assert lock.stat().st_ino == metadata.st_ino
+
+
+def test_migration_rejects_non_private_lock(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    lock = tmp_path / "control.sqlite.migrate.lock"
+    lock.touch(mode=0o600)
+    lock.chmod(0o640)
+
+    # WHEN / THEN
+    with pytest.raises(PermissionError, match="user-owned regular mode-0600"):
+        migrate_daemon_db(database)
+    assert not database.exists()
+
+
+def test_migration_does_not_follow_lock_symlink(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    target = tmp_path / "unrelated"
+    target.write_text("preserve")
+    target.chmod(0o600)
+    lock = tmp_path / "control.sqlite.migrate.lock"
+    lock.symlink_to(target)
+
+    # WHEN / THEN
+    with pytest.raises(PermissionError, match="must not be a symbolic link"):
+        migrate_daemon_db(database)
+    assert target.read_text() == "preserve"
+    assert not database.exists()
+
+
+def test_engine_rejects_database_file_symlink_without_touching_target(tmp_path: Path) -> None:
+    # GIVEN
+    target = tmp_path / "preserved.sqlite"
+    target.write_text("preserved database bytes")
+    target.chmod(0o640)
+    configured = tmp_path / "configured.sqlite"
+    configured.symlink_to(target)
+
+    # WHEN / THEN
+    with pytest.raises(PermissionError, match="database file must not be a symbolic link"):
+        create_daemon_engine(configured)
+    assert target.read_text() == "preserved database bytes"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+
+
+def test_migration_rejects_database_file_symlink_without_touching_target(tmp_path: Path) -> None:
+    # GIVEN
+    target = tmp_path / "preserved.sqlite"
+    target.write_text("preserved database bytes")
+    target.chmod(0o640)
+    configured = tmp_path / "configured.sqlite"
+    configured.symlink_to(target)
+
+    # WHEN / THEN
+    with pytest.raises(PermissionError, match="database file must not be a symbolic link"):
+        migrate_daemon_db(configured)
+    assert target.read_text() == "preserved database bytes"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+    assert not (tmp_path / "preserved.sqlite.migrate.lock").exists()
+
+
+def test_separate_process_migrations_are_serialized_by_one_lock(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    invocation = (
+        "from pathlib import Path; "
+        "from ocint.daemon.db import migrate_daemon_db; "
+        "import sys; "
+        "migrate_daemon_db(Path(sys.argv[1]))"
+    )
+
+    # WHEN
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", invocation, str(database)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for _index in range(2)
+    ]
+    results = [process.communicate(timeout=30) for process in processes]
+
+    # THEN
+    assert [(process.returncode, stderr) for process, (_stdout, stderr) in zip(processes, results, strict=True)] == [
+        (0, ""),
+        (0, ""),
+    ]
+    lock = tmp_path / "control.sqlite.migrate.lock"
+    assert lock.exists()
+    engine = create_daemon_engine(database)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT COUNT(*) FROM alembic_version")).scalar_one() == 1
+    engine.dispose()
 
 
 def test_thread_model_migration_discards_workflow_rows_and_preserves_jobs(tmp_path: Path) -> None:

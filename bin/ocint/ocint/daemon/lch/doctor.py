@@ -6,24 +6,39 @@ import socket
 import sqlite3
 import stat
 import subprocess
+from contextlib import suppress
 from datetime import UTC, datetime
+from ipaddress import ip_address
 from pathlib import Path
 
 import click
 from pydantic import BaseModel, ConfigDict
 
-from ocint.daemon.config import DaemonConfig, DaemonContext, LifecycleConfig
+from ocint.daemon.config import DaemonConfig, DaemonContext
 from ocint.daemon.db import current_daemon_head_revision
 from ocint.daemon.lch.setup import (
+    CoordinatorRestrictedOpenCodeConfig,
+    CoordinatorStaticOpenCodePolicy,
     OpenCodeSourceConfig,
     RestrictedOpenCodeConfig,
     StaticOpenCodePolicy,
+    coordinator_policy_resource_path,
     discovery_environment,
+    load_coordinator_policy,
     load_policy,
     policy_resource_path,
     restricted_agent_config,
 )
-from ocint.daemon.lch.systemd import CommandRunner, SystemdLifecycle, service_text, timer_text
+from ocint.daemon.lch.systemd import (
+    CommandRunner,
+    NgrokRuntime,
+    SystemdLifecycle,
+    coordinator_ngrok_service_text,
+    coordinator_service_text,
+    discover_ngrok,
+    service_text,
+    timer_text,
+)
 from ocint.daemon.logging import daemon_log_settings
 from ocint.daemon.slack import check_slack_access
 
@@ -88,9 +103,11 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
     environment = lifecycle.paths.environment_file
     diagnostics.append(_private_file_diagnostic("env.path", environment))
     names = (
-        ("OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN", "OCINT_DAEMON_SLACK_BOT_TOKEN")
-        if config is not None and config.slack is not None
-        else ("OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN")
+        "OCINT_DAEMON_API_TOKEN",
+        "OCINT_DAEMON_GITHUB_TOKEN",
+        "OCINT_DAEMON_SLACK_BOT_TOKEN",
+        "OCINT_DAEMON_SLACK_SIGNING_SECRET",
+        "OCINT_NGROK_URL",
     )
     present = _environment_presence(environment, names)
     for name in names:
@@ -101,6 +118,34 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
                 ok=name in present,
                 value="present" if name in present else "missing",
                 detail="" if name in present else f"add {name} to the mode-0600 environment file",
+            )
+        )
+
+    ngrok: NgrokRuntime | None = None
+    try:
+        ngrok = discover_ngrok(runner, environment)
+        diagnostics.extend(
+            (
+                Diagnostic(
+                    name="ngrok.executable_version",
+                    required=True,
+                    ok=True,
+                    value=f"{ngrok.executable} ({ngrok.version})",
+                ),
+                Diagnostic(name="ngrok.url", required=True, ok=True, value="valid static HTTPS URL"),
+            )
+        )
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        diagnostics.extend(
+            (
+                Diagnostic(
+                    name="ngrok.executable_version",
+                    required=True,
+                    ok=False,
+                    value="unavailable",
+                    detail=str(error),
+                ),
+                Diagnostic(name="ngrok.url", required=True, ok=False, value="invalid", detail=str(error)),
             )
         )
 
@@ -121,6 +166,29 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
             Diagnostic(name="opencode.packaged_policy", required=True, ok=False, value="unavailable", detail=str(error))
         )
 
+    coordinator_policy: CoordinatorStaticOpenCodePolicy | None = None
+    try:
+        coordinator_policy, payload = load_coordinator_policy()
+        diagnostics.append(
+            Diagnostic(
+                name="coordinator.opencode.packaged_policy",
+                required=True,
+                ok=True,
+                value=coordinator_policy.model_dump_json(by_alias=True),
+                detail=f"resource={coordinator_policy_resource_path()}; bytes={len(payload)}",
+            )
+        )
+    except (OSError, ValueError, click.ClickException) as error:
+        diagnostics.append(
+            Diagnostic(
+                name="coordinator.opencode.packaged_policy",
+                required=True,
+                ok=False,
+                value="unavailable",
+                detail=str(error),
+            )
+        )
+
     if config is None:
         for name in (
             "opencode.effective_config",
@@ -137,12 +205,21 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
             "ports.private_opencode",
             "ports.api",
             "git.remote_author_ssh",
+            "coordinator.opencode.effective_config",
+            "coordinator.opencode.executable_version",
+            "coordinator.opencode.paths",
+            "coordinator.workspace",
+            "ports.coordinator_ingress",
+            "ports.coordinator_opencode",
+            "ports.distinct_loopback",
+            "slack.access",
         ):
             diagnostics.append(
                 Diagnostic(name=name, required=True, ok=False, value="unavailable", detail="config invalid")
             )
     else:
         diagnostics.extend(_opencode_diagnostics(config, runner, context, policy))
+        diagnostics.extend(_coordinator_diagnostics(config, runner, context, coordinator_policy))
         diagnostics.extend(_storage_diagnostics(config, daemon_log_settings(context.state_home, config.logging).path))
         diagnostics.extend(_git_diagnostics(config))
         service_active = (
@@ -158,19 +235,40 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
             )
         )
         diagnostics.append(_port_diagnostic("ports.api", config.api.port, occupied_allowed=service_active))
-        if config.slack is not None:
-            token = _environment_value(environment, "OCINT_DAEMON_SLACK_BOT_TOKEN")
-            try:
-                value = asyncio.run(check_slack_access(config.slack, token)) if token else "token missing"
-                diagnostics.append(Diagnostic(name="slack.access", required=True, ok=bool(token), value=value))
-            except Exception as error:
-                diagnostics.append(
-                    Diagnostic(name="slack.access", required=True, ok=False, value="unavailable", detail=str(error))
-                )
+        coordinator_active = (
+            _observe(
+                runner,
+                ("systemctl", "--user", "show", "ocint-coordinator.service", "--property=ActiveState", "--value"),
+            ).value
+            == "active"
+        )
+        diagnostics.append(
+            _port_diagnostic(
+                "ports.coordinator_ingress",
+                config.coordinator.ingress.port,
+                occupied_allowed=coordinator_active,
+            )
+        )
+        diagnostics.append(
+            _port_diagnostic(
+                "ports.coordinator_opencode",
+                config.coordinator.opencode.server_url.port or 80,
+                occupied_allowed=coordinator_active,
+            )
+        )
+        diagnostics.append(_distinct_loopback_ports_diagnostic(config))
+        token = _environment_value(environment, "OCINT_DAEMON_SLACK_BOT_TOKEN")
+        try:
+            value = asyncio.run(check_slack_access(config.slack, token)) if token else "token missing"
+            diagnostics.append(Diagnostic(name="slack.access", required=True, ok=bool(token), value=value))
+        except Exception as error:
+            diagnostics.append(
+                Diagnostic(name="slack.access", required=True, ok=False, value="unavailable", detail=str(error))
+            )
 
     repository = config.repositories[0].github_repository if config is not None else ""
     diagnostics.extend(_github_diagnostics(runner, context, repository))
-    diagnostics.extend(_systemd_diagnostics(lifecycle, runner, config.lifecycle if config is not None else None))
+    diagnostics.extend(_systemd_diagnostics(lifecycle, runner, config, ngrok))
     return DoctorReport(diagnostics=tuple(diagnostics))
 
 
@@ -230,9 +328,9 @@ def _opencode_diagnostics(
         Diagnostic(
             name="opencode.executable_version",
             required=True,
-            ok=version == "1.17.20" and config.opencode.expected_version == "1.17.20",
+            ok=version == "1.18.15" and config.opencode.expected_version == "1.18.15",
             value=f"{config.opencode.executable} ({version or 'unavailable'})",
-            detail=version_observation.error or "required and configured version must both be 1.17.20",
+            detail=version_observation.error or "required and configured version must both be 1.18.15",
         )
     )
     source = context.data_home / "opencode" / "auth.json"
@@ -281,6 +379,125 @@ def _opencode_diagnostics(
             detail=(
                 f"source_mode={_mode(source)}; source_owner_ok={_owned(source)}; "
                 f"link_owner_ok={_owned(link)}; link_is_symlink={link.is_symlink()}"
+            ),
+        )
+    )
+    return result
+
+
+def _coordinator_diagnostics(
+    config: DaemonConfig,
+    runner: CommandRunner,
+    context: DaemonContext,
+    policy: CoordinatorStaticOpenCodePolicy | None,
+) -> list[Diagnostic]:
+    coordinator = config.coordinator
+    service = coordinator.opencode
+    result: list[Diagnostic] = []
+    try:
+        if not _owned_regular(service.config_file, 0o600):
+            raise ValueError("coordinator OpenCode config must be user-owned, regular, non-symlink, and mode 0600")
+        effective = CoordinatorRestrictedOpenCodeConfig.model_validate_json(service.config_file.read_text())
+        source_path = context.config_home / "opencode" / "opencode.json"
+        source = OpenCodeSourceConfig.model_validate_json(source_path.read_text())
+        policy_matches = (
+            policy is not None
+            and effective.model_dump(exclude={"model", "provider"}) == policy.model_dump()
+            and effective.model == source.model
+            and tuple(effective.provider) == (source.model.partition("/")[0],)
+        )
+        result.append(
+            Diagnostic(
+                name="coordinator.opencode.effective_config",
+                required=True,
+                ok=policy_matches,
+                value=effective.model_dump_json(by_alias=True, exclude_none=True),
+                detail=(
+                    f"path={service.config_file}; mode={_mode(service.config_file)}; policy_preserved={policy_matches}"
+                ),
+            )
+        )
+    except (OSError, ValueError) as error:
+        result.append(
+            Diagnostic(
+                name="coordinator.opencode.effective_config",
+                required=True,
+                ok=False,
+                value="unavailable",
+                detail=str(error),
+            )
+        )
+    version_observation = _observe_isolated(
+        runner,
+        (str(service.executable), "--version"),
+        discovery_environment(context, False),
+    )
+    version = version_observation.value
+    result.append(
+        Diagnostic(
+            name="coordinator.opencode.executable_version",
+            required=True,
+            ok=version == "1.18.15" and service.expected_version == "1.18.15",
+            value=f"{service.executable} ({version or 'unavailable'})",
+            detail=version_observation.error or "required and configured version must both be 1.18.15",
+        )
+    )
+    source_auth = context.data_home / "opencode" / "auth.json"
+    auth_link = service.xdg_data_home / "opencode" / "auth.json"
+    paths_ok = (
+        _private_directory(service.xdg_config_home)
+        and _private_directory(service.xdg_data_home)
+        and _owned_regular(service.config_file, 0o600)
+        and _owned_regular(source_auth, 0o600)
+        and auth_link.is_symlink()
+        and auth_link.lstat().st_uid == os.getuid()
+        and auth_link.resolve() == source_auth.resolve()
+    )
+    result.append(
+        Diagnostic(
+            name="coordinator.opencode.paths",
+            required=True,
+            ok=paths_ok,
+            value=(
+                f"config={service.config_file}; config_home={service.xdg_config_home}; "
+                f"data_home={service.xdg_data_home}; auth_link={auth_link}"
+            ),
+            detail=(
+                f"config_mode={_mode(service.config_file)}; config_home_mode={_mode(service.xdg_config_home)}; "
+                f"data_home_mode={_mode(service.xdg_data_home)}"
+            ),
+        )
+    )
+    workspace = coordinator.workspace_root
+    agents = workspace / "AGENTS.md"
+    catalogue = workspace / "repositories.json"
+    expected_catalogue = {
+        "repositories": [
+            {
+                "name": repository.name,
+                "description": repository.description,
+                "github_repository": repository.github_repository,
+                "default_branch": repository.default_branch,
+            }
+            for repository in config.repositories
+        ]
+    }
+    catalogue_matches = False
+    with suppress(OSError, json.JSONDecodeError):
+        catalogue_matches = json.loads(catalogue.read_text()) == expected_catalogue
+    workspace_files_absent = not agents.exists() and not catalogue.exists()
+    workspace_files_safe = _owned_regular(agents, 0o600) and _owned_regular(catalogue, 0o600) and catalogue_matches
+    workspace_ok = _private_directory(workspace) and (workspace_files_absent or workspace_files_safe)
+    result.append(
+        Diagnostic(
+            name="coordinator.workspace",
+            required=True,
+            ok=workspace_ok,
+            value=f"root={workspace}; agents={agents}; catalogue={catalogue}",
+            detail=(
+                f"root_mode={_mode(workspace)}; agents_mode={_mode(agents)}; "
+                f"catalogue_mode={_mode(catalogue)}; catalogue_exact={catalogue_matches}; "
+                f"runtime_owned_pending={workspace_files_absent}"
             ),
         )
     )
@@ -365,11 +582,16 @@ def _github_diagnostics(runner: CommandRunner, context: DaemonContext, repositor
 
 
 def _systemd_diagnostics(
-    lifecycle: SystemdLifecycle, runner: CommandRunner, config: LifecycleConfig | None
+    lifecycle: SystemdLifecycle,
+    runner: CommandRunner,
+    config: DaemonConfig | None,
+    ngrok: NgrokRuntime | None,
 ) -> list[Diagnostic]:
     paths = lifecycle.paths
     service_content = _read(paths.service)
     timer_content = _read(paths.timer)
+    coordinator_content = _read(paths.coordinator_service)
+    ngrok_content = _read(paths.coordinator_ngrok_service)
     active_observation = _observe(
         runner, ("systemctl", "--user", "show", "ocint-daemon.timer", "--property=ActiveState", "--value")
     )
@@ -406,6 +628,46 @@ def _systemd_diagnostics(
     )
     service_safe = _owned_regular(paths.service, 0o644)
     timer_safe = _owned_regular(paths.timer, 0o644)
+    expected_coordinator = (
+        coordinator_service_text(
+            Path(executable).resolve(),
+            paths.environment_reference,
+            paths.reference(paths.config_home),
+            paths.reference(paths.data_home),
+            paths.reference(paths.state_home),
+            paths.reference(paths.daemon_config),
+        )
+        if executable is not None
+        else ""
+    )
+    expected_ngrok = (
+        coordinator_ngrok_service_text(
+            ngrok,
+            paths.reference(paths.home),
+            paths.reference(paths.config_home),
+            "C.UTF-8",
+            config.coordinator.ingress.port,
+        )
+        if config is not None and ngrok is not None
+        else ""
+    )
+    coordinator_safe = _owned_regular(paths.coordinator_service, 0o644)
+    ngrok_safe = _owned_regular(paths.coordinator_ngrok_service, 0o644)
+    coordinator_state = _observe(
+        runner,
+        ("systemctl", "--user", "show", "ocint-coordinator.service", "--property=ActiveState", "--value"),
+    )
+    ngrok_state = _observe(
+        runner,
+        (
+            "systemctl",
+            "--user",
+            "show",
+            "ocint-coordinator-ngrok.service",
+            "--property=ActiveState",
+            "--value",
+        ),
+    )
     return [
         Diagnostic(
             name="systemd.service",
@@ -421,11 +683,34 @@ def _systemd_diagnostics(
         Diagnostic(
             name="systemd.timer",
             required=True,
-            ok=timer_safe and config is not None and timer_content == timer_text(config),
+            ok=timer_safe and config is not None and timer_content == timer_text(config.lifecycle),
             value=f"{paths.timer}\n{timer_content}",
             detail=(
                 f"mode={_mode(paths.timer)}; owner_ok={_owned(paths.timer)}; "
-                f"payload_exact={config is not None and timer_content == timer_text(config)}"
+                f"payload_exact={config is not None and timer_content == timer_text(config.lifecycle)}"
+            ),
+        ),
+        Diagnostic(
+            name="systemd.coordinator_service",
+            required=True,
+            ok=coordinator_safe and bool(expected_coordinator) and coordinator_content == expected_coordinator,
+            value=f"{paths.coordinator_service}\n{coordinator_content}",
+            detail=(
+                f"mode={_mode(paths.coordinator_service)}; owner_ok={_owned(paths.coordinator_service)}; "
+                f"payload_exact={bool(expected_coordinator) and coordinator_content == expected_coordinator}"
+            ),
+        ),
+        Diagnostic(
+            name="systemd.coordinator_ngrok_service",
+            required=True,
+            ok=ngrok_safe and bool(expected_ngrok) and ngrok_content == expected_ngrok,
+            value=(
+                f"{paths.coordinator_ngrok_service}\n"
+                f"{ngrok_content.replace(ngrok.url, '<redacted-static-url>') if ngrok is not None else ngrok_content}"
+            ),
+            detail=(
+                f"mode={_mode(paths.coordinator_ngrok_service)}; owner_ok={_owned(paths.coordinator_ngrok_service)}; "
+                f"payload_exact={bool(expected_ngrok) and ngrok_content == expected_ngrok}"
             ),
         ),
         Diagnostic(
@@ -441,6 +726,20 @@ def _systemd_diagnostics(
             ok=bool(schedule),
             value=schedule or "unavailable",
             detail=schedule_observation.error,
+        ),
+        Diagnostic(
+            name="systemd.coordinator_state",
+            required=False,
+            ok=coordinator_state.value == "active",
+            value=coordinator_state.value or "inactive",
+            detail=coordinator_state.error or "unit may remain inactive before production rollout",
+        ),
+        Diagnostic(
+            name="systemd.coordinator_ngrok_state",
+            required=False,
+            ok=ngrok_state.value == "active",
+            value=ngrok_state.value or "inactive",
+            detail=ngrok_state.error or "unit may remain inactive before production rollout",
         ),
         Diagnostic(
             name="systemd.linger",
@@ -543,6 +842,30 @@ def _port_diagnostic(name: str, port: int, occupied_allowed: bool = False) -> Di
         ok=available or occupied_allowed,
         value=f"127.0.0.1:{port} available={available}",
         detail="occupied by active daemon service" if not available and occupied_allowed else "",
+    )
+
+
+def _distinct_loopback_ports_diagnostic(config: DaemonConfig) -> Diagnostic:
+    hosts = (
+        config.api.host,
+        config.coordinator.ingress.host,
+        config.opencode.server_url.host or "",
+        config.coordinator.opencode.server_url.host or "",
+    )
+    ports = (
+        config.api.port,
+        config.coordinator.ingress.port,
+        config.opencode.server_url.port,
+        config.coordinator.opencode.server_url.port,
+    )
+    loopback = all(ip_address(host).is_loopback for host in hosts)
+    distinct = None not in ports and len(set(ports)) == 4
+    return Diagnostic(
+        name="ports.distinct_loopback",
+        required=True,
+        ok=loopback and distinct,
+        value=", ".join(f"{host}:{port}" for host, port in zip(hosts, ports, strict=True)),
+        detail=f"loopback={loopback}; distinct={distinct}",
     )
 
 

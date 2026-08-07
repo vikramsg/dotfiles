@@ -13,6 +13,7 @@ backup_count = 5
 
 [[repositories]]
 name = "repository"
+description = "Repository available for daemon-managed changes."
 remote_url = "git@github.com:OWNER/REPOSITORY.git"
 default_branch = "main"
 github_repository = "OWNER/REPOSITORY"
@@ -29,7 +30,7 @@ job_timeout_seconds = 3600
 server_url = "http://127.0.0.1:4097"
 username = "opencode"
 request_timeout_seconds = 30
-expected_version = "1.17.20"
+expected_version = "1.18.15"
 executable = "/usr/bin/opencode"
 config_file = "~/.config/ocint/opencode-xdg/opencode/opencode.json"
 xdg_config_home = "~/.config/ocint/opencode-xdg"
@@ -46,17 +47,43 @@ api_url = "https://api.github.com"
 issue_label = "ocint"
 agent_actor = "GITHUB_LOGIN"
 
-# Slack is optional. Only configured private channels are polled. Create the app
-# from config/slack-app-manifest.yaml; Socket Mode and event delivery stay off.
-# [slack]
-# workspace_id = "T01234567"
-# completion_reaction = "white_check_mark"
-# [[slack.channels]]
-# channel_id = "C01234567"
-# repository = "repository"
-# authorized_users = ["U01234567"]
-# Inclusive first-run boundary. Set this to the prepared root message timestamp.
-# initial_oldest = "1753380000.000000"
+[coordinator]
+workspace_root = "~/.local/share/ocint/coordinator"
+turn_timeout_seconds = 1800
+shutdown_timeout_seconds = 30
+orphan_retention_seconds = 86400
+retry_seconds = 5
+max_turn_retries = 3
+response_chunk_characters = 3500
+slack_post_interval_seconds = 1
+
+[coordinator.ingress]
+host = "127.0.0.1"
+port = 8733
+max_request_bytes = 65536
+timestamp_tolerance_seconds = 300
+processing_timeout_seconds = 2.5
+database_busy_timeout_ms = 2000
+
+[coordinator.slack]
+workspace_id = "T01234567"
+
+[[coordinator.slack.channels]]
+# Phase 1 channel IDs must identify public channels.
+channel_id = "C01234567"
+authorized_users = ["U01234567"]
+
+[coordinator.opencode]
+server_url = "http://127.0.0.1:4098"
+username = "opencode"
+request_timeout_seconds = 30
+expected_version = "1.18.15"
+executable = "/usr/bin/opencode"
+config_file = "~/.config/ocint/coordinator-opencode-xdg/opencode/opencode.json"
+xdg_config_home = "~/.config/ocint/coordinator-opencode-xdg"
+xdg_data_home = "~/.local/share/ocint/coordinator-opencode-data"
+startup_timeout_seconds = 120
+shutdown_timeout_seconds = 10
 
 [git]
 ssh_executable = "/usr/bin/ssh"

@@ -70,6 +70,8 @@ The preflight passes when:
 - GitHub and SSH authentication are available;
 - the configured repository is the intended target;
 - the timer is installed and active;
+- coordinator and ngrok unit payloads are installed exactly, even when those
+  units intentionally remain disabled or inactive before rollout;
 - required configuration and credentials pass `ocint daemon doctor`;
 - the database is at the expected migration after daemon startup;
 - the configured OpenCode executable and policy are valid.
@@ -77,6 +79,9 @@ The preflight passes when:
 An occupied private OpenCode or API port is expected while the oneshot service
 is running. Interpret port diagnostics together with systemd state rather than
 calling an active daemon unhealthy solely because its ports are in use.
+The same rule applies to coordinator ingress and coordinator OpenCode ports when
+`ocint-coordinator.service` is active. Doctor does not require the coordinator
+or ngrok unit to be active during pre-rollout configuration diagnostics.
 
 After setup, a pre-start doctor can report the previous database
 revision. This is not a reason to migrate manually. Confirm that the timer is

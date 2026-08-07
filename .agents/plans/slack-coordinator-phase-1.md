@@ -244,10 +244,12 @@ only one performs it at a time and all workers start after the lock is released.
 Perform only the preparation required to make the implemented behavior readable,
 observable, and safe before adding more behavior:
 
-1. **Public-channel contract:** replace the incorrect private-channel
-   `message.groups`/`groups:history` contract with
-   `message.channels`/`channels:history`. Persist sanitized fixtures from both
-   proven callback shapes before changing translation tests.
+1. **Channel event contract:** represent public `channel` and private `group`
+   message payloads as a normal Pydantic typed union, without a discriminator.
+   Deploy only `message.channels`/`channels:history` in Phase 1 and leave a code
+   FIXME at the private variant because `message.groups`/`groups:history`
+   deployment is not implemented. Persist sanitized fixtures from both proven
+   public-channel callback shapes before changing translation tests.
 2. **Coordinator lifecycle:** move runtime lock ownership, OpenCode start/stop,
    worker/ingress supervision, and bounded shutdown out of `daemon/cli.py` and
    into the coordinator workflow facade. CLI remains the composition root but
@@ -265,6 +267,22 @@ observable, and safe before adding more behavior:
 6. **Keep atomic work atomic:** do not split `CoordinatorRepository.ingest`,
    migration locking, LCH discovery, or doctor aggregation only because they are
    long. Their current transaction/security boundaries are cohesive.
+7. **Bound ordered-turn recovery:** configure a positive `max_turn_retries`
+   budget, defaulting to three retries after the initial attempt. Retryable
+   OpenCode errors and inactive incomplete prompt observations consume that
+   budget without resubmission. Exhaustion persists and delivers the existing
+   safe failure response so the next ordered turn can run. Slack delivery
+   retries do not consume this budget; they remain unbounded and preserve the
+   response already persisted for delivery.
+8. **Out-of-plan production restart lifecycle:** make the coordinator facade the
+   sole process-signal owner from before OpenCode startup through final close. A
+   signal during startup cancels and closes OpenCode as an expected normal exit;
+   startup failure remains an error. Once running, unexpected child, worker, or
+   ingress completion takes precedence over a concurrent shutdown request.
+   Bounded worker/ingress shutdown precedes OpenCode close and prior handlers are
+   restored. Only coordinator ingress uses signal-free Uvicorn; the generic
+   daemon retains normal Uvicorn signal ownership. Keep `KillMode=mixed` so the
+   initial stop signal targets the main process.
 
 Do not refactor GitHub, Git, task, or pull-request-job behavior beyond removing
 the Slack polling adapter from their composition.
@@ -347,6 +365,7 @@ database_path = "~/.local/state/ocint/daemon.sqlite"
 workspace_root = "~/.local/share/ocint/coordinator"
 turn_timeout_seconds = 1800
 shutdown_timeout_seconds = 30
+max_turn_retries = 3
 response_chunk_characters = 3500
 slack_post_interval_seconds = 1
 
@@ -384,11 +403,16 @@ Validation rules:
 - Ingress is loopback-only and differs from control API port `8732`.
 - Existing repository names remain unique and descriptions are non-empty.
 - Authorized-user sets are non-empty.
-- Phase 1 channels are public Slack channels; inbound events must have
-  `channel_type = "channel"`.
+- Inbound channel events parse through a non-discriminated typed union whose
+  variants require `channel_type = "channel"` or `channel_type = "group"`.
+- Phase 1 deployment configures only public Slack channels; private-channel
+  subscription and OAuth scope deployment are not implemented.
 - Slack workspace matches `auth.test`.
 - Response chunk size leaves room below Slack's 4,000-character recommendation.
 - Timeouts, body limits, and delivery intervals are positive.
+- The turn retry budget is positive. It counts retry schedules after the initial
+  attempt: `3` means at most four OpenCode processing attempts, not three total
+  attempts.
 
 Production credentials remain in the existing mode-0600 daemon environment
 file:
@@ -473,6 +497,8 @@ relative `config/` path.
 The OpenCode child receives only isolated HOME/XDG paths, OpenCode provider
 authentication, its ephemeral HTTP basic-auth values, PATH, and locale. It does
 not receive Slack, ngrok, GitHub, daemon API, SSH, or Git credentials.
+It runs without `--print-logs`, and child stdout/stderr are discarded so prompts,
+responses, and provider diagnostics cannot enter the coordinator journal.
 
 ## Slack Ingress
 
@@ -497,8 +523,10 @@ Request handling:
 6. Require the configured workspace.
 7. Answer signed `url_verification` requests with the challenge.
 8. Convert supported `event_callback` messages into normalized conversation
-   messages. Phase 1 accepts `message.channels` with
-   `channel_type = "channel"`; other channel types are durably ignored.
+   messages. Parse public `channel` and private `group` payloads through a normal
+   Pydantic typed union, without a discriminator. Phase 1 deploys only
+   `message.channels`; private-channel subscription and scope deployment remain
+   an explicit FIXME.
 9. In one repository transaction, insert/deduplicate the provider event, insert
    the logical message, create or update the conversation, and create all newly
    eligible turns. Unsupported events commit only their ignored disposition.
@@ -685,8 +713,16 @@ Recovery:
 - Prompt absent: submit after persisting intent.
 - Prompt present and active: wait.
 - Prompt present and complete: read the existing assistant response.
-- Prompt present but inactive/incomplete: use the existing interrupted-prompt
-  recovery rule without silently adding a second logical turn.
+- Prompt present but inactive/incomplete: schedule observation retry without
+  adding a second managed user message, until the configured turn retry budget
+  is exhausted.
+- Prompt with a persisted terminal error: deliver the safe failure response
+  without resubmission. A retryable persisted error schedules observation retry
+  without resubmission until that same budget is exhausted.
+- Budget exhaustion persists and delivers the safe failure response, terminally
+  completes the failed turn, and makes the next ordered turn eligible. The
+  budget counts retries after the initial attempt; a value of three permits one
+  initial attempt and three retries.
 - Persist assistant ID and full response before starting Slack delivery.
 
 Session identity derives deterministically from provider/workspace/channel/root
@@ -728,10 +764,12 @@ webhook request handler.
   body: reject without state.
 - Valid unsupported event: record ignored disposition and return `200`.
 - Database unavailable: return 5xx for Slack retry.
-- OpenCode transient failure: retain turn and retry with bounded backoff.
+- OpenCode transient failure: retain the turn and retry with bounded backoff up
+  to the configured retry budget, then persist and deliver the safe failure.
 - OpenCode terminal failure or timeout: persist and deliver one safe coordinator
   failure response without provider details.
-- Slack network/5xx failure: retain delivery for retry.
+- Slack network/5xx failure: retain delivery and the persisted response for
+  unbounded retry; the OpenCode retry budget does not apply.
 - Slack 429: honor durable `Retry-After`.
 - Process restart: recover all non-terminal turns and deliveries in order.
 - OpenCode child exit: fail the coordinator service; systemd restart recovers.
@@ -750,6 +788,18 @@ Add two user-systemd units while preserving the existing timer units.
 - restarts on failure with bounded delay
 - starts after network availability
 - starts ingress only after database migration and OpenCode health succeed
+- uses `KillMode=mixed` so SIGTERM first reaches the lifecycle-owning main
+  process and systemd may clean up the cgroup only after its stop timeout
+
+A coordinator signal handler is installed before OpenCode startup. A requested
+shutdown during startup cancels and closes OpenCode, restores the handler, and
+maps to normal process exit. Startup failure still closes OpenCode and fails the
+service. After startup, unexpected worker, ingress, or child completion takes
+precedence over a concurrent requested shutdown.
+
+A graceful restart logs `Coordinator bounded shutdown started` and completed,
+then `Coordinator OpenCode shutdown started` and completed. It does not report
+the managed OpenCode child as an unexpected exit.
 
 ### `ocint-coordinator-ngrok.service`
 
@@ -763,6 +813,8 @@ LCH setup/apply/status/doctor/uninstall manages both units alongside the existin
 timer. Doctor validates config, private files, Slack `auth.test`, configured
 channel access, signing-secret presence, ngrok config, exact OpenCode version,
 workspace policy, port separation, migration head, and systemd payloads.
+Initial setup leaves coordinator units disabled. Subsequent setup/apply preserves
+their existing enablement and reports the actual unit-file states.
 
 Uninstall removes units but preserves the shared database, coordinator rows,
 workspace context, OpenCode data, credentials, and Slack messages.
@@ -886,7 +938,8 @@ tests.
 - raw-body Slack HMAC and case-insensitive headers;
 - timestamp freshness and body limits without `Content-Length`;
 - URL verification and workspace checks;
-- public `message.channels` translation and private `message.groups` rejection;
+- non-discriminated typed-union parsing and translation for public `channel` and
+  private `group` message payloads, with public-only deployment coverage;
 - durable-before-ack and database-failure 5xx;
 - immediate `503` at the processing deadline without waiting for a blocked
   ingest thread or waking the worker;
@@ -906,7 +959,11 @@ temporary schema to verify:
 - root then follow-up reuse one OpenCode session;
 - duplicate Slack retries create one turn and reply;
 - restart after prompt submission does not resubmit;
+- repeated retryable and interrupted prompt recovery exhausts the configured
+  budget, delivers the safe failure once, and releases the next ordered turn;
 - uncertain Slack delivery is recovered without duplication;
+- Slack delivery can retry beyond the OpenCode budget without replacing the
+  persisted response;
 - an 8,000+ character response produces ordered chunks;
 - 429 during a middle chunk resumes correctly;
 - bot reply events do not recurse;
@@ -948,6 +1005,8 @@ field absence, not incidental rendered log prose.
   busy timeout, and serialized migration.
 - Slack retries do not duplicate prompts or replies.
 - Restart resumes incomplete OpenCode and Slack delivery work.
+- Exhausted OpenCode retries terminally fail one turn with the safe response so
+  a later ordered turn is not blocked forever; Slack delivery remains unbounded.
 - Oversized responses are delivered completely as ordered chunks.
 - No database file is deleted or recreated.
 
@@ -1054,10 +1113,12 @@ field absence, not incidental rendered log prose.
 1. Record worktree state and preserve unrelated/user edits.
 2. Persist sanitized fixtures from the proven `message.channels` human and xoxp
    callbacks; update Slack contract tests before production translation.
-3. Replace `message.groups`/`groups:history` with
-   `message.channels`/`channels:history` in manifest, access validation,
-   translation, examples, doctor, and documentation. Reject non-public channel
-   event types in Phase 1.
+3. Model public `channel` and private `group` messages as a normal Pydantic typed
+   union without a discriminator. Replace deployed
+   `message.groups`/`groups:history` with `message.channels`/`channels:history` in
+   the manifest, access validation, examples, doctor, and documentation. Keep
+   private parsing support, add a code FIXME that private deployment is not
+   implemented, and do not deploy its subscription or scope.
 4. Tidy coordinator process lifecycle out of `daemon/cli.py` into an exported
    coordinator application context/workflow with injected delivery and generic
    ingress dependencies. Preserve `coordinator -X-> slack` in Tach.
@@ -1096,6 +1157,7 @@ uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
   bin/ocint/tests/integration/ocint/daemon/slack/test_events.py \
   bin/ocint/tests/integration/ocint/daemon/slack/test_client.py \
   bin/ocint/tests/integration/ocint/daemon/opencode/test_service.py \
+  bin/ocint/tests/integration/ocint/daemon/test_run.py \
   bin/ocint/tests/e2e/ocint/daemon/coordinator
 ```
 

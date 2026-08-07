@@ -27,10 +27,11 @@ On the setup screen:
    [authtoken page](https://dashboard.ngrok.com/get-started/your-authtoken).
 4. Copy the `ngrok config add-authtoken` command shown for the account.
 
-The account's public development domain is visible on the
-[Domains page](https://dashboard.ngrok.com/domains). Do not write that domain in
-tracked documentation. The commands below discover it from the running agent
-and save it only in the ignored `.env` file.
+Reserve a static HTTPS domain on the account's
+[Domains page](https://dashboard.ngrok.com/domains). Slack keeps one verified
+Request URL, so a changing development URL is not suitable for the always-on
+service. Keep the actual domain out of tracked documentation and store its base
+URL only in the private daemon environment file.
 
 ## Install
 
@@ -69,48 +70,70 @@ ngrok config check
 ```
 
 ngrok stores the credential in `~/.config/ngrok/ngrok.yml`. Keep that file
-private and never commit it. The package `.env` stores only the public URL.
+private and never commit it. Do not copy the authtoken into `daemon.env`; the
+managed ngrok process reads its own isolated configuration.
 
-## Start And Discover
+## Configure The Static URL
 
-Start the tunnel after the Slack ingress is listening on port `8733`:
-
-```bash
-ngrok http 8733
-```
-
-While ngrok is running, determine its public HTTPS URL from the local agent API:
+Put the assigned static base URL, without `/slack/events`, in the user-owned
+mode-0600 daemon environment file:
 
 ```bash
-curl --fail --silent http://127.0.0.1:4040/api/tunnels |
-  jq -r '.tunnels[] | select(.proto == "https") | .public_url'
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+vi "$CONFIG_HOME/ocint/daemon.env"
+# Set exactly one line:
+# OCINT_NGROK_URL=https://YOUR_STATIC_NGROK_DOMAIN
+chmod 600 "$CONFIG_HOME/ocint/daemon.env"
 ```
 
-From `bin/ocint`, store that base URL in the ignored `.env` file:
-
-```bash
-OCINT_NGROK_URL="$(curl --fail --silent http://127.0.0.1:4040/api/tunnels |
-  jq -r '.tunnels[] | select(.proto == "https") | .public_url')"
-printf 'OCINT_NGROK_URL=%s\n' "$OCINT_NGROK_URL" > .env
-```
-
-The tracked `.env.example` documents the variable without recording the actual
-domain. The Slack Events request URL is the base URL plus `/slack/events`:
+Keep exactly one non-empty `OCINT_NGROK_URL` assignment. LCH rejects a URL with
+userinfo, a port, query, fragment, non-root path, localhost, or an IP address.
+The Slack Events Request URL is that base plus `/slack/events`:
 
 ```bash
 set -a
-. ./.env
+. "$CONFIG_HOME/ocint/daemon.env"
 set +a
 printf '%s/slack/events\n' "$OCINT_NGROK_URL"
 ```
 
-To request the same saved domain explicitly on a later run:
+Configure that URL in Slack Event Subscriptions and subscribe the bot to
+`message.channels`. Slack verifies it with a signed challenge handled by the same
+ingress route.
+
+The separate **ocint E2E actor** app does not use this URL and has no event
+subscription. During the explicit live test its User OAuth client posts one
+marked root. Slack delivers an app-authored public-channel event containing the
+authorized user plus actor `bot_id`, `app_id`, and exact `client_msg_id` through
+this signed route. Test composition accepts only that exact probe. The xoxp
+token stays in mode-0600
+`live-e2e.env`, not the ngrok or daemon systemd environments.
+
+## Managed Service
+
+`ocint daemon lch setup` and `apply` render
+`ocint-coordinator-ngrok.service`. Initial setup leaves it disabled; subsequent
+apply preserves and reports its existing enablement. Explicitly disable it for
+a pre-rollout live test. The service requires the coordinator and runs the
+equivalent of:
 
 ```bash
-set -a
-. ./.env
-set +a
-ngrok http 8733 --domain "${OCINT_NGROK_URL#https://}"
+ngrok http \
+  --url="$OCINT_NGROK_URL" \
+  --inspect=false \
+  http://127.0.0.1:8733
+```
+
+For a manual connectivity check, first ensure the managed ngrok unit is stopped
+and the coordinator ingress is listening, then use that command. Do not run a
+second tunnel against the same static domain during the autonomous live harness
+or production service.
+
+After the explicit live E2E passes, start in receiver-first order:
+
+```bash
+systemctl --user enable --now ocint-coordinator.service
+systemctl --user enable --now ocint-coordinator-ngrok.service
 ```
 
 ## Security
@@ -118,5 +141,7 @@ ngrok http 8733 --domain "${OCINT_NGROK_URL#https://}"
 - Bind the Slack ingress to `127.0.0.1`.
 - Expose only the Slack Events route through the ingress service.
 - Verify every Slack request signature before accepting an event.
-- Keep ports `8732`, `8733`, and `4040` closed in the GCP firewall.
+- Keep ports `8732`, `8733`, `4097`, `4098`, and `4040` closed in the GCP firewall.
 - Keep `~/.config/ngrok/ngrok.yml` outside the repository.
+- Keep Slack, GitHub, API, and SSH credentials out of the ngrok process.
+- Preserve the static domain and daemon state across restart and rollback.

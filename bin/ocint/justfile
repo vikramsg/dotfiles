@@ -23,9 +23,10 @@ tach:
 
 # Run ocint static checks
 check:
-    {{uv_ocint}} ruff check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
-    {{uv_ocint}} ruff format --check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
-    {{uv_ocint}} ty check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
+    @set -e; ROOTS="{{justfile_directory()}}/ocint {{justfile_directory()}}/scripts {{justfile_directory()}}/tests"; \
+        {{uv_ocint}} ruff check $ROOTS; \
+        {{uv_ocint}} ruff format --check $ROOTS; \
+        {{uv_ocint}} ty check $ROOTS
     @just --justfile "{{justfile()}}" tach
 
 # Install the OpenCode intelligence CLI
@@ -107,4 +108,4 @@ smoke-daemon:
         sed -e "s#~/.local/state/ocint/daemon.sqlite#$TMPDIR/control.sqlite#g" -e "s#~/.local/share/ocint/mirrors#$TMPDIR/mirrors#g" -e "s#~/.local/share/ocint/worktrees#$TMPDIR/worktrees#g" "{{justfile_directory()}}/config/daemon.example.toml" > "$TMPDIR/daemon.toml"; \
         OCINT_DAEMON_CONFIG="$TMPDIR/daemon.toml" {{uv_ocint}} ocint daemon config --path; \
         OCINT_DAEMON_CONFIG="$TMPDIR/daemon.toml" {{uv_ocint}} ocint daemon migrate; \
-        CONTROL_DB="$TMPDIR/control.sqlite" {{uv_ocint}} python3 -c 'import os; from sqlalchemy import create_engine, inspect; assert set(inspect(create_engine("sqlite:///" + os.environ["CONTROL_DB"])).get_table_names()) == {"alembic_version", "github_issue", "github_issue_comment", "job", "pull_request_ownership", "slack_channel", "slack_message", "slack_reply", "slack_thread", "task", "task_job", "task_message", "thread", "thread_message"}'
+        CONTROL_DB="$TMPDIR/control.sqlite" {{uv_ocint}} python3 -c 'import os; from sqlalchemy import create_engine, inspect; assert set(inspect(create_engine("sqlite:///" + os.environ["CONTROL_DB"])).get_table_names()) == {"alembic_version", "coordinator_conversation", "coordinator_delivery", "coordinator_event", "coordinator_turn", "github_issue", "github_issue_comment", "job", "pull_request_ownership", "slack_channel", "slack_message", "slack_reply", "slack_thread", "task", "task_job", "task_message", "thread", "thread_message"}'

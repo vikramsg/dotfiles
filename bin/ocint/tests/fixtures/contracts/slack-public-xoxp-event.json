@@ -1,0 +1,18 @@
+{
+  "type": "event_callback",
+  "team_id": "T021N0EQ3JQ",
+  "event_id": "Ev_SANITIZED_PUBLIC_XOXP",
+  "event_time": 1786070001,
+  "event": {
+    "type": "message",
+    "channel": "C0955FD2FK4",
+    "channel_type": "channel",
+    "user": "U067EG8278R",
+    "bot_id": "B0BNRPSUB8W",
+    "app_id": "A0BNQBTV022",
+    "client_msg_id": "772b8798-747a-44d2-94f8-60350a3cb9e0",
+    "text": "[sanitized public xoxp callback fixture]",
+    "ts": "1786070001.000001",
+    "event_ts": "1786070001.000001"
+  }
+}
