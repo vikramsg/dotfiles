@@ -32,6 +32,10 @@
         "plan": {
             "disable": true
         },
+        "rigor-planner": {
+            "disable": true,
+            "description": "Disabling because we are writing plans in discuss mode"
+        },
         "discuss": {
             "description": "Discusses designs and writes implementation plans without modifying the system.",
             "mode": "primary",
