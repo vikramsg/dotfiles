@@ -246,6 +246,9 @@ The migration chain remains explicit:
         |
         v
 20260807_add_coordinator
+        |
+        v
+20260810_complete_coordinator_message_identity
 ```
 
 Migration startup is protected by a user-owned daemon migration lock derived
@@ -352,10 +355,10 @@ submission, Git operation, or GitHub publication path from the Phase 1
 coordinator. Only coordinator output is delivered to Slack.
 
 Slack models public `channel_type="channel"` and private
-`channel_type="group"` messages as a normal typed union. Translation supports
-both variants, but Phase 1 deployment is public-only: it subscribes to
-`message.channels` and requests `channels:history`. Private subscription and
-`groups:history` deployment remain unimplemented.
+`channel_type="group"` messages as a normal typed union. Phase 1 translates only
+the public variant. Private payloads parse but are durably ignored before
+authorization. Deployment subscribes to `message.channels` and requests
+`channels:history`; private subscription and `groups:history` remain a FIXME.
 
 Every external effect has a durable intent. Prompt state records the stable
 user-message ID before submission; the assistant message ID and full response

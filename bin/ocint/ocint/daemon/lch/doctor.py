@@ -259,7 +259,7 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
         diagnostics.append(_distinct_loopback_ports_diagnostic(config))
         token = _environment_value(environment, "OCINT_DAEMON_SLACK_BOT_TOKEN")
         try:
-            value = asyncio.run(check_slack_access(config.slack, token)) if token else "token missing"
+            value = asyncio.run(check_slack_access(config.coordinator.slack, token)) if token else "token missing"
             diagnostics.append(Diagnostic(name="slack.access", required=True, ok=bool(token), value=value))
         except Exception as error:
             diagnostics.append(

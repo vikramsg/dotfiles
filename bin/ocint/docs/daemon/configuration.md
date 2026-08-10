@@ -15,9 +15,12 @@ shell as `OCINT_NGROK_URL`. Then run setup from the target Git checkout:
 ```bash
 export OCINT_NGROK_URL=https://YOUR_STATIC_NGROK_DOMAIN
 ocint daemon lch setup
-ocint daemon migrate
 ocint daemon doctor
 ```
+
+The timer or coordinator performs the serialized database migration at its
+first startup. Doctor may report the prior revision until that happens; do not
+run a manual migration during normal setup or acceptance.
 
 `daemon.toml` becomes user-owned after its first creation. Command behavior is
 deliberately asymmetric:
@@ -183,8 +186,8 @@ before the daemon accepts it.
 
 The inbound contract parses both Slack `channel_type="channel"` and
 `channel_type="group"` message variants through a normal typed union. Phase 1
-deploys only public channels: private `message.groups` subscription and
-`groups:history` scope are intentionally not configured.
+translates only public messages. Private payloads are durably ignored, and the
+`message.groups` subscription and `groups:history` scope remain a FIXME.
 
 ### Create The Live E2E Actor
 

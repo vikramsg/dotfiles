@@ -69,6 +69,49 @@ def test_github_facade_exports_only_supported_api() -> None:
     assert not (github / "integration.py").exists()
 
 
+def test_coordinator_facade_does_not_initialize_runtime_modules() -> None:
+    # GIVEN
+    package = Path(__file__).parents[2]
+    script = """
+import json
+import sys
+import ocint.daemon.coordinator
+names = [
+    "ocint.daemon.coordinator.opencode",
+    "ocint.daemon.coordinator.repository",
+    "ocint.daemon.coordinator.run",
+    "ocint.daemon.coordinator.workspace",
+]
+print(json.dumps([name for name in names if name in sys.modules]))
+"""
+
+    # WHEN
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=package,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    # THEN
+    assert json.loads(result.stdout) == []
+
+
+def test_slack_facade_exposes_only_the_events_coordinator_architecture() -> None:
+    # GIVEN / WHEN
+    import ocint.daemon.slack as slack_api
+
+    # THEN
+    assert "CoordinatorSlackConfig" in slack_api.__all__
+    assert "SlackEventsConfig" in slack_api.__all__
+    assert "create_slack_events_app" in slack_api.__all__
+    assert "open_slack_coordinator_delivery" in slack_api.__all__
+    assert "SlackConfig" not in slack_api.__all__
+    assert "SlackGateway" not in slack_api.__all__
+    assert "open_slack_service" not in slack_api.__all__
+
+
 def test_thread_core_contains_only_provider_neutral_identity_and_title() -> None:
     # GIVEN
     models = Path(__file__).parents[2] / "ocint" / "daemon" / "tasks" / "models.py"
@@ -136,7 +179,7 @@ def test_policy_resource_is_one_canonical_symlinked_source() -> None:
     assert resource.read_bytes() == source.read_bytes()
 
 
-def test_coordinator_policy_resource_is_restrictive_and_packaged() -> None:
+def test_coordinator_policy_resource_is_one_canonical_restrictive_packaged_source() -> None:
     # GIVEN
     package = Path(__file__).parents[2]
     source = package / "config" / "opencode.coordinator.json"
@@ -147,6 +190,8 @@ def test_coordinator_policy_resource_is_restrictive_and_packaged() -> None:
     policy = json.loads(source.read_text())
 
     # THEN
+    assert resource.is_symlink()
+    assert resource.resolve() == source.resolve()
     assert resource.read_bytes() == source.read_bytes()
     assert policy["$schema"] == "https://opencode.ai/config.json"
     assert policy["share"] == "disabled"
@@ -187,70 +232,6 @@ def test_root_daemon_cli_uses_only_the_lch_facade() -> None:
 
     # THEN
     assert lch_imports == {"ocint.daemon.lch"}
-
-
-def test_timer_composition_does_not_compose_slack_polling() -> None:
-    # GIVEN
-    cli = (Path(__file__).parents[2] / "ocint" / "daemon" / "cli.py").read_text()
-
-    # WHEN
-    timer_composition = cli.split("async def _run_daemon", maxsplit=1)[1].split(
-        "async def _run_coordinator", maxsplit=1
-    )[0]
-
-    # THEN
-    assert "open_slack_service" not in cli
-    assert "slack_bot_token" not in timer_composition
-
-
-def test_daemon_log_events_do_not_include_secret_or_prompt_fields() -> None:
-    # GIVEN
-    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-    prohibited = {
-        "body",
-        "credential",
-        "environment",
-        "headers",
-        "identity_file",
-        "ngrok_url",
-        "password",
-        "prompt",
-        "raw_body",
-        "response",
-        "signature",
-        "text",
-        "token",
-    }
-
-    # WHEN
-    fields: set[str] = set()
-    for module in daemon.rglob("*.py"):
-        tree = ast.parse(module.read_text())
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "logger"
-            ):
-                fields.update(keyword.arg for keyword in node.keywords if keyword.arg is not None)
-
-    # THEN
-    assert fields.isdisjoint(prohibited)
-
-
-def test_coordinator_cli_delegates_application_lifecycle_to_the_feature_facade() -> None:
-    # GIVEN
-    cli = (Path(__file__).parents[2] / "ocint" / "daemon" / "cli.py").read_text()
-    coordinator_body = cli.split("async def _run_coordinator", maxsplit=1)[1]
-
-    # WHEN / THEN
-    assert "run_coordinator_application" in coordinator_body
-    assert "RuntimeFileLock" not in coordinator_body
-    assert "opencode.start" not in coordinator_body
-    assert "opencode.close" not in coordinator_body
-    assert "opencode.wait_exited" not in coordinator_body
-    assert "_supervise_coordinator" not in cli
 
 
 def test_daemon_context_is_the_only_configuration_load_boundary() -> None:

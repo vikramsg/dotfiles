@@ -134,10 +134,6 @@ class DaemonConfig(BaseModel):
             raise ValueError("daemon API, coordinator ingress, and OpenCode ports must be distinct")
         return self
 
-    @property
-    def slack(self) -> CoordinatorSlackConfig:
-        return self.coordinator.slack
-
     def repository(self, name: str) -> RepositoryConfig:
         for item in self.repositories:
             if item.name == name:

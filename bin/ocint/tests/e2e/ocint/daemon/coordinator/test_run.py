@@ -5,16 +5,18 @@ import pytest
 from ocint.daemon.coordinator import (
     ActorKind,
     ChannelAccess,
-    ConfiguredAuthorizationPolicy,
     ConversationIdentity,
     ConversationMessage,
-    CoordinatorRepository,
-    CoordinatorRuntime,
-    CoordinatorService,
     DeliveryMissing,
     DeliveryReceipt,
     DeliveryRequest,
     MessageKind,
+    RetryableCoordinatorError,
+    TerminalCoordinatorDeliveryError,
+    TerminalCoordinatorError,
+)
+from ocint.daemon.coordinator.models import (
+    DeliveryLookup,
     OpenCodeAssistantMessageId,
     OpenCodeCompletion,
     OpenCodePromptObservation,
@@ -22,11 +24,11 @@ from ocint.daemon.coordinator import (
     OpenCodeSessionId,
     OpenCodeSessionRequest,
     PromptPresence,
-    RetryableCoordinatorError,
-    TerminalCoordinatorDeliveryError,
-    TerminalCoordinatorError,
+    TurnState,
 )
-from ocint.daemon.coordinator.models import DeliveryLookup, TurnState
+from ocint.daemon.coordinator.repository import CoordinatorRepository
+from ocint.daemon.coordinator.run import CoordinatorRuntime
+from ocint.daemon.coordinator.service import ConfiguredAuthorizationPolicy, CoordinatorService
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
 
@@ -121,9 +123,9 @@ class FakeDelivery:
         ):
             if self.accept_before_retry:
                 self.posts.append(request)
-            raise RetryableCoordinatorError("temporary Slack failure", 0.001)
+            raise RetryableCoordinatorError("temporary chat delivery failure", 0.001)
         if self.terminal_failure:
-            raise RuntimeError("terminal Slack failure")
+            raise RuntimeError("terminal chat delivery failure")
         self.posts.append(request)
         return DeliveryReceipt(provider_message_id=f"provider-{len(self.posts)}")
 
@@ -137,14 +139,14 @@ async def test_fake_adapters_process_a_thread_once_reuse_session_and_deliver_a_l
     metadata.create_all(engine)
     repository = CoordinatorRepository(engine)
     policy = ConfiguredAuthorizationPolicy(
-        (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+        (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
     )
     service = CoordinatorService(policy, 100, "safe failure")
     response = "🙂" * 8_100
     opencode = FakeOpenCode(response)
     delivery = FakeDelivery()
     runtime = CoordinatorRuntime(repository, service, opencode, delivery, tmp_path, 1, 3, 3_600, 0.001)
-    identity = ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001")
+    identity = ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001")
     for event_id, timestamp, kind in (
         ("root-event", "1.000001", MessageKind.ROOT),
         ("reply-event", "1.000002", MessageKind.REPLY),
@@ -199,7 +201,7 @@ async def test_restart_after_prompt_submission_observes_the_same_logical_prompt_
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -212,7 +214,7 @@ async def test_restart_after_prompt_submission_observes_the_same_logical_prompt_
             ConversationMessage(
                 provider_event_id="restart-event",
                 conversation_identity=ConversationIdentity(
-                    provider="slack", workspace="w", channel="c", thread="1.000001"
+                    provider="chat", workspace="w", channel="c", thread="1.000001"
                 ),
                 message_id="1.000001",
                 actor_id="alice",
@@ -250,7 +252,7 @@ async def test_restart_terminal_prompt_observation_delivers_safe_failure_without
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -263,7 +265,7 @@ async def test_restart_terminal_prompt_observation_delivers_safe_failure_without
             ConversationMessage(
                 provider_event_id="terminal-restart-event",
                 conversation_identity=ConversationIdentity(
-                    provider="slack", workspace="w", channel="c", thread="1.000001"
+                    provider="chat", workspace="w", channel="c", thread="1.000001"
                 ),
                 message_id="1.000001",
                 actor_id="alice",
@@ -303,7 +305,7 @@ async def test_restart_retryable_prompt_observation_schedules_retry_without_resu
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -316,7 +318,7 @@ async def test_restart_retryable_prompt_observation_schedules_retry_without_resu
             ConversationMessage(
                 provider_event_id="retryable-restart-event",
                 conversation_identity=ConversationIdentity(
-                    provider="slack", workspace="w", channel="c", thread="1.000001"
+                    provider="chat", workspace="w", channel="c", thread="1.000001"
                 ),
                 message_id="1.000001",
                 actor_id="alice",
@@ -364,7 +366,7 @@ async def test_repeated_opencode_recovery_exhausts_the_budget_and_unblocks_the_n
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -377,7 +379,7 @@ async def test_repeated_opencode_recovery_exhausts_the_budget_and_unblocks_the_n
     )
     delivery = FakeDelivery()
     runtime = CoordinatorRuntime(repository, service, opencode, delivery, tmp_path, 0.001, 3, 3_600, 0.001)
-    identity = ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001")
+    identity = ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001")
     for event_id, timestamp, kind in (
         ("failed-root", "1.000001", MessageKind.ROOT),
         ("ordered-reply", "1.000002", MessageKind.REPLY),
@@ -423,7 +425,7 @@ async def test_repeated_opencode_recovery_exhausts_the_budget_and_unblocks_the_n
 
 
 @pytest.mark.asyncio
-async def test_uncertain_slack_acceptance_is_recovered_by_client_message_id_without_a_duplicate(
+async def test_uncertain_chat_acceptance_is_recovered_by_client_message_id_without_a_duplicate(
     tmp_path: Path,
 ) -> None:
     # GIVEN
@@ -432,7 +434,7 @@ async def test_uncertain_slack_acceptance_is_recovered_by_client_message_id_with
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -446,7 +448,7 @@ async def test_uncertain_slack_acceptance_is_recovered_by_client_message_id_with
             ConversationMessage(
                 provider_event_id="uncertain-event",
                 conversation_identity=ConversationIdentity(
-                    provider="slack", workspace="w", channel="c", thread="1.000001"
+                    provider="chat", workspace="w", channel="c", thread="1.000001"
                 ),
                 message_id="1.000001",
                 actor_id="alice",
@@ -481,7 +483,7 @@ async def test_middle_chunk_rate_limit_resumes_the_same_chunk_and_preserves_orde
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         20,
         "safe failure",
@@ -503,7 +505,7 @@ async def test_middle_chunk_rate_limit_resumes_the_same_chunk_and_preserves_orde
             ConversationMessage(
                 provider_event_id="rate-limit-event",
                 conversation_identity=ConversationIdentity(
-                    provider="slack", workspace="w", channel="c", thread="1.000001"
+                    provider="chat", workspace="w", channel="c", thread="1.000001"
                 ),
                 message_id="1.000001",
                 actor_id="alice",
@@ -545,7 +547,7 @@ async def test_bot_root_cannot_create_a_recursive_turn_through_the_runtime_bound
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -560,7 +562,7 @@ async def test_bot_root_cannot_create_a_recursive_turn_through_the_runtime_bound
             ConversationMessage(
                 provider_event_id="bot-event",
                 conversation_identity=ConversationIdentity(
-                    provider="slack", workspace="w", channel="c", thread="1.000001"
+                    provider="chat", workspace="w", channel="c", thread="1.000001"
                 ),
                 message_id="1.000001",
                 actor_id="coordinator-bot",
@@ -590,7 +592,7 @@ async def test_terminal_delivery_error_preserves_valid_opencode_response_and_fai
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -601,7 +603,7 @@ async def test_terminal_delivery_error_preserves_valid_opencode_response_and_fai
     )
     message = ConversationMessage(
         provider_event_id="root-event",
-        conversation_identity=ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001"),
+        conversation_identity=ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001"),
         message_id="1.000001",
         actor_id="alice",
         text="work",
@@ -630,7 +632,7 @@ async def test_transient_delivery_retries_beyond_the_opencode_budget_and_preserv
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -641,7 +643,7 @@ async def test_transient_delivery_retries_beyond_the_opencode_budget_and_preserv
     )
     message = ConversationMessage(
         provider_event_id="root-event",
-        conversation_identity=ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001"),
+        conversation_identity=ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001"),
         message_id="1.000001",
         actor_id="alice",
         text="work",
@@ -676,7 +678,7 @@ async def test_transient_opencode_failure_before_response_retries_without_safe_f
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -686,7 +688,7 @@ async def test_transient_opencode_failure_before_response_retries_without_safe_f
     runtime = CoordinatorRuntime(repository, service, opencode, delivery, tmp_path, 0.001, 3, 3_600, 0.001)
     message = ConversationMessage(
         provider_event_id="root-event",
-        conversation_identity=ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001"),
+        conversation_identity=ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001"),
         message_id="1.000001",
         actor_id="alice",
         text="work",
@@ -717,7 +719,7 @@ async def test_terminal_provider_error_preserves_one_safe_failure_through_delive
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+            (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
         ),
         100,
         "safe failure",
@@ -736,7 +738,7 @@ async def test_terminal_provider_error_preserves_one_safe_failure_through_delive
     )
     message = ConversationMessage(
         provider_event_id="root-event",
-        conversation_identity=ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001"),
+        conversation_identity=ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001"),
         message_id="1.000001",
         actor_id="alice",
         text="work",

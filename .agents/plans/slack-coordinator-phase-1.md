@@ -472,9 +472,11 @@ the configured Slack workspace:
 
 ## OpenCode Policy And Workspace
 
-LCH creates private coordinator directories and atomically generates `AGENTS.md`
-and `repositories.json`. It rejects symlinks and preserves mode `0700` on
-directories and `0600` on generated files.
+LCH creates private coordinator directories and provisions policy and auth only.
+Coordinator startup is the single owner that atomically generates `AGENTS.md`
+and `repositories.json` from its final validated repository projection. Doctor
+may report this context as pending before first coordinator startup. Generated
+directories use mode `0700` and files use mode `0600`.
 
 Add `config/opencode.coordinator.json` with this policy:
 
@@ -522,11 +524,12 @@ Request handling:
 5. Parse only after authentication.
 6. Require the configured workspace.
 7. Answer signed `url_verification` requests with the challenge.
-8. Convert supported `event_callback` messages into normalized conversation
-   messages. Parse public `channel` and private `group` payloads through a normal
-   Pydantic typed union, without a discriminator. Phase 1 deploys only
-   `message.channels`; private-channel subscription and scope deployment remain
-   an explicit FIXME.
+8. Convert supported public `event_callback` messages into normalized
+   conversation messages. Parse public `channel` and private `group` payloads
+   through a normal Pydantic typed union, without a discriminator, but durably
+   ignore private payloads before authorization. Phase 1 deploys only
+   `message.channels`; private translation, subscription, and scope deployment
+   remain an explicit FIXME.
 9. In one repository transaction, insert/deduplicate the provider event, insert
    the logical message, create or update the conversation, and create all newly
    eligible turns. Unsupported events commit only their ignored disposition.
@@ -1195,8 +1198,10 @@ uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
 
 Rollout:
 
-1. Apply the shared additive migration without starting the coordinator worker.
-2. Generate and inspect coordinator context and OpenCode policy.
+1. Apply setup and inspect coordinator OpenCode policy/auth without manually
+   migrating the database.
+2. Start the timer or coordinator to exercise serialized migration; coordinator
+   startup atomically generates context from the final repository projection.
 3. Verify the existing GitHub timer daemon after Slack polling is disconnected.
 4. Keep production coordinator/ngrok units disabled and run the autonomous E2E
    harness in public channel `C0955FD2FK4`.

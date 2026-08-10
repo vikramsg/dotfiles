@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 from alembic import command
-from ocint.daemon.config import DaemonConfig, GitHubConfig, RepositoryConfig
-from ocint.daemon.coordinator import CoordinatorConfig
+from ocint.daemon.config import CoordinatorConfig, DaemonConfig, GitHubConfig, RepositoryConfig
 from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
 from ocint.daemon.db.schema import metadata

@@ -4,23 +4,32 @@ import fcntl
 import os
 import signal
 import stat
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from contextlib import AbstractContextManager, asynccontextmanager, contextmanager
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import FrameType, TracebackType
-from typing import Protocol, Self
+from typing import Self
 
+from ocint.daemon.coordinator.contracts import (
+    CoordinatorDelivery,
+    CoordinatorIngress,
+    CoordinatorOperations,
+    CoordinatorPersistence,
+    CoordinatorProcess,
+    CoordinatorWorker,
+    OpenCodeCoordinator,
+    RetryableCoordinatorDeliveryError,
+    RetryableCoordinatorError,
+    ShutdownSignalRegistrar,
+    TerminalCoordinatorDeliveryError,
+    TerminalCoordinatorError,
+)
 from ocint.daemon.coordinator.models import (
-    DeliveryLookup,
     DeliveryMissing,
-    DeliveryReceipt,
     DeliveryRequest,
     DeliveryState,
-    OpenCodeAssistantMessageId,
-    OpenCodeCompletion,
-    OpenCodePromptObservation,
     OpenCodePromptRequest,
     OpenCodeSessionId,
     OpenCodeSessionRequest,
@@ -29,108 +38,7 @@ from ocint.daemon.coordinator.models import (
     Turn,
     TurnState,
 )
-from ocint.daemon.coordinator.repository import CoordinatorRepository
-from ocint.daemon.coordinator.service import CoordinatorService
 from ocint.daemon.logging import get_logger
-from ocint.daemon.models import PromptObservation
-from ocint.daemon.opencode import (
-    OpenCodePrompt,
-    OpenCodeResponse,
-    RetryableOpenCodeError,
-    TerminalOpenCodeError,
-)
-
-
-class OpenCodeCoordinator(Protocol):
-    async def create_or_reuse_session(self, request: OpenCodeSessionRequest) -> OpenCodeSessionId: ...
-    async def observe_prompt(self, request: OpenCodePromptRequest) -> OpenCodePromptObservation: ...
-    async def submit_prompt(self, request: OpenCodePromptRequest) -> None: ...
-    async def wait_for_completion(self, request: OpenCodePromptRequest) -> OpenCodeCompletion: ...
-
-
-class CorrelatedOpenCodeGateway(Protocol):
-    async def create(self, directory: Path, identity: str) -> str: ...
-    async def observe_response(self, directory: Path, session_id: str, prompt: OpenCodePrompt) -> PromptObservation: ...
-    async def submit_prompt(self, directory: Path, session_id: str, prompt: OpenCodePrompt) -> None: ...
-    async def wait_for_response(self, directory: Path, session_id: str, prompt: OpenCodePrompt) -> OpenCodeResponse: ...
-
-
-class OpenCodeCoordinatorAdapter:
-    def __init__(self, gateway: CorrelatedOpenCodeGateway, workspace: Path) -> None:
-        self.gateway = gateway
-        self.workspace = workspace.expanduser().resolve()
-
-    async def create_or_reuse_session(self, request: OpenCodeSessionRequest) -> OpenCodeSessionId:
-        requested_workspace = Path(request.workspace).expanduser().resolve()
-        if requested_workspace != self.workspace:
-            raise ValueError("coordinator OpenCode request used an unexpected workspace")
-        return OpenCodeSessionId(await self._call(self.gateway.create(self.workspace, request.identity)))
-
-    async def observe_prompt(self, request: OpenCodePromptRequest) -> OpenCodePromptObservation:
-        prompt = self._prompt(request)
-        observation = await self._call(self.gateway.observe_response(self.workspace, request.session_id.value, prompt))
-        if not observation.found:
-            return OpenCodePromptObservation(presence=PromptPresence.ABSENT)
-        if observation.active:
-            return OpenCodePromptObservation(presence=PromptPresence.ACTIVE)
-        if not observation.completed:
-            return OpenCodePromptObservation(presence=PromptPresence.INTERRUPTED)
-        response = await self._call(self.gateway.wait_for_response(self.workspace, request.session_id.value, prompt))
-        return OpenCodePromptObservation(
-            presence=PromptPresence.COMPLETE,
-            assistant_message_id=OpenCodeAssistantMessageId(response.assistant_message_id),
-            text=response.text,
-        )
-
-    async def submit_prompt(self, request: OpenCodePromptRequest) -> None:
-        await self._call(self.gateway.submit_prompt(self.workspace, request.session_id.value, self._prompt(request)))
-
-    async def wait_for_completion(self, request: OpenCodePromptRequest) -> OpenCodeCompletion:
-        response = await self._call(
-            self.gateway.wait_for_response(
-                self.workspace,
-                request.session_id.value,
-                self._prompt(request),
-            )
-        )
-        if response.parent_message_id != request.user_message_id.value:
-            raise RuntimeError("OpenCode assistant response parent did not match the managed user message")
-        return OpenCodeCompletion(
-            assistant_message_id=OpenCodeAssistantMessageId(response.assistant_message_id),
-            text=response.text,
-        )
-
-    @staticmethod
-    def _prompt(request: OpenCodePromptRequest) -> OpenCodePrompt:
-        return OpenCodePrompt(message_id=request.user_message_id.value, text=request.prompt)
-
-    @staticmethod
-    async def _call[Result](operation: Awaitable[Result]) -> Result:
-        try:
-            return await operation
-        except RetryableOpenCodeError as error:
-            raise RetryableCoordinatorError(str(error)) from error
-        except TerminalOpenCodeError as error:
-            raise TerminalCoordinatorError(str(error)) from error
-
-
-class CoordinatorDelivery(Protocol):
-    async def find_delivery(self, request: DeliveryRequest) -> DeliveryLookup: ...
-    async def post(self, request: DeliveryRequest) -> DeliveryReceipt: ...
-
-
-class CoordinatorProcess(Protocol):
-    async def start(self) -> None: ...
-    async def close(self) -> None: ...
-    async def wait_exited(self) -> int: ...
-
-
-class CoordinatorIngress(Protocol):
-    async def __call__(self, shutdown: asyncio.Event, /) -> None: ...
-
-
-class ShutdownSignalRegistrar(Protocol):
-    def register(self, request_shutdown: Callable[[], None]) -> AbstractContextManager[None]: ...
 
 
 class ProcessSignalRegistrar:
@@ -171,26 +79,6 @@ class CoordinatorShutdown:
         await self.event.wait()
 
 
-class RetryableCoordinatorError(Exception):
-    def __init__(self, message: str, retry_after_seconds: float | None = None) -> None:
-        super().__init__(message)
-        if retry_after_seconds is not None and retry_after_seconds <= 0:
-            raise ValueError("retry delay must be positive")
-        self.retry_after_seconds = retry_after_seconds
-
-
-class RetryableCoordinatorDeliveryError(RetryableCoordinatorError):
-    """A temporary delivery failure whose response remains valid."""
-
-
-class TerminalCoordinatorError(Exception):
-    """A classified adapter failure that should not be retried."""
-
-
-class TerminalCoordinatorDeliveryError(Exception):
-    """A delivery failure that must stop the worker without changing its response."""
-
-
 class RuntimeFileLock:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -229,8 +117,8 @@ class RuntimeFileLock:
 class CoordinatorRuntime:
     def __init__(
         self,
-        repository: CoordinatorRepository,
-        service: CoordinatorService,
+        repository: CoordinatorPersistence,
+        service: CoordinatorOperations,
         opencode: OpenCodeCoordinator,
         delivery: CoordinatorDelivery,
         workspace: Path,
@@ -480,7 +368,7 @@ class CoordinatorRuntime:
             )
             posted = False
             self.logger.info(
-                "Coordinator Slack delivery checkpoint",
+                "Coordinator delivery checkpoint",
                 turn=current.id,
                 chunk_index=chunk.chunk_index,
                 client_message=chunk.client_msg_id,
@@ -495,7 +383,7 @@ class CoordinatorRuntime:
                         posted = True
                     else:
                         self.logger.info(
-                            "Coordinator Slack delivery recovered",
+                            "Coordinator delivery recovered",
                             turn=current.id,
                             chunk_index=chunk.chunk_index,
                             client_message=chunk.client_msg_id,
@@ -513,7 +401,7 @@ class CoordinatorRuntime:
                     self._retry_at(retry_after_seconds),
                 )
                 self.logger.warning(
-                    "Coordinator Slack delivery retry scheduled",
+                    "Coordinator delivery retry scheduled",
                     turn=current.id,
                     chunk_index=chunk.chunk_index,
                     client_message=chunk.client_msg_id,
@@ -526,7 +414,7 @@ class CoordinatorRuntime:
                 raise TerminalCoordinatorDeliveryError("coordinator delivery failed") from error
             self.repository.mark_delivered(chunk.turn_id, chunk.chunk_index, receipt.provider_message_id)
             self.logger.info(
-                "Coordinator Slack delivery stored",
+                "Coordinator delivery stored",
                 turn=current.id,
                 chunk_index=chunk.chunk_index,
                 client_message=chunk.client_msg_id,
@@ -549,7 +437,7 @@ class CoordinatorRuntime:
 
 @dataclass(frozen=True)
 class CoordinatorApplicationRequest:
-    runtime: CoordinatorRuntime
+    runtime: CoordinatorWorker
     opencode: CoordinatorProcess
     ingress: CoordinatorIngress
     ingress_host: str

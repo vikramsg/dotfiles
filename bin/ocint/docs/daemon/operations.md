@@ -8,7 +8,7 @@ Linux user-systemd lifecycle.
 ```text
 setup            create initial configuration and install all four units
 slack-token      validate and atomically install a hidden-input Slack bot token
-apply            provision coordinator context and regenerate all four units
+apply            provision coordinator policy/auth and regenerate all four units
 lifecycle        show timer, job service, coordinator, ngrok, and log state
 list             list recent durable jobs from SQLite
 status JOB_ID    show one durable job
@@ -23,9 +23,10 @@ bounded service is inactive and do not require API credentials.
 `ocint daemon doctor` is the preflight surface. It validates private config and
 environment files, required credentials, Slack `auth.test` and channel access,
 ngrok v3 and its static URL, exact OpenCode `1.18.15`, both isolated OpenCode
-policies/data homes, generated coordinator workspace, four distinct loopback
-ports, migration head, user lingering, and exact systemd payloads. Coordinator
-and ngrok may be disabled during pre-rollout doctor checks.
+policies/data homes, coordinator workspace state, four distinct loopback ports,
+migration head, user lingering, and exact systemd payloads. Workspace context
+and the migration revision may be pending until first coordinator/timer startup.
+Coordinator and ngrok may be disabled during pre-rollout doctor checks.
 
 ## Command Outcomes
 
@@ -122,8 +123,7 @@ both units explicitly when an inspection or live-test window is required.
 ```text
 setup/apply
    |
-   +-> run explicit additive shared migration
-   +-> generate and inspect context/policy
+   +-> provision and inspect policy/auth
    +-> verify timer-driven GitHub daemon
    +-> initial install: coordinator + ngrok disabled
    +-> later apply: preserve and report current enablement
@@ -135,7 +135,6 @@ Use this order:
 
 ```bash
 ocint daemon lch apply
-ocint daemon migrate
 ocint daemon doctor
 ocint daemon lch lifecycle
 
@@ -149,8 +148,11 @@ ocint daemon lch lifecycle
 ocint daemon doctor
 ```
 
-The GitHub timer can remain enabled throughout. Start coordinator first so
-ingress and OpenCode are healthy before the static tunnel accepts callbacks.
+The GitHub timer can remain enabled throughout. Timer/coordinator startup owns
+the serialized migration; do not hide that startup check with a manual migrate.
+Start coordinator first so it generates context from the final validated
+repository projection and ingress/OpenCode become healthy before the static
+tunnel accepts callbacks.
 
 ### Autonomous Live Slack E2E
 

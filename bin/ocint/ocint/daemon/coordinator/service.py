@@ -17,6 +17,7 @@ from ocint.daemon.coordinator.models import (
 class ChannelAccess(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    provider: str = Field(min_length=1)
     workspace: str = Field(min_length=1)
     channel: str = Field(min_length=1)
     authorized_actors: frozenset[str] = Field(min_length=1)
@@ -35,7 +36,11 @@ class ConfiguredAuthorizationPolicy:
             return AuthorizationDecision.UNAUTHORIZED
         identity = message.conversation_identity
         for channel in self.channels:
-            if channel.workspace == identity.workspace and channel.channel == identity.channel:
+            if (
+                channel.provider == identity.provider
+                and channel.workspace == identity.workspace
+                and channel.channel == identity.channel
+            ):
                 return (
                     AuthorizationDecision.AUTHORIZED
                     if message.actor_id in channel.authorized_actors
@@ -72,7 +77,8 @@ class CoordinatorService:
     def managed_prompt(self, message: ConversationMessage) -> str:
         identity = message.conversation_identity
         return (
-            "Slack turn\n"
+            "Coordinator turn\n"
+            f"provider: {identity.provider}\n"
             f"workspace: {identity.workspace}\n"
             f"channel: {identity.channel}\n"
             f"thread: {identity.thread}\n"

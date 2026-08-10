@@ -8,7 +8,6 @@ from click.testing import CliRunner
 from ocint.cli import main
 from ocint.daemon.cli import _run_coordinator, open_daemon_app
 from ocint.daemon.config import DaemonContext, DaemonSettings
-from ocint.daemon.coordinator import CoordinatorIngressConfig
 from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.models import (
     GitHubLogin,
@@ -20,7 +19,7 @@ from ocint.daemon.models import (
 )
 from ocint.daemon.pull_request_job import PullRequestJobRequest
 from ocint.daemon.pull_request_job.repository import PullRequestJobRepository
-from ocint.daemon.slack import SlackAuth, SlackConfig
+from ocint.daemon.slack import CoordinatorSlackConfig, SlackAuth, SlackEventsConfig
 from ocint.presentation import default_cli_context
 from pydantic import SecretStr
 from sqlalchemy import Engine
@@ -241,13 +240,13 @@ agent_actor = "maintainer"
     async def delivery(_token: str) -> AsyncIterator[object]:
         yield object()
 
-    def create_events_app(ingress: CoordinatorIngressConfig, *_arguments: object) -> Never:
+    def create_events_app(ingress: SlackEventsConfig, *_arguments: object) -> Never:
         observed["processing_timeout_seconds"] = ingress.processing_timeout_seconds
         raise RuntimeError("composition observed")
 
     monkeypatch.setattr("ocint.daemon.cli.validate_coordinator_runtime", lambda _context, _config: None)
     monkeypatch.setattr("ocint.daemon.cli.validate_coordinator_slack_access", validate_slack)
-    monkeypatch.setattr("ocint.daemon.cli.create_daemon_engine", create_engine)
+    monkeypatch.setattr("ocint.daemon.db.create_daemon_engine", create_engine)
     monkeypatch.setattr("ocint.daemon.cli.open_slack_coordinator_delivery", delivery)
     monkeypatch.setattr("ocint.daemon.cli.create_slack_events_app", create_events_app)
 
@@ -394,13 +393,6 @@ identity_file = "{tmp_path / "identity"}"
 known_hosts_file = "{tmp_path / "known_hosts"}"
 [github]
 agent_actor = "maintainer"
-[slack]
-workspace_id = "T1"
-[[slack.channels]]
-channel_id = "C1"
-repository = "repo"
-authorized_users = ["U1"]
-initial_oldest = "1753380000.123456"
 {coordinator_toml}
 '''
     )
@@ -408,7 +400,7 @@ initial_oldest = "1753380000.123456"
     environment_file.write_text("# preserve\nOTHER=value\nOCINT_DAEMON_API_TOKEN=api\n")
     environment_file.chmod(0o600)
 
-    async def validate(_config: SlackConfig, token: str) -> SlackAuth:
+    async def validate(_config: CoordinatorSlackConfig, token: str) -> SlackAuth:
         assert token == "xoxb-super-secret"
         return SlackAuth(user_id="UBOT", bot_id="BBOT", team_id="T1")
 

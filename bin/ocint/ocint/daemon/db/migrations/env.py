@@ -1,6 +1,6 @@
 from alembic import context
 from ocint.daemon.db.schema import metadata
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import Connection, Engine
 
 config = context.config
 target_metadata = metadata
@@ -13,17 +13,17 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    engine = engine_from_config(
-        config.get_section(config.config_ini_section, {}), prefix="sqlalchemy.", poolclass=pool.NullPool
-    )
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
-        connection.exec_driver_sql("PRAGMA journal_mode=WAL")
-        connection.exec_driver_sql("PRAGMA busy_timeout=5000")
-        connection.commit()
+    connection = config.attributes.get("connection")
+    engine = config.attributes.get("engine")
+    if not isinstance(connection, Connection) or not isinstance(engine, Engine):
+        raise RuntimeError("daemon migrations require a validated database connection")
+    try:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
+    finally:
+        connection.close()
+        engine.dispose()
 
 
 if context.is_offline_mode():

@@ -181,7 +181,14 @@ coordinator_event = Table(
     Column("managed_prompt", Text, nullable=False),
     Column("disposition", String, nullable=False),
     Column("created_at", String, nullable=False),
-    UniqueConstraint("provider", "workspace_id", "channel_id", "message_id", name="uq_coordinator_event_message"),
+    UniqueConstraint(
+        "provider",
+        "workspace_id",
+        "channel_id",
+        "thread_id",
+        "message_id",
+        name="uq_coordinator_event_message",
+    ),
 )
 
 coordinator_conversation = Table(

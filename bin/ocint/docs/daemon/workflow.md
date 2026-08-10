@@ -17,15 +17,19 @@ Does daemon.toml exist?
 Note: `daemon.toml` is usually at `XDG_HOME/.config/ocint/daemon.toml`.
 
 Run `setup` once, from the target repository root, to create initial
-configuration, provision both OpenCode policies, generate coordinator context,
-and install all four systemd units:
+configuration, provision both OpenCode policies, and install all four systemd
+units. The coordinator generates its context at startup from the final validated
+repository projection:
 
 ```bash
 export OCINT_NGROK_URL=https://YOUR_STATIC_NGROK_DOMAIN
 ocint daemon lch setup
-ocint daemon migrate
 ocint daemon doctor
 ```
+
+The first timer or coordinator startup owns serialized migration. A pre-start
+doctor may show the prior revision; normal setup and acceptance do not migrate
+manually.
 
 Run `apply` after editing `daemon.toml` or when the systemd units must be
 regenerated:

@@ -25,13 +25,6 @@ class ConversationMessage(BaseModel):
     source_order_at: int = Field(ge=0)
 
 
-def parse_slack_timestamp(timestamp: str) -> int:
-    seconds, separator, fraction = timestamp.partition(".")
-    if separator != "." or not seconds.isdigit() or len(fraction) != 6 or not fraction.isdigit():
-        raise ValueError(f"invalid Slack timestamp: {timestamp!r}")
-    return int(seconds) * 1_000_000 + int(fraction)
-
-
 class MessageKind(StrEnum):
     ROOT = "root"
     REPLY = "reply"

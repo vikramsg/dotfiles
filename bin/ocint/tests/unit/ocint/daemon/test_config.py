@@ -186,6 +186,8 @@ def test_config_resolves_repository_and_rejects_duplicate_names(
                 "repositories": [{key: value for key, value in raw["repositories"][0].items() if key != "description"}],
             }
         )
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        DaemonConfig.model_validate({**raw, "slack": {"workspace_id": "obsolete"}})
 
 
 @pytest.mark.parametrize("remote", ["git@example.test:owner/repo.git", "ssh://git@example.test/owner/repo.git"])

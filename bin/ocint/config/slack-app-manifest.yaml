@@ -11,7 +11,7 @@ oauth_config:
       - chat:write
 settings:
   event_subscriptions:
-    request_url: https://YOUR_STATIC_NGROK_DOMAIN/slack/events
+    request_url: https://YOUR_PUBLIC_CALLBACK_DOMAIN/slack/events
     bot_events:
       - message.channels
   org_deploy_enabled: false

@@ -115,9 +115,9 @@ class CoordinatorWorkspace:
     def _agents() -> str:
         return """# Coordinator
 
-You are the sole conversational coordinator for Slack.
+You are the sole coordinator for this chat workspace.
 
-- Answer questions concisely in plain text suitable for Slack.
+- Answer questions concisely in plain text suitable for chat.
 - Use web research when it helps.
 - Read `repositories.json` only as a safe catalogue of available repositories.
 - Do not inspect, modify, or run commands in target repositories.

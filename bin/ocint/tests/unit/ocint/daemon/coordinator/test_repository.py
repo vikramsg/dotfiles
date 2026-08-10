@@ -4,14 +4,13 @@ import pytest
 from ocint.daemon.coordinator import (
     ActorKind,
     ChannelAccess,
-    ConfiguredAuthorizationPolicy,
     ConversationIdentity,
     ConversationMessage,
-    CoordinatorRepository,
-    CoordinatorService,
     MessageKind,
 )
 from ocint.daemon.coordinator.models import ConversationState, EventDisposition, ResponseChunk, TurnState
+from ocint.daemon.coordinator.repository import CoordinatorRepository
+from ocint.daemon.coordinator.service import ConfiguredAuthorizationPolicy, CoordinatorService
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import metadata
 
@@ -26,7 +25,7 @@ def repository(tmp_path: Path) -> CoordinatorRepository:
 @pytest.fixture
 def service() -> CoordinatorService:
     policy = ConfiguredAuthorizationPolicy(
-        (ChannelAccess(workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
+        (ChannelAccess(provider="chat", workspace="w", channel="c", authorized_actors=frozenset(("alice",))),)
     )
     return CoordinatorService(policy, 100, "safe")
 
@@ -35,7 +34,7 @@ def test_reply_waits_for_root_then_all_turns_are_created_in_exact_source_order(
     repository: CoordinatorRepository, service: CoordinatorService
 ) -> None:
     # GIVEN
-    identity = ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001")
+    identity = ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001")
     reply = ConversationMessage(
         provider_event_id="reply-event",
         conversation_identity=identity,
@@ -69,7 +68,7 @@ def test_duplicate_and_event_identity_conflict_never_create_more_work(
     repository: CoordinatorRepository, service: CoordinatorService
 ) -> None:
     # GIVEN
-    identity = ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001")
+    identity = ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001")
     message = ConversationMessage(
         provider_event_id="event",
         conversation_identity=identity,
@@ -93,13 +92,44 @@ def test_duplicate_and_event_identity_conflict_never_create_more_work(
     assert len(repository.turns(1)) == 1
 
 
+def test_same_provider_message_id_in_different_threads_creates_distinct_work(
+    repository: CoordinatorRepository, service: CoordinatorService
+) -> None:
+    # GIVEN
+    first = ConversationMessage(
+        provider_event_id="first-event",
+        conversation_identity=ConversationIdentity(provider="chat", workspace="w", channel="c", thread="first"),
+        message_id="provider-message",
+        actor_id="alice",
+        text="first root",
+        source_created_at="1.000001",
+        source_order_at=1_000_001,
+    )
+    second = first.model_copy(
+        update={
+            "provider_event_id": "second-event",
+            "conversation_identity": first.conversation_identity.model_copy(update={"thread": "second"}),
+            "text": "second root",
+        }
+    )
+
+    # WHEN
+    first_result = repository.ingest(service.prepare(first, MessageKind.ROOT, ActorKind.HUMAN))
+    second_result = repository.ingest(service.prepare(second, MessageKind.ROOT, ActorKind.HUMAN))
+
+    # THEN
+    assert first_result.disposition is EventDisposition.ACCEPTED
+    assert second_result.disposition is EventDisposition.ACCEPTED
+    assert first_result.conversation_id != second_result.conversation_id
+
+
 def test_unsupported_file_only_message_is_durably_ignored_without_a_conversation(
     repository: CoordinatorRepository, service: CoordinatorService
 ) -> None:
     # GIVEN
     message = ConversationMessage(
         provider_event_id="file-event",
-        conversation_identity=ConversationIdentity(provider="slack", workspace="w", channel="c", thread="root"),
+        conversation_identity=ConversationIdentity(provider="chat", workspace="w", channel="c", thread="root"),
         message_id="1.000001",
         actor_id="alice",
         text="",
@@ -119,7 +149,7 @@ def test_claiming_blocks_a_later_turn_while_an_earlier_turn_waits_for_retry(
     repository: CoordinatorRepository, service: CoordinatorService
 ) -> None:
     # GIVEN
-    identity = ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001")
+    identity = ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001")
     for event_id, timestamp, kind in (
         ("root", "1.000001", MessageKind.ROOT),
         ("reply", "1.000002", MessageKind.REPLY),
@@ -152,7 +182,7 @@ def test_orphan_reply_expires_without_creating_opencode_work(
     # GIVEN
     message = ConversationMessage(
         provider_event_id="orphan",
-        conversation_identity=ConversationIdentity(provider="slack", workspace="w", channel="c", thread="root"),
+        conversation_identity=ConversationIdentity(provider="chat", workspace="w", channel="c", thread="root"),
         message_id="1.000002",
         actor_id="alice",
         text="reply",
@@ -170,13 +200,53 @@ def test_orphan_reply_expires_without_creating_opencode_work(
     assert repository.claim_turn("9999-01-01T00:00:00+00:00") is None
 
 
+def test_replies_after_orphan_expiry_remain_durably_expired(
+    repository: CoordinatorRepository, service: CoordinatorService
+) -> None:
+    # GIVEN
+    identity = ConversationIdentity(provider="chat", workspace="w", channel="c", thread="missing-root")
+    first = ConversationMessage(
+        provider_event_id="first-orphan",
+        conversation_identity=identity,
+        message_id="reply-1",
+        actor_id="alice",
+        text="first reply",
+        source_created_at="1.000001",
+        source_order_at=1_000_001,
+    )
+    waiting = repository.ingest(service.prepare(first, MessageKind.REPLY, ActorKind.HUMAN))
+    assert repository.expire_orphans("9999-01-01T00:00:00+00:00") == 1
+    second = first.model_copy(
+        update={
+            "provider_event_id": "second-orphan",
+            "message_id": "reply-2",
+            "text": "second reply",
+            "source_created_at": "1.000002",
+            "source_order_at": 1_000_002,
+        }
+    )
+
+    # WHEN
+    expired = repository.ingest(service.prepare(second, MessageKind.REPLY, ActorKind.HUMAN))
+    repeated_expiry = repository.expire_orphans("9999-01-01T00:00:00+00:00")
+    duplicate = repository.ingest(service.prepare(second, MessageKind.REPLY, ActorKind.HUMAN))
+
+    # THEN
+    assert expired.disposition is EventDisposition.EXPIRED
+    assert expired.conversation_id == waiting.conversation_id
+    assert repeated_expiry == 0
+    assert duplicate.disposition is EventDisposition.DUPLICATE
+    assert repository.conversation(waiting.conversation_id).state is ConversationState.EXPIRED
+    assert repository.claim_turn("9999-01-01T00:00:00+00:00") is None
+
+
 def test_deferred_delivery_chunk_cannot_be_overtaken(
     repository: CoordinatorRepository, service: CoordinatorService
 ) -> None:
     # GIVEN
     message = ConversationMessage(
         provider_event_id="root",
-        conversation_identity=ConversationIdentity(provider="slack", workspace="w", channel="c", thread="1.000001"),
+        conversation_identity=ConversationIdentity(provider="chat", workspace="w", channel="c", thread="1.000001"),
         message_id="1.000001",
         actor_id="alice",
         text="root",
