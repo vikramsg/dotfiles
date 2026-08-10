@@ -130,6 +130,61 @@ agent_actor = "maintainer"
 
 
 @pytest.mark.asyncio
+async def test_coordinator_validates_provisioned_runtime_before_startup_mutates_state(
+    tmp_path: Path,
+    coordinator_toml: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    config = tmp_path / "daemon.toml"
+    config.write_text(
+        f'''database_path = "{database}"
+mirror_root = "{tmp_path / "mirrors"}"
+worktree_root = "{tmp_path / "worktrees"}"
+[[repositories]]
+name = "repo"
+description = "Repository for tests."
+remote_url = "git@example.test:owner/repo.git"
+github_repository = "owner/repo"
+author_name = "Agent"
+author_email = "agent@example.test"
+[opencode]
+config_file = "{tmp_path / "opencode.json"}"
+xdg_config_home = "{tmp_path / "opencode-xdg"}"
+xdg_data_home = "{tmp_path / "opencode-data"}"
+[git]
+ssh_executable = "/usr/bin/ssh"
+identity_file = "{tmp_path / "identity"}"
+known_hosts_file = "{tmp_path / "known-hosts"}"
+[github]
+agent_actor = "maintainer"
+{coordinator_toml}
+'''
+    )
+    context = DaemonContext.create(
+        default_cli_context().output,
+        tmp_path,
+        {},
+        DaemonSettings(
+            config=config,
+            slack_bot_token=SecretStr("xoxb-token"),
+            slack_signing_secret=SecretStr("signing-secret"),
+        ),
+    )
+
+    def reject_runtime(_context: DaemonContext, _config: object) -> None:
+        raise RuntimeError("coordinator policy drift")
+
+    monkeypatch.setattr("ocint.daemon.cli.validate_coordinator_runtime", reject_runtime)
+
+    # WHEN / THEN
+    with pytest.raises(RuntimeError, match="policy drift"):
+        await _run_coordinator(context)
+    assert not database.exists()
+
+
+@pytest.mark.asyncio
 async def test_coordinator_composes_ingress_processing_and_database_timeouts(
     tmp_path: Path,
     coordinator_toml: str,
@@ -190,6 +245,7 @@ agent_actor = "maintainer"
         observed["processing_timeout_seconds"] = ingress.processing_timeout_seconds
         raise RuntimeError("composition observed")
 
+    monkeypatch.setattr("ocint.daemon.cli.validate_coordinator_runtime", lambda _context, _config: None)
     monkeypatch.setattr("ocint.daemon.cli.validate_coordinator_slack_access", validate_slack)
     monkeypatch.setattr("ocint.daemon.cli.create_daemon_engine", create_engine)
     monkeypatch.setattr("ocint.daemon.cli.open_slack_coordinator_delivery", delivery)

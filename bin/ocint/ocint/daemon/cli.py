@@ -35,7 +35,7 @@ from ocint.daemon.github import (
     GitHubRepositoryPolicy,
     open_github_service,
 )
-from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle
+from ocint.daemon.lch import SubprocessRunner, diagnose, lch, lifecycle, validate_coordinator_runtime
 from ocint.daemon.models import GitRepository
 from ocint.daemon.opencode import OpenCodeRuntimeConfig, create_opencode_client
 from ocint.daemon.pull_request_job import (
@@ -270,8 +270,6 @@ async def _run_daemon(context: DaemonContext) -> None:
 async def _run_coordinator(context: DaemonContext) -> None:
     config = context.config()
     coordinator = config.coordinator
-    if coordinator is None:
-        raise ValueError("[coordinator] configuration is required")
     bot_token = context.settings.slack_bot_token.get_secret_value()
     signing_secret = context.settings.slack_signing_secret.get_secret_value()
     if not bot_token:
@@ -279,6 +277,7 @@ async def _run_coordinator(context: DaemonContext) -> None:
     if not signing_secret:
         raise ValueError("OCINT_DAEMON_SLACK_SIGNING_SECRET is required")
 
+    validate_coordinator_runtime(context, config)
     await validate_coordinator_slack_access(coordinator.slack, bot_token)
     migrate_daemon_db(config.database_path)
     workspace = CoordinatorWorkspace(

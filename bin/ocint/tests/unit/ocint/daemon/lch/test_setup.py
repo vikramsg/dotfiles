@@ -9,19 +9,25 @@ import click
 import pytest
 from ocint.daemon.config import DaemonContext, DaemonSettings, LifecycleConfig, LoggingConfig
 from ocint.daemon.lch.setup import (
+    CoordinatorRestrictedOpenCodeConfig,
     OpenCodeSourceConfig,
     RestrictedOpenCodeConfig,
+    coordinator_policy_bytes,
+    coordinator_restricted_opencode_config,
     daemon_toml,
     discover,
     discovered_daemon_config,
     ensure_auth_symlink,
     existing_github_token,
+    load_coordinator_policy,
     load_policy,
     policy_bytes,
+    provision_configured_coordinator_runtime,
     require_available_loopback_port,
     restricted_opencode_config,
     setup,
     upsert_private_environment,
+    validate_coordinator_runtime,
     write_private_file,
 )
 from ocint.daemon.lch.systemd import CommandResult, SystemdLifecycle, SystemdPaths
@@ -70,6 +76,8 @@ class DiscoveryRunner:
             return CommandResult(stdout="yes\n")
         if command[0] == "systemctl":
             return CommandResult()
+        if command[-1] == "version":
+            return CommandResult(stdout="ngrok version 3.31.0\n")
         raise AssertionError(command)
 
     def run_isolated(self, arguments: Sequence[str], environment: Mapping[str, str]) -> CommandResult:
@@ -166,13 +174,15 @@ def discovery_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Discov
     ssh = binary_directory / "ssh"
     ocint = binary_directory / "ocint"
     opencode = binary_directory / "opencode"
-    for executable in (ssh, ocint, opencode):
+    ngrok = binary_directory / "ngrok"
+    for executable in (ssh, ocint, opencode, ngrok):
         executable.write_text("#!/bin/sh\nexit 0\n")
         executable.chmod(0o755)
     monkeypatch.setenv("PATH", str(binary_directory))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
     monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
     monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    monkeypatch.setenv("OCINT_NGROK_URL", "https://static.example.test")
     monkeypatch.setattr("ocint.daemon.lch.setup.require_available_loopback_port", lambda _port: None)
     paths = SystemdPaths(
         directory=config_home / "systemd" / "user",
@@ -211,9 +221,15 @@ def test_discovery_resolves_checkout_github_git_ssh_and_opencode(discovery_fixtu
     assert result.opencode.model == "example-provider/example-model"
     assert result.github_token == "github-secret"
     assert result.opencode.version == "1.18.15"
-    assert 'expected_version = "1.18.15"' in daemon_toml(
-        discovered_daemon_config(result, (LifecycleConfig(), LoggingConfig()))
-    )
+    rendered = daemon_toml(discovered_daemon_config(result, (LifecycleConfig(), LoggingConfig())))
+    assert rendered.count('expected_version = "1.18.15"') == 2
+    assert 'description = "Personal configuration for OpenCode, Neovim, tmux, and terminals."' in rendered
+    assert 'workspace_id = "T021N0EQ3JQ"' in rendered
+    assert 'channel_id = "C0955FD2FK4"' in rendered
+    assert 'authorized_users = ["U067EG8278R"]' in rendered
+    assert '[api]\nhost = "127.0.0.1"\nport = 8732' in rendered
+    assert 'server_url = "http://127.0.0.1:4098/"' in rendered
+    assert str(result.paths.coordinator_effective_opencode_config) in rendered
     gh_commands = [command for command, _environment in discovery_fixture.runner.isolated_calls if command[0] == "gh"]
     assert gh_commands == [
         ("gh", "api", "--hostname", "github.com", "user"),
@@ -224,6 +240,30 @@ def test_discovery_resolves_checkout_github_git_ssh_and_opencode(discovery_fixtu
         command for command, _environment in discovery_fixture.runner.isolated_calls
     ]
     assert not discovery_fixture.managed_config.exists()
+
+
+def test_generated_daemon_toml_round_trips_selected_turn_retry_budget(
+    discovery_fixture: DiscoveryFixture,
+) -> None:
+    # GIVEN
+    discovered = discover(
+        discovery_fixture.runner,
+        discovery_fixture.lifecycle,
+        discovery_fixture.checkout,
+        discovery_fixture.context,
+    )
+    generated = discovered_daemon_config(discovered, (LifecycleConfig(), LoggingConfig()))
+    selected = generated.model_copy(
+        update={"coordinator": generated.coordinator.model_copy(update={"max_turn_retries": 11})}
+    )
+    discovery_fixture.context.config_path.parent.mkdir(parents=True)
+    discovery_fixture.context.config_path.write_text(daemon_toml(selected))
+
+    # WHEN
+    loaded = discovery_fixture.context.config()
+
+    # THEN
+    assert loaded.coordinator.max_turn_retries == 11
 
 
 def test_discovery_passes_explicit_ssh_url_user_and_port_to_ssh_config(
@@ -388,7 +428,19 @@ def test_setup_uses_only_the_validated_policy_and_provider_snapshot(
     assert effective == discovered.effective_opencode_payload
     assert "changed-provider" not in effective
     assert "late-secret" not in effective
-    assert 'expected_version = "1.18.15"' in discovered.paths.configuration.read_text()
+    assert discovered.paths.configuration.read_text().count('expected_version = "1.18.15"') == 2
+    assert discovered.paths.coordinator_effective_opencode_config.read_text() == (
+        discovered.coordinator_effective_opencode_payload
+    )
+    assert stat.S_IMODE(discovered.paths.coordinator_effective_opencode_config.stat().st_mode) == 0o600
+    assert stat.S_IMODE(discovered.paths.coordinator_workspace.stat().st_mode) == 0o700
+    assert not (discovered.paths.coordinator_workspace / "AGENTS.md").exists()
+    assert not (discovered.paths.coordinator_workspace / "repositories.json").exists()
+    coordinator_auth = discovered.paths.coordinator_isolated_data_home / "opencode" / "auth.json"
+    assert coordinator_auth.is_symlink()
+    assert coordinator_auth.resolve() == discovered.opencode.auth_source.resolve()
+    assert stat.S_IMODE(discovered.paths.coordinator_isolated_config_home.stat().st_mode) == 0o700
+    assert stat.S_IMODE(discovered.paths.coordinator_isolated_data_home.stat().st_mode) == 0o700
 
 
 def test_setup_losslessly_refreshes_managed_tokens(discovery_fixture: DiscoveryFixture) -> None:
@@ -406,6 +458,8 @@ def test_setup_losslessly_refreshes_managed_tokens(discovery_fixture: DiscoveryF
         "OCINT_DAEMON_API_TOKEN=existing-api\n"
         "OCINT_DAEMON_GITHUB_TOKEN=stale-github\n"
         "OCINT_DAEMON_SLACK_BOT_TOKEN=xoxb-existing\n"
+        "OCINT_DAEMON_SLACK_SIGNING_SECRET=existing-signing-secret\n"
+        "OCINT_NGROK_URL=https://static.example.test\n"
     )
     discovered.paths.environment.write_text(original)
     discovered.paths.environment.chmod(0o600)
@@ -416,6 +470,54 @@ def test_setup_losslessly_refreshes_managed_tokens(discovery_fixture: DiscoveryF
     # THEN
     assert discovered.paths.environment.read_text() == original.replace("stale-github", "github-secret")
     assert stat.S_IMODE(discovered.paths.environment.stat().st_mode) == 0o600
+
+
+def test_configured_coordinator_provisioning_is_idempotent_and_preserves_state_and_credentials(
+    discovery_fixture: DiscoveryFixture,
+) -> None:
+    # GIVEN
+    discovered = discover(
+        discovery_fixture.runner,
+        discovery_fixture.lifecycle,
+        discovery_fixture.checkout,
+        discovery_fixture.context,
+    )
+    setup(discovered, discovery_fixture.lifecycle)
+    config = discovery_fixture.context.config()
+    state = config.coordinator.opencode.xdg_data_home / "opencode" / "preserved-state"
+    state.write_text("preserved")
+    auth_before = discovered.opencode.auth_source.read_bytes()
+    config_before = discovery_fixture.context.config_path.read_bytes()
+    config.coordinator.opencode.config_file.unlink()
+
+    # WHEN
+    provision_configured_coordinator_runtime(discovery_fixture.context, config)
+    provision_configured_coordinator_runtime(discovery_fixture.context, config)
+
+    # THEN
+    validate_coordinator_runtime(discovery_fixture.context, config)
+    assert state.read_text() == "preserved"
+    assert discovered.opencode.auth_source.read_bytes() == auth_before
+    assert discovery_fixture.context.config_path.read_bytes() == config_before
+
+
+def test_coordinator_runtime_validation_fails_closed_on_policy_drift(discovery_fixture: DiscoveryFixture) -> None:
+    # GIVEN
+    discovered = discover(
+        discovery_fixture.runner,
+        discovery_fixture.lifecycle,
+        discovery_fixture.checkout,
+        discovery_fixture.context,
+    )
+    setup(discovered, discovery_fixture.lifecycle)
+    config = discovery_fixture.context.config()
+    payload = config.coordinator.opencode.config_file.read_text().replace('"bash": "deny"', '"bash": "allow"')
+    config.coordinator.opencode.config_file.write_text(payload)
+    config.coordinator.opencode.config_file.chmod(0o600)
+
+    # WHEN / THEN
+    with pytest.raises(RuntimeError, match="does not exactly match"):
+        validate_coordinator_runtime(discovery_fixture.context, config)
 
 
 def test_setup_refuses_to_overwrite_existing_configuration(
@@ -585,6 +687,44 @@ def test_packaged_policy_is_the_authoritative_source_and_composition_preserves_i
         f"{(tmp_path / 'managed-worktrees').resolve()}/**": "allow",
     }
     assert "apiKey" not in effective.model_dump_json(by_alias=True)
+
+
+def test_packaged_coordinator_policy_is_distinct_restricted_and_composed_without_source_tree(tmp_path: Path) -> None:
+    # GIVEN
+    source = OpenCodeSourceConfig.model_validate_json(
+        '{"model":"example-provider/example-model","provider":{"example-provider":'
+        '{"options":{"baseURL":"https://example.test/v1"},'
+        '"models":{"example-model":{"id":"example-model","name":"Example"}}}}}'
+    )
+
+    # WHEN
+    policy, packaged = load_coordinator_policy()
+    rendered = coordinator_restricted_opencode_config(
+        policy,
+        source.model,
+        "example-provider",
+        source.provider["example-provider"],
+    )
+    effective = CoordinatorRestrictedOpenCodeConfig.model_validate_json(rendered)
+
+    # THEN
+    assert packaged == coordinator_policy_bytes()
+    assert effective.model == "example-provider/example-model"
+    assert effective.share == "disabled"
+    assert effective.plugin == []
+    assert effective.mcp == {}
+    assert effective.lsp is False
+    assert effective.permission.read == "allow"
+    assert effective.permission.webfetch == "allow"
+    assert effective.permission.websearch == "allow"
+    assert effective.permission.edit == "deny"
+    assert effective.permission.write == "deny"
+    assert effective.permission.patch == "deny"
+    assert effective.permission.bash == "deny"
+    assert effective.permission.shell == "deny"
+    assert effective.permission.question == "deny"
+    assert effective.permission.external_directory == {"*": "deny"}
+    assert str(tmp_path) not in rendered
 
 
 def test_private_file_replacement_is_atomic_mode_0600_and_idempotent(tmp_path: Path) -> None:

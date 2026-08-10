@@ -19,6 +19,8 @@ ocint daemon lch lifecycle
 ocint daemon lch list
 systemctl --user status ocint-daemon.timer --no-pager
 systemctl --user status ocint-daemon.service --no-pager
+systemctl --user status ocint-coordinator.service --no-pager
+systemctl --user status ocint-coordinator-ngrok.service --no-pager
 systemctl --user list-timers ocint-daemon.timer --no-pager
 ```
 
@@ -50,7 +52,9 @@ systemctl --user list-timers ocint-daemon.timer --no-pager
 ```
 
 `setup` creates missing configuration, preserves existing configuration, and
-installs or enables the timer. Use `ocint daemon lch apply` after deliberately
+installs all four unit payloads while preserving the timer's enabled behavior.
+Coordinator and ngrok units remain inactive until the production rollout is
+explicitly approved. Use `ocint daemon lch apply` after deliberately
 editing existing TOML. Database migration occurs on daemon
 startup, so a pre-start doctor can report the previous migration. Do not run a
 manual migration to make doctor green. Wait for the timer-triggered daemon cycle,
@@ -97,6 +101,8 @@ timer rather than manually starting the service:
 ```bash
 ocint daemon lch status
 systemctl --user status ocint-daemon.timer --no-pager
+systemctl --user status ocint-coordinator.service --no-pager
+systemctl --user status ocint-coordinator-ngrok.service --no-pager
 systemctl --user list-timers ocint-daemon.timer --no-pager
 systemctl --user cat ocint-daemon.timer
 systemctl --user cat ocint-daemon.service
@@ -125,6 +131,8 @@ Expected service states:
 | `activating/start` | The oneshot daemon is currently running. |
 | `failed` | Inspect daemon logs and `systemctl --user status`. |
 | Timer `active/waiting` | Future lifecycle invocations remain scheduled. |
+| Coordinator/ngrok `inactive/dead` before rollout | Unit payloads can still pass required doctor checks. |
+| Coordinator/ngrok `active/running` after rollout | Slack ingress and its dedicated tunnel are running. |
 
 For a successful automation check, the timer's recorded trigger must be followed
 by a service start without a manual start command.
@@ -366,6 +374,9 @@ gh pr close <pr-number> --repo "$REPOSITORY"
 Removing the label prevents new eligible work but does not necessarily cancel a
 running job. Preserve all databases, worktrees, mirrors, logs, and generated
 configuration. Restore timer/service state only if the exercise changed it.
+`ocint daemon lch uninstall` removes only the four unit files. It preserves the
+daemon database, coordinator workspace, both OpenCode data homes, configuration,
+and credentials.
 
 ## Report Template
 

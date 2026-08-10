@@ -1,18 +1,21 @@
 # Provider Interactions
 
-This document defines the target call stack for provider-neutral interaction
-coordination and thin platform adapters.
+This document shows why GitHub polling and Slack Events remain thin input
+adapters while their workflows own different outcomes. Phase 1 does not route
+Slack into the pull-request task coordinator.
 
 ## Boundary
 
-The core owns outcomes, shared prose, task lifecycle, retries, and execution
-context reuse. Providers own only their platform protocols.
+The GitHub task core owns pull-request outcomes, task lifecycle, retries, and
+execution-context reuse. The Slack coordinator core owns conversations, turns,
+response persistence, and delivery recovery. Providers own transport identity,
+authentication, and API behavior.
 
 Platform responsibilities include API transport, message identity,
-idempotency markers, reactions, and instructions required to continue work on
-that platform.
+idempotency markers, and instructions required to continue work on that
+platform.
 
-## Shared Contract
+## GitHub Task Contract
 
 Raw reply text is replaced with typed domain replies:
 
@@ -45,35 +48,20 @@ PullRequestJob completes
             "Work addressed: <pull-request-url>"
        -> SourceRouter.deliver()
             |
-            +-> GitHubThreadSource.deliver()
-            |    -> append GitHub protocol guidance
-            |         "To make further changes, add a comment."
-            |    -> add hidden idempotency marker
-            |    -> GitHubTransport.post_comment()
-            |
-            `-> SlackThreadSource.deliver()
-                 -> append Slack protocol guidance
-                 -> SlackTransport.post_message()
-                 -> SlackTransport.add_reaction()
-                 -> SlackRepository.close()
+             `-> GitHubThreadSource.deliver()
+                  -> append GitHub protocol guidance
+                       "To make further changes, add a comment."
+                  -> add hidden idempotency marker
+                  -> GitHubTransport.post_comment()
   -> TaskRepository.set_state(ADDRESSED)
 ```
 
-Slack receives:
+GitHub receives:
 
 ```text
 Work addressed: <pull-request-url>
 
-ocint has stopped polling this Slack thread. To request further changes:
-
-1. Copy the permalink of this thread's root message.
-2. Post a new root message in this channel:
-
-   reopen <root-message-permalink>
-
-3. Reply in the new thread with your requested changes.
-
-The reopen message alone does not schedule work.
+To make further changes, add a comment.
 ```
 
 ## Observation Call Stack
@@ -83,12 +71,8 @@ Daemon
   -> TaskCoordinator.reconcile()
   -> SourceRouter.observe()
        |
-       +-> GitHubThreadSource.observe()
-       |    -> GitHub protocol: open labelled issues and comments
-       |    -> ThreadObservation
-       |
-       `-> SlackThreadSource.observe()
-            -> Slack protocol: roots, replies, reopen commands and aliases
+       `-> GitHubThreadSource.observe()
+            -> GitHub protocol: open labelled issues and comments
             -> ThreadObservation
   -> TaskCoordinator
        -> persist normalized messages
@@ -96,17 +80,34 @@ Daemon
        -> reuse existing execution context when available
 ```
 
-## Slack Reopening
+## Slack Coordinator Call Stack
 
-Slack reopening remains entirely inside the Slack adapter:
+Slack does not implement the `ThreadSource` task contract in Phase 1. Events
+are translated into provider-neutral coordinator messages, and only
+coordinator output returns through the Slack adapter:
 
 ```text
-Slack history
-  -> recognize reopen command
-  -> validate referenced closed root
-  -> map new physical root to existing logical thread ID
-  -> suppress command as prompt input
-  -> emit later replies as normal ACTIONABLE messages
+POST /slack/events
+  -> verify raw-body signature, timestamp, body size, workspace
+  -> Slack event translator
+  -> authorization and bot-loop policy
+  -> CoordinatorRepository.ingest()
+       -> commit event + message + conversation + eligible turns
+  -> 200 response
+
+Coordinator worker
+  -> claim oldest eligible turn
+  -> create/reuse restricted OpenCode session
+  -> persist prompt intent -> observe/submit -> persist full response
+  -> persist numbered delivery chunks
+  -> SlackCoordinatorDelivery
+       -> find deterministic client_msg_id after uncertain delivery
+       -> post missing chunk to original root thread
+       -> persist receipt or durable retry deadline
 ```
 
-The shared coordinator never knows that reopening occurred.
+The coordinator contract contains provider, workspace, channel, thread,
+message, actor, text, and source order. It does not contain Slack headers,
+signatures, retry metadata, bot tokens, or raw event envelopes. This keeps
+ingestion replaceable without turning Slack transport details into workflow
+state.

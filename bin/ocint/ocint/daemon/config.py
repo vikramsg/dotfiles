@@ -21,7 +21,7 @@ class RepositoryConfig(GitRepository):
     model_config = ConfigDict(frozen=True)
 
     github_repository: str
-    description: str = Field(default="Repository available for daemon-managed changes.", min_length=1)
+    description: str = Field(min_length=1)
     author_name: str
     author_email: str
     actors: frozenset[GitHubLogin] = frozenset()
@@ -90,7 +90,7 @@ class DaemonConfig(BaseModel):
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     github: GitHubConfig = Field(default_factory=GitHubConfig)
-    coordinator: CoordinatorConfig | None = None
+    coordinator: CoordinatorConfig
     git: GitConfig
     idle_timeout_seconds: int = Field(default=60, ge=1)
 
@@ -104,10 +104,6 @@ class DaemonConfig(BaseModel):
         names = [item.name for item in self.repositories]
         if len(names) != len(set(names)):
             raise ValueError("repository names must be unique")
-        if self.coordinator is None:
-            if self.mirror_root == self.worktree_root:
-                raise ValueError("mirror_root and worktree_root must differ")
-            return self
         roots = (self.coordinator.workspace_root, self.mirror_root, self.worktree_root)
         for index, left in enumerate(roots):
             for right in roots[index + 1 :]:
@@ -139,8 +135,8 @@ class DaemonConfig(BaseModel):
         return self
 
     @property
-    def slack(self) -> CoordinatorSlackConfig | None:
-        return self.coordinator.slack if self.coordinator is not None else None
+    def slack(self) -> CoordinatorSlackConfig:
+        return self.coordinator.slack
 
     def repository(self, name: str) -> RepositoryConfig:
         for item in self.repositories:
@@ -157,6 +153,9 @@ class DaemonSettings(BaseSettings):
     github_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_GITHUB_TOKEN")
     slack_bot_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_SLACK_BOT_TOKEN")
     slack_signing_secret: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_SLACK_SIGNING_SECRET")
+    ngrok_url: SecretStr = Field(
+        default=SecretStr(""), validation_alias=AliasChoices("OCINT_NGROK_URL", "OCINT_DAEMON_NGROK_URL")
+    )
     xdg_config_home: Path | None = Field(
         default=None, validation_alias=AliasChoices("XDG_CONFIG_HOME", "OCINT_DAEMON_XDG_CONFIG_HOME")
     )

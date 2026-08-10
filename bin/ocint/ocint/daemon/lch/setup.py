@@ -27,7 +27,14 @@ from ocint.daemon.config import (
     RepositoryConfig,
 )
 from ocint.daemon.github import GitHubConfig
-from ocint.daemon.lch.systemd import CommandRunner, SystemdLifecycle, installed_ocint
+from ocint.daemon.lch.systemd import (
+    CommandRunner,
+    CoordinatorUnitEnablement,
+    SystemdLifecycle,
+    discover_ngrok,
+    discover_ngrok_runtime,
+    installed_ocint,
+)
 from ocint.daemon.models import GitHubLogin
 
 
@@ -132,6 +139,42 @@ class RestrictedOpenCodeConfig(StaticOpenCodePolicy):
     provider: Mapping[str, OpenCodeProvider]
 
 
+class CoordinatorOpenCodePermission(BaseModel):
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+    fallback: str = Field(validation_alias="*", serialization_alias="*")
+    read: str
+    list: str
+    glob: str
+    grep: str
+    webfetch: str
+    websearch: str
+    edit: str
+    write: str
+    patch: str
+    bash: str
+    shell: str
+    external_directory: Mapping[str, str]
+    question: str
+
+
+class CoordinatorStaticOpenCodePolicy(BaseModel):
+    model_config = ConfigDict(frozen=True, populate_by_name=True, extra="forbid")
+    schema_url: str = Field(validation_alias="$schema", serialization_alias="$schema")
+    share: str
+    instructions: list[str]
+    plugin: list[str]
+    mcp: Mapping[str, str]
+    agent: RestrictedOpenCodeAgents
+    lsp: bool
+    formatter: bool
+    permission: CoordinatorOpenCodePermission
+
+
+class CoordinatorRestrictedOpenCodeConfig(CoordinatorStaticOpenCodePolicy):
+    model: str
+    provider: Mapping[str, OpenCodeProvider]
+
+
 class GitHubUser(BaseModel):
     model_config = ConfigDict(frozen=True)
     login: str
@@ -179,6 +222,13 @@ class OpenCodeDiscovery(BaseModel):
     provider: OpenCodeProvider
 
 
+class OpenCodeSelection(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    model: str
+    provider_name: str
+    provider: OpenCodeProvider
+
+
 class ProvisionPaths(BaseModel):
     model_config = ConfigDict(frozen=True)
     home: Path
@@ -191,6 +241,10 @@ class ProvisionPaths(BaseModel):
     environment: Path
     configuration: Path
     effective_opencode_config: Path
+    coordinator_workspace: Path
+    coordinator_isolated_config_home: Path
+    coordinator_isolated_data_home: Path
+    coordinator_effective_opencode_config: Path
 
 
 class ProvisionDiscovery(BaseModel):
@@ -207,8 +261,13 @@ class ProvisionDiscovery(BaseModel):
     policy: StaticOpenCodePolicy
     policy_bytes: bytes
     effective_opencode_payload: str
+    coordinator_policy: CoordinatorStaticOpenCodePolicy
+    coordinator_policy_bytes: bytes
+    coordinator_effective_opencode_payload: str
+    repository_description: str = Field(min_length=1)
     paths: ProvisionPaths
     ocint_executable: Path
+    ngrok_url: str
 
 
 def policy_bytes() -> bytes:
@@ -222,11 +281,30 @@ def policy_resource_path() -> str:
     return str(files("ocint.daemon").joinpath("opencode.daemon.json"))
 
 
+def coordinator_policy_bytes() -> bytes:
+    resource = files("ocint.daemon").joinpath("opencode.coordinator.json")
+    if not resource.is_file():
+        raise click.ClickException(f"packaged coordinator OpenCode policy resource is missing: {resource}")
+    return resource.read_bytes()
+
+
+def coordinator_policy_resource_path() -> str:
+    return str(files("ocint.daemon").joinpath("opencode.coordinator.json"))
+
+
 def load_policy() -> tuple[StaticOpenCodePolicy, bytes]:
     payload = policy_bytes()
     policy = StaticOpenCodePolicy.model_validate_json(payload)
     if policy.permission.external_directory != {"*": "deny"}:
         raise click.ClickException("packaged OpenCode policy must contain only the static external-directory deny rule")
+    return policy, payload
+
+
+def load_coordinator_policy() -> tuple[CoordinatorStaticOpenCodePolicy, bytes]:
+    payload = coordinator_policy_bytes()
+    policy = CoordinatorStaticOpenCodePolicy.model_validate_json(payload)
+    if policy.permission.external_directory != {"*": "deny"}:
+        raise click.ClickException("packaged coordinator OpenCode policy must deny every external directory")
     return policy, payload
 
 
@@ -270,6 +348,26 @@ def restricted_agent_config(service_tier: str | None) -> RestrictedOpenCodeAgent
     return RestrictedOpenCodeAgents(
         build=RestrictedOpenCodeBuildAgent(options=RestrictedOpenCodeAgentOptions(serviceTier=service_tier))
     )
+
+
+def coordinator_restricted_opencode_config(
+    policy: CoordinatorStaticOpenCodePolicy,
+    model_name_with_provider: str,
+    provider_name: str,
+    provider: OpenCodeProvider,
+) -> str:
+    if not model_name_with_provider.startswith(f"{provider_name}/"):
+        raise click.ClickException("selected OpenCode model does not match its provider")
+    model_name = model_name_with_provider.removeprefix(f"{provider_name}/")
+    model = provider.models.get(model_name)
+    if model is None:
+        raise click.ClickException(f"existing OpenCode model is not configured: {model_name_with_provider}")
+    restricted = CoordinatorRestrictedOpenCodeConfig(
+        **policy.model_dump(by_alias=False),
+        model=model_name_with_provider,
+        provider={provider_name: provider.model_copy(update={"models": {model_name: model}})},
+    )
+    return restricted.model_dump_json(by_alias=True, exclude_none=True, indent=2) + "\n"
 
 
 def write_private_file(path: Path, content: str) -> None:
@@ -361,7 +459,11 @@ def ensure_auth_symlink(source: Path, isolated_data_home: Path) -> Path:
 
 
 def discover(
-    runner: CommandRunner, lifecycle: SystemdLifecycle, checkout: Path, context: DaemonContext
+    runner: CommandRunner,
+    lifecycle: SystemdLifecycle,
+    checkout: Path,
+    context: DaemonContext,
+    repository_description: str = "Personal configuration for OpenCode, Neovim, tmux, and terminals.",
 ) -> ProvisionDiscovery:
     home = context.home
     if context.environment.get("GIT_SSH_COMMAND") or context.environment.get("GIT_SSH"):
@@ -433,6 +535,7 @@ def discover(
     if version != "1.18.15":
         raise click.ClickException(f"opencode 1.18.15 is required; found {version or 'no version'}")
     policy, payload = load_policy()
+    coordinator_policy, coordinator_payload = load_coordinator_policy()
     effective_payload = restricted_opencode_config(
         policy,
         source.model,
@@ -441,11 +544,23 @@ def discover(
         paths.worktree_root,
         source.agent.build.options.service_tier,
     )
+    coordinator_effective_payload = coordinator_restricted_opencode_config(
+        coordinator_policy,
+        source.model,
+        provider_name,
+        provider,
+    )
     lifecycle.validate_host()
     ocint_executable = lifecycle.validate_executable(installed_ocint())
     lifecycle.validate_lingering()
+    ngrok_url = _existing_environment_value(paths.environment, "OCINT_NGROK_URL") or context.environment.get(
+        "OCINT_NGROK_URL", ""
+    )
+    discover_ngrok_runtime(runner, ngrok_url)
     require_available_loopback_port(4097)
+    require_available_loopback_port(4098)
     require_available_loopback_port(8732)
+    require_available_loopback_port(8733)
     _validate_managed_destinations(paths, lifecycle)
     return ProvisionDiscovery(
         checkout=root,
@@ -468,12 +583,17 @@ def discover(
         policy=policy,
         policy_bytes=payload,
         effective_opencode_payload=effective_payload,
+        coordinator_policy=coordinator_policy,
+        coordinator_policy_bytes=coordinator_payload,
+        coordinator_effective_opencode_payload=coordinator_effective_payload,
+        repository_description=repository_description,
         paths=paths,
         ocint_executable=ocint_executable,
+        ngrok_url=ngrok_url,
     )
 
 
-def setup(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> None:
+def setup(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> CoordinatorUnitEnablement:
     paths = discovery.paths
     if paths.configuration.exists():
         raise click.ClickException(
@@ -490,13 +610,18 @@ def setup(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> None:
         ensure_private_directory(directory)
     ensure_auth_symlink(discovery.opencode.auth_source, paths.isolated_data_home)
     current_api_token = _existing_api_token(paths.environment)
-    slack_token = _existing_environment_value(paths.environment, "OCINT_DAEMON_SLACK_BOT_TOKEN")
     assignments = {
         "OCINT_DAEMON_API_TOKEN": current_api_token or secrets.token_urlsafe(48),
         "OCINT_DAEMON_GITHUB_TOKEN": discovery.github_token,
+        "OCINT_NGROK_URL": discovery.ngrok_url,
     }
-    if slack_token:
-        assignments["OCINT_DAEMON_SLACK_BOT_TOKEN"] = slack_token
+    for name in (
+        "OCINT_DAEMON_SLACK_BOT_TOKEN",
+        "OCINT_DAEMON_SLACK_SIGNING_SECRET",
+    ):
+        existing = _existing_environment_value(paths.environment, name)
+        if existing:
+            assignments[name] = existing
     upsert_private_environment(
         paths.environment,
         assignments,
@@ -506,12 +631,116 @@ def setup(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> None:
         discovery.effective_opencode_payload,
     )
     write_private_file(paths.configuration, daemon_toml(config))
-    lifecycle.install(discovery.ocint_executable, config.lifecycle)
+    provision_coordinator_runtime(
+        config,
+        OpenCodeSelection(
+            model=discovery.opencode.model,
+            provider_name=discovery.opencode.provider_name,
+            provider=discovery.opencode.provider,
+        ),
+        discovery.opencode.auth_source,
+    )
+    ngrok = discover_ngrok(lifecycle.runner, paths.environment)
+    return lifecycle.install(discovery.ocint_executable, config.lifecycle, config.coordinator.ingress.port, ngrok)
+
+
+def configured_opencode_selection(context: DaemonContext) -> OpenCodeSelection:
+    source_path = context.config_home / "opencode" / "opencode.json"
+    if not source_path.is_file():
+        raise click.ClickException(f"required OpenCode config does not exist: {source_path}")
+    source = OpenCodeSourceConfig.model_validate_json(source_path.read_text())
+    provider_name, separator, model_name = source.model.partition("/")
+    provider = source.provider.get(provider_name)
+    if not separator or provider is None or model_name not in provider.models:
+        raise click.ClickException("selected OpenCode model/provider is not completely configured")
+    return OpenCodeSelection(model=source.model, provider_name=provider_name, provider=provider)
+
+
+def provision_configured_coordinator_runtime(context: DaemonContext, config: DaemonConfig) -> None:
+    provision_coordinator_runtime(
+        config,
+        configured_opencode_selection(context),
+        context.data_home / "opencode" / "auth.json",
+    )
+
+
+def provision_coordinator_runtime(
+    config: DaemonConfig,
+    selection: OpenCodeSelection,
+    auth_source: Path,
+) -> None:
+    coordinator = config.coordinator
+    service = coordinator.opencode
+    policy, _payload = load_coordinator_policy()
+    payload = coordinator_restricted_opencode_config(
+        policy,
+        selection.model,
+        selection.provider_name,
+        selection.provider,
+    )
+    for directory in (
+        coordinator.workspace_root,
+        service.xdg_config_home,
+        service.config_file.parent,
+        service.xdg_data_home,
+        service.xdg_data_home / "opencode",
+    ):
+        ensure_private_directory(directory)
+    ensure_auth_symlink(auth_source, service.xdg_data_home)
+    write_private_file(service.config_file, payload)
+
+
+def validate_coordinator_runtime(context: DaemonContext, config: DaemonConfig) -> None:
+    try:
+        selection = configured_opencode_selection(context)
+        policy, _payload = load_coordinator_policy()
+        expected = coordinator_restricted_opencode_config(
+            policy,
+            selection.model,
+            selection.provider_name,
+            selection.provider,
+        )
+    except (OSError, ValueError, click.ClickException) as error:
+        raise RuntimeError(f"coordinator OpenCode policy validation failed: {error}") from error
+
+    coordinator = config.coordinator
+    service = coordinator.opencode
+    if service.config_file.is_symlink() or not _user_file(service.config_file, 0o600):
+        raise RuntimeError(
+            f"coordinator OpenCode config must be a user-owned regular mode-0600 file: {service.config_file}"
+        )
+    if service.config_file.read_text() != expected:
+        raise RuntimeError("coordinator OpenCode config does not exactly match the packaged restricted policy")
+    for directory in (
+        coordinator.workspace_root,
+        service.xdg_config_home,
+        service.config_file.parent,
+        service.xdg_data_home,
+        service.xdg_data_home / "opencode",
+    ):
+        if (
+            directory.is_symlink()
+            or not directory.is_dir()
+            or directory.stat().st_uid != os.getuid()
+            or stat.S_IMODE(directory.stat().st_mode) != 0o700
+        ):
+            raise RuntimeError(f"coordinator managed directory must be user-owned and mode 0700: {directory}")
+    auth_source = context.data_home / "opencode" / "auth.json"
+    auth_link = service.xdg_data_home / "opencode" / "auth.json"
+    if (
+        auth_source.is_symlink()
+        or not _user_file(auth_source, 0o600)
+        or not auth_link.is_symlink()
+        or auth_link.lstat().st_uid != os.getuid()
+        or auth_link.resolve() != auth_source.resolve()
+    ):
+        raise RuntimeError(f"coordinator OpenCode auth link is unsafe: {auth_link}")
 
 
 def _paths(context: DaemonContext) -> ProvisionPaths:
     managed = context.config_home / "ocint"
     isolated_config_home = managed / "opencode-xdg"
+    coordinator_isolated_config_home = managed / "coordinator-opencode-xdg"
     return ProvisionPaths(
         home=context.home,
         config_home=context.config_home,
@@ -523,6 +752,10 @@ def _paths(context: DaemonContext) -> ProvisionPaths:
         environment=managed / "daemon.env",
         configuration=managed / "daemon.toml",
         effective_opencode_config=isolated_config_home / "opencode" / "opencode.json",
+        coordinator_workspace=context.data_home / "ocint" / "coordinator",
+        coordinator_isolated_config_home=coordinator_isolated_config_home,
+        coordinator_isolated_data_home=context.data_home / "ocint" / "coordinator-opencode-data",
+        coordinator_effective_opencode_config=(coordinator_isolated_config_home / "opencode" / "opencode.json"),
     )
 
 
@@ -646,21 +879,33 @@ def _validate_managed_destinations(paths: ProvisionPaths, lifecycle: SystemdLife
         paths.isolated_config_home / "opencode",
         paths.isolated_data_home,
         paths.isolated_data_home / "opencode",
+        paths.coordinator_workspace,
+        paths.coordinator_isolated_config_home,
+        paths.coordinator_isolated_config_home / "opencode",
+        paths.coordinator_isolated_data_home,
+        paths.coordinator_isolated_data_home / "opencode",
     ):
         if directory.exists() and (
             directory.is_symlink() or not directory.is_dir() or directory.stat().st_uid != os.getuid()
         ):
             raise click.ClickException(f"managed directory is unsafe: {directory}")
-    for path in (paths.environment, paths.configuration, paths.effective_opencode_config):
+    for path in (
+        paths.environment,
+        paths.configuration,
+        paths.effective_opencode_config,
+        paths.coordinator_effective_opencode_config,
+    ):
         if path.exists() and (path.is_symlink() or not _user_file(path, 0o600)):
             raise click.ClickException(f"managed configuration must be a user-owned regular mode-0600 file: {path}")
     auth_link = paths.isolated_data_home / "opencode" / "auth.json"
-    if os.path.lexists(auth_link) and (
-        not auth_link.is_symlink()
-        or auth_link.lstat().st_uid != os.getuid()
-        or auth_link.resolve() != (paths.data_home / "opencode" / "auth.json").resolve()
-    ):
-        raise click.ClickException(f"managed OpenCode auth link is unsafe: {auth_link}")
+    coordinator_auth_link = paths.coordinator_isolated_data_home / "opencode" / "auth.json"
+    for link in (auth_link, coordinator_auth_link):
+        if os.path.lexists(link) and (
+            not link.is_symlink()
+            or link.lstat().st_uid != os.getuid()
+            or link.resolve() != (paths.data_home / "opencode" / "auth.json").resolve()
+        ):
+            raise click.ClickException(f"managed OpenCode auth link is unsafe: {link}")
     lifecycle.validate_install_paths()
 
 
@@ -682,35 +927,70 @@ def discovered_daemon_config(
 ) -> DaemonConfig:
     lifecycle, logging = policy
     paths = discovery.paths
-    return DaemonConfig(
-        database_path=paths.state_home / "ocint" / "daemon.sqlite",
-        mirror_root=paths.data_home / "ocint" / "mirrors",
-        worktree_root=paths.worktree_root,
-        repositories=(
-            RepositoryConfig(
-                name=discovery.github_repository.partition("/")[2],
-                remote_url=discovery.remote_url,
-                default_branch=discovery.default_branch,
-                github_repository=discovery.github_repository,
-                author_name=discovery.author.name,
-                author_email=discovery.author.email,
-                actors=frozenset((GitHubLogin(discovery.login),)),
+    return DaemonConfig.model_validate(
+        {
+            "database_path": paths.state_home / "ocint" / "daemon.sqlite",
+            "mirror_root": paths.data_home / "ocint" / "mirrors",
+            "worktree_root": paths.worktree_root,
+            "repositories": (
+                RepositoryConfig(
+                    name=discovery.github_repository.partition("/")[2],
+                    description=discovery.repository_description,
+                    remote_url=discovery.remote_url,
+                    default_branch=discovery.default_branch,
+                    github_repository=discovery.github_repository,
+                    author_name=discovery.author.name,
+                    author_email=discovery.author.email,
+                    actors=frozenset((GitHubLogin(discovery.login),)),
+                ),
             ),
-        ),
-        lifecycle=lifecycle,
-        logging=logging,
-        opencode=OpenCodeConfig(
-            executable=discovery.opencode.executable,
-            config_file=paths.effective_opencode_config,
-            xdg_config_home=paths.isolated_config_home,
-            xdg_data_home=paths.isolated_data_home,
-        ),
-        github=GitHubConfig(agent_actor=GitHubLogin(discovery.login)),
-        git=GitConfig(
-            ssh_executable=discovery.ssh.executable,
-            identity_file=discovery.ssh.identity_file,
-            known_hosts_file=discovery.ssh.known_hosts_file,
-        ),
+            "lifecycle": lifecycle,
+            "logging": logging,
+            "opencode": OpenCodeConfig(
+                executable=discovery.opencode.executable,
+                config_file=paths.effective_opencode_config,
+                xdg_config_home=paths.isolated_config_home,
+                xdg_data_home=paths.isolated_data_home,
+            ),
+            "coordinator": {
+                "workspace_root": paths.coordinator_workspace,
+                "turn_timeout_seconds": 1800,
+                "shutdown_timeout_seconds": 30,
+                "orphan_retention_seconds": 86400,
+                "retry_seconds": 5,
+                "max_turn_retries": 3,
+                "response_chunk_characters": 3500,
+                "slack_post_interval_seconds": 1,
+                "ingress": {
+                    "host": "127.0.0.1",
+                    "port": 8733,
+                    "max_request_bytes": 65536,
+                    "timestamp_tolerance_seconds": 300,
+                },
+                "slack": {
+                    "workspace_id": "T021N0EQ3JQ",
+                    "channels": (
+                        {
+                            "channel_id": "C0955FD2FK4",
+                            "authorized_users": frozenset(("U067EG8278R",)),
+                        },
+                    ),
+                },
+                "opencode": {
+                    "server_url": "http://127.0.0.1:4098",
+                    "executable": discovery.opencode.executable,
+                    "config_file": paths.coordinator_effective_opencode_config,
+                    "xdg_config_home": paths.coordinator_isolated_config_home,
+                    "xdg_data_home": paths.coordinator_isolated_data_home,
+                },
+            },
+            "github": GitHubConfig(agent_actor=GitHubLogin(discovery.login)),
+            "git": GitConfig(
+                ssh_executable=discovery.ssh.executable,
+                identity_file=discovery.ssh.identity_file,
+                known_hosts_file=discovery.ssh.known_hosts_file,
+            ),
+        }
     )
 
 
@@ -724,6 +1004,7 @@ idle_timeout_seconds = {config.idle_timeout_seconds}
 
 [[repositories]]
 name = {quote(repository.name)}
+description = {quote(repository.description)}
 remote_url = {quote(repository.remote_url)}
 default_branch = {quote(repository.default_branch)}
 github_repository = {quote(repository.github_repository)}
@@ -749,6 +1030,47 @@ config_file = {quote(str(config.opencode.config_file))}
 xdg_config_home = {quote(str(config.opencode.xdg_config_home))}
 xdg_data_home = {quote(str(config.opencode.xdg_data_home))}
 startup_timeout_seconds = {config.opencode.startup_timeout_seconds}
+
+[api]
+host = {quote(config.api.host)}
+port = {config.api.port}
+
+[coordinator]
+workspace_root = {quote(str(config.coordinator.workspace_root))}
+turn_timeout_seconds = {config.coordinator.turn_timeout_seconds}
+shutdown_timeout_seconds = {config.coordinator.shutdown_timeout_seconds}
+orphan_retention_seconds = {config.coordinator.orphan_retention_seconds}
+retry_seconds = {config.coordinator.retry_seconds}
+max_turn_retries = {config.coordinator.max_turn_retries}
+response_chunk_characters = {config.coordinator.response_chunk_characters}
+slack_post_interval_seconds = {config.coordinator.slack_post_interval_seconds}
+
+[coordinator.ingress]
+host = {quote(config.coordinator.ingress.host)}
+port = {config.coordinator.ingress.port}
+max_request_bytes = {config.coordinator.ingress.max_request_bytes}
+    timestamp_tolerance_seconds = {config.coordinator.ingress.timestamp_tolerance_seconds}
+processing_timeout_seconds = {config.coordinator.ingress.processing_timeout_seconds}
+database_busy_timeout_ms = {config.coordinator.ingress.database_busy_timeout_ms}
+
+[coordinator.slack]
+workspace_id = {quote(config.coordinator.slack.workspace_id)}
+
+[[coordinator.slack.channels]]
+channel_id = {quote(config.coordinator.slack.channels[0].channel_id)}
+authorized_users = [{", ".join(quote(user) for user in sorted(config.coordinator.slack.channels[0].authorized_users))}]
+
+[coordinator.opencode]
+server_url = {quote(str(config.coordinator.opencode.server_url))}
+username = {quote(config.coordinator.opencode.username)}
+request_timeout_seconds = {config.coordinator.opencode.request_timeout_seconds}
+expected_version = {quote(config.coordinator.opencode.expected_version)}
+executable = {quote(str(config.coordinator.opencode.executable))}
+config_file = {quote(str(config.coordinator.opencode.config_file))}
+xdg_config_home = {quote(str(config.coordinator.opencode.xdg_config_home))}
+xdg_data_home = {quote(str(config.coordinator.opencode.xdg_data_home))}
+startup_timeout_seconds = {config.coordinator.opencode.startup_timeout_seconds}
+shutdown_timeout_seconds = {config.coordinator.opencode.shutdown_timeout_seconds}
 
 [github]
 issue_label = {quote(config.github.issue_label)}
