@@ -118,7 +118,7 @@ The complete execution path remains visible in one diagram:
     |    isolated branch + worktree
     |       |
     |       v
-    +--> OpenCode 1.18.15 session
+    +--> OpenCode 1.18.16 session
     |       |
     |       v
     |    prompt + HTTP/SSE idle confirmation
@@ -186,6 +186,12 @@ The daemon database is independent from both OpenCode data homes. The daemon
 never reads or migrates OpenCode's SQLite schema. The timer and coordinator use
 the same configured `daemon.sqlite`, with foreign keys, WAL mode, short
 transactions, uniqueness constraints, and a busy timeout.
+
+Coordinator prompts rely on the exact OpenCode 1.18.16 HTTP contract. ocint
+supplies `messageID` to `prompt_async`, observes the returned user message with
+that ID, and accepts only a completed assistant message whose `parentID` points
+to that user message. The sanitized contract fixture records the request body
+and returned message-list shape without credentials or conversation content.
 
 ```text
  provider mapping -> thread -> thread_message
