@@ -172,6 +172,13 @@ uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt \
   bin/ocint/tests/live/ocint/daemon/coordinator/test_slack.py
 ```
 
+Before it starts ngrok, the harness makes one bounded, unauthenticated request to
+the configured callback endpoint. It proceeds only for ngrok's typed
+`ERR_NGROK_3200` offline-domain response. Any active backend/tunnel, ambiguous
+response, timeout, or connection failure stops the run without logging the URL,
+response body, headers, or credentials. This complements rather than replaces
+the local unit and loopback-port checks; it does not use the ngrok inspector.
+
 The **ocint E2E actor** app was created from
 [`../../config/slack-e2e-actor-manifest.yaml`](../../config/slack-e2e-actor-manifest.yaml),
 in the production app's workspace. Grant user OAuth `chat:write`, reinstall the

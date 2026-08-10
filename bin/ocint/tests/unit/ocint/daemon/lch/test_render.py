@@ -2,18 +2,13 @@ import re
 from io import StringIO
 from pathlib import Path
 
-from ocint.daemon.config import DaemonConfig, GitHubConfig, RepositoryConfig
-from ocint.daemon.coordinator import (
-    CoordinatorConfig,
-    CoordinatorIngressConfig,
-    CoordinatorSlackChannelConfig,
-    CoordinatorSlackConfig,
-)
+from ocint.daemon.config import CoordinatorConfig, DaemonConfig, GitHubConfig, RepositoryConfig
 from ocint.daemon.git import GitConfig
 from ocint.daemon.lch.render import render_status
 from ocint.daemon.lch.systemd import LifecycleStatus
 from ocint.daemon.models import GitHubLogin
 from ocint.daemon.opencode import OpenCodeConfig
+from ocint.daemon.slack import CoordinatorSlackChannelConfig, CoordinatorSlackConfig, SlackEventsConfig
 from pydantic import HttpUrl
 from rich.console import Console
 
@@ -69,7 +64,7 @@ def test_status_rendering_has_colored_sections_and_copyable_log_commands(tmp_pat
             retry_seconds=5,
             response_chunk_characters=3500,
             slack_post_interval_seconds=1,
-            ingress=CoordinatorIngressConfig(),
+            ingress=SlackEventsConfig(),
             slack=CoordinatorSlackConfig(
                 workspace_id="T-test",
                 channels=(CoordinatorSlackChannelConfig(channel_id="C-test", authorized_users=frozenset(("U-test",))),),

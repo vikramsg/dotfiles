@@ -7,28 +7,32 @@ from pathlib import Path
 
 import click
 import pytest
+from click.testing import CliRunner
+from ocint.cli import main
 from ocint.daemon.config import DaemonContext, DaemonSettings, LifecycleConfig, LoggingConfig
-from ocint.daemon.lch.setup import (
+from ocint.daemon.lch.opencode import (
     CoordinatorRestrictedOpenCodeConfig,
     OpenCodeSourceConfig,
     RestrictedOpenCodeConfig,
     coordinator_policy_bytes,
     coordinator_restricted_opencode_config,
-    daemon_toml,
-    discover,
-    discovered_daemon_config,
     ensure_auth_symlink,
-    existing_github_token,
     load_coordinator_policy,
     load_policy,
     policy_bytes,
     provision_configured_coordinator_runtime,
-    require_available_loopback_port,
     restricted_opencode_config,
-    setup,
     upsert_private_environment,
     validate_coordinator_runtime,
     write_private_file,
+)
+from ocint.daemon.lch.setup import (
+    daemon_toml,
+    discover,
+    discovered_daemon_config,
+    existing_github_token,
+    require_available_loopback_port,
+    setup,
 )
 from ocint.daemon.lch.systemd import CommandResult, SystemdLifecycle, SystemdPaths
 from ocint.presentation import default_cli_context
@@ -158,6 +162,7 @@ def discovery_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Discov
         '{"model":"example-provider/example-model","provider":{"example-provider":'
         '{"models":{"example-model":{"id":"example-model","name":"Example"}}}}}'
     )
+    source_config.chmod(0o600)
     auth = data_home / "opencode" / "auth.json"
     auth.parent.mkdir(parents=True)
     auth.write_text("auth-secret")
@@ -240,6 +245,87 @@ def test_discovery_resolves_checkout_github_git_ssh_and_opencode(discovery_fixtu
         command for command, _environment in discovery_fixture.runner.isolated_calls
     ]
     assert not discovery_fixture.managed_config.exists()
+
+
+def test_setup_rejects_symlinked_daemon_config_before_unit_or_filesystem_mutation(tmp_path: Path) -> None:
+    # GIVEN
+    home = tmp_path / "home"
+    config_home = home / "config"
+    source = config_home / "opencode" / "opencode.json"
+    source.parent.mkdir(parents=True)
+    source.write_text("{}")
+    source.chmod(0o600)
+    target = tmp_path / "daemon-target.toml"
+    target.write_text("not = [parsed")
+    target.chmod(0o600)
+    config = config_home / "ocint" / "daemon.toml"
+    config.parent.mkdir()
+    config.symlink_to(target)
+    unit = config_home / "systemd" / "user" / "ocint-daemon.service"
+    unit.parent.mkdir(parents=True)
+    unit.write_text("preserved-unit")
+    before = frozenset(path.relative_to(home) for path in home.rglob("*"))
+
+    # WHEN
+    result = CliRunner().invoke(
+        main,
+        ["daemon", "lch", "setup"],
+        env={
+            "HOME": str(home),
+            "XDG_CONFIG_HOME": str(config_home),
+            "XDG_DATA_HOME": str(home / "data"),
+            "XDG_STATE_HOME": str(home / "state"),
+            "OCINT_DAEMON_CONFIG": str(config),
+        },
+    )
+
+    # THEN
+    assert result.exit_code == 1
+    assert "non-symlink" in result.output
+    assert unit.read_text() == "preserved-unit"
+    assert frozenset(path.relative_to(home) for path in home.rglob("*")) == before
+    assert target.read_text() == "not = [parsed"
+
+
+def test_apply_rejects_symlinked_source_config_before_unit_or_filesystem_mutation(tmp_path: Path) -> None:
+    # GIVEN
+    home = tmp_path / "home"
+    config_home = home / "config"
+    config = config_home / "ocint" / "daemon.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text("not = [parsed")
+    config.chmod(0o600)
+    source_target = tmp_path / "source-target.json"
+    source_target.write_text("{}")
+    source_target.chmod(0o600)
+    source = config_home / "opencode" / "opencode.json"
+    source.parent.mkdir()
+    source.symlink_to(source_target)
+    unit = config_home / "systemd" / "user" / "ocint-daemon.service"
+    unit.parent.mkdir(parents=True)
+    unit.write_text("preserved-unit")
+    before = frozenset(path.relative_to(home) for path in home.rglob("*"))
+
+    # WHEN
+    result = CliRunner().invoke(
+        main,
+        ["daemon", "lch", "apply"],
+        env={
+            "HOME": str(home),
+            "XDG_CONFIG_HOME": str(config_home),
+            "XDG_DATA_HOME": str(home / "data"),
+            "XDG_STATE_HOME": str(home / "state"),
+            "OCINT_DAEMON_CONFIG": str(config),
+        },
+    )
+
+    # THEN
+    assert result.exit_code == 1
+    assert "source OpenCode config" in result.output
+    assert "non-symlink" in result.output
+    assert unit.read_text() == "preserved-unit"
+    assert frozenset(path.relative_to(home) for path in home.rglob("*")) == before
+    assert config.read_text() == "not = [parsed"
 
 
 def test_generated_daemon_toml_round_trips_selected_turn_retry_budget(

@@ -10,11 +10,35 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, fiel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ocint._models import CliOutput
-from ocint.daemon.coordinator import CoordinatorConfig, CoordinatorSlackConfig
 from ocint.daemon.git import GitConfig
 from ocint.daemon.github import GitHubConfig
 from ocint.daemon.models import GitHubLogin, GitRepository
 from ocint.daemon.opencode import OpenCodeConfig
+from ocint.daemon.slack import CoordinatorSlackConfig, SlackEventsConfig
+
+
+class CoordinatorConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    workspace_root: Path
+    turn_timeout_seconds: int = Field(gt=0)
+    shutdown_timeout_seconds: int = Field(gt=0)
+    orphan_retention_seconds: int = Field(gt=0)
+    retry_seconds: int = Field(gt=0)
+    max_turn_retries: int = Field(default=3, gt=0)
+    response_chunk_characters: int = Field(gt=16, le=3_500)
+    slack_post_interval_seconds: float = Field(gt=0)
+    safe_failure_text: str = Field(
+        default="The coordinator could not complete this request. Please try again.", min_length=1
+    )
+    ingress: SlackEventsConfig
+    slack: CoordinatorSlackConfig
+    opencode: OpenCodeConfig
+
+    @field_validator("workspace_root")
+    @classmethod
+    def expand_path(cls, value: Path) -> Path:
+        return value.expanduser().absolute()
 
 
 class RepositoryConfig(GitRepository):
@@ -78,7 +102,7 @@ class ApiConfig(BaseModel):
 
 
 class DaemonConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     database_path: Path
     mirror_root: Path
@@ -160,9 +184,11 @@ class DaemonSettings(BaseSettings):
 
     def config_path(self, home: Path) -> Path:
         if self.config is not None:
-            return self.config.expanduser().resolve()
+            expanded = self.config.expanduser().absolute()
+            return expanded.parent.resolve() / expanded.name
         base = self.xdg_config_home if self.xdg_config_home is not None else home / ".config"
-        return (base / "ocint" / "daemon.toml").resolve()
+        path = (base / "ocint" / "daemon.toml").expanduser().absolute()
+        return path.parent.resolve() / path.name
 
 
 @dataclass

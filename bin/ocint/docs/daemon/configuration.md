@@ -28,7 +28,7 @@ deliberately asymmetric:
 ```text
 daemon.toml absent  -> setup discovers values and creates it
 daemon.toml exists  -> setup reuses it byte-for-byte
-apply               -> reads it and regenerates systemd units only
+apply               -> reads it, provisions policy/auth, and regenerates units
 package reinstall   -> does not read or modify it
 uninstall           -> preserves it and all daemon state
 ```
@@ -130,7 +130,9 @@ eligible. Slack delivery retries are not counted against this budget; they
 remain unbounded and always resume the already persisted response.
 
 Each Slack root maps to one coordinator OpenCode session. A thread reply reuses
-that session. The coordinator reads only a generated fake/context workspace:
+that session. LCH provisions private coordinator directories, policy, and auth,
+but does not write context files. Coordinator startup atomically generates the
+fake/context workspace from its final validated repository projection:
 
 ```text
 ~/.local/share/ocint/coordinator/
@@ -142,6 +144,7 @@ that session. The coordinator reads only a generated fake/context workspace:
 and contains only `name`, `description`, `github_repository`, and
 `default_branch`. It is a catalogue, not a target checkout. Do not put local
 paths, credentials, remotes, author identities, or validation commands in it.
+Doctor may report the workspace as pending before the first coordinator start.
 
 Create the Slack app from
 [`../../config/slack-app-manifest.yaml`](../../config/slack-app-manifest.yaml).

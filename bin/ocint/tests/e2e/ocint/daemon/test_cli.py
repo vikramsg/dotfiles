@@ -481,6 +481,7 @@ def test_setup_and_apply_provision_missing_coordinator_artifacts_without_rewriti
         '{"model":"example-provider/example-model","provider":{"example-provider":'
         '{"models":{"example-model":{"id":"example-model","name":"Example"}}}}}'
     )
+    source_config.chmod(0o600)
     auth = data_home / "opencode" / "auth.json"
     auth.parent.mkdir(parents=True)
     auth.write_text("preserved-auth")
@@ -514,6 +515,7 @@ agent_actor = "maintainer"
 {coordinator_toml}
 '''
     )
+    config.chmod(0o600)
     original = config.read_bytes()
     binary_directory = tmp_path / "bin"
     binary_directory.mkdir()

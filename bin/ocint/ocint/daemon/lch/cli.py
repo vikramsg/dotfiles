@@ -8,15 +8,17 @@ import click
 from sqlalchemy.exc import NoResultFound
 
 from ocint.daemon.config import DaemonConfig, DaemonContext
-from ocint.daemon.lch.render import render_job, render_jobs, render_status
-from ocint.daemon.lch.service import attach_to_job
-from ocint.daemon.lch.setup import (
-    discover,
+from ocint.daemon.lch.opencode import (
+    PrivateFilePurpose,
+    PrivateFileRequirement,
     ensure_private_directory,
     provision_configured_coordinator_runtime,
-    setup,
     upsert_private_environment,
+    validate_private_file,
 )
+from ocint.daemon.lch.render import render_job, render_jobs, render_status
+from ocint.daemon.lch.service import attach_to_job
+from ocint.daemon.lch.setup import discover, setup
 from ocint.daemon.lch.systemd import (
     CoordinatorUnitEnablement,
     SubprocessRunner,
@@ -58,7 +60,8 @@ def setup_command(context: DaemonContext) -> None:
     """Create initial configuration and install the daemon."""
     managed_lifecycle = lifecycle(context)
     executable = installed_ocint()
-    if context.config_path.exists():
+    if context.config_path.exists() or context.config_path.is_symlink():
+        _validate_configuration_inputs(context)
         config = context.config()
         provision_configured_coordinator_runtime(context, config)
         ngrok = discover_ngrok(managed_lifecycle.runner, managed_lifecycle.paths.environment_file)
@@ -99,12 +102,23 @@ def setup_command(context: DaemonContext) -> None:
 def apply_command(context: DaemonContext) -> None:
     """Apply existing configuration to systemd units."""
     managed_lifecycle = lifecycle(context)
+    _validate_configuration_inputs(context)
     config = context.config()
     executable = installed_ocint()
     provision_configured_coordinator_runtime(context, config)
     ngrok = discover_ngrok(managed_lifecycle.runner, managed_lifecycle.paths.environment_file)
     enablement = managed_lifecycle.install(executable, config.lifecycle, config.coordinator.ingress.port, ngrok)
     _report_install(context, managed_lifecycle, config, executable, enablement, "loaded", modified=False)
+
+
+def _validate_configuration_inputs(context: DaemonContext) -> None:
+    validate_private_file(PrivateFileRequirement(path=context.config_path, purpose=PrivateFilePurpose.DAEMON_CONFIG))
+    validate_private_file(
+        PrivateFileRequirement(
+            path=context.config_home / "opencode" / "opencode.json",
+            purpose=PrivateFilePurpose.SOURCE_OPENCODE_CONFIG,
+        )
+    )
 
 
 @lch.command("slack-token")

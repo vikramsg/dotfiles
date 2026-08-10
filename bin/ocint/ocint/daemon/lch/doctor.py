@@ -16,19 +16,23 @@ from pydantic import BaseModel, ConfigDict
 
 from ocint.daemon.config import DaemonConfig, DaemonContext
 from ocint.daemon.db import current_daemon_head_revision
-from ocint.daemon.lch.setup import (
+from ocint.daemon.lch.opencode import (
     CoordinatorRestrictedOpenCodeConfig,
     CoordinatorStaticOpenCodePolicy,
     OpenCodeSourceConfig,
+    PrivateFilePurpose,
+    PrivateFileRequirement,
     RestrictedOpenCodeConfig,
     StaticOpenCodePolicy,
     coordinator_policy_resource_path,
-    discovery_environment,
     load_coordinator_policy,
     load_policy,
     policy_resource_path,
+    private_file_is_valid,
     restricted_agent_config,
+    validate_private_file,
 )
+from ocint.daemon.lch.setup import discovery_environment
 from ocint.daemon.lch.systemd import (
     CommandRunner,
     NgrokRuntime,
@@ -90,12 +94,11 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
     diagnostics.append(_private_file_diagnostic("config.path", config_path))
     config: DaemonConfig | None = None
     try:
-        if not _owned_regular(config_path, 0o600):
-            raise ValueError("daemon config must be a user-owned regular non-symlink mode-0600 file")
+        validate_private_file(PrivateFileRequirement(path=config_path, purpose=PrivateFilePurpose.DAEMON_CONFIG))
         config = context.config()
         effective = config.model_dump_json(exclude_none=True)
         diagnostics.append(Diagnostic(name="config.effective", required=True, ok=True, value=effective))
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, click.ClickException) as error:
         diagnostics.append(
             Diagnostic(name="config.effective", required=True, ok=False, value="unavailable", detail=str(error))
         )
@@ -283,7 +286,12 @@ def _opencode_diagnostics(
         if not _owned_regular(config.opencode.config_file, 0o600):
             raise ValueError("effective OpenCode config must be user-owned, regular, non-symlink, and mode 0600")
         effective = RestrictedOpenCodeConfig.model_validate_json(config.opencode.config_file.read_text())
-        source_path = context.config_home / "opencode" / "opencode.json"
+        source_path = validate_private_file(
+            PrivateFileRequirement(
+                path=context.config_home / "opencode" / "opencode.json",
+                purpose=PrivateFilePurpose.SOURCE_OPENCODE_CONFIG,
+            )
+        ).path
         source = OpenCodeSourceConfig.model_validate_json(source_path.read_text())
         policy_matches = policy is not None and _effective_policy_matches(
             effective,
@@ -311,7 +319,7 @@ def _opencode_diagnostics(
                 value=f"{effective.model} / {','.join(effective.provider)}",
             )
         )
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, click.ClickException) as error:
         result.append(
             Diagnostic(
                 name="opencode.effective_config", required=True, ok=False, value="unavailable", detail=str(error)
@@ -417,7 +425,7 @@ def _coordinator_diagnostics(
                 ),
             )
         )
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, click.ClickException) as error:
         result.append(
             Diagnostic(
                 name="coordinator.opencode.effective_config",
@@ -523,7 +531,11 @@ def _storage_diagnostics(config: DaemonConfig, log_path: Path) -> list[Diagnosti
     expected = current_daemon_head_revision()
     result.append(
         Diagnostic(
-            name="database.migration", required=True, ok=revision == expected, value=revision, detail=f"head={expected}"
+            name="database.migration",
+            required=False,
+            ok=revision == expected,
+            value=revision,
+            detail=f"head={expected}; timer/coordinator startup owns migration",
         )
     )
     return result
@@ -904,12 +916,13 @@ def _owned(path: Path) -> bool:
         return False
 
 
-def _owned_regular(path: Path, expected_mode: int = -1) -> bool:
-    return (
-        path.is_file()
-        and not path.is_symlink()
-        and _owned(path)
-        and (expected_mode < 0 or stat.S_IMODE(path.stat().st_mode) == expected_mode)
+def _owned_regular(path: Path, expected_mode: int) -> bool:
+    return private_file_is_valid(
+        PrivateFileRequirement(
+            path=path,
+            purpose=PrivateFilePurpose.MANAGED_CONFIG,
+            mode=expected_mode,
+        )
     )
 
 

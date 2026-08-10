@@ -93,12 +93,13 @@ unchanged and has no environment switch or backdoor. The production bot remains
 the delivery client, and the explicit harness sources both private environment
 files while preserving Slack messages and shared-database rows.
 
-### Parse both channel payloads while deploying public-only access
+### Parse private payloads but execute public payloads only
 
 **Decision:** Model `channel_type="channel"` and `channel_type="group"` message
-payloads as a normal Pydantic typed union and translate either. Deploy only
-`message.channels` with `channels:history`; private subscription and scope are a
-documented FIXME.
+payloads as a normal Pydantic typed union. Translate only the public variant;
+private payloads parse but are durably ignored before authorization. Deploy only
+`message.channels` with `channels:history`; private translation, subscription,
+and scope remain a documented FIXME.
 
 **Rationale:** Channel visibility controls Slack's event and OAuth contract. The
 proven target is public, so requesting `message.groups`/`groups:history` was both
@@ -228,3 +229,78 @@ restores prior handlers, and exits normally. Once running, unexpected supervised
 completion takes precedence over a concurrent shutdown request. Graceful restart
 still completes bounded shutdown before OpenCode close and leaves timeout cgroup
 cleanup to systemd.
+
+### Reject unsafe database and configuration files before mutation
+
+**Decision:** Database lifecycle rejects a database-file symlink before opening
+it. LCH setup/apply likewise validate daemon TOML and source OpenCode JSON as
+user-owned regular non-symlink mode-0600 files before parsing, provisioning, or
+unit writes. Parent-directory symlink aliases are canonicalized; the final file
+component is never resolved through a symlink.
+
+**Rationale:** A convenient parent alias can safely converge on one canonical
+lock and path, while following a configured file symlink could parse, migrate,
+chmod, or replace an unrelated target.
+
+**Consequence:** Unsafe inputs fail without changing managed files, units, or
+database bytes. Doctor uses the same typed private-file contract.
+
+### Preserve terminal events after orphan expiry
+
+**Decision:** Once an awaiting-root conversation expires, later provider events
+for that terminal conversation remain durably classified and cannot reactivate
+it or create turns.
+
+**Rationale:** Expiry is a terminal workflow decision, not a temporary absence
+of an eligible root.
+
+**Consequence:** Delayed and retried Slack events remain observable without
+reopening completed retention policy.
+
+### Complete thread identity in a follow-up migration
+
+**Decision:** Keep the additive coordinator migration and add a second migration
+that completes immutable message/thread identity needed by follow-up turns.
+
+**Rationale:** The approved core schema had already shipped in the stack; an
+additive follow-up preserves the migration chain and existing rows.
+
+**Consequence:** Root and follow-up events correlate deterministically without
+rewriting the first migration.
+
+### Keep the coordinator facade lazy and protocol-shaped
+
+**Decision:** Export narrow coordinator protocols and construction operations
+from a lazy facade. Concrete repository, OpenCode, workspace, and runtime modules
+load only when their factory or workflow is called.
+
+**Rationale:** The provider-neutral core must not depend on Slack or eagerly
+initialize runtime adapters.
+
+**Consequence:** CLI remains the composition root, Slack depends on coordinator
+contracts, and Tach enforces the split.
+
+### Generate workspace context only at coordinator startup
+
+**Decision:** Coordinator startup is the single owner of atomic `AGENTS.md` and
+`repositories.json` generation because it has the final validated repository
+projection. LCH owns private directories plus policy/auth provisioning only.
+
+**Rationale:** A second LCH generator could drift from the projection actually
+used when OpenCode starts.
+
+**Consequence:** Doctor reports context as pending before first coordinator
+startup rather than treating absence as an LCH provisioning failure.
+
+### Validate stacked changes without release behavior
+
+**Decision:** Validate this work as the cumulative core -> Slack -> operations
+stack, with each upper branch remaining a descendant of its updated approved
+parent. Do not invoke release preparation or publication for stack review.
+
+**Rationale:** Review fixes must preserve approved lower-stack contracts while
+avoiding unrelated release mutations.
+
+**Consequence:** Tests, static checks, smoke checks, package build, and explicit
+live-marker collection are the acceptance surface; external live E2E remains a
+separate final operator action.

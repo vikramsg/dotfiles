@@ -10,15 +10,14 @@ import pytest
 from click.testing import CliRunner
 from ocint.cli import main
 from ocint.daemon.config import DaemonContext, DaemonSettings
-from ocint.daemon.coordinator import (
-    CoordinatorSlackConfig,
-    CoordinatorWorkspace,
+from ocint.daemon.coordinator.config import (
     CoordinatorWorkspaceConfig,
     RepositoryCatalogueEntry,
 )
+from ocint.daemon.coordinator.workspace import CoordinatorWorkspace
 from ocint.daemon.db import current_daemon_head_revision, migrate_daemon_db
 from ocint.daemon.lch.doctor import Diagnostic, DoctorReport, diagnose
-from ocint.daemon.lch.setup import (
+from ocint.daemon.lch.opencode import (
     OpenCodeSourceConfig,
     coordinator_restricted_opencode_config,
     load_coordinator_policy,
@@ -35,6 +34,7 @@ from ocint.daemon.lch.systemd import (
     service_text,
     timer_text,
 )
+from ocint.daemon.slack import CoordinatorSlackConfig
 from ocint.presentation import default_cli_context
 
 
@@ -124,6 +124,7 @@ def doctor_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DoctorFix
         '"provider":{"example-provider":'
         '{"models":{"example-model":{"id":"example-model","name":"Example"}}}}}'
     )
+    source_config.chmod(0o600)
     selected = OpenCodeSourceConfig.model_validate_json(source_config.read_text())
     policy, _payload = load_policy()
     effective = config_home / "ocint" / "opencode-xdg" / "opencode" / "opencode.json"
@@ -407,7 +408,7 @@ def test_diagnose_rejects_unsafe_ngrok_url_without_exposing_it(doctor_fixture: D
     assert "recognizable-ngrok-secret" not in report.human_text()
 
 
-def test_diagnose_accepts_system_ssh_and_readable_symlinked_discovery_files(
+def test_diagnose_rejects_symlinked_source_config_but_accepts_readable_known_hosts_symlink(
     doctor_fixture: DoctorFixture,
 ) -> None:
     # GIVEN
@@ -424,12 +425,12 @@ def test_diagnose_accepts_system_ssh_and_readable_symlinked_discovery_files(
     report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
-    assert report.healthy
+    assert not report.healthy
     git = next(item for item in report.diagnostics if item.name == "git.remote_author_ssh")
-    paths = next(item for item in report.diagnostics if item.name == "opencode.config_paths")
+    effective = next(item for item in report.diagnostics if item.name == "opencode.effective_config")
     assert git.ok
     assert "/ssh" in git.value
-    assert paths.ok
+    assert not effective.ok
 
 
 def test_diagnose_accepts_runtime_owned_workspace_files_before_coordinator_rollout(
@@ -594,7 +595,7 @@ def test_diagnose_preserves_actionable_command_failures(doctor_fixture: DoctorFi
     assert "command failed" in state.detail
 
 
-def test_diagnose_reports_migration_failure_without_writing_database(doctor_fixture: DoctorFixture) -> None:
+def test_diagnose_reports_pending_startup_migration_without_writing_database(doctor_fixture: DoctorFixture) -> None:
     # GIVEN
     with sqlite3.connect(doctor_fixture.database) as connection:
         connection.execute("UPDATE alembic_version SET version_num = ?", ("outdated_revision",))
@@ -604,9 +605,11 @@ def test_diagnose_reports_migration_failure_without_writing_database(doctor_fixt
 
     # THEN
     migration = next(item for item in report.diagnostics if item.name == "database.migration")
+    assert report.healthy
     assert not migration.ok
+    assert not migration.required
     assert migration.value == "outdated_revision"
-    assert migration.detail == f"head={current_daemon_head_revision()}"
+    assert migration.detail == (f"head={current_daemon_head_revision()}; timer/coordinator startup owns migration")
 
 
 def test_diagnose_human_json_parity_redacts_all_secret_material(doctor_fixture: DoctorFixture) -> None:

@@ -3,8 +3,8 @@
 `ocint daemon lch` is the concrete Linux user-systemd surface:
 
 ```text
-setup     -> create config when absent; provision runtime; install four units
-apply     -> validate existing config/env; regenerate units; enable timer only
+setup     -> create config when absent; provision policy/auth; install four units
+apply     -> validate config/source; provision policy/auth; regenerate units
 slack-token -> validate and install a Slack bot token from hidden input
 lifecycle -> report timer, bounded service, coordinator, ngrok, and log state
 list      -> list durable jobs directly from SQLite
@@ -55,6 +55,9 @@ GitHub token. See the [complete workflow](../../../docs/daemon/workflow.md).
 After creation, `daemon.toml` is user-owned. Setup reuses it byte-for-byte,
 `apply` reads it without modifying it, and package reinstall and uninstall leave
 it untouched. Every command reports concrete non-secret paths and outcomes.
+Both setup and apply reject unsafe daemon/source OpenCode files before parsing or
+writing. LCH does not generate coordinator context files; coordinator startup is
+their single atomic owner, and also owns serialized database migration.
 Token updates preserve unrelated `daemon.env` assignments and comments. The
 Slack token command accepts interactive hidden input or piped stdin and never
 places the token in argv or output.

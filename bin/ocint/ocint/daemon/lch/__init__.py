@@ -1,7 +1,14 @@
 from ocint.daemon.lch.cli import lch, lifecycle
 from ocint.daemon.lch.doctor import DoctorReport, diagnose
+from ocint.daemon.lch.opencode import validate_coordinator_runtime
+from ocint.daemon.lch.preflight import (
+    AioHttpStaticEndpointTransport,
+    StaticEndpointClassifier,
+    StaticEndpointPreflightClient,
+    StaticEndpointPreflightConfig,
+    require_static_endpoint_offline,
+)
 from ocint.daemon.lch.render import render_job, render_jobs, render_status
-from ocint.daemon.lch.setup import validate_coordinator_runtime
 from ocint.daemon.lch.systemd import (
     CoordinatorUnitEnablement,
     LifecycleStatus,
@@ -20,10 +27,14 @@ from ocint.daemon.lch.systemd import (
 )
 
 __all__ = [
+    "AioHttpStaticEndpointTransport",
     "CoordinatorUnitEnablement",
     "DoctorReport",
     "LifecycleStatus",
     "NgrokRuntime",
+    "StaticEndpointClassifier",
+    "StaticEndpointPreflightClient",
+    "StaticEndpointPreflightConfig",
     "SubprocessRunner",
     "SystemdLifecycle",
     "SystemdPaths",
@@ -38,6 +49,7 @@ __all__ = [
     "render_job",
     "render_jobs",
     "render_status",
+    "require_static_endpoint_offline",
     "scrubbed_subprocess_environment",
     "service_text",
     "timer_text",

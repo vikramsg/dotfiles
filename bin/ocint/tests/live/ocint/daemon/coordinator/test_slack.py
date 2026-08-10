@@ -10,20 +10,20 @@ from uuid import UUID, uuid4
 import aiohttp
 import pytest
 from ocint.daemon.config import DaemonContext, DaemonSettings
-from ocint.daemon.coordinator import (
-    ActorKind,
-    ChannelAccess,
-    ConfiguredAuthorizationPolicy,
-    CoordinatorApplicationRequest,
-    CoordinatorRepository,
-    CoordinatorRuntime,
-    CoordinatorService,
-    CoordinatorWorkspace,
+from ocint.daemon.coordinator.config import (
     CoordinatorWorkspaceConfig,
-    OpenCodeCoordinatorAdapter,
     RepositoryCatalogueEntry,
+)
+from ocint.daemon.coordinator.models import ActorKind
+from ocint.daemon.coordinator.opencode import OpenCodeCoordinatorAdapter
+from ocint.daemon.coordinator.repository import CoordinatorRepository
+from ocint.daemon.coordinator.run import (
+    CoordinatorApplicationRequest,
+    CoordinatorRuntime,
     open_coordinator_application,
 )
+from ocint.daemon.coordinator.service import ChannelAccess, ConfiguredAuthorizationPolicy, CoordinatorService
+from ocint.daemon.coordinator.workspace import CoordinatorWorkspace
 from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.db.schema import (
     coordinator_conversation,
@@ -36,9 +36,14 @@ from ocint.daemon.db.schema import (
     thread_message,
 )
 from ocint.daemon.lch import (
+    AioHttpStaticEndpointTransport,
+    StaticEndpointClassifier,
+    StaticEndpointPreflightClient,
+    StaticEndpointPreflightConfig,
     SubprocessRunner,
     coordinator_ngrok_command,
     discover_ngrok_runtime,
+    require_static_endpoint_offline,
     scrubbed_subprocess_environment,
     validate_coordinator_runtime,
 )
@@ -136,6 +141,15 @@ async def test_real_slack_ngrok_and_opencode_coordinator_path_preserves_probe_ev
     except RuntimeError:
         pytest.fail("live coordinator test requires a valid ngrok v3 static URL runtime")
     validate_coordinator_runtime(context, config)
+    preflight_config = StaticEndpointPreflightConfig()
+    await require_static_endpoint_offline(
+        f"{ngrok_url.rstrip('/')}/slack/events",
+        StaticEndpointPreflightClient(
+            AioHttpStaticEndpointTransport(),
+            StaticEndpointClassifier(preflight_config),
+            preflight_config,
+        ),
+    )
     migrate_daemon_db(config.database_path)
     CoordinatorWorkspace(
         CoordinatorWorkspaceConfig(
@@ -233,6 +247,7 @@ async def test_real_slack_ngrok_and_opencode_coordinator_path_preserves_probe_ev
             ConfiguredAuthorizationPolicy(
                 tuple(
                     ChannelAccess(
+                        provider="slack",
                         workspace=coordinator.slack.workspace_id,
                         channel=configured_channel.channel_id,
                         authorized_actors=configured_channel.authorized_users,

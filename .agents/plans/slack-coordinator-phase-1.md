@@ -603,7 +603,7 @@ coordinator_event
   source_created_at
   disposition
   created_at
-  unique(provider, workspace_id, channel_id, message_id)
+  unique(provider, workspace_id, channel_id, thread_id, message_id)
 
 coordinator_conversation
   id                       primary key
@@ -889,7 +889,11 @@ systemd unit.
 ### Live Test Steps
 
 1. Fail fast unless production coordinator/ngrok units are inactive and ports
-   `8733`, `4098`, and the static ngrok domain are free.
+   `8733` and `4098` are free. Make one bounded sanitized request to the
+   configured callback endpoint and proceed only when a typed classifier sees
+   ngrok's `404`/`ERR_NGROK_3200` offline-domain response. Treat every active
+   backend/tunnel or ambiguous/network response as failure without logging URL,
+   body, headers, or credentials and without using the ngrok inspector.
 2. Source production credentials from mode-0600 `daemon.env` and the test user
    token from separate mode-0600 `live-e2e.env`; never load the test token
    through systemd or print it.
@@ -902,7 +906,7 @@ systemd unit.
    configured-channel authorization and the exact test-only xoxp event
    classifier, while keeping the production bot as the delivery client.
 6. Start the real coordinator OpenCode server and verify exact version/health.
-7. Start ngrok for the configured static URL.
+7. Start ngrok for the preflighted static URL.
 8. Post a root to the configured public channel using the authorized user's
    Slack client and the probe ID as `client_msg_id`.
 9. Ask the coordinator to echo the probe ID and identify `dotfiles` from its
@@ -1061,7 +1065,8 @@ field absence, not incidental rendered log prose.
 
 - `daemon/db/connection.py`: serialized migration lock.
 - `daemon/db/schema.py`: coordinator tables.
-- `daemon/db/migrations/versions/`: one additive coordinator revision.
+- `daemon/db/migrations/versions/`: the additive coordinator revision followed
+  by a second migration completing thread-aware message identity.
 - `daemon/cli.py`: thin coordinator composition; remove lifecycle supervision and
   Slack polling composition.
 - `daemon/config.py`: aggregate coordinator config and environment settings.
