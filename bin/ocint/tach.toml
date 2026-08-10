@@ -100,6 +100,15 @@ depends_on = [
 ]
 
 [[modules]]
+path = "ocint.daemon.coordinator"
+depends_on = [
+  "ocint.daemon.db",
+  "ocint.daemon.logging",
+  "ocint.daemon.models",
+  "ocint.daemon.opencode",
+]
+
+[[modules]]
 path = "ocint.daemon.config"
 depends_on = [
   "ocint.daemon.github",

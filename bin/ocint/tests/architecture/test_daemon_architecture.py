@@ -136,6 +136,43 @@ def test_policy_resource_is_one_canonical_symlinked_source() -> None:
     assert resource.read_bytes() == source.read_bytes()
 
 
+def test_coordinator_policy_resource_is_restrictive_and_packaged() -> None:
+    # GIVEN
+    package = Path(__file__).parents[2]
+    source = package / "config" / "opencode.coordinator.json"
+    resource = package / "ocint" / "daemon" / "opencode.coordinator.json"
+    pyproject = tomllib.loads((package / "pyproject.toml").read_text())
+
+    # WHEN
+    policy = json.loads(source.read_text())
+
+    # THEN
+    assert resource.read_bytes() == source.read_bytes()
+    assert policy["$schema"] == "https://opencode.ai/config.json"
+    assert policy["share"] == "disabled"
+    assert policy["plugin"] == []
+    assert policy["mcp"] == {}
+    assert policy["lsp"] is False
+    assert policy["formatter"] is False
+    assert policy["permission"] == {
+        "*": "deny",
+        "read": "allow",
+        "list": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "edit": "deny",
+        "write": "deny",
+        "patch": "deny",
+        "bash": "deny",
+        "shell": "deny",
+        "external_directory": {"*": "deny"},
+        "question": "deny",
+    }
+    assert "config/opencode.coordinator.json" in pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+
+
 def test_root_daemon_cli_uses_only_the_lch_facade() -> None:
     # GIVEN
     cli = Path(__file__).parents[2] / "ocint" / "daemon" / "cli.py"
