@@ -1,8 +1,16 @@
 import asyncio
-from collections.abc import Awaitable
+import errno
+import fcntl
+import os
+import signal
+import stat
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from contextlib import AbstractContextManager, asynccontextmanager, contextmanager
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Protocol
+from types import FrameType, TracebackType
+from typing import Protocol, Self
 
 from ocint.daemon.coordinator.models import (
     DeliveryLookup,
@@ -111,6 +119,58 @@ class CoordinatorDelivery(Protocol):
     async def post(self, request: DeliveryRequest) -> DeliveryReceipt: ...
 
 
+class CoordinatorProcess(Protocol):
+    async def start(self) -> None: ...
+    async def close(self) -> None: ...
+    async def wait_exited(self) -> int: ...
+
+
+class CoordinatorIngress(Protocol):
+    async def __call__(self, shutdown: asyncio.Event, /) -> None: ...
+
+
+class ShutdownSignalRegistrar(Protocol):
+    def register(self, request_shutdown: Callable[[], None]) -> AbstractContextManager[None]: ...
+
+
+class ProcessSignalRegistrar:
+    @contextmanager
+    def register(self, request_shutdown: Callable[[], None]) -> Iterator[None]:
+        def handle_shutdown(_signal_number: int, _frame: FrameType | None) -> None:
+            request_shutdown()
+
+        previous_termination_handler = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, handle_shutdown)
+        try:
+            previous_interrupt_handler = signal.getsignal(signal.SIGINT)
+            signal.signal(signal.SIGINT, handle_shutdown)
+            try:
+                yield
+            finally:
+                signal.signal(signal.SIGINT, previous_interrupt_handler)
+        finally:
+            signal.signal(signal.SIGTERM, previous_termination_handler)
+
+
+class CoordinatorStartupShutdown(Exception):
+    """A requested shutdown that interrupted coordinator startup."""
+
+
+class CoordinatorShutdown:
+    def __init__(self) -> None:
+        self.event = asyncio.Event()
+
+    @property
+    def requested(self) -> bool:
+        return self.event.is_set()
+
+    def request(self) -> None:
+        self.event.set()
+
+    async def wait(self) -> None:
+        await self.event.wait()
+
+
 class RetryableCoordinatorError(Exception):
     def __init__(self, message: str, retry_after_seconds: float | None = None) -> None:
         super().__init__(message)
@@ -129,6 +189,41 @@ class TerminalCoordinatorError(Exception):
 
 class TerminalCoordinatorDeliveryError(Exception):
     """A delivery failure that must stop the worker without changing its response."""
+
+
+class RuntimeFileLock:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.descriptor = -1
+
+    def __enter__(self) -> Self:
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        descriptor = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        information = os.fstat(descriptor)
+        if not stat.S_ISREG(information.st_mode) or information.st_uid != os.getuid():
+            os.close(descriptor)
+            raise PermissionError(f"invalid coordinator runtime lock: {self.path}")
+        os.fchmod(descriptor, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            os.close(descriptor)
+            if error.errno in (errno.EACCES, errno.EAGAIN):
+                raise RuntimeError("another coordinator runtime owns the lock") from error
+            raise
+        self.descriptor = descriptor
+        return self
+
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self.descriptor >= 0:
+            fcntl.flock(self.descriptor, fcntl.LOCK_UN)
+            os.close(self.descriptor)
+            self.descriptor = -1
 
 
 class CoordinatorRuntime:
@@ -385,7 +480,7 @@ class CoordinatorRuntime:
             )
             posted = False
             self.logger.info(
-                "Coordinator delivery checkpoint",
+                "Coordinator Slack delivery checkpoint",
                 turn=current.id,
                 chunk_index=chunk.chunk_index,
                 client_message=chunk.client_msg_id,
@@ -400,7 +495,7 @@ class CoordinatorRuntime:
                         posted = True
                     else:
                         self.logger.info(
-                            "Coordinator delivery recovered",
+                            "Coordinator Slack delivery recovered",
                             turn=current.id,
                             chunk_index=chunk.chunk_index,
                             client_message=chunk.client_msg_id,
@@ -418,7 +513,7 @@ class CoordinatorRuntime:
                     self._retry_at(retry_after_seconds),
                 )
                 self.logger.warning(
-                    "Coordinator delivery retry scheduled",
+                    "Coordinator Slack delivery retry scheduled",
                     turn=current.id,
                     chunk_index=chunk.chunk_index,
                     client_message=chunk.client_msg_id,
@@ -431,7 +526,7 @@ class CoordinatorRuntime:
                 raise TerminalCoordinatorDeliveryError("coordinator delivery failed") from error
             self.repository.mark_delivered(chunk.turn_id, chunk.chunk_index, receipt.provider_message_id)
             self.logger.info(
-                "Coordinator delivery stored",
+                "Coordinator Slack delivery stored",
                 turn=current.id,
                 chunk_index=chunk.chunk_index,
                 client_message=chunk.client_msg_id,
@@ -450,3 +545,183 @@ class CoordinatorRuntime:
 
     def _orphan_cutoff(self) -> str:
         return (datetime.now(UTC) - timedelta(seconds=self.orphan_retention_seconds)).isoformat()
+
+
+@dataclass(frozen=True)
+class CoordinatorApplicationRequest:
+    runtime: CoordinatorRuntime
+    opencode: CoordinatorProcess
+    ingress: CoordinatorIngress
+    ingress_host: str
+    ingress_port: int
+    runtime_lock: Path
+    shutdown_timeout_seconds: float
+    signal_registrar: ShutdownSignalRegistrar = field(default_factory=ProcessSignalRegistrar)
+
+
+class CoordinatorApplication:
+    def __init__(
+        self,
+        request: CoordinatorApplicationRequest,
+        worker_stop: asyncio.Event,
+        ingress_shutdown: asyncio.Event,
+        worker: asyncio.Task[None],
+        ingress: asyncio.Task[None],
+        child: asyncio.Task[int],
+        shutdown: CoordinatorShutdown,
+    ) -> None:
+        self.request = request
+        self.worker_stop = worker_stop
+        self.ingress_shutdown = ingress_shutdown
+        self.worker = worker
+        self.ingress = ingress
+        self.child = child
+        self.shutdown = shutdown
+        self.logger = get_logger("coordinator.lifecycle")
+        self.closed = False
+
+    def request_shutdown(self) -> None:
+        self.shutdown.request()
+
+    async def wait(self) -> None:
+        shutdown = asyncio.create_task(self.shutdown.wait())
+        try:
+            await asyncio.wait(
+                (self.worker, self.ingress, self.child, shutdown),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            self._raise_if_supervision_stopped()
+            if shutdown.done():
+                shutdown.result()
+                return
+            raise RuntimeError("coordinator application wait ended without a completed operation")
+        finally:
+            shutdown.cancel()
+            await asyncio.gather(shutdown, return_exceptions=True)
+
+    def raise_if_stopped(self) -> None:
+        self._raise_if_supervision_stopped()
+
+    def _raise_if_supervision_stopped(self) -> None:
+        if self.child.done():
+            status = self.child.result()
+            self.logger.error("Coordinator OpenCode child exited", exit_status=status)
+            raise RuntimeError(f"OpenCode exited unexpectedly ({status})")
+        completed = tuple(task for task in (self.worker, self.ingress) if task.done())
+        if not completed:
+            return
+        errors: list[BaseException] = []
+        for task in completed:
+            if task.cancelled():
+                errors.append(RuntimeError("coordinator supervised operation was cancelled unexpectedly"))
+                continue
+            error = task.exception()
+            if error is not None:
+                errors.append(error)
+        if errors:
+            raise errors[0]
+        raise RuntimeError("coordinator application stopped unexpectedly")
+
+    async def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self.logger.info("Coordinator bounded shutdown started")
+        self.worker_stop.set()
+        self.ingress_shutdown.set()
+        tasks = (self.worker, self.ingress)
+        outcome = "completed"
+        try:
+            async with asyncio.timeout(self.request.shutdown_timeout_seconds):
+                await asyncio.gather(*tasks, return_exceptions=True)
+        except TimeoutError:
+            outcome = "cancelled"
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.child.cancel()
+        await asyncio.gather(self.child, return_exceptions=True)
+        self.logger.info("Coordinator bounded shutdown completed", shutdown_outcome=outcome)
+
+
+async def run_coordinator_application(request: CoordinatorApplicationRequest) -> None:
+    try:
+        async with open_coordinator_application(request) as application:
+            await application.wait()
+    except CoordinatorStartupShutdown:
+        get_logger("coordinator.lifecycle").info("Coordinator stopped during OpenCode startup")
+
+
+@asynccontextmanager
+async def open_coordinator_application(
+    request: CoordinatorApplicationRequest,
+) -> AsyncIterator[CoordinatorApplication]:
+    if request.shutdown_timeout_seconds <= 0:
+        raise ValueError("shutdown timeout must be positive")
+    logger = get_logger("coordinator.lifecycle")
+    with RuntimeFileLock(request.runtime_lock):
+        logger.info(
+            "Coordinator runtime lock acquired",
+            pid=os.getpid(),
+            host=request.ingress_host,
+            port=request.ingress_port,
+        )
+        shutdown = CoordinatorShutdown()
+        with request.signal_registrar.register(shutdown.request):
+            logger.info("Coordinator OpenCode startup started")
+            try:
+                await _start_opencode_or_shutdown(request.opencode, shutdown)
+            except CoordinatorStartupShutdown:
+                logger.info("Coordinator OpenCode startup stopped by requested shutdown")
+                await request.opencode.close()
+                raise
+            except BaseException:
+                logger.error("Coordinator OpenCode startup failed")
+                await request.opencode.close()
+                raise
+            logger.info("Coordinator OpenCode startup completed")
+            worker_stop = asyncio.Event()
+            ingress_shutdown = asyncio.Event()
+            worker = asyncio.create_task(request.runtime.run(worker_stop))
+            ingress = asyncio.create_task(request.ingress(ingress_shutdown))
+            child = asyncio.create_task(request.opencode.wait_exited())
+            logger.info("Coordinator ingress and worker started", host=request.ingress_host, port=request.ingress_port)
+            application = CoordinatorApplication(
+                request,
+                worker_stop,
+                ingress_shutdown,
+                worker,
+                ingress,
+                child,
+                shutdown,
+            )
+            try:
+                yield application
+            finally:
+                await application.close()
+                logger.info("Coordinator OpenCode shutdown started")
+                await request.opencode.close()
+                logger.info("Coordinator OpenCode shutdown completed")
+
+
+async def _start_opencode_or_shutdown(opencode: CoordinatorProcess, shutdown: CoordinatorShutdown) -> None:
+    if shutdown.requested:
+        raise CoordinatorStartupShutdown
+    startup = asyncio.create_task(opencode.start())
+    requested = asyncio.create_task(shutdown.wait())
+    try:
+        await asyncio.wait((startup, requested), return_when=asyncio.FIRST_COMPLETED)
+        if startup.done():
+            startup.result()
+        if requested.done():
+            if not startup.done():
+                startup.cancel()
+                await asyncio.gather(startup, return_exceptions=True)
+            raise CoordinatorStartupShutdown
+        await startup
+    finally:
+        if not startup.done():
+            startup.cancel()
+            await asyncio.gather(startup, return_exceptions=True)
+        requested.cancel()
+        await asyncio.gather(requested, return_exceptions=True)

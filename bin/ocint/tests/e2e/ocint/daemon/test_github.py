@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from ocint.daemon.config import DaemonConfig, GitHubConfig, RepositoryConfig
+from ocint.daemon.coordinator import CoordinatorConfig
 from ocint.daemon.db import create_daemon_engine, migrate_daemon_db
 from ocint.daemon.db.connection import alembic_config
 from ocint.daemon.db.schema import metadata
@@ -40,6 +41,32 @@ from ocint.daemon.tasks import TaskCoordinator, TaskState
 from ocint.daemon.tasks.models import MessageClassification
 from ocint.daemon.tasks.repository import TaskRepository
 from sqlalchemy import text
+
+
+@pytest.fixture
+def coordinator_config(tmp_path: Path) -> CoordinatorConfig:
+    return CoordinatorConfig.model_validate(
+        {
+            "workspace_root": tmp_path / "coordinator",
+            "turn_timeout_seconds": 1_800,
+            "shutdown_timeout_seconds": 30,
+            "orphan_retention_seconds": 86_400,
+            "retry_seconds": 5,
+            "response_chunk_characters": 3_500,
+            "slack_post_interval_seconds": 1,
+            "ingress": {"host": "127.0.0.1", "port": 8_733},
+            "slack": {
+                "workspace_id": "T1",
+                "channels": [{"channel_id": "C1", "authorized_users": ["U1"]}],
+            },
+            "opencode": {
+                "server_url": "http://127.0.0.1:4098",
+                "config_file": tmp_path / "coordinator-opencode.json",
+                "xdg_config_home": tmp_path / "coordinator-opencode-xdg",
+                "xdg_data_home": tmp_path / "coordinator-opencode-data",
+            },
+        }
+    )
 
 
 @dataclass
@@ -197,7 +224,9 @@ async def test_closed_owned_pull_request_is_refused_and_task_transition_is_coord
 
 
 @pytest.mark.asyncio
-async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tmp_path: Path) -> None:
+async def test_failed_thread_task_with_new_comments_creates_successor_attempt(
+    tmp_path: Path, coordinator_config: CoordinatorConfig
+) -> None:
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
@@ -212,6 +241,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
                 name="dotfiles",
                 remote_url="git@github.com:example-org/project.git",
                 github_repository="example-org/project",
+                description="Repository for tests.",
                 author_name="ocint",
                 author_email="ocint@example.invalid",
                 actors=frozenset((GitHubLogin("maintainer"),)),
@@ -228,6 +258,7 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
             known_hosts_file=tmp_path / "known_hosts",
         ),
         github=GitHubConfig(agent_actor=GitHubLogin("maintainer")),
+        coordinator=coordinator_config,
     )
     issue = GitHubIssue(
         id=100,
@@ -365,7 +396,9 @@ async def test_failed_thread_task_with_new_comments_creates_successor_attempt(tm
 
 
 @pytest.mark.asyncio
-async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_path: Path) -> None:
+async def test_root_only_completion_response_does_not_schedule_follow_up(
+    tmp_path: Path, coordinator_config: CoordinatorConfig
+) -> None:
     # GIVEN
     engine = create_daemon_engine(tmp_path / "control.sqlite")
     metadata.create_all(engine)
@@ -380,6 +413,7 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
                 name="dotfiles",
                 remote_url="git@github.com:example-org/project.git",
                 github_repository="example-org/project",
+                description="Repository for tests.",
                 author_name="ocint",
                 author_email="ocint@example.invalid",
                 actors=frozenset((GitHubLogin("maintainer"),)),
@@ -396,6 +430,7 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
             known_hosts_file=tmp_path / "known_hosts",
         ),
         github=GitHubConfig(agent_actor=GitHubLogin("maintainer")),
+        coordinator=coordinator_config,
     )
     repository_policies = GitHubRepositoryPolicies(
         root=[
@@ -452,7 +487,9 @@ async def test_root_only_completion_response_does_not_schedule_follow_up(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path) -> None:
+async def test_reset_task_identity_does_not_reuse_historical_job(
+    tmp_path: Path, coordinator_config: CoordinatorConfig
+) -> None:
     # GIVEN
     database = tmp_path / "control.sqlite"
     command.upgrade(alembic_config(database), "20260719_add_thread_execution_job")
@@ -496,6 +533,7 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
                 name="dotfiles",
                 remote_url="git@github.com:example-org/project.git",
                 github_repository="example-org/project",
+                description="Repository for tests.",
                 author_name="ocint",
                 author_email="ocint@example.invalid",
                 actors=frozenset((GitHubLogin("maintainer"),)),
@@ -512,6 +550,7 @@ async def test_reset_task_identity_does_not_reuse_historical_job(tmp_path: Path)
             known_hosts_file=tmp_path / "known_hosts",
         ),
         github=GitHubConfig(agent_actor=GitHubLogin("maintainer")),
+        coordinator=coordinator_config,
     )
     repository_policies = GitHubRepositoryPolicies(
         root=[

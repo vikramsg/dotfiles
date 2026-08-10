@@ -72,7 +72,7 @@ class CoordinatorService:
     def managed_prompt(self, message: ConversationMessage) -> str:
         identity = message.conversation_identity
         return (
-            "Coordinator turn\n"
+            "Slack turn\n"
             f"workspace: {identity.workspace}\n"
             f"channel: {identity.channel}\n"
             f"thread: {identity.thread}\n"

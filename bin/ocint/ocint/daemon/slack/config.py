@@ -26,4 +26,11 @@ class SlackConfig(BaseModel):
 
     @property
     def required_scopes(self) -> frozenset[str]:
-        return frozenset(("groups:history", "chat:write", "reactions:write"))
+        return frozenset(("channels:history", "chat:write", "reactions:write"))
+
+
+class SlackIngressConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    max_request_bytes: int = Field(default=65_536, gt=0)
+    timestamp_tolerance_seconds: int = Field(default=300, gt=0)

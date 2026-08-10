@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 
 
@@ -44,6 +46,71 @@ class SlackHistory(BaseModel):
 class SlackPostedMessage(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
     ts: str = Field(min_length=1)
+
+
+class SlackFile(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    id: str = Field(min_length=1)
+
+
+class SlackBotProfile(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    id: str = ""
+
+
+class SlackEventPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    type: str = Field(min_length=1)
+    channel: str = ""
+    channel_type: str = ""
+    user: str = ""
+    bot_id: str = ""
+    app_id: str = ""
+    text: str = ""
+    ts: str = ""
+    event_ts: str = ""
+    thread_ts: str = ""
+    subtype: str = ""
+    client_msg_id: str = ""
+    files: tuple[SlackFile, ...] = ()
+    bot_profile: SlackBotProfile | None = None
+
+
+class SlackPublicChannelMessage(SlackEventPayload):
+    channel_type: Literal["channel"]
+
+
+class SlackPrivateChannelMessage(SlackEventPayload):
+    # FIXME: message.groups/groups:history deployment is not implemented.
+    channel_type: Literal["group"]
+
+
+type SlackChannelMessage = SlackPublicChannelMessage | SlackPrivateChannelMessage
+type SlackEvent = SlackChannelMessage | SlackEventPayload
+
+
+class SlackEventCallback(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    type: Literal["event_callback"] = "event_callback"
+    team_id: str = Field(min_length=1)
+    event_id: str = Field(min_length=1)
+    event_time: int = Field(ge=0)
+    event: SlackEvent
+
+
+class SlackUrlVerification(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    type: Literal["url_verification"] = "url_verification"
+    team_id: str = Field(min_length=1)
+    challenge: str = Field(min_length=1)
+
+
+type SlackEventsEnvelope = SlackEventCallback | SlackUrlVerification
 
 
 class StoredSlackThread(BaseModel):

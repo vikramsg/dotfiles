@@ -1,6 +1,10 @@
 """Transport-neutral durable coordinator facade."""
 
 from ocint.daemon.coordinator.config import (
+    CoordinatorConfig,
+    CoordinatorIngressConfig,
+    CoordinatorSlackChannelConfig,
+    CoordinatorSlackConfig,
     CoordinatorWorkspaceConfig,
     RepositoryCatalogueEntry,
 )
@@ -23,17 +27,25 @@ from ocint.daemon.coordinator.models import (
     OpenCodeSessionRequest,
     OpenCodeUserMessageId,
     PromptPresence,
+    parse_slack_timestamp,
 )
 from ocint.daemon.coordinator.repository import CoordinatorRepository
 from ocint.daemon.coordinator.run import (
+    CoordinatorApplication,
+    CoordinatorApplicationRequest,
     CoordinatorDelivery,
     CoordinatorRuntime,
+    CoordinatorStartupShutdown,
     OpenCodeCoordinator,
     OpenCodeCoordinatorAdapter,
+    ProcessSignalRegistrar,
     RetryableCoordinatorDeliveryError,
     RetryableCoordinatorError,
+    RuntimeFileLock,
     TerminalCoordinatorDeliveryError,
     TerminalCoordinatorError,
+    open_coordinator_application,
+    run_coordinator_application,
 )
 from ocint.daemon.coordinator.service import (
     AuthorizationPolicy,
@@ -51,10 +63,17 @@ __all__ = [
     "ConfiguredAuthorizationPolicy",
     "ConversationIdentity",
     "ConversationMessage",
+    "CoordinatorApplication",
+    "CoordinatorApplicationRequest",
+    "CoordinatorConfig",
     "CoordinatorDelivery",
+    "CoordinatorIngressConfig",
     "CoordinatorRepository",
     "CoordinatorRuntime",
     "CoordinatorService",
+    "CoordinatorSlackChannelConfig",
+    "CoordinatorSlackConfig",
+    "CoordinatorStartupShutdown",
     "CoordinatorWorkspace",
     "CoordinatorWorkspaceConfig",
     "DeliveryLookup",
@@ -72,10 +91,15 @@ __all__ = [
     "OpenCodeSessionId",
     "OpenCodeSessionRequest",
     "OpenCodeUserMessageId",
+    "ProcessSignalRegistrar",
     "PromptPresence",
     "RepositoryCatalogueEntry",
     "RetryableCoordinatorDeliveryError",
     "RetryableCoordinatorError",
+    "RuntimeFileLock",
     "TerminalCoordinatorDeliveryError",
     "TerminalCoordinatorError",
+    "open_coordinator_application",
+    "parse_slack_timestamp",
+    "run_coordinator_application",
 ]

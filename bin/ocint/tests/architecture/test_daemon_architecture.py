@@ -189,10 +189,38 @@ def test_root_daemon_cli_uses_only_the_lch_facade() -> None:
     assert lch_imports == {"ocint.daemon.lch"}
 
 
+def test_timer_composition_does_not_compose_slack_polling() -> None:
+    # GIVEN
+    cli = (Path(__file__).parents[2] / "ocint" / "daemon" / "cli.py").read_text()
+
+    # WHEN
+    timer_composition = cli.split("async def _run_daemon", maxsplit=1)[1].split(
+        "async def _run_coordinator", maxsplit=1
+    )[0]
+
+    # THEN
+    assert "open_slack_service" not in cli
+    assert "slack_bot_token" not in timer_composition
+
+
 def test_daemon_log_events_do_not_include_secret_or_prompt_fields() -> None:
     # GIVEN
     daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-    prohibited = {"body", "environment", "identity_file", "password", "prompt", "token"}
+    prohibited = {
+        "body",
+        "credential",
+        "environment",
+        "headers",
+        "identity_file",
+        "ngrok_url",
+        "password",
+        "prompt",
+        "raw_body",
+        "response",
+        "signature",
+        "text",
+        "token",
+    }
 
     # WHEN
     fields: set[str] = set()
@@ -209,6 +237,20 @@ def test_daemon_log_events_do_not_include_secret_or_prompt_fields() -> None:
 
     # THEN
     assert fields.isdisjoint(prohibited)
+
+
+def test_coordinator_cli_delegates_application_lifecycle_to_the_feature_facade() -> None:
+    # GIVEN
+    cli = (Path(__file__).parents[2] / "ocint" / "daemon" / "cli.py").read_text()
+    coordinator_body = cli.split("async def _run_coordinator", maxsplit=1)[1]
+
+    # WHEN / THEN
+    assert "run_coordinator_application" in coordinator_body
+    assert "RuntimeFileLock" not in coordinator_body
+    assert "opencode.start" not in coordinator_body
+    assert "opencode.close" not in coordinator_body
+    assert "opencode.wait_exited" not in coordinator_body
+    assert "_supervise_coordinator" not in cli
 
 
 def test_daemon_context_is_the_only_configuration_load_boundary() -> None:

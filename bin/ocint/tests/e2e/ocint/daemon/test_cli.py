@@ -20,6 +20,32 @@ from ocint.presentation import default_cli_context
 from pydantic import SecretStr
 
 
+@pytest.fixture
+def coordinator_toml(tmp_path: Path) -> str:
+    return f'''[coordinator]
+workspace_root = "{tmp_path / "coordinator"}"
+turn_timeout_seconds = 1800
+shutdown_timeout_seconds = 30
+orphan_retention_seconds = 86400
+retry_seconds = 5
+response_chunk_characters = 3500
+slack_post_interval_seconds = 1
+[coordinator.ingress]
+host = "127.0.0.1"
+port = 8733
+[coordinator.slack]
+workspace_id = "T1"
+[[coordinator.slack.channels]]
+channel_id = "C1"
+authorized_users = ["U1"]
+[coordinator.opencode]
+server_url = "http://127.0.0.1:4098"
+config_file = "{tmp_path / "coordinator-opencode.json"}"
+xdg_config_home = "{tmp_path / "coordinator-opencode-xdg"}"
+xdg_data_home = "{tmp_path / "coordinator-opencode-data"}"
+'''
+
+
 @dataclass
 class ProductionState:
     pull_requests_created: int = 0
@@ -70,7 +96,7 @@ def test_job_inspection_commands_are_exposed_only_through_lch() -> None:
 
 @pytest.mark.asyncio
 async def test_production_composition_completes_job_through_api(
-    tmp_path: Path, unused_tcp_port_factory: Callable[[], int]
+    tmp_path: Path, unused_tcp_port_factory: Callable[[], int], coordinator_toml: str
 ) -> None:
     # GIVEN
     api_port = unused_tcp_port_factory()
@@ -190,6 +216,7 @@ worktree_root = "{tmp_path / "worktrees"}"
 name = "repo"
 remote_url = "ssh://example{remote}"
 github_repository = "owner/repo"
+description = "Repository for tests."
 author_name = "Daemon Agent"
 author_email = "daemon@example.test"
 actors = ["allowed"]
@@ -216,6 +243,7 @@ port = {api_port}
 [github]
 api_url = "http://127.0.0.1:{github_port}"
 agent_actor = "automation-bot"
+{coordinator_toml}
 '''
     )
     settings = DaemonSettings(
@@ -304,7 +332,9 @@ agent_actor = "automation-bot"
 
 
 @pytest.mark.asyncio
-async def test_daemon_run_applies_toml_log_rotation(tmp_path: Path, unused_tcp_port_factory: Callable[[], int]) -> None:
+async def test_daemon_run_applies_toml_log_rotation(
+    tmp_path: Path, unused_tcp_port_factory: Callable[[], int], coordinator_toml: str
+) -> None:
     # GIVEN
     api_port = unused_tcp_port_factory()
     opencode_port = unused_tcp_port_factory()
@@ -350,6 +380,7 @@ idle_timeout_seconds = 3
 name = "repo"
 remote_url = "git@example.test:owner/repo.git"
 github_repository = "owner/repo"
+description = "Repository for tests."
 author_name = "Daemon Agent"
 author_email = "daemon@example.test"
 [logging]
@@ -370,6 +401,7 @@ port = {api_port}
 [github]
 api_url = "http://127.0.0.1:{github_port}"
 agent_actor = "automation-bot"
+{coordinator_toml}
 '''
     )
     runner = CliRunner()
@@ -429,7 +461,7 @@ def test_lch_setup_and_apply_are_discoverable() -> None:
 
 
 def test_setup_reuses_existing_configuration_and_reports_applied_artifacts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, coordinator_toml: str
 ) -> None:
     # GIVEN
     home = tmp_path / "home"
@@ -450,6 +482,7 @@ worktree_root = "{data_home / "ocint" / "worktrees"}"
 name = "repo"
 remote_url = "git@example.test:owner/repo.git"
 github_repository = "owner/repo"
+description = "Repository for tests."
 author_name = "Agent"
 author_email = "agent@example.test"
 [lifecycle]
@@ -466,6 +499,7 @@ identity_file = "{tmp_path / "identity"}"
 known_hosts_file = "{tmp_path / "known_hosts"}"
 [github]
 agent_actor = "maintainer"
+{coordinator_toml}
 '''
     )
     original = config.read_bytes()

@@ -1,4 +1,6 @@
 import asyncio
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Protocol
 
 import uvicorn
@@ -21,6 +23,12 @@ class IdleExecutor(Protocol):
 
 class IdleTasks(Protocol):
     async def reconcile(self) -> bool: ...
+
+
+class SignalFreeUvicornServer(uvicorn.Server):
+    @contextmanager
+    def capture_signals(self) -> Iterator[None]:
+        yield
 
 
 async def wait_for_idle(
@@ -48,8 +56,17 @@ async def wait_for_idle(
 
 
 async def serve_bounded(app: FastAPI, host: str, port: int, shutdown_event: asyncio.Event) -> None:
-    logger.info("API server starting", host=host, port=port)
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_config=None, access_log=False))
+    await _serve_bounded(server, host, port, shutdown_event)
+
+
+async def serve_signal_free_ingress(app: FastAPI, host: str, port: int, shutdown_event: asyncio.Event) -> None:
+    server = SignalFreeUvicornServer(uvicorn.Config(app, host=host, port=port, log_config=None, access_log=False))
+    await _serve_bounded(server, host, port, shutdown_event)
+
+
+async def _serve_bounded(server: uvicorn.Server, host: str, port: int, shutdown_event: asyncio.Event) -> None:
+    logger.info("API server starting", host=host, port=port)
     serving = asyncio.create_task(server.serve())
     waiting = asyncio.create_task(shutdown_event.wait())
     done, _pending = await asyncio.wait((serving, waiting), return_when=asyncio.FIRST_COMPLETED)
