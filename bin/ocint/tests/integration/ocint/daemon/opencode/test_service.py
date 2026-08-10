@@ -367,10 +367,10 @@ async def test_correlated_prompt_uses_caller_id_and_returns_ordered_text_parts(
     await client.close()
 
 
-def test_real_1_18_15_contract_fixture_preserves_request_response_correlation_shape() -> None:
+def test_real_1_18_16_contract_fixture_preserves_request_response_correlation_shape() -> None:
     # GIVEN
     fixture = OpenCodeContract.model_validate_json(
-        (Path(__file__).parents[4] / "fixtures/contracts/opencode-1.18.15-correlated-prompt.json").read_text()
+        (Path(__file__).parents[4] / "fixtures/contracts/opencode-1.18.16-correlated-prompt.json").read_text()
     )
     user_message, assistant_message = fixture.response.messages
 
@@ -378,7 +378,7 @@ def test_real_1_18_15_contract_fixture_preserves_request_response_correlation_sh
     ordered_text = "".join(part.text for part in assistant_message.parts if part.type == "text")
 
     # THEN
-    assert fixture.version == "1.18.15"
+    assert fixture.version == "1.18.16"
     assert fixture.request.method == "POST"
     assert fixture.request.path.endswith("/prompt_async")
     assert fixture.response.status == 202
@@ -593,7 +593,7 @@ port = int(sys.argv[sys.argv.index("--port") + 1])
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b'{"healthy": true, "version": "1.18.15"}'
+        body = b'{"healthy": true, "version": "1.18.16"}'
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -655,7 +655,7 @@ class Handler(BaseHTTPRequestHandler):
         Handler.requests += 1
         if Handler.requests == 1:
             time.sleep(1.2)
-        body = b'{"healthy": true, "version": "1.18.15"}'
+        body = b'{"healthy": true, "version": "1.18.16"}'
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
