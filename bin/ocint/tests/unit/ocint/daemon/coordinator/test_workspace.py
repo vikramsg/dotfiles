@@ -3,7 +3,8 @@ import stat
 from pathlib import Path
 
 import pytest
-from ocint.daemon.coordinator import CoordinatorWorkspace, CoordinatorWorkspaceConfig, RepositoryCatalogueEntry
+from ocint.daemon.coordinator import CoordinatorWorkspaceConfig, RepositoryCatalogueEntry
+from ocint.daemon.coordinator.workspace import CoordinatorWorkspace
 
 
 def test_workspace_is_private_atomic_and_contains_only_the_safe_catalogue(tmp_path: Path) -> None:

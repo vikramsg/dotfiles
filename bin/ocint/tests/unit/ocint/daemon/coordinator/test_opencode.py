@@ -1,15 +1,15 @@
 from pathlib import Path
 
 import pytest
-from ocint.daemon.coordinator import (
-    OpenCodeCoordinatorAdapter,
+from ocint.daemon.coordinator import RetryableCoordinatorError
+from ocint.daemon.coordinator.models import (
     OpenCodePromptRequest,
     OpenCodeSessionId,
     OpenCodeSessionRequest,
     OpenCodeUserMessageId,
     PromptPresence,
-    RetryableCoordinatorError,
 )
+from ocint.daemon.coordinator.opencode import OpenCodeCoordinatorAdapter
 from ocint.daemon.models import PromptObservation
 from ocint.daemon.opencode import OpenCodePrompt, OpenCodeResponse, RetryableOpenCodeError
 

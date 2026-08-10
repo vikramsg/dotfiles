@@ -92,6 +92,17 @@ class CoordinatorRepository:
                 conversation_id = int(conversation_row["id"])
                 conversation_state = ConversationState(str(conversation_row["state"]))
 
+            if conversation_state is ConversationState.EXPIRED:
+                connection.execute(
+                    update(coordinator_event)
+                    .where(coordinator_event.c.event_id == prepared.message.provider_event_id)
+                    .values(disposition=EventDisposition.EXPIRED.value)
+                )
+                return IngestResult(
+                    disposition=EventDisposition.EXPIRED,
+                    conversation_id=conversation_id,
+                )
+
             if prepared.kind is MessageKind.ROOT:
                 connection.execute(
                     update(coordinator_conversation)
@@ -517,6 +528,7 @@ class CoordinatorRepository:
             coordinator_event.c.provider == identity.provider,
             coordinator_event.c.workspace_id == identity.workspace,
             coordinator_event.c.channel_id == identity.channel,
+            coordinator_event.c.thread_id == identity.thread,
             coordinator_event.c.message_id == message.message_id,
         )
 

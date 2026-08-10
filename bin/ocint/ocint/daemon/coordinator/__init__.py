@@ -1,12 +1,23 @@
-"""Transport-neutral durable coordinator facade."""
+"""Provider-neutral coordinator contracts and construction operations."""
 
-from ocint.daemon.coordinator.config import (
-    CoordinatorWorkspaceConfig,
-    RepositoryCatalogueEntry,
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+
+from ocint.daemon.coordinator.config import CoordinatorWorkspaceConfig, RepositoryCatalogueEntry
+from ocint.daemon.coordinator.contracts import (
+    CoordinatorDelivery,
+    CoordinatorOperations,
+    CoordinatorPersistence,
+    CoordinatorWorker,
+    OpenCodeCoordinator,
+    RetryableCoordinatorDeliveryError,
+    RetryableCoordinatorError,
+    TerminalCoordinatorDeliveryError,
+    TerminalCoordinatorError,
 )
 from ocint.daemon.coordinator.models import (
     ActorKind,
-    AuthorizationDecision,
     ConversationIdentity,
     ConversationMessage,
     DeliveryLookup,
@@ -15,47 +26,87 @@ from ocint.daemon.coordinator.models import (
     DeliveryRequest,
     IngestResult,
     MessageKind,
-    OpenCodeAssistantMessageId,
-    OpenCodeCompletion,
-    OpenCodePromptObservation,
-    OpenCodePromptRequest,
-    OpenCodeSessionId,
-    OpenCodeSessionRequest,
-    OpenCodeUserMessageId,
-    PromptPresence,
 )
-from ocint.daemon.coordinator.repository import CoordinatorRepository
-from ocint.daemon.coordinator.run import (
-    CoordinatorDelivery,
-    CoordinatorRuntime,
-    OpenCodeCoordinator,
-    OpenCodeCoordinatorAdapter,
-    RetryableCoordinatorDeliveryError,
-    RetryableCoordinatorError,
-    TerminalCoordinatorDeliveryError,
-    TerminalCoordinatorError,
-)
-from ocint.daemon.coordinator.service import (
-    AuthorizationPolicy,
-    ChannelAccess,
-    ConfiguredAuthorizationPolicy,
-    CoordinatorService,
-)
-from ocint.daemon.coordinator.workspace import CoordinatorWorkspace
+from ocint.daemon.coordinator.service import AuthorizationPolicy, ChannelAccess
+from ocint.daemon.opencode import OpenCodeGateway
+
+
+def create_configured_authorization_policy(channels: tuple[ChannelAccess, ...]) -> AuthorizationPolicy:
+    from ocint.daemon.coordinator.service import ConfiguredAuthorizationPolicy
+
+    return ConfiguredAuthorizationPolicy(channels)
+
+
+def create_coordinator_operations(
+    authorization: AuthorizationPolicy,
+    response_chunk_characters: int,
+    safe_failure_text: str,
+) -> CoordinatorOperations:
+    from ocint.daemon.coordinator.service import CoordinatorService
+
+    return CoordinatorService(authorization, response_chunk_characters, safe_failure_text)
+
+
+@contextmanager
+def open_coordinator_persistence(database_path: Path) -> Iterator[CoordinatorPersistence]:
+    from ocint.daemon.coordinator.repository import CoordinatorRepository
+    from ocint.daemon.db import create_daemon_engine
+
+    engine = create_daemon_engine(database_path)
+    try:
+        yield CoordinatorRepository(engine)
+    finally:
+        engine.dispose()
+
+
+def create_opencode_coordinator(gateway: OpenCodeGateway, workspace: Path) -> OpenCodeCoordinator:
+    from ocint.daemon.coordinator.opencode import OpenCodeCoordinatorAdapter
+
+    return OpenCodeCoordinatorAdapter(gateway, workspace)
+
+
+def create_coordinator_worker(
+    repository: CoordinatorPersistence,
+    service: CoordinatorOperations,
+    opencode: OpenCodeCoordinator,
+    delivery: CoordinatorDelivery,
+    workspace: Path,
+    retry_seconds: float,
+    max_turn_retries: int,
+    orphan_retention_seconds: float,
+    delivery_interval_seconds: float,
+) -> CoordinatorWorker:
+    from ocint.daemon.coordinator.run import CoordinatorRuntime
+
+    return CoordinatorRuntime(
+        repository,
+        service,
+        opencode,
+        delivery,
+        workspace,
+        retry_seconds,
+        max_turn_retries,
+        orphan_retention_seconds,
+        delivery_interval_seconds,
+    )
+
+
+def generate_coordinator_workspace(config: CoordinatorWorkspaceConfig) -> None:
+    from ocint.daemon.coordinator.workspace import CoordinatorWorkspace
+
+    CoordinatorWorkspace(config).generate()
+
 
 __all__ = [
     "ActorKind",
-    "AuthorizationDecision",
     "AuthorizationPolicy",
     "ChannelAccess",
-    "ConfiguredAuthorizationPolicy",
     "ConversationIdentity",
     "ConversationMessage",
     "CoordinatorDelivery",
-    "CoordinatorRepository",
-    "CoordinatorRuntime",
-    "CoordinatorService",
-    "CoordinatorWorkspace",
+    "CoordinatorOperations",
+    "CoordinatorPersistence",
+    "CoordinatorWorker",
     "CoordinatorWorkspaceConfig",
     "DeliveryLookup",
     "DeliveryMissing",
@@ -63,19 +114,16 @@ __all__ = [
     "DeliveryRequest",
     "IngestResult",
     "MessageKind",
-    "OpenCodeAssistantMessageId",
-    "OpenCodeCompletion",
     "OpenCodeCoordinator",
-    "OpenCodeCoordinatorAdapter",
-    "OpenCodePromptObservation",
-    "OpenCodePromptRequest",
-    "OpenCodeSessionId",
-    "OpenCodeSessionRequest",
-    "OpenCodeUserMessageId",
-    "PromptPresence",
     "RepositoryCatalogueEntry",
     "RetryableCoordinatorDeliveryError",
     "RetryableCoordinatorError",
     "TerminalCoordinatorDeliveryError",
     "TerminalCoordinatorError",
+    "create_configured_authorization_policy",
+    "create_coordinator_operations",
+    "create_coordinator_worker",
+    "create_opencode_coordinator",
+    "generate_coordinator_workspace",
+    "open_coordinator_persistence",
 ]
