@@ -202,8 +202,9 @@ returns the answer to the same Slack
 thread. That reply is ignored normally as bot-authored input. Callback
 diagnostics contain status codes, never request bodies or credentials.
 
-OpenCode `1.18.16` remains pending live-contract verification by this final
-top-stack E2E. Local verification does not claim that the live run has passed.
+The final top-stack E2E live-contract verified OpenCode `1.18.16` on
+2026-08-10. Future version changes require another explicit live run before
+rollout.
 
 Probe-scoped durable rows must contain the real event, conversation, OpenCode
 session ID, assistant message ID, response, and delivery receipts. The Slack

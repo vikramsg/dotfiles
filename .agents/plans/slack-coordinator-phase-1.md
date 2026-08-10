@@ -447,10 +447,9 @@ contract test.
 
 ### External API Contract Prerequisite
 
-The host-observed OpenCode version is `1.18.16`. The final top-stack E2E will
-live-contract verify the real OpenCode `1.18.16` server and the configured Slack
-workspace; until that operator run completes, do not record `1.18.16` as having
-passed live verification:
+The host-observed OpenCode version is `1.18.16`. The final top-stack E2E
+live-contract verified the real OpenCode `1.18.16` server and configured Slack
+workspace on 2026-08-10:
 
 1. Verify whether prompt submission accepts a caller-selected deterministic user
    `messageID`.

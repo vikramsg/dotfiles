@@ -306,9 +306,10 @@ parent. Do not invoke release preparation or publication for stack review.
 **Rationale:** Review fixes must preserve approved lower-stack contracts while
 avoiding unrelated release mutations.
 
-**Consequence:** Tests, static checks, smoke checks, package build, and explicit
-live-marker collection are the acceptance surface; external live E2E remains a
-separate final operator action.
+**Consequence:** Tests, static checks, smoke checks, package build, and the
+explicit external live E2E form the acceptance surface.
 
-The host-observed OpenCode `1.18.16` contract remains pending verification by
-that final top-stack live E2E; this implementation note does not claim it passed.
+The final top-stack live E2E verified OpenCode `1.18.16` through signed Slack
+event `Ev0BP8MKMU8Z`: the correlated session and assistant completed turn `4`,
+Slack delivery completed, the bot reply was ignored, and harness shutdown was
+clean.
