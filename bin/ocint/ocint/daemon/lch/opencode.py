@@ -159,7 +159,6 @@ class OpenCodeSelection(BaseModel):
 
 class PrivateFilePurpose(StrEnum):
     DAEMON_CONFIG = "daemon config"
-    SOURCE_OPENCODE_CONFIG = "source OpenCode config"
     OPENCODE_AUTH = "OpenCode auth"
     MANAGED_CONFIG = "managed configuration"
 
@@ -175,6 +174,15 @@ class ValidatedPrivateFile(BaseModel):
     model_config = ConfigDict(frozen=True)
     path: Path
     purpose: PrivateFilePurpose
+
+
+class ValidatedOpenCodeSourceFile(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    source_path: Path
+    target_path: Path
+    is_symlink: bool
+    target_mode: int
+    content: str
 
 
 def canonical_file_path(path: Path) -> Path:
@@ -207,6 +215,61 @@ def private_file_is_valid(requirement: PrivateFileRequirement) -> bool:
     except click.ClickException:
         return False
     return True
+
+
+def validate_opencode_source_file(path: Path) -> ValidatedOpenCodeSourceFile:
+    source_path = canonical_file_path(path)
+    try:
+        source_metadata = source_path.lstat()
+    except OSError as error:
+        raise click.ClickException(
+            f"source OpenCode config must exist as a user-owned regular file or symlink: {source_path}"
+        ) from error
+    is_symlink = stat.S_ISLNK(source_metadata.st_mode)
+    if source_metadata.st_uid != os.getuid() or (not is_symlink and not stat.S_ISREG(source_metadata.st_mode)):
+        raise click.ClickException(
+            f"source OpenCode config must be a user-owned regular file or user-owned symlink: {source_path}"
+        )
+    try:
+        target_path = source_path.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise click.ClickException(
+            f"source OpenCode config target must resolve to a regular file: source={source_path}; target=unavailable"
+        ) from error
+    descriptor = -1
+    try:
+        descriptor = os.open(target_path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK)
+        target_metadata = os.fstat(descriptor)
+        target_mode = stat.S_IMODE(target_metadata.st_mode)
+        if not stat.S_ISREG(target_metadata.st_mode) or target_metadata.st_uid != os.getuid():
+            raise click.ClickException(
+                "source OpenCode config target must be a user-owned regular file: "
+                f"source={source_path}; target={target_path}"
+            )
+        if target_mode & 0o022:
+            raise click.ClickException(
+                "source OpenCode config target must not be writable by group or others: "
+                f"source={source_path}; target={target_path}; mode={target_mode:04o}"
+            )
+        with os.fdopen(descriptor, encoding="utf-8") as stream:
+            descriptor = -1
+            content = stream.read()
+    except click.ClickException:
+        raise
+    except (OSError, UnicodeError) as error:
+        raise click.ClickException(
+            f"source OpenCode config target must be readable as a regular file: source={source_path}; target={target_path}"
+        ) from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    return ValidatedOpenCodeSourceFile(
+        source_path=source_path,
+        target_path=target_path,
+        is_symlink=is_symlink,
+        target_mode=target_mode,
+        content=content,
+    )
 
 
 def policy_bytes() -> bytes:
@@ -383,10 +446,8 @@ def ensure_auth_symlink(source: Path, isolated_data_home: Path) -> Path:
 
 def configured_opencode_selection(context: DaemonContext) -> OpenCodeSelection:
     source_path = context.config_home / "opencode" / "opencode.json"
-    validated = validate_private_file(
-        PrivateFileRequirement(path=source_path, purpose=PrivateFilePurpose.SOURCE_OPENCODE_CONFIG)
-    )
-    source = OpenCodeSourceConfig.model_validate_json(validated.path.read_text())
+    validated = validate_opencode_source_file(source_path)
+    source = OpenCodeSourceConfig.model_validate_json(validated.content)
     provider_name, separator, model_name = source.model.partition("/")
     provider = source.provider.get(provider_name)
     if not separator or provider is None or model_name not in provider.models:

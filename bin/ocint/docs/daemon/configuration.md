@@ -70,6 +70,14 @@ requires ngrok v3 and the static URL, and installs the systemd units. Add the
 Slack bot token and signing secret before expecting doctor to pass. A later
 setup reuses the existing TOML without running discovery again.
 
+The XDG OpenCode source config is deliberately different from private managed
+configuration. It may be a direct user-owned regular file or a user-owned
+dotfiles symlink. LCH fully resolves a symlink, validates a user-owned regular
+target, rejects group/other write bits, and reads that validated target before
+provisioning. Readable modes such as 0600, 0640, and 0644 are accepted. Generated
+job/coordinator configs, daemon TOML/environment files, and OpenCode auth retain
+their strict mode-0600 contracts.
+
 ## Slack Coordinator
 
 Slack is an Events API input to the Phase 1 coordinator, not a polling source

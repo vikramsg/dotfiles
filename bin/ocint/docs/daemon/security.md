@@ -32,6 +32,16 @@ The API, GitHub, Slack, signing-secret, and static-URL values are persisted in
 regular, user-owned mode-0600 file. It is sensitive, but it is not public and is
 never committed to the repository.
 
+The interactive `$XDG_CONFIG_HOME/opencode/opencode.json` is a non-secret source
+for model and provider selection. It may be a user-owned regular file or a
+user-owned symlink whose fully resolved target is a user-owned regular file.
+The target must not be writable by group or others; modes 0600, 0640, and 0644
+are valid. LCH reads the validated target as one stable snapshot, then projects
+only the selected provider and model into separate restricted, user-owned
+mode-0600 job and coordinator configs. Provider authentication remains in the
+separate mode-0600 `auth.json`; neither the source-config exception nor its
+symlink support weakens credential or generated-config checks.
+
 The **ocint E2E actor** User OAuth Token is the sole assignment in
 `$XDG_CONFIG_HOME/ocint/live-e2e.env`, also a regular mode-0600 file. Only the
 explicit live pytest sources it. Daemon and ngrok systemd units do not load that

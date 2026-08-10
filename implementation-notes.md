@@ -230,20 +230,25 @@ completion takes precedence over a concurrent shutdown request. Graceful restart
 still completes bounded shutdown before OpenCode close and leaves timeout cgroup
 cleanup to systemd.
 
-### Reject unsafe database and configuration files before mutation
+### Distinguish source OpenCode configuration from private managed files
 
-**Decision:** Database lifecycle rejects a database-file symlink before opening
-it. LCH setup/apply likewise validate daemon TOML and source OpenCode JSON as
-user-owned regular non-symlink mode-0600 files before parsing, provisioning, or
-unit writes. Parent-directory symlink aliases are canonicalized; the final file
-component is never resolved through a symlink.
+**Decision:** Database lifecycle and daemon/managed/credential files retain
+their strict non-symlink mode-0600 contracts. The non-secret source OpenCode JSON
+instead accepts either a user-owned regular file or a user-owned symlink after
+fully resolving and validating a user-owned regular target with no group/other
+write bits. Validation reads one stable target snapshot before provisioning.
 
-**Rationale:** A convenient parent alias can safely converge on one canonical
-lock and path, while following a configured file symlink could parse, migrate,
-chmod, or replace an unrelated target.
+**Rationale:** This repository intentionally projects its user-owned dotfiles
+config through `$XDG_CONFIG_HOME/opencode/opencode.json`. That file selects a
+model/provider; it is not an authentication store and should not be treated as
+one, while an untrusted or writable symlink target still must not drive managed
+configuration.
 
-**Consequence:** Unsafe inputs fail without changing managed files, units, or
-database bytes. Doctor uses the same typed private-file contract.
+**Consequence:** Safe 0600, 0640, and 0644 source targets work directly or
+through the dotfiles symlink. LCH still writes generated restricted OpenCode
+configs as mode-0600 files, keeps credentials separate, and fails unsafe inputs
+before managed files, units, services, or databases change. Doctor reports the
+source path, link, resolved target, and target mode.
 
 ### Preserve terminal events after orphan expiry
 

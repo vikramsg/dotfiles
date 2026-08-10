@@ -14,6 +14,7 @@ from ocint.daemon.lch.opencode import (
     ensure_private_directory,
     provision_configured_coordinator_runtime,
     upsert_private_environment,
+    validate_opencode_source_file,
     validate_private_file,
 )
 from ocint.daemon.lch.render import render_job, render_jobs, render_status
@@ -113,12 +114,7 @@ def apply_command(context: DaemonContext) -> None:
 
 def _validate_configuration_inputs(context: DaemonContext) -> None:
     validate_private_file(PrivateFileRequirement(path=context.config_path, purpose=PrivateFilePurpose.DAEMON_CONFIG))
-    validate_private_file(
-        PrivateFileRequirement(
-            path=context.config_home / "opencode" / "opencode.json",
-            purpose=PrivateFilePurpose.SOURCE_OPENCODE_CONFIG,
-        )
-    )
+    validate_opencode_source_file(context.config_home / "opencode" / "opencode.json")
 
 
 @lch.command("slack-token")

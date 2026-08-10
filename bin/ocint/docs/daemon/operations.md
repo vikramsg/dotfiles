@@ -27,6 +27,10 @@ policies/data homes, coordinator workspace state, four distinct loopback ports,
 migration head, user lingering, and exact systemd payloads. Workspace context
 and the migration revision may be pending until first coordinator/timer startup.
 Coordinator and ngrok may be disabled during pre-rollout doctor checks.
+Diagnostics report the configured OpenCode source path, whether it is a link,
+its fully resolved target, and the target mode. A safe dotfiles symlink is valid;
+generated restricted configs and credentials must still be regular mode-0600
+files.
 
 ## Command Outcomes
 
@@ -318,6 +322,15 @@ strict host checking, and no SSH-agent fallback.
 
 Confirm the service uses its isolated `xdg_data_home` and that managed
 `auth.json` is a symlink. It must not share the interactive OpenCode database.
+
+### Source OpenCode config is rejected
+
+Resolve `$XDG_CONFIG_HOME/opencode/opencode.json`, confirm the configured link
+and final regular target are user-owned, and remove group/other write bits from
+the target. For the normal dotfiles mode, run
+`chmod 0644 "$(readlink -f ~/.config/opencode/opencode.json)"`, then run doctor
+before `ocint daemon lch apply`. Do not replace the dotfiles symlink with a copy,
+and do not relax mode-0600 daemon, generated-config, environment, or auth files.
 
 ### Logs cannot be read
 

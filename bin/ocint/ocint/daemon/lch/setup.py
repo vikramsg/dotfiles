@@ -41,6 +41,7 @@ from ocint.daemon.lch.opencode import (
     provision_coordinator_runtime,
     restricted_opencode_config,
     upsert_private_environment,
+    validate_opencode_source_file,
     validate_private_file,
     write_private_file,
 )
@@ -218,13 +219,11 @@ def discover(
     paths = _paths(context)
     source_config = paths.config_home / "opencode" / "opencode.json"
     auth_source = paths.data_home / "opencode" / "auth.json"
-    validated_source = validate_private_file(
-        PrivateFileRequirement(path=source_config, purpose=PrivateFilePurpose.SOURCE_OPENCODE_CONFIG)
-    )
+    validated_source = validate_opencode_source_file(source_config)
     validated_auth = validate_private_file(
         PrivateFileRequirement(path=auth_source, purpose=PrivateFilePurpose.OPENCODE_AUTH)
     )
-    source = OpenCodeSourceConfig.model_validate_json(validated_source.path.read_text())
+    source = OpenCodeSourceConfig.model_validate_json(validated_source.content)
     provider_name, separator, model_name = source.model.partition("/")
     provider = source.provider.get(provider_name)
     if not separator or provider is None or model_name not in provider.models:
@@ -276,7 +275,7 @@ def discover(
         opencode=OpenCodeDiscovery(
             executable=opencode_executable,
             version=version,
-            source_config=validated_source.path,
+            source_config=validated_source.source_path,
             auth_source=validated_auth.path,
             model=source.model,
             provider_name=provider_name,
@@ -297,12 +296,7 @@ def discover(
 
 def setup(discovery: ProvisionDiscovery, lifecycle: SystemdLifecycle) -> CoordinatorUnitEnablement:
     paths = discovery.paths
-    validate_private_file(
-        PrivateFileRequirement(
-            path=discovery.opencode.source_config,
-            purpose=PrivateFilePurpose.SOURCE_OPENCODE_CONFIG,
-        )
-    )
+    validate_opencode_source_file(discovery.opencode.source_config)
     if os.path.lexists(paths.configuration):
         raise click.ClickException(
             f"daemon configuration already exists and will not be overwritten: {paths.configuration}"

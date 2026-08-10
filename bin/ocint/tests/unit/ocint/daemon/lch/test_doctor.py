@@ -408,12 +408,13 @@ def test_diagnose_rejects_unsafe_ngrok_url_without_exposing_it(doctor_fixture: D
     assert "recognizable-ngrok-secret" not in report.human_text()
 
 
-def test_diagnose_rejects_symlinked_source_config_but_accepts_readable_known_hosts_symlink(
+def test_diagnose_accepts_validated_source_config_and_readable_known_hosts_symlinks(
     doctor_fixture: DoctorFixture,
 ) -> None:
     # GIVEN
     source_target = doctor_fixture.source_config.with_name("source-target.json")
     source_target.write_text(doctor_fixture.source_config.read_text())
+    source_target.chmod(0o644)
     doctor_fixture.source_config.unlink()
     doctor_fixture.source_config.symlink_to(source_target)
     known_target = doctor_fixture.known_hosts.with_name("known-hosts-target")
@@ -425,12 +426,17 @@ def test_diagnose_rejects_symlinked_source_config_but_accepts_readable_known_hos
     report = diagnose(doctor_fixture.context, doctor_fixture.runner, doctor_fixture.lifecycle)
 
     # THEN
-    assert not report.healthy
+    assert report.healthy
     git = next(item for item in report.diagnostics if item.name == "git.remote_author_ssh")
     effective = next(item for item in report.diagnostics if item.name == "opencode.effective_config")
+    paths = next(item for item in report.diagnostics if item.name == "opencode.config_paths")
     assert git.ok
     assert "/ssh" in git.value
-    assert not effective.ok
+    assert effective.ok
+    assert paths.ok
+    assert f"source={doctor_fixture.source_config}" in paths.value
+    assert f"link={doctor_fixture.source_config}" in paths.value
+    assert f"target={source_target}" in paths.value
 
 
 def test_diagnose_accepts_runtime_owned_workspace_files_before_coordinator_rollout(

@@ -30,6 +30,7 @@ from ocint.daemon.lch.opencode import (
     policy_resource_path,
     private_file_is_valid,
     restricted_agent_config,
+    validate_opencode_source_file,
     validate_private_file,
 )
 from ocint.daemon.lch.setup import discovery_environment
@@ -286,13 +287,8 @@ def _opencode_diagnostics(
         if not _owned_regular(config.opencode.config_file, 0o600):
             raise ValueError("effective OpenCode config must be user-owned, regular, non-symlink, and mode 0600")
         effective = RestrictedOpenCodeConfig.model_validate_json(config.opencode.config_file.read_text())
-        source_path = validate_private_file(
-            PrivateFileRequirement(
-                path=context.config_home / "opencode" / "opencode.json",
-                purpose=PrivateFilePurpose.SOURCE_OPENCODE_CONFIG,
-            )
-        ).path
-        source = OpenCodeSourceConfig.model_validate_json(source_path.read_text())
+        source_file = validate_opencode_source_file(context.config_home / "opencode" / "opencode.json")
+        source = OpenCodeSourceConfig.model_validate_json(source_file.content)
         policy_matches = policy is not None and _effective_policy_matches(
             effective,
             policy,
@@ -343,15 +339,31 @@ def _opencode_diagnostics(
     )
     source = context.data_home / "opencode" / "auth.json"
     source_config = context.config_home / "opencode" / "opencode.json"
+    try:
+        source_file = validate_opencode_source_file(source_config)
+        source_config_ok = True
+        source_config_value = (
+            f"source={source_file.source_path}; "
+            f"link={source_file.source_path if source_file.is_symlink else 'none'}; "
+            f"target={source_file.target_path}; effective={config.opencode.config_file}; "
+            f"isolated_config={config.opencode.xdg_config_home}"
+        )
+        source_config_detail = f"target_mode={source_file.target_mode:04o}; target_owner_ok=True"
+    except click.ClickException as error:
+        source_config_ok = False
+        source_config_value = (
+            f"source={source_config}; link={source_config if source_config.is_symlink() else 'none'}; "
+            f"target=unavailable; effective={config.opencode.config_file}; "
+            f"isolated_config={config.opencode.xdg_config_home}"
+        )
+        source_config_detail = str(error)
     result.append(
         Diagnostic(
             name="opencode.config_paths",
             required=True,
-            ok=source_config.is_file() and _owned_regular(config.opencode.config_file, 0o600),
-            value=(
-                f"source={source_config}; effective={config.opencode.config_file}; "
-                f"isolated_config={config.opencode.xdg_config_home}"
-            ),
+            ok=source_config_ok and _owned_regular(config.opencode.config_file, 0o600),
+            value=source_config_value,
+            detail=source_config_detail,
         )
     )
     isolated_config_ok = _private_directory(config.opencode.xdg_config_home)
@@ -406,8 +418,8 @@ def _coordinator_diagnostics(
         if not _owned_regular(service.config_file, 0o600):
             raise ValueError("coordinator OpenCode config must be user-owned, regular, non-symlink, and mode 0600")
         effective = CoordinatorRestrictedOpenCodeConfig.model_validate_json(service.config_file.read_text())
-        source_path = context.config_home / "opencode" / "opencode.json"
-        source = OpenCodeSourceConfig.model_validate_json(source_path.read_text())
+        source_file = validate_opencode_source_file(context.config_home / "opencode" / "opencode.json")
+        source = OpenCodeSourceConfig.model_validate_json(source_file.content)
         policy_matches = (
             policy is not None
             and effective.model_dump(exclude={"model", "provider"}) == policy.model_dump()

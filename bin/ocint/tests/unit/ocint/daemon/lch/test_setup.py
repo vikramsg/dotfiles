@@ -287,7 +287,7 @@ def test_setup_rejects_symlinked_daemon_config_before_unit_or_filesystem_mutatio
     assert target.read_text() == "not = [parsed"
 
 
-def test_apply_rejects_symlinked_source_config_before_unit_or_filesystem_mutation(tmp_path: Path) -> None:
+def test_apply_accepts_safe_symlinked_source_config_before_unit_or_filesystem_mutation(tmp_path: Path) -> None:
     # GIVEN
     home = tmp_path / "home"
     config_home = home / "config"
@@ -297,7 +297,7 @@ def test_apply_rejects_symlinked_source_config_before_unit_or_filesystem_mutatio
     config.chmod(0o600)
     source_target = tmp_path / "source-target.json"
     source_target.write_text("{}")
-    source_target.chmod(0o600)
+    source_target.chmod(0o644)
     source = config_home / "opencode" / "opencode.json"
     source.parent.mkdir()
     source.symlink_to(source_target)
@@ -321,8 +321,8 @@ def test_apply_rejects_symlinked_source_config_before_unit_or_filesystem_mutatio
 
     # THEN
     assert result.exit_code == 1
-    assert "source OpenCode config" in result.output
-    assert "non-symlink" in result.output
+    assert "source OpenCode config" not in result.output
+    assert "Invalid value" in str(result.exception)
     assert unit.read_text() == "preserved-unit"
     assert frozenset(path.relative_to(home) for path in home.rglob("*")) == before
     assert config.read_text() == "not = [parsed"
