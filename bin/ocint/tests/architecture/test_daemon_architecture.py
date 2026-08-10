@@ -98,6 +98,20 @@ print(json.dumps([name for name in names if name in sys.modules]))
     assert json.loads(result.stdout) == []
 
 
+def test_slack_facade_exposes_only_the_events_coordinator_architecture() -> None:
+    # GIVEN / WHEN
+    import ocint.daemon.slack as slack_api
+
+    # THEN
+    assert "CoordinatorSlackConfig" in slack_api.__all__
+    assert "SlackEventsConfig" in slack_api.__all__
+    assert "create_slack_events_app" in slack_api.__all__
+    assert "open_slack_coordinator_delivery" in slack_api.__all__
+    assert "SlackConfig" not in slack_api.__all__
+    assert "SlackGateway" not in slack_api.__all__
+    assert "open_slack_service" not in slack_api.__all__
+
+
 def test_thread_core_contains_only_provider_neutral_identity_and_title() -> None:
     # GIVEN
     models = Path(__file__).parents[2] / "ocint" / "daemon" / "tasks" / "models.py"
