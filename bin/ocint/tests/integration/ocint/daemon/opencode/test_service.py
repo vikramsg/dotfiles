@@ -67,20 +67,24 @@ class WireStatuses(BaseModel):
     session: WireStatus
 
 
-class ContractAssistant(BaseModel):
-    model_config = ConfigDict(frozen=True, populate_by_name=True)
-    id: str
-    parent_id: str = Field(alias="parentID")
-    finish: str
-    ordered_text_parts: tuple[str, ...]
+class ContractRequest(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    method: str
+    path: str
+    body: WirePrompt
+
+
+class ContractResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    status: int
+    messages: tuple[WireMessage, ...]
 
 
 class OpenCodeContract(BaseModel):
     model_config = ConfigDict(frozen=True)
     version: str
-    accepted_caller_message_id: str
-    returned_user_info_id: str
-    assistant: ContractAssistant
+    request: ContractRequest
+    response: ContractResponse
 
 
 class OpenCodeHttpFake:
@@ -363,49 +367,28 @@ async def test_correlated_prompt_uses_caller_id_and_returns_ordered_text_parts(
     await client.close()
 
 
-@pytest.mark.asyncio
-async def test_real_1_18_15_contract_fixture_preserves_correlation_finish_and_text_order(
-    tmp_path: Path, opencode_server: OpenCodeHttpFake, opencode_config: OpenCodeRuntimeConfig
-) -> None:
+def test_real_1_18_15_contract_fixture_preserves_request_response_correlation_shape() -> None:
     # GIVEN
     fixture = OpenCodeContract.model_validate_json(
         (Path(__file__).parents[4] / "fixtures/contracts/opencode-1.18.15-correlated-prompt.json").read_text()
     )
-    prompt = OpenCodePrompt(message_id=fixture.accepted_caller_message_id, text="contract probe")
-    client = OpenCodeClient(opencode_config)
-    client.client = aiohttp.ClientSession(headers=client.headers, timeout=client.request_timeout)
+    user_message, assistant_message = fixture.response.messages
 
     # WHEN
-    await client.submit_prompt(tmp_path, "session", prompt)
-    opencode_server.messages.append(
-        WireMessage(
-            info=WireInfo(
-                id=fixture.assistant.id,
-                role="assistant",
-                parentID=fixture.assistant.parent_id,
-                finish=fixture.assistant.finish,
-            ),
-            parts=[WirePart(type="text", text=text) for text in fixture.assistant.ordered_text_parts],
-        )
-    )
-    response = await client.wait_for_response(tmp_path, "session", prompt)
+    ordered_text = "".join(part.text for part in assistant_message.parts if part.type == "text")
 
     # THEN
-    assert fixture.version == opencode_config.service.expected_version
-    assert fixture.returned_user_info_id == fixture.accepted_caller_message_id
-    assert opencode_server.submitted_prompt is not None
-    assert opencode_server.submitted_prompt.message_id == fixture.accepted_caller_message_id
-    assert opencode_server.messages[-2].info.id == fixture.returned_user_info_id
-    assert opencode_server.messages[-1].info.parent_id == fixture.returned_user_info_id
-    assert opencode_server.messages[-1].info.finish == fixture.assistant.finish
-    assert tuple(part.text for part in opencode_server.messages[-1].parts) == fixture.assistant.ordered_text_parts
-    assert fixture.assistant.parent_id == fixture.returned_user_info_id
-    assert fixture.assistant.finish == "stop"
-    assert response.assistant_message_id == fixture.assistant.id
-    assert response.parent_message_id == fixture.accepted_caller_message_id
-    assert response.text == "".join(fixture.assistant.ordered_text_parts)
-    assert response.text == "CONTRACT-PROBE-OK"
-    await client.close()
+    assert fixture.version == "1.18.15"
+    assert fixture.request.method == "POST"
+    assert fixture.request.path.endswith("/prompt_async")
+    assert fixture.response.status == 202
+    assert fixture.request.body.message_id == user_message.info.id
+    assert fixture.request.body.parts == user_message.parts
+    assert user_message.info.role == "user"
+    assert assistant_message.info.role == "assistant"
+    assert assistant_message.info.parent_id == user_message.info.id
+    assert assistant_message.info.finish == "stop"
+    assert ordered_text == "CONTRACT-PROBE-OK"
 
 
 @pytest.mark.asyncio

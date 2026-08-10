@@ -28,18 +28,62 @@ def test_upgrade_downgrade_upgrade_occurs(tmp_path: Path) -> None:
     migrate_daemon_db(database)
 
 
-def test_migration_secures_existing_database_without_recreating_it(tmp_path: Path) -> None:
+def test_migration_rejects_non_private_database_without_mutating_it(tmp_path: Path) -> None:
     # GIVEN
     database = tmp_path / "control.sqlite"
-    migrate_daemon_db(database)
-    inode = database.stat().st_ino
+    database.write_text("preserve")
     database.chmod(0o644)
+    metadata = database.stat()
+
+    # WHEN / THEN
+    with pytest.raises(PermissionError, match="user-owned regular mode-0600"):
+        migrate_daemon_db(database)
+    assert database.read_text() == "preserve"
+    assert database.stat().st_ino == metadata.st_ino
+    assert stat.S_IMODE(database.stat().st_mode) == 0o644
+
+
+def test_engine_creates_private_database_before_sqlite_connects(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
 
     # WHEN
-    migrate_daemon_db(database)
+    engine = create_daemon_engine(database)
 
     # THEN
-    assert database.stat().st_ino == inode
+    assert database.is_file()
+    assert database.stat().st_uid == os.getuid()
+    assert stat.S_IMODE(database.stat().st_mode) == 0o600
+    engine.dispose()
+
+
+def test_engine_rejects_non_regular_database_without_mutating_it(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    os.mkfifo(database, mode=0o600)
+    metadata = database.stat()
+
+    # WHEN / THEN
+    with pytest.raises(PermissionError, match="user-owned regular mode-0600"):
+        create_daemon_engine(database)
+    assert stat.S_ISFIFO(database.stat().st_mode)
+    assert database.stat().st_ino == metadata.st_ino
+    assert stat.S_IMODE(database.stat().st_mode) == 0o600
+
+
+def test_engine_rejects_foreign_owner_without_mutating_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # GIVEN
+    database = tmp_path / "control.sqlite"
+    database.write_text("preserve")
+    database.chmod(0o600)
+    metadata = database.stat()
+    monkeypatch.setattr("ocint.daemon.db.connection.os.getuid", lambda: metadata.st_uid + 1)
+
+    # WHEN / THEN
+    with pytest.raises(PermissionError, match="user-owned regular mode-0600"):
+        create_daemon_engine(database)
+    assert database.read_text() == "preserve"
+    assert database.stat().st_ino == metadata.st_ino
     assert stat.S_IMODE(database.stat().st_mode) == 0o600
 
 
@@ -106,6 +150,25 @@ def test_engine_rejects_database_file_symlink_without_touching_target(tmp_path: 
         create_daemon_engine(configured)
     assert target.read_text() == "preserved database bytes"
     assert stat.S_IMODE(target.stat().st_mode) == 0o640
+
+
+def test_engine_revalidates_before_wal_when_database_is_replaced_by_a_symlink(tmp_path: Path) -> None:
+    # GIVEN
+    database = tmp_path / "configured.sqlite"
+    engine = create_daemon_engine(database)
+    original = tmp_path / "original.sqlite"
+    database.rename(original)
+    target = tmp_path / "preserved.sqlite"
+    target.write_text("preserved database bytes")
+    target.chmod(0o640)
+    database.symlink_to(target)
+
+    # WHEN / THEN
+    with pytest.raises(PermissionError, match="must not be a symbolic link"):
+        engine.connect()
+    assert target.read_text() == "preserved database bytes"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+    engine.dispose()
 
 
 def test_migration_rejects_database_file_symlink_without_touching_target(tmp_path: Path) -> None:

@@ -13,17 +13,16 @@ import pytest
 from ocint.daemon.coordinator import (
     ActorKind,
     ChannelAccess,
-    ConfiguredAuthorizationPolicy,
     ConversationMessage,
-    CoordinatorRepository,
-    CoordinatorService,
     MessageKind,
 )
 from ocint.daemon.coordinator.models import EventDisposition, IngestResult, PreparedMessage
+from ocint.daemon.coordinator.repository import CoordinatorRepository
+from ocint.daemon.coordinator.service import ConfiguredAuthorizationPolicy, CoordinatorService
 from ocint.daemon.db import create_daemon_engine
 from ocint.daemon.db.schema import coordinator_event, metadata
 from ocint.daemon.logging import DaemonLogSettings, close, configure
-from ocint.daemon.slack.config import SlackIngressConfig
+from ocint.daemon.slack.config import SlackEventsConfig
 from ocint.daemon.slack.events import create_slack_events_app
 from ocint.daemon.slack.models import SlackEventCallback, SlackPrivateChannelMessage, SlackPublicChannelMessage
 from ocint.daemon.slack.service import ProductionSlackActorClassifier, translate_slack_event
@@ -104,7 +103,7 @@ def test_proven_public_callback_fixtures_parse_and_translate_without_sensitive_m
     ("channel_type", "variant"),
     [("channel", SlackPublicChannelMessage), ("group", SlackPrivateChannelMessage)],
 )
-def test_public_and_private_channel_messages_use_the_typed_union_and_translate(
+def test_public_and_private_channel_messages_use_the_typed_union_with_only_public_execution(
     channel_type: str,
     variant: type[SlackPublicChannelMessage] | type[SlackPrivateChannelMessage],
 ) -> None:
@@ -129,7 +128,8 @@ def test_public_and_private_channel_messages_use_the_typed_union_and_translate(
 
     # THEN
     assert isinstance(callback.event, variant)
-    assert translated.kind is MessageKind.ROOT
+    expected_kind = MessageKind.ROOT if channel_type == "channel" else MessageKind.UNSUPPORTED
+    assert translated.kind is expected_kind
     assert translated.actor_kind is ActorKind.HUMAN
     assert "discriminator" not in json.dumps(SlackEventCallback.model_json_schema())
 
@@ -144,7 +144,7 @@ async def test_ingress_structured_log_contains_only_safe_correlation_fields(tmp_
     log_path = tmp_path / "daemon.log"
     configure(DaemonLogSettings(path=log_path, max_bytes=1_024, backups=1))
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         coordinator.prepare,
@@ -205,7 +205,7 @@ async def test_signed_event_is_ingested_before_wakeup_with_case_insensitive_head
         coordinator.calls.append("wake")
 
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=65_536, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=65_536, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         coordinator.prepare,
@@ -246,7 +246,7 @@ async def test_missing_stale_or_invalid_authentication_is_rejected_without_inges
     elif authentication == "invalid":
         headers["X-Slack-Signature"] = "v0=invalid"
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         coordinator.prepare,
@@ -270,7 +270,7 @@ async def test_streamed_body_over_limit_without_content_length_is_rejected() -> 
     coordinator = FakeCoordinator()
     timestamp = str(int(time.time()))
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=8, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=8, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         coordinator.prepare,
@@ -310,7 +310,7 @@ async def test_signed_url_verification_answers_challenge_and_rejects_other_works
         "v0=" + hmac.new(b"signing", b"v0:" + timestamp.encode() + b":" + wrong_body, hashlib.sha256).hexdigest()
     )
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         coordinator.prepare,
@@ -346,7 +346,7 @@ async def test_database_failure_is_not_acknowledged() -> None:
     timestamp = str(int(time.time()))
     signature = "v0=" + hmac.new(b"signing", b"v0:" + timestamp.encode() + b":" + body, hashlib.sha256).hexdigest()
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         coordinator.prepare,
@@ -376,9 +376,19 @@ async def test_database_contention_keeps_the_event_loop_responsive_and_returns_5
     engine = create_daemon_engine(tmp_path / "coordinator.sqlite", busy_timeout_ms=100)
     metadata.create_all(engine)
     repository = CoordinatorRepository(engine)
+    ingest_started = threading.Event()
+    ingest_finished = threading.Event()
+
+    def ingest(prepared: PreparedMessage) -> IngestResult:
+        ingest_started.set()
+        try:
+            return repository.ingest(prepared)
+        finally:
+            ingest_finished.set()
+
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="T1", channel="C1", authorized_actors=frozenset(("U1",))),)
+            (ChannelAccess(provider="slack", workspace="T1", channel="C1", authorized_actors=frozenset(("U1",))),)
         ),
         3_500,
         "safe failure",
@@ -387,11 +397,11 @@ async def test_database_contention_keeps_the_event_loop_responsive_and_returns_5
     timestamp = str(int(time.time()))
     signature = "v0=" + hmac.new(b"signing", b"v0:" + timestamp.encode() + b":" + body, hashlib.sha256).hexdigest()
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         service.prepare,
-        repository.ingest,
+        ingest,
         ProductionSlackActorClassifier(),
         lambda: None,
         processing_timeout_seconds=0.5,
@@ -399,33 +409,30 @@ async def test_database_contention_keeps_the_event_loop_responsive_and_returns_5
     lock = engine.connect()
     lock.exec_driver_sql("BEGIN IMMEDIATE")
 
-    async def event_loop_probe() -> None:
-        await asyncio.sleep(0.02)
-
     # WHEN
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://slack.test") as client:
-            probe = asyncio.create_task(event_loop_probe())
-            started = time.monotonic()
-            response = await client.post(
-                "/slack/events",
-                content=body,
-                headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
+            request = asyncio.create_task(
+                client.post(
+                    "/slack/events",
+                    content=body,
+                    headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
+                )
             )
-            elapsed = time.monotonic() - started
-            responsive = probe.done()
-            await probe
+            assert await asyncio.to_thread(ingest_started.wait, 1)
+            probe = asyncio.Event()
+            asyncio.get_running_loop().call_soon(probe.set)
+            await asyncio.wait_for(probe.wait(), 1)
+            response = await asyncio.wait_for(request, 1)
+            assert ingest_finished.is_set()
     finally:
         lock.rollback()
         lock.close()
-    await asyncio.sleep(0.15)
     with engine.connect() as connection:
         event_count = connection.execute(select(func.count()).select_from(coordinator_event)).scalar_one()
 
     # THEN
     assert response.status_code == 503
-    assert responsive
-    assert elapsed < 0.5
     assert event_count == 0
     engine.dispose()
 
@@ -434,24 +441,27 @@ async def test_database_contention_keeps_the_event_loop_responsive_and_returns_5
 async def test_processing_timeout_returns_promptly_and_observes_late_commit_without_wakeup() -> None:
     # GIVEN
     coordinator = FakeCoordinator()
-    commits: list[str] = []
+    ingest_started = threading.Event()
+    release_ingest = threading.Event()
+    ingest_finished = threading.Event()
     wakes: list[str] = []
     body = b'{"type":"event_callback","team_id":"T1","event_id":"Ev1","event_time":1754000000,"event":{"type":"message","channel":"C1","channel_type":"channel","user":"U1","text":"work","ts":"1754000000.123456"}}'
     timestamp = str(int(time.time()))
     signature = "v0=" + hmac.new(b"signing", b"v0:" + timestamp.encode() + b":" + body, hashlib.sha256).hexdigest()
 
-    def delayed_ingest(prepared: PreparedEvent) -> IngestResult:
+    def blocked_ingest(prepared: PreparedEvent) -> IngestResult:
         assert prepared in coordinator.prepared
-        time.sleep(0.1)
-        commits.append("committed")
+        ingest_started.set()
+        release_ingest.wait()
+        ingest_finished.set()
         return IngestResult(disposition=EventDisposition.ACCEPTED)
 
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         coordinator.prepare,
-        delayed_ingest,
+        blocked_ingest,
         ProductionSlackActorClassifier(),
         lambda: wakes.append("wake"),
         processing_timeout_seconds=0.05,
@@ -459,18 +469,21 @@ async def test_processing_timeout_returns_promptly_and_observes_late_commit_with
 
     # WHEN
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://slack.test") as client:
-        response = await client.post(
-            "/slack/events",
-            content=body,
-            headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
+        request = asyncio.create_task(
+            client.post(
+                "/slack/events",
+                content=body,
+                headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
+            )
         )
-    commits_when_returned = tuple(commits)
-    await asyncio.sleep(0.1)
+        assert await asyncio.to_thread(ingest_started.wait, 1)
+        response = await asyncio.wait_for(request, 1)
+        assert not ingest_finished.is_set()
+        release_ingest.set()
+        assert await asyncio.to_thread(ingest_finished.wait, 1)
 
     # THEN
     assert response.status_code == 503
-    assert commits_when_returned == ()
-    assert commits == ["committed"]
     assert wakes == []
 
 
@@ -494,7 +507,7 @@ async def test_request_cancellation_returns_immediately_while_late_ingest_finish
         return IngestResult(disposition=EventDisposition.ACCEPTED)
 
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         coordinator.prepare,
@@ -514,16 +527,13 @@ async def test_request_cancellation_returns_immediately_while_late_ingest_finish
                     headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
                 )
             )
-            async with asyncio.timeout(1):
-                while not ingest_started.is_set():
-                    await asyncio.sleep(0.001)
+            assert await asyncio.to_thread(ingest_started.wait, 1)
             request.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await asyncio.wait_for(request, 0.1)
     finally:
         release_ingest.set()
         assert await asyncio.to_thread(ingest_finished.wait, 1)
-        await asyncio.sleep(0)
 
     # THEN
     assert wakes == []
@@ -537,7 +547,7 @@ async def test_duplicate_signed_delivery_returns_success_with_one_durable_turn(t
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="T1", channel="C1", authorized_actors=frozenset(("U1",))),)
+            (ChannelAccess(provider="slack", workspace="T1", channel="C1", authorized_actors=frozenset(("U1",))),)
         ),
         3_500,
         "safe failure",
@@ -560,7 +570,7 @@ async def test_duplicate_signed_delivery_returns_success_with_one_durable_turn(t
     timestamp = str(int(time.time()))
     signature = "v0=" + hmac.new(b"signing", b"v0:" + timestamp.encode() + b":" + body, hashlib.sha256).hexdigest()
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         service.prepare,
@@ -598,9 +608,10 @@ async def test_duplicate_signed_delivery_returns_success_with_one_durable_turn(t
         ({"bot_id": "BBOT", "subtype": "bot_message", "user": "UBOT"}, "UBOT"),
         ({"subtype": "message_changed"}, "U1"),
         ({"channel": "C2"}, "U1"),
+        ({"channel_type": "group"}, "U1"),
     ],
 )
-async def test_bot_subtype_and_unconfigured_channel_events_are_durably_ignored(
+async def test_non_executable_events_are_durably_ignored(
     tmp_path: Path, event_fields: dict[str, str], authorized_actor: str
 ) -> None:
     # GIVEN
@@ -609,7 +620,11 @@ async def test_bot_subtype_and_unconfigured_channel_events_are_durably_ignored(
     repository = CoordinatorRepository(engine)
     service = CoordinatorService(
         ConfiguredAuthorizationPolicy(
-            (ChannelAccess(workspace="T1", channel="C1", authorized_actors=frozenset((authorized_actor,))),)
+            (
+                ChannelAccess(
+                    provider="slack", workspace="T1", channel="C1", authorized_actors=frozenset((authorized_actor,))
+                ),
+            )
         ),
         3_500,
         "safe failure",
@@ -643,7 +658,7 @@ async def test_bot_subtype_and_unconfigured_channel_events_are_durably_ignored(
     timestamp = str(int(time.time()))
     signature = "v0=" + hmac.new(b"signing", b"v0:" + timestamp.encode() + b":" + body, hashlib.sha256).hexdigest()
     app = create_slack_events_app(
-        SlackIngressConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
+        SlackEventsConfig(max_request_bytes=1_024, timestamp_tolerance_seconds=300),
         "T1",
         "signing",
         service.prepare,

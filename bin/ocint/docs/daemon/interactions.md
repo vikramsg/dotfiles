@@ -1,104 +1,23 @@
 # Daemon Interactions
 
-ocint accepts work from configured GitHub issues and Slack channels. Each issue
-or Slack root message represents one work thread.
+## GitHub Pull-Request Work
 
-## Shared Lifecycle
+An open issue with the configured label starts work. Its body and authorized
+comments become prompt input. The daemon creates or updates the owned pull
+request and replies on the issue. A later authorized comment reuses the existing
+OpenCode session, worktree, branch, and pull request. Closing the issue or
+removing the label makes it ineligible; closed or merged owned pull requests are
+not replaced.
 
-```text
-initial request -> work -> pull request -> completion reply
-      ^                                      |
-      `------------- follow-up --------------'
-```
+## Slack Coordinator
 
-An authorized initial request starts work. When the work completes, ocint
-creates or updates the thread's pull request and posts a completion reply.
+The Slack coordinator is independent of GitHub pull-request jobs. Slack sends a
+signed `message.channels` callback for each public-channel root or reply. After
+signature, workspace, channel, actor, and payload validation, ocint stores the
+event before returning success. The worker serializes turns per thread, reuses
+the thread's OpenCode session, and posts chunked responses back to that thread.
 
-An eligible follow-up reuses the existing OpenCode session, worktree, branch,
-and pull request.
-
-ocint's own replies do not schedule work. Unauthorized messages do not become
-prompt input.
-
-If the owned pull request is closed or merged, ocint does not create a
-replacement.
-
-## GitHub
-
-An open issue with the configured label starts work.
-
-- The issue title is the work title.
-- The issue body and authorized comments become prompt input.
-- A later authorized comment starts follow-up work.
-- ocint replies using issue comments.
-- Closing the issue or removing its configured label makes it ineligible.
-
-After completing work, ocint replies:
-
-```text
-Issue addressed: <pull-request-url>
-
-To make further changes, add a comment.
-```
-
-## Slack
-
-An ordinary root message in a configured private channel starts work.
-
-- The first non-empty line is the work title.
-- The complete root message becomes prompt input.
-- Authorized thread replies become follow-up input while the thread is open.
-- ocint replies inside the Slack thread.
-- Unauthorized users receive a reply and do not schedule work.
-
-After completing work, ocint:
-
-1. Posts the pull-request result in the thread.
-2. Adds the configured completion reaction to the root message.
-3. Marks the Slack thread closed in daemon state.
-4. Stops polling replies on that root message.
-
-The default completion reaction is `white_check_mark`.
-
-The completion reply must explain the Slack reopening protocol:
-
-```text
-Issue addressed: <pull-request-url>
-
-ocint has stopped polling this Slack thread. To request further changes:
-
-1. Copy the permalink of this thread's root message.
-2. Post a new root message in this channel:
-
-   reopen <root-message-permalink>
-
-3. Reply in the new thread with your requested changes.
-
-The reopen message alone does not schedule work.
-```
-
-### Reopening Slack Work
-
-A reopen request must be a new, authorized, single-line root message:
-
-```text
-reopen <root-message-permalink>
-```
-
-The referenced root must:
-
-- Be known to ocint.
-- Be closed in daemon state.
-- Belong to the same Slack workspace and channel.
-- Belong to the same configured repository.
-- Have no existing open alias.
-
-A valid reopen request creates a new Slack thread representing the existing
-work thread. A subsequent authorized reply in that new thread starts follow-up
-work and reuses the existing execution context and pull request.
-
-Replying directly to the closed Slack thread does not schedule work. Replies
-added while it is closed are not recovered.
-
-Malformed, unknown, or otherwise invalid authorized reopen requests do not
-schedule work and currently receive no explanatory response.
+Only configured public `channel` messages from configured human actors are
+executable in Phase 1. Bot, xoxp-originated, changed, empty, unconfigured,
+unauthorized, and private `group` messages are durably ignored. Duplicate
+callbacks and response retries do not create duplicate turns or replies.

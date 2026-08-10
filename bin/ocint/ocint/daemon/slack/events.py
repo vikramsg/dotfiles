@@ -11,7 +11,7 @@ from starlette.responses import JSONResponse, Response
 
 from ocint.daemon.coordinator import ActorKind, ConversationMessage, IngestResult, MessageKind
 from ocint.daemon.logging import get_logger
-from ocint.daemon.slack.config import SlackIngressConfig
+from ocint.daemon.slack.config import SlackEventsConfig
 from ocint.daemon.slack.models import SlackEventCallback, SlackEventsEnvelope, SlackUrlVerification
 from ocint.daemon.slack.service import SlackActorClassifier, translate_slack_event
 
@@ -37,7 +37,7 @@ class IngressCorrelation(BaseModel):
 class SlackEventsIngress[Prepared]:
     def __init__(
         self,
-        config: SlackIngressConfig,
+        config: SlackEventsConfig,
         workspace_id: str,
         signing_secret: str,
         prepare: CoordinatorPrepare[Prepared],
@@ -180,7 +180,7 @@ class SlackEventsIngress[Prepared]:
 
 
 def create_slack_events_app[Prepared](
-    config: SlackIngressConfig,
+    config: SlackEventsConfig,
     workspace_id: str,
     signing_secret: str,
     prepare: CoordinatorPrepare[Prepared],

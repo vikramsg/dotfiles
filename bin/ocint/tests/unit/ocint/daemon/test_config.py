@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from ocint.daemon.config import (
+    CoordinatorConfig,
     DaemonConfig,
     DaemonContext,
     DaemonSettings,
@@ -9,9 +10,7 @@ from ocint.daemon.config import (
     LoggingConfig,
     RepositoryConfig,
 )
-from ocint.daemon.coordinator import CoordinatorConfig
 from ocint.daemon.opencode import OpenCodeConfig
-from ocint.daemon.slack import SlackConfig
 from ocint.presentation import default_cli_context
 from pydantic import ValidationError
 
@@ -40,29 +39,6 @@ def coordinator_config(tmp_path: Path) -> CoordinatorConfig:
             },
         }
     )
-
-
-def test_slack_config_requires_safe_boundary_and_unique_channels() -> None:
-    # GIVEN
-    channel = {
-        "channel_id": "C1",
-        "repository": "repo",
-        "authorized_users": ["U1"],
-        "initial_oldest": "1753380000.123456",
-    }
-
-    # WHEN / THEN
-    config = SlackConfig.model_validate({"workspace_id": "T1", "channels": [channel]})
-    assert config.channels[0].authorized_users == frozenset(("U1",))
-    with pytest.raises(ValidationError, match="initial_oldest"):
-        SlackConfig.model_validate(
-            {
-                "workspace_id": "T1",
-                "channels": [{key: value for key, value in channel.items() if key != "initial_oldest"}],
-            }
-        )
-    with pytest.raises(ValidationError, match="unique"):
-        SlackConfig.model_validate({"workspace_id": "T1", "channels": [channel, channel]})
 
 
 def test_slack_manifest_uses_public_message_events_and_minimal_scopes() -> None:
@@ -133,6 +109,8 @@ def test_config_resolves_repository_and_rejects_duplicate_names(
     assert isinstance(config.repository("repo").checks[0], tuple)
     with pytest.raises(ValidationError, match="unique"):
         DaemonConfig.model_validate({**raw, "repositories": [*raw["repositories"], *raw["repositories"]]})
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        DaemonConfig.model_validate({**raw, "slack": {"workspace_id": "obsolete"}})
 
 
 @pytest.mark.parametrize("remote", ["git@example.test:owner/repo.git", "ssh://git@example.test/owner/repo.git"])

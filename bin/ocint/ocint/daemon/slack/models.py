@@ -3,6 +3,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 
 
+def parse_slack_timestamp(timestamp: str) -> int:
+    seconds, separator, fraction = timestamp.partition(".")
+    if separator != "." or not seconds.isdigit() or len(fraction) != 6 or not fraction.isdigit():
+        raise ValueError(f"invalid Slack timestamp: {timestamp!r}")
+    return int(seconds) * 1_000_000 + int(fraction)
+
+
 class SlackMessage(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 

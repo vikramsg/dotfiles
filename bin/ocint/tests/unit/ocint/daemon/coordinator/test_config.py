@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from ocint.daemon.coordinator import CoordinatorConfig
+from ocint.daemon.config import CoordinatorConfig
 from pydantic import ValidationError
 
 

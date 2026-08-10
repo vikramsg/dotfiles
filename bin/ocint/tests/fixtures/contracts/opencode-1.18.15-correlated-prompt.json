@@ -1,13 +1,47 @@
 {
   "version": "1.18.15",
-  "accepted_caller_message_id": "msg_ocint_contract_probe_20260807",
-  "returned_user_info_id": "msg_ocint_contract_probe_20260807",
-  "assistant": {
-    "id": "msg_fdbfdf15a001fnalS8nmUl06D0",
-    "parentID": "msg_ocint_contract_probe_20260807",
-    "finish": "stop",
-    "ordered_text_parts": [
-      "CONTRACT-PROBE-OK"
+  "request": {
+    "method": "POST",
+    "path": "/session/<sanitized-session>/prompt_async",
+    "body": {
+      "messageID": "msg_ocint_contract_probe_20260807",
+      "parts": [
+        {
+          "type": "text",
+          "text": "<sanitized contract probe>"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 202,
+    "messages": [
+      {
+        "info": {
+          "id": "msg_ocint_contract_probe_20260807",
+          "role": "user"
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "<sanitized contract probe>"
+          }
+        ]
+      },
+      {
+        "info": {
+          "id": "msg_fdbfdf15a001fnalS8nmUl06D0",
+          "role": "assistant",
+          "parentID": "msg_ocint_contract_probe_20260807",
+          "finish": "stop"
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "CONTRACT-PROBE-OK"
+          }
+        ]
+      }
     ]
   }
 }
