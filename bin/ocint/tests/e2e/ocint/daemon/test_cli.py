@@ -105,7 +105,7 @@ async def test_production_composition_completes_job_through_api(
     state = ProductionState()
 
     async def opencode_health(_request: web.Request) -> web.Response:
-        return web.json_response({"healthy": True, "version": "1.18.15"})
+        return web.json_response({"healthy": True, "version": "1.18.16"})
 
     async def opencode_sessions(request: web.Request) -> web.Response:
         if request.method == "GET":
@@ -228,7 +228,7 @@ shutdown_timeout_seconds = 5
 server_url = "http://127.0.0.1:{opencode_port}"
 username = "opencode"
 request_timeout_seconds = 2
-expected_version = "1.18.15"
+expected_version = "1.18.16"
 executable = "{opencode}"
 config_file = "{tmp_path / "opencode.json"}"
 xdg_config_home = "{tmp_path / "opencode-xdg"}"
@@ -341,7 +341,7 @@ async def test_daemon_run_applies_toml_log_rotation(
     github_port = unused_tcp_port_factory()
 
     async def opencode_health(_request: web.Request) -> web.Response:
-        return web.json_response({"healthy": True, "version": "1.18.15"})
+        return web.json_response({"healthy": True, "version": "1.18.16"})
 
     async def github_issues(_request: web.Request) -> web.Response:
         return web.json_response([])
