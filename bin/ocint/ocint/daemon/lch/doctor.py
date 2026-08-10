@@ -332,9 +332,9 @@ def _opencode_diagnostics(
         Diagnostic(
             name="opencode.executable_version",
             required=True,
-            ok=version == "1.18.15" and config.opencode.expected_version == "1.18.15",
+            ok=version == "1.18.16" and config.opencode.expected_version == "1.18.16",
             value=f"{config.opencode.executable} ({version or 'unavailable'})",
-            detail=version_observation.error or "required and configured version must both be 1.18.15",
+            detail=version_observation.error or "required and configured version must both be 1.18.16",
         )
     )
     source = context.data_home / "opencode" / "auth.json"
@@ -457,9 +457,9 @@ def _coordinator_diagnostics(
         Diagnostic(
             name="coordinator.opencode.executable_version",
             required=True,
-            ok=version == "1.18.15" and service.expected_version == "1.18.15",
+            ok=version == "1.18.16" and service.expected_version == "1.18.16",
             value=f"{service.executable} ({version or 'unavailable'})",
-            detail=version_observation.error or "required and configured version must both be 1.18.15",
+            detail=version_observation.error or "required and configured version must both be 1.18.16",
         )
     )
     source_auth = context.data_home / "opencode" / "auth.json"

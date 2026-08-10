@@ -163,7 +163,7 @@ A startup failure prevents the API from becoming ready.
 
 The always-on coordinator separately validates configuration and Slack channel
 access, takes its single-runtime lock, serializes any pending migration, safely
-regenerates its context workspace, and starts OpenCode `1.18.15`. Only after
+regenerates its context workspace, and starts OpenCode `1.18.16`. Only after
 OpenCode health succeeds does it serve ingress on `127.0.0.1:8733` and recover
 durable turns. An unexpected OpenCode child exit fails the service so systemd
 can restart the whole coordinator. The coordinator installs SIGTERM/SIGINT

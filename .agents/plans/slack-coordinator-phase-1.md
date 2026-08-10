@@ -385,7 +385,7 @@ authorized_users = ["U067EG8278R"]
 [coordinator.opencode]
 server_url = "http://127.0.0.1:4098"
 username = "opencode"
-expected_version = "1.18.15"
+expected_version = "1.18.16"
 executable = "/path/to/opencode"
 config_file = "~/.config/ocint/coordinator-opencode-xdg/opencode/opencode.json"
 xdg_config_home = "~/.config/ocint/coordinator-opencode-xdg"
@@ -447,10 +447,10 @@ contract test.
 
 ### External API Contract Prerequisite
 
-The VM currently runs OpenCode `1.18.15`, while existing daemon configuration
-requires `1.17.20`. Before finalizing the coordinator schema or implementing the
-worker, run focused contract tests against the real OpenCode `1.18.15` server and
-the configured Slack workspace:
+The host-observed OpenCode version is `1.18.16`. The final top-stack E2E will
+live-contract verify the real OpenCode `1.18.16` server and the configured Slack
+workspace; until that operator run completes, do not record `1.18.16` as having
+passed live verification:
 
 1. Verify whether prompt submission accepts a caller-selected deterministic user
    `messageID`.
@@ -467,7 +467,7 @@ the configured Slack workspace:
 6. Record the confirmed contracts in the OpenCode and Slack adapter tests. If a
    required correlation or recovery contract is unavailable, stop and revise
    this plan before creating the migration.
-7. Update the exact supported pin to `1.18.15` for both OpenCode runtimes, keep
+7. Update the exact supported pin to `1.18.16` for both OpenCode runtimes, keep
    exact startup checks, and re-run existing PR-job recovery tests.
 
 ## OpenCode Policy And Workspace

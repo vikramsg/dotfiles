@@ -69,7 +69,7 @@ class DoctorRunner:
         if self.fail_commands:
             raise subprocess.CalledProcessError(2, command, stderr="command unavailable")
         if command == (str(self.opencode), "--version"):
-            return CommandResult(stdout="1.18.15\n")
+            return CommandResult(stdout="1.18.16\n")
         if command == ("gh", "api", "--hostname", "github.com", "user"):
             return CommandResult(stdout='{"login":"maintainer"}\n')
         if command == (
@@ -210,7 +210,7 @@ author_name = "Example Author"
 author_email = "author@example.test"
 actors = ["maintainer"]
 [opencode]
-expected_version = "1.18.15"
+expected_version = "1.18.16"
 executable = "{opencode}"
 config_file = "{effective}"
 xdg_config_home = "{effective.parents[1]}"
@@ -237,7 +237,7 @@ channel_id = "C-test"
 authorized_users = ["U-test"]
 [coordinator.opencode]
 server_url = "http://127.0.0.1:4098"
-expected_version = "1.18.15"
+expected_version = "1.18.16"
 executable = "{opencode}"
 config_file = "{coordinator_effective}"
 xdg_config_home = "{coordinator_effective.parents[1]}"

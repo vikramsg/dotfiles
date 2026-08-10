@@ -22,7 +22,7 @@ bounded service is inactive and do not require API credentials.
 
 `ocint daemon doctor` is the preflight surface. It validates private config and
 environment files, required credentials, Slack `auth.test` and channel access,
-ngrok v3 and its static URL, exact OpenCode `1.18.15`, both isolated OpenCode
+ngrok v3 and its static URL, exact OpenCode `1.18.16`, both isolated OpenCode
 policies/data homes, coordinator workspace state, four distinct loopback ports,
 migration head, user lingering, and exact systemd payloads. Workspace context
 and the migration revision may be pending until first coordinator/timer startup.
@@ -197,10 +197,13 @@ the same authorized user plus actor `bot_id` and `app_id` through the static
 ngrok URL. A one-probe test-only classifier accepts only the exact configured
 workspace, channel, user, UUID, and prompt; exact Slack retries remain accepted
 for durable deduplication. The production classifier remains unchanged. The
-real restricted OpenCode `1.18.15`
-coordinator runs; and the production bot returns the answer to the same Slack
+real restricted OpenCode `1.18.16` coordinator runs, and the production bot
+returns the answer to the same Slack
 thread. That reply is ignored normally as bot-authored input. Callback
 diagnostics contain status codes, never request bodies or credentials.
+
+OpenCode `1.18.16` remains pending live-contract verification by this final
+top-stack E2E. Local verification does not claim that the live run has passed.
 
 Probe-scoped durable rows must contain the real event, conversation, OpenCode
 session ID, assistant message ID, response, and delivery receipts. The Slack

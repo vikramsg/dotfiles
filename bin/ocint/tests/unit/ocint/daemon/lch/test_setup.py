@@ -63,7 +63,7 @@ class DiscoveryRunner:
     identities: tuple[Path, ...]
     known_hosts: Path
     repository: str = "example-org/project"
-    version: str = "1.18.15"
+    version: str = "1.18.16"
     push_urls: tuple[str, ...] = ("git@github.com:example-org/project.git",)
     core_ssh_command: str = ""
     isolated_calls: list[tuple[tuple[str, ...], Mapping[str, str]]] = field(default_factory=list)
@@ -225,9 +225,9 @@ def test_discovery_resolves_checkout_github_git_ssh_and_opencode(discovery_fixtu
     assert result.ssh.identity_file.name == "project-key"
     assert result.opencode.model == "example-provider/example-model"
     assert result.github_token == "github-secret"
-    assert result.opencode.version == "1.18.15"
+    assert result.opencode.version == "1.18.16"
     rendered = daemon_toml(discovered_daemon_config(result, (LifecycleConfig(), LoggingConfig())))
-    assert rendered.count('expected_version = "1.18.15"') == 2
+    assert rendered.count('expected_version = "1.18.16"') == 2
     assert 'description = "Personal configuration for OpenCode, Neovim, tmux, and terminals."' in rendered
     assert 'workspace_id = "T021N0EQ3JQ"' in rendered
     assert 'channel_id = "C0955FD2FK4"' in rendered
@@ -480,7 +480,7 @@ def test_discovery_rejects_wrong_opencode_version_before_writes(discovery_fixtur
     discovery_fixture.runner.version = "2.0.0"
 
     # WHEN / THEN
-    with pytest.raises(click.ClickException, match=r"1\.18\.15 is required; found 2\.0\.0"):
+    with pytest.raises(click.ClickException, match=r"1\.18\.16 is required; found 2\.0\.0"):
         discover(
             discovery_fixture.runner,
             discovery_fixture.lifecycle,
@@ -514,7 +514,7 @@ def test_setup_uses_only_the_validated_policy_and_provider_snapshot(
     assert effective == discovered.effective_opencode_payload
     assert "changed-provider" not in effective
     assert "late-secret" not in effective
-    assert discovered.paths.configuration.read_text().count('expected_version = "1.18.15"') == 2
+    assert discovered.paths.configuration.read_text().count('expected_version = "1.18.16"') == 2
     assert discovered.paths.coordinator_effective_opencode_config.read_text() == (
         discovered.coordinator_effective_opencode_payload
     )

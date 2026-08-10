@@ -7,7 +7,7 @@
 **Decision:** Submit a deterministic `msg_`-prefixed user message ID and recover
 the assistant by its `parentID` instead of matching prompt text.
 
-**Rationale:** A live OpenCode 1.18.15 probe confirmed caller IDs, stable
+**Rationale:** A prior live OpenCode probe confirmed caller IDs, stable
 assistant IDs, parent IDs, terminal finish state, and ordered text parts.
 
 **Consequence:** Retries and restarts can identify the exact logical turn
@@ -309,3 +309,6 @@ avoiding unrelated release mutations.
 **Consequence:** Tests, static checks, smoke checks, package build, and explicit
 live-marker collection are the acceptance surface; external live E2E remains a
 separate final operator action.
+
+The host-observed OpenCode `1.18.16` contract remains pending verification by
+that final top-stack live E2E; this implementation note does not claim it passed.

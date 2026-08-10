@@ -98,6 +98,8 @@ async def test_real_slack_ngrok_and_opencode_coordinator_path_preserves_probe_ev
         pytest.fail("live coordinator test requires the current daemon configuration")
     config = context.config()
     coordinator = config.coordinator
+    if config.opencode.expected_version != "1.18.16" or coordinator.opencode.expected_version != "1.18.16":
+        pytest.fail("live coordinator test requires OpenCode 1.18.16 for both runtimes")
     production_bot_token = settings.slack_bot_token.get_secret_value()
     signing_secret = settings.slack_signing_secret.get_secret_value()
     ngrok_url = settings.ngrok_url.get_secret_value()

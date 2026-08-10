@@ -114,7 +114,7 @@ authorized_users = ["U01234567"]
 server_url = "http://127.0.0.1:4098"
 username = "opencode"
 request_timeout_seconds = 30
-expected_version = "1.18.15"
+expected_version = "1.18.16"
 executable = "/usr/bin/opencode"
 config_file = "~/.config/ocint/coordinator-opencode-xdg/opencode/opencode.json"
 xdg_config_home = "~/.config/ocint/coordinator-opencode-xdg"
@@ -307,7 +307,7 @@ Capacity uses an `asyncio.Semaphore`; there is no scheduler polling loop.
 ## OpenCode, Ports, API, And Logging
 
 Both runtimes start exactly the configured OpenCode executable and require
-version `1.18.15`; a mismatch fails startup. They use different loopback ports
+version `1.18.16`; a mismatch fails startup. They use different loopback ports
 and isolated XDG data/config homes. The job runtime receives the unattended job
 policy. The coordinator receives a stricter policy and the fake/context
 workspace only.
