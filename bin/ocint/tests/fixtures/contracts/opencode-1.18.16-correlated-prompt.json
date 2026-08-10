@@ -1,5 +1,5 @@
 {
-  "version": "1.18.15",
+  "version": "1.18.16",
   "request": {
     "method": "POST",
     "path": "/session/<sanitized-session>/prompt_async",
