@@ -7,15 +7,9 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  "diff_view_style": "split",
   "confirm_quit": true,
   "agent_servers": {
-    "cursor": {
-      "default_config_options": {
-        "fast": "false",
-        "model": "grok-4.5"
-      },
-      "type": "registry"
-    },
     "opencode": {
       "default_config_options": {
         "model": "azure-cognitive-services/gpt-5.5",
@@ -75,6 +69,11 @@
         },
         {
           "paths": [
+            "/home/vikram_orbio_earth/projects/orbio/meanderx/kunda-wt"
+          ]
+        },
+        {
+          "paths": [
             "/home/vikram_orbio_earth/projects/orbio/meanderx/kunda-wt2/./"
           ]
         },
@@ -91,6 +90,11 @@
         {
           "paths": [
             "/home/vikram_orbio_earth/projects/orbio/meanderx/meanderx-wt"
+          ]
+        },
+        {
+          "paths": [
+            "/home/vikram_orbio_earth/projects/orbio/meanderx/meanderx-wt2"
           ]
         },
         {
