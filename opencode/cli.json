@@ -1,0 +1,19 @@
+{
+  "keybinds": {
+    "agent.cycle": "tab",
+    "model.cycle_favorite": "<leader>right",
+    "model.cycle_favorite_reverse": "<leader>left"
+  },
+  "tabs": {
+    "enabled": false
+  },
+  "diffs": {
+    "wrap": "word"
+  },
+  "session": {
+    "sidebar": "hide",
+    "scrollbar": false,
+    "thinking": "show"
+  },
+  "animations": true
+}
