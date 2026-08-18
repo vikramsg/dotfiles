@@ -66,6 +66,37 @@ tmux:
         echo "TPM is already installed."; \
     fi
 
+# Set up Herdr config symlink while preserving its runtime directory
+herdr:
+    @CONFIG_FILE="{{justfile_directory()}}/herdr/config.toml"; \
+        CONFIG_DIR="$HOME/.config/herdr"; \
+        TARGET="$CONFIG_DIR/config.toml"; \
+        echo "Herdr config source: $CONFIG_FILE"; \
+        echo "Herdr config target: $TARGET"; \
+        mkdir -p "$HOME/.config"; \
+        if [ -L "$CONFIG_DIR" ]; then \
+            echo "ERROR: $CONFIG_DIR is a symlink; Herdr requires a normal runtime directory."; \
+            exit 1; \
+        elif [ -e "$CONFIG_DIR" ] && [ ! -d "$CONFIG_DIR" ]; then \
+            echo "ERROR: $CONFIG_DIR exists and is not a directory."; \
+            exit 1; \
+        fi; \
+        mkdir -p "$CONFIG_DIR"; \
+        if [ -L "$TARGET" ]; then \
+            CURRENT_TARGET="$(readlink "$TARGET")"; \
+            if [ "$CURRENT_TARGET" != "$CONFIG_FILE" ]; then \
+                echo "ERROR: $TARGET is a symlink to $CURRENT_TARGET, not the managed config."; \
+                exit 1; \
+            fi; \
+        elif [ -e "$TARGET" ]; then \
+            echo "ERROR: $TARGET exists and is not the managed symlink."; \
+            echo "Move or migrate it manually before running this recipe."; \
+            exit 1; \
+        else \
+            ln -s "$CONFIG_FILE" "$TARGET"; \
+        fi; \
+        echo "Herdr config symlink created at $TARGET -> $CONFIG_FILE"
+
 # Set up Opencode symlink
 opencode: npm-global-bin
     @echo "Setting up Opencode symlink..."
@@ -321,7 +352,7 @@ harlequin:
     @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

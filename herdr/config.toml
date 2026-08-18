@@ -1,0 +1,77 @@
+onboarding = false
+
+[theme]
+name = "catppuccin"
+
+[theme.custom]
+accent = "#89b4fa"
+
+[terminal]
+default_shell = "/bin/zsh"
+new_cwd = "follow"
+
+[keys]
+prefix = "ctrl+space"
+reload_config = "prefix+q"
+help = "prefix+?"
+detach = "prefix+d"
+copy_mode = "prefix+["
+new_tab = "prefix+c"
+switch_tab = "prefix+1..9"
+previous_tab = "prefix+p"
+next_tab = "prefix+n"
+close_pane = "prefix+x"
+zoom = "prefix+z"
+last_pane = "prefix+semicolon"
+split_horizontal = 'prefix+"'
+split_vertical = "prefix+%"
+new_workspace = "prefix+shift+c"
+
+# Direct pane cycling intentionally takes these keys from pane applications.
+cycle_pane_previous = ["ctrl+h", "ctrl+k"]
+cycle_pane_next = ["ctrl+j", "ctrl+l"]
+
+# Prefix h/j/k/l are reserved for the tmux-compatible resize commands below.
+focus_pane_left = ""
+focus_pane_down = ""
+focus_pane_up = ""
+focus_pane_right = ""
+
+swap_pane_left = "prefix+shift+h"
+swap_pane_down = "prefix+shift+j"
+swap_pane_up = "prefix+shift+k"
+swap_pane_right = "prefix+shift+l"
+
+[[keys.command]]
+key = "prefix+h"
+type = "shell"
+command = '"$HERDR_BIN_PATH" pane resize --direction left --pane "$HERDR_ACTIVE_PANE_ID"'
+description = "resize pane left"
+
+[[keys.command]]
+key = "prefix+l"
+type = "shell"
+command = '"$HERDR_BIN_PATH" pane resize --direction right --pane "$HERDR_ACTIVE_PANE_ID"'
+description = "resize pane right"
+
+[[keys.command]]
+key = "prefix+k"
+type = "shell"
+command = '"$HERDR_BIN_PATH" pane resize --direction down --pane "$HERDR_ACTIVE_PANE_ID"'
+description = "resize pane down"
+
+[[keys.command]]
+key = "prefix+j"
+type = "shell"
+command = '"$HERDR_BIN_PATH" pane resize --direction up --pane "$HERDR_ACTIVE_PANE_ID"'
+description = "resize pane up"
+
+[ui]
+tab_bar_position = "top"
+pane_borders = true
+pane_gaps = false
+pane_scrollbars = false
+mouse_capture = true
+copy_on_select = true
+confirm_close = true
+prompt_new_tab_name = false
