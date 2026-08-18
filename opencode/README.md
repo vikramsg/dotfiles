@@ -141,6 +141,29 @@ just opencode-doctor
 
 That smoke check verifies the live installed config layout from the current worktree. It should not report `plugins2` as an enabled OpenCode plugin path while orchestration state remains disabled.
 
+### Plugin generations
+
+OpenCode 2 uses two plugin layers under the installed `plugins` directory:
+
+```text
+~/.config/opencode/plugins/*.ts       Server plugins
+~/.config/opencode/plugins/tui/*.ts   Terminal client plugins
+```
+
+`mode-transition-reminder-v2.ts` is a server plugin. It adds a request-local
+reminder when the selected primary agent changes between Discuss and Build.
+The reminder is sent only in the model request and is not stored in the
+session transcript.
+
+`tui/zed-bell-v2.ts` is a terminal client plugin. It emits a terminal bell when
+an execution finishes or requests permission. It runs in the TUI so the bell
+reaches the active terminal rather than the background service. `cli.json`
+loads it explicitly because the current V2 beta does not activate it through
+global `plugins/tui` auto-discovery in this symlinked configuration layout.
+
+The previous V1 implementations remain under `plugins-v1/` for reference and
+tests. They are outside OpenCode 2's automatic plugin discovery path.
+
 ## Favorite Models
 
 OpenCode does not currently support declaring favorite models in `opencode.json`.

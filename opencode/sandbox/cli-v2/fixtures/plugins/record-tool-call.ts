@@ -1,6 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { PluginInput, Hooks, Plugin } from "@opencode-ai/plugin";
+import type { PluginInput, Hooks, Plugin } from "@opencode-ai/plugin/v1";
 
 interface ToolCallMetadata {
   output_dir: string;

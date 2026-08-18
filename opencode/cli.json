@@ -4,6 +4,7 @@
     "model.cycle_favorite": "<leader>right",
     "model.cycle_favorite_reverse": "<leader>left"
   },
+  "plugins": ["./plugins/tui/zed-bell-v2.ts"],
   "tabs": {
     "enabled": false
   },

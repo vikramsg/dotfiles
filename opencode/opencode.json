@@ -51,7 +51,8 @@
                 "question": "deny",
                 "plan_exit": "allow",
                 "task": {
-                    "general": "deny"
+                    "general": "deny",
+                    "implementer": "deny"
                 },
                 "edit": {
                     "*": "deny",

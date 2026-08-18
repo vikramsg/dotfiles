@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildRecordToolCallPlugin } from "./record-tool-call.ts";
-import { PluginInput } from "@opencode-ai/plugin";
+import type { PluginInput } from "@opencode-ai/plugin/v1";
 
 describe("RecordToolCallPlugin", () => {
   const metadata = {
@@ -32,6 +32,7 @@ describe("RecordToolCallPlugin", () => {
       project: {} as never,
       directory: worktree,
       worktree,
+      experimental_workspace: { register: () => undefined },
       serverUrl: new URL("http://localhost"),
       $: {} as never,
     };

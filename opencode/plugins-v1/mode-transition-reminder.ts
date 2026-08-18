@@ -5,7 +5,7 @@ Use `experimental.chat.messages.transform` to
 2. Read its active mode from `user.info.agent`.
 3. Scan backward only before that user message for the nearest assistant.
 4. Read the preceding mode from `assistant.info.mode`, which matches the pinned
-   `@opencode-ai/plugin` 1.4.2 types.
+   the V1 compatibility types.
 5. Select a reminder only for an exact, case-sensitive `discuss`/`build`
    transition.
 6. Find the latest non-ignored, nonblank text part on the selected user message.
@@ -31,7 +31,7 @@ Use these reminder contracts:
 ```
 */
 
-import type { Hooks, Plugin } from "@opencode-ai/plugin";
+import type { Hooks, Plugin } from "@opencode-ai/plugin/v1";
 
 const BUILD_REMINDER = `<system-reminder>
 Your operational mode has changed from discuss to build.
