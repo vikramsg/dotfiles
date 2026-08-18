@@ -3,6 +3,13 @@
     "model": "azure-cognitive-services/gpt-5.6-sol",
     "default_agent": "discuss",
     "instructions": ["~/.config/opencode/rules.md"],
+    "permissions": [
+        {
+            "action": "websearch",
+            "resource": "*",
+            "effect": "allow"
+        }
+    ],
     "permission": {
         "bash": {
             "*rm*.sqlite*": "deny",
