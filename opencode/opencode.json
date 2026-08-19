@@ -64,7 +64,6 @@
             }
         }
     },
-    "plugin": ["opencode-websearch-cited@1.2.0"],
     "lsp": false,
     "formatter": false,
     "provider": {
