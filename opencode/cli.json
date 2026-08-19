@@ -1,8 +1,10 @@
 {
   "keybinds": {
     "agent.cycle": "tab",
+    "input.newline": "shift+return,alt+return,ctrl+return,ctrl+j",
     "model.cycle_favorite": "<leader>right",
-    "model.cycle_favorite_reverse": "<leader>left"
+    "model.cycle_favorite_reverse": "<leader>left",
+    "prompt.queue": "<leader>return"
   },
   "plugins": ["./plugins/tui/zed-bell-v2.ts"],
   "tabs": {
