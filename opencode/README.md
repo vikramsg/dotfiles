@@ -1,6 +1,8 @@
 # OpenCode Tips & Configuration
 
-This repository tracks configuration and learnings about the `opencode` CLI agent.
+This repository tracks configuration and learnings about the `opencode` and
+`opencode2` CLI agents. V1 terminal settings live in `tui.json`; V2 terminal
+settings live in `cli.json`.
 
 ## Configuration Modes
 
@@ -139,12 +141,35 @@ just opencode-doctor
 
 That smoke check verifies the live installed config layout from the current worktree. It should not report `plugins2` as an enabled OpenCode plugin path while orchestration state remains disabled.
 
+### Plugin generations
+
+OpenCode 2 uses two plugin layers under the installed `plugins` directory:
+
+```text
+~/.config/opencode/plugins/*.ts       Server plugins
+~/.config/opencode/plugins/tui/*.ts   Terminal client plugins
+```
+
+`mode-transition-reminder-v2.ts` is a server plugin. It adds a request-local
+reminder when the selected primary agent changes between Discuss and Build.
+The reminder is sent only in the model request and is not stored in the
+session transcript.
+
+`tui/zed-bell-v2.ts` is a terminal client plugin. It emits a terminal bell when
+an execution finishes or requests permission. It runs in the TUI so the bell
+reaches the active terminal rather than the background service. `cli.json`
+loads it explicitly because the current V2 beta does not activate it through
+global `plugins/tui` auto-discovery in this symlinked configuration layout.
+
+The previous V1 implementations remain under `plugins-v1/` for reference and
+tests. They are outside OpenCode 2's automatic plugin discovery path.
+
 ## Favorite Models
 
 OpenCode does not currently support declaring favorite models in `opencode.json`.
 
 - Use `opencode.json` to set the default startup model.
-- Use `tui.json` to bind favorite cycling keys.
+- Use `cli.json` to bind favorite cycling keys in OpenCode 2.
 - Use the TUI model picker to mark models as favorites.
 
 ### Recommended setup
@@ -158,14 +183,13 @@ Set a default model in `opencode.json`:
 }
 ```
 
-Bind left and right to cycle favorite models in `tui.json`:
+Bind left and right to cycle favorite models in `cli.json`:
 
 ```json
 {
-  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
-    "model_cycle_favorite": "<leader>right",
-    "model_cycle_favorite_reverse": "<leader>left"
+    "model.cycle_favorite": "<leader>right",
+    "model.cycle_favorite_reverse": "<leader>left"
   }
 }
 ```
@@ -185,7 +209,10 @@ This configuration uses a dual-agent workflow:
 1.  **Discuss (Read-Only):** The AI analyzes and discusses the design. It writes a plan only when asked.
 2.  **Build (Execution):** The AI writes code and executes commands based on the approved plan.
 
-*(You can toggle between these modes instantly in the terminal by pressing the **Tab** key.)*
+`cli.json` binds `Tab` to `agent.cycle`, so OpenCode 2 switches directly
+between these agents instead of using its default `Shift+Tab` binding. Session
+tabs are disabled because this workflow uses the terminal multiplexer for
+session organization.
 
 You can optimize cost and performance by configuring different models for each agent within your `opencode.json` configuration file under the `"agent"` key.
 

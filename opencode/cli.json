@@ -1,0 +1,20 @@
+{
+  "keybinds": {
+    "agent.cycle": "tab",
+    "model.cycle_favorite": "<leader>right",
+    "model.cycle_favorite_reverse": "<leader>left"
+  },
+  "plugins": ["./plugins/tui/zed-bell-v2.ts"],
+  "tabs": {
+    "enabled": false
+  },
+  "diffs": {
+    "wrap": "word"
+  },
+  "session": {
+    "sidebar": "hide",
+    "scrollbar": false,
+    "thinking": "show"
+  },
+  "animations": true
+}

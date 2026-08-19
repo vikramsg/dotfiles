@@ -1,7 +1,7 @@
 ---
 description: Implementation subagent that executes the planner's instructions, makes code changes, and runs real verification.
 mode: subagent
-hidden: true
+hidden: false
 permission:
   bash: allow
   read: allow

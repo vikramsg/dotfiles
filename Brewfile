@@ -15,6 +15,9 @@ brew "lazygit"
 # Shows current git branch/status directly in tmux status line.
 brew "gitmux"
 
+# Persistent terminal multiplexer alternative to tmux.
+brew "herdr"
+
 # Better git and lazygit diffs with syntax highlighting.
 brew "git-delta"
 

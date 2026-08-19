@@ -6,10 +6,10 @@ import type {
   ToolPart,
   UserMessage,
 } from "@opencode-ai/sdk";
-import type { Hooks, PluginInput } from "@opencode-ai/plugin";
+import type { Hooks, PluginInput } from "@opencode-ai/plugin/v1";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import modeTransitionReminder from "../../plugins/mode-transition-reminder.ts";
+import modeTransitionReminder from "../../plugins-v1/mode-transition-reminder.ts";
 
 const BUILD_REMINDER = `<system-reminder>
 Your operational mode has changed from discuss to build.
