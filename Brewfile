@@ -3,6 +3,7 @@ brew "autossh"
 brew "fzf"
 # Fast file finder used by snacks explorer search.
 brew "fd"
+
 # ripgrep used in grep search inside neovim
 brew "rg"
 
@@ -15,11 +16,11 @@ brew "lazygit"
 # Shows current git branch/status directly in tmux status line.
 brew "gitmux"
 
+# Terminal multiplexer.
+brew "tmux"
+
 # Persistent terminal multiplexer alternative to tmux.
 brew "herdr"
-
-# Better git and lazygit diffs with syntax highlighting.
-brew "git-delta"
 
 # Required to build/install local Go tooling like bin/marxual via `just marxual`.
 brew "go"
@@ -28,7 +29,6 @@ brew "go"
 brew "mcat"
 
 brew "zoxide"
-brew "television"
 
 # Terminal database client.
 brew "harlequin"
@@ -47,6 +47,7 @@ brew "go"
 
 # Duckdb for analytics
 brew "duckdb"
+
 # Raster analytics
 brew "gdal"
 
