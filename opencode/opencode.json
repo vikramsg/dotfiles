@@ -1,31 +1,46 @@
 {
     "$schema": "https://opencode.ai/config.json",
     "model": "azure-cognitive-services/gpt-5.6-sol",
-    "default_agent": "discuss",
     "instructions": ["~/.config/opencode/rules.md"],
     "permissions": [
+        {
+            "action": "shell",
+            "resource": "*rm*.sqlite*",
+            "effect": "deny"
+        },
+        {
+            "action": "shell",
+            "resource": "*rm*.db*",
+            "effect": "deny"
+        },
+        {
+            "action": "external_directory",
+            "resource": "/tmp/**",
+            "effect": "allow"
+        },
+        {
+            "action": "external_directory",
+            "resource": "/private/tmp/**",
+            "effect": "allow"
+        },
+        {
+            "action": "external_directory",
+            "resource": "*.local/**",
+            "effect": "allow"
+        },
+        {
+            "action": "external_directory",
+            "resource": "*.config/**",
+            "effect": "allow"
+        },
         {
             "action": "websearch",
             "resource": "*",
             "effect": "allow"
         }
     ],
-    "permission": {
-        "bash": {
-            "*rm*.sqlite*": "deny",
-            "*rm*.db*": "deny"
-        },
-        "external_directory": {
-            "/tmp/**": "allow",
-            "/private/tmp/**": "allow",
-            "*.local/**": "allow",
-            "*.config/**": "allow",
-            "/opt/homebrew/lib/**": "allow"
-        }
-    },
     "agent": {
         "build": {
-            "prompt": "{file:./prompts/build.txt}\n\n{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}",
             "options": {
                 "serviceTier": "priority"
             }
@@ -36,44 +51,16 @@
                 "reasoningEffort": "medium"
             }
         },
-        "plan": {
-            "disable": true
-        },
-        "rigor-planner": {
-            "disable": true,
-            "description": "Disabling because we are writing plans in discuss mode"
-        },
-        "discuss": {
-            "description": "Discusses designs and writes implementation plans without modifying the system.",
-            "mode": "primary",
-            "prompt": "{file:./prompts/plan.txt}\n\n{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}\n\n{file:./prompts/discuss.txt}",
-            "permission": {
-                "question": "deny",
-                "plan_exit": "allow",
-                "task": {
-                    "general": "deny",
-                    "implementer": "deny"
-                },
-                "edit": {
-                    "*": "deny",
-                    ".agents/plans/**": "allow"
-                }
-            },
+        "general": {
+            "model": "azure-cognitive-services/gpt-5.6-terra",
             "options": {
-                "serviceTier": "priority"
+                "reasoningEffort": "medium"
             }
         }
     },
     "lsp": false,
     "formatter": false,
     "provider": {
-        "google": {
-            "options": {
-                "websearch_cited": {
-                    "model": "gemini-3.5-flash"
-                }
-            }
-        },
         "azure-cognitive-services": {
             "options": {
                 "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1"
@@ -111,55 +98,6 @@
                         "reasoningEffort": "high",
                         "reasoningSummary": "auto"
                     },
-                    "modalities": {
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                },
-                "gpt-5.4": {
-                    "id": "gpt-5.4",
-                    "name": "gpt-5.4",
-                    "modalities": {
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                }
-            }
-        },
-        "azure-openai": {
-            "npm": "@ai-sdk/openai",
-            "options": {
-                "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1",
-                "apiKey": "{env:AZURE_OPENAI_API_KEY}"
-            },
-            "models": {
-                "gpt-5.6-terra": {
-                    "id": "gpt-5.6-terra",
-                    "name": "gpt-5.6-terra",
-                    "modalities": {
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                },
-                "gpt-5.6-sol": {
-                    "id": "gpt-5.6-sol",
-                    "name": "gpt-5.6-sol",
-                    "modalities": {
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                },
-                "gpt-5.5": {
-                    "id": "gpt-5.5",
-                    "name": "gpt-5.5",
-                    "modalities": {
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                },
-                "gpt-5.4": {
-                    "id": "gpt-5.4",
-                    "name": "gpt-5.4",
                     "modalities": {
                         "input": ["text", "image", "pdf"],
                         "output": ["text"]
