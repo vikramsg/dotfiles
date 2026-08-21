@@ -7,11 +7,16 @@ os:
   edit: '[ -z "$NVIM" ] && (nvim -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}})'
   editAtLine: '[ -z "$NVIM" ] && (nvim +{{line}} -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}} && nvim --server "$NVIM" --remote-send ":{{line}}<CR>")'
   editAtLineAndWait: '[ -z "$NVIM" ] && (nvim +{{line}} -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}} && nvim --server "$NVIM" --remote-send ":{{line}}<CR>")'
+
 gui:
-  wrapLinesInStagingView: true
-  splitDiff: 'auto'
-  sidePanelWidth: 0.2
+  border: rounded
+  showCommandLog: false
+  showRandomTip: false
   nerdFontsVersion: "3"
+  showFileIcons: true
+  wrapLinesInStagingView: true
+  splitDiff: auto
+  sidePanelWidth: 0.22
   # TokyoNight Night theme (matches Neovim colorscheme)
   theme:
     activeBorderColor:
@@ -42,12 +47,16 @@ gui:
       - '#c0caf5'
   authorColors:
     '*': '#bb9af7'
+
 git:
   diffContextSize: 5
+  paging:
+    colorArg: always
+    pager: delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=base16-256 --minus-style='syntax #4a272f' --minus-emph-style='syntax #713137' --plus-style='syntax #243e4a' --plus-emph-style='syntax #2c5a66' --line-numbers-minus-style='#914c54' --line-numbers-plus-style='#449dab' --line-numbers-zero-style='#3b4261' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
   diffRenderers:
-    # Use delta with TokyoNight Night colors to match Neovim
     - command: >-
         delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=base16-256 --minus-style='syntax #4a272f' --minus-emph-style='syntax #713137' --plus-style='syntax #243e4a' --plus-emph-style='syntax #2c5a66' --line-numbers-minus-style='#914c54' --line-numbers-plus-style='#449dab' --line-numbers-zero-style='#3b4261' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
+
 customCommands:
   - key: '<c-y>'
     context: 'global'

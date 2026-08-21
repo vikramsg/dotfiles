@@ -13,6 +13,9 @@ brew "eza"
 # Lazygit
 brew "lazygit"
 
+# Yazi file manager
+brew "yazi"
+
 # Shows current git branch/status directly in tmux status line.
 brew "gitmux"
 
