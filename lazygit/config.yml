@@ -7,19 +7,16 @@ os:
   edit: '[ -z "$NVIM" ] && (nvim -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}})'
   editAtLine: '[ -z "$NVIM" ] && (nvim +{{line}} -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}} && nvim --server "$NVIM" --remote-send ":{{line}}<CR>")'
   editAtLineAndWait: '[ -z "$NVIM" ] && (nvim +{{line}} -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}} && nvim --server "$NVIM" --remote-send ":{{line}}<CR>")'
-
 gui:
   wrapLinesInStagingView: true
   splitDiff: 'auto'
   sidePanelWidth: 0.2
-
 git:
   diffContextSize: 5
-  pagers:
+  diffRenderers:
     # Use delta with a custom syntax-theme to remove blocky high-contrast ANSI colors, applying subtle hex background colors instead.
-    - pager: >-
+    - command: >-
         delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
-
 customCommands:
   - key: '<c-y>'
     context: 'global'
