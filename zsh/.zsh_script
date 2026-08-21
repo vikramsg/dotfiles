@@ -96,3 +96,12 @@ EOF
         /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes \
         vm "exec /home/linuxbrew/.linuxbrew/bin/tmux attach-session -d -t $remote_session"
 }
+
+# Fuzzy find and open file in Neovim
+fz() {
+    local file
+    file=$(fzf --preview 'bat --style=numbers --color=always {} 2>/dev/null || cat {}') || return
+    if [[ -n "$file" ]]; then
+        ${EDITOR:-nvim} "$file"
+    fi
+}
