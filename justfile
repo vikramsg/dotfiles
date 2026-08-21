@@ -354,6 +354,11 @@ harlequin:
     ln -sfn {{justfile_directory()}}/harlequin/config.toml ~/.config/harlequin/config.toml
     @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
 
+# Install or update terminal-browser
+terminal-browser:
+    @echo "Installing terminal-browser..."
+    @curl -fsSL https://terminal-browser.sh/install | bash
+
 # Set up all symlinks
 all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
