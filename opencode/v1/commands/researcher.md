@@ -5,4 +5,4 @@ subtask: false
 ---
 $ARGUMENTS
 
-**REMEMBER**: Strictly follow the citation requirements.
+**REMEMBER**: You should strictly adhere to the citiation requirements. 

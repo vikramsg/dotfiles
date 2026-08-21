@@ -1,5 +1,11 @@
 [
   {
+    "bindings": {
+      "cmd-alt-shift-up": "multi_workspace::MoveProjectUp",
+      "cmd-alt-shift-down": "multi_workspace::MoveProjectDown",
+    },
+  },
+  {
     "context": "Workspace",
     "bindings": {
       "ctrl-cmd-left": "workspace::ActivatePaneLeft",
