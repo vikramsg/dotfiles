@@ -11,12 +11,40 @@ gui:
   wrapLinesInStagingView: true
   splitDiff: 'auto'
   sidePanelWidth: 0.2
+  theme:
+    activeBorderColor:
+      - '#89b4fa'
+      - bold
+    inactiveBorderColor:
+      - '#a6adc8'
+    searchingActiveBorderColor:
+      - '#f9e2af'
+    optionsTextColor:
+      - '#89b4fa'
+    selectedLineBgColor:
+      - '#313244'
+    inactiveViewSelectedLineBgColor:
+      - '#45475a'
+    cherryPickedCommitFgColor:
+      - '#89b4fa'
+    cherryPickedCommitBgColor:
+      - '#45475a'
+    markedBaseCommitFgColor:
+      - '#89b4fa'
+    markedBaseCommitBgColor:
+      - '#f9e2af'
+    unstagedChangesColor:
+      - '#f38ba8'
+    defaultFgColor:
+      - '#cdd6f4'
+  authorColors:
+    '*': '#b4befe'
 git:
   diffContextSize: 5
   diffRenderers:
-    # Use delta with a custom syntax-theme to remove blocky high-contrast ANSI colors, applying subtle hex background colors instead.
+    # Use delta with Catppuccin Mocha syntax-theme and subtle diff highlights
     - command: >-
-        delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
+        delta --dark --paging=never --side-by-side --line-numbers --syntax-theme="Catppuccin Mocha" --minus-style='syntax #493447' --minus-emph-style='bold syntax #694559' --plus-style='syntax #394545' --plus-emph-style='bold syntax #4e6356' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
 customCommands:
   - key: '<c-y>'
     context: 'global'
@@ -31,19 +59,19 @@ customCommands:
         labelFormat: '{{ .file }}'
     # Uses the same delta styling as the existing full-screen diff, but compares against main.
     command: >-
-      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" diff main -- {{.Form.File | quote}}
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=\"Catppuccin Mocha\" --minus-style='syntax #493447' --minus-emph-style='bold syntax #694559' --plus-style='syntax #394545' --plus-emph-style='bold syntax #4e6356'" diff main -- {{.Form.File | quote}}
     output: terminal
   - key: '<c-g>'
     context: 'files'
     description: 'Full-screen diff of selected file'
     # Passes identical delta style arguments inline so full-screen mode matches the inner UI style
     command: >-
-      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" diff HEAD -- {{.SelectedFile.Name | quote}}
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=\"Catppuccin Mocha\" --minus-style='syntax #493447' --minus-emph-style='bold syntax #694559' --plus-style='syntax #394545' --plus-emph-style='bold syntax #4e6356'" diff HEAD -- {{.SelectedFile.Name | quote}}
     output: terminal
   - key: '<c-g>'
     context: 'commits'
     description: 'Full-screen diff of selected commit'
     # Passes identical delta style arguments inline so full-screen mode matches the inner UI style
     command: >-
-      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" show {{.SelectedLocalCommit.Sha}}
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=\"Catppuccin Mocha\" --minus-style='syntax #493447' --minus-emph-style='bold syntax #694559' --plus-style='syntax #394545' --plus-emph-style='bold syntax #4e6356'" show {{.SelectedLocalCommit.Sha}}
     output: terminal

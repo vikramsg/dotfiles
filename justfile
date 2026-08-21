@@ -235,15 +235,16 @@ marxual:
     @mkdir -p ~/.local/bin && cd {{justfile_directory()}}/bin/marxual && GOBIN="$HOME/.local/bin" go install .
     @echo "marxual installed at ~/.local/bin/marxual"
 
-# Set up lazygit symlink (Linux only)
+# Set up lazygit symlink
 lazygit:
-    @if [ "$(uname)" = "Linux" ]; then \
-        echo "Setting up lazygit symlink..."; \
-        mkdir -p ~/.config/lazygit; \
-        ln -sfn {{justfile_directory()}}/lazygit/config.yml ~/.config/lazygit/config.yml; \
-        echo "lazygit symlink created at ~/.config/lazygit/config.yml"; \
-    else \
-        echo "Skipping lazygit symlink on non-Linux OS"; \
+    @echo "Setting up lazygit symlinks..."; \
+    mkdir -p ~/.config/lazygit; \
+    ln -sfn {{justfile_directory()}}/lazygit/config.yml ~/.config/lazygit/config.yml; \
+    echo "lazygit symlink created at ~/.config/lazygit/config.yml"; \
+    if [ "$(uname)" = "Darwin" ]; then \
+        mkdir -p "$HOME/Library/Application Support/lazygit"; \
+        ln -sfn {{justfile_directory()}}/lazygit/config.yml "$HOME/Library/Application Support/lazygit/config.yml"; \
+        echo "lazygit symlink created at ~/Library/Application Support/lazygit/config.yml"; \
     fi
 
 # Set up zsh symlink
