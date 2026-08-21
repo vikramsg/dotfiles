@@ -58,6 +58,10 @@ git:
     - command: >-
         delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=base16-256 --minus-style='syntax #4a272f' --minus-emph-style='syntax #713137' --plus-style='syntax #243e4a' --plus-emph-style='syntax #2c5a66' --line-numbers-minus-style='#914c54' --line-numbers-plus-style='#449dab' --line-numbers-zero-style='#3b4261' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
 
+keybinding:
+  universal:
+    copyToClipboard: 'y'
+
 customCommands:
   - key: '<c-y>'
     context: 'global'
