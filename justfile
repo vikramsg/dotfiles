@@ -220,10 +220,8 @@ bin:
     @echo "Setting up custom bin symlinks..."
     mkdir -p ~/.local/bin
     ln -sfn {{justfile_directory()}}/bin/lc ~/.local/bin/lc
-    @if [ "$(uname)" = "Linux" ]; then \
-        ln -sfn {{justfile_directory()}}/bin/xdg-open ~/.local/bin/xdg-open; \
-        echo "xdg-open symlink created at ~/.local/bin/xdg-open"; \
-    fi
+    ln -sfn {{justfile_directory()}}/bin/xdg-open ~/.local/bin/xdg-open
+    @echo "bin symlinks created at ~/.local/bin"
 
 # Build and install marxual
 marxual:
