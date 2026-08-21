@@ -68,8 +68,6 @@ cd nvim
 nvim --headless -u init.lua "+lua require('tests.run').run()" +qa
 ```
 
-The Diffview picker spec opens a real temporary git repo, launches `:DiffviewOpen`, opens `:DiffviewPicker`, and asserts the Snacks picker items and confirmation handoff stay backed by the live Diffview session.
-
 ## Remote issues
 
 1. `ruff`

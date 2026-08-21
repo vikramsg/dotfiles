@@ -1,5 +1,6 @@
 os:
-  openLink: 'xdg-open {{link}}'
+  open: '[ "$(uname)" = "Darwin" ] && open {{filename}} || xdg-open {{filename}}'
+  openLink: '[ "$(uname)" = "Darwin" ] && open {{link}} || xdg-open {{link}}'
   # We do not use the built-in editPreset: 'nvim-remote' here because it forcefully exits the lazygit 
   # process by sending "q" which triggers the lazygit.nvim on_exit callback, stealing focus back to 
   # the old buffer. Instead, we use a custom edit command that leaves the lazygit terminal process 
@@ -7,16 +8,56 @@ os:
   edit: '[ -z "$NVIM" ] && (nvim -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}})'
   editAtLine: '[ -z "$NVIM" ] && (nvim +{{line}} -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}} && nvim --server "$NVIM" --remote-send ":{{line}}<CR>")'
   editAtLineAndWait: '[ -z "$NVIM" ] && (nvim +{{line}} -- {{filename}}) || (nvim --server "$NVIM" --remote-send ''<C-\><C-n>:q<CR>'' && nvim --server "$NVIM" --remote {{filename}} && nvim --server "$NVIM" --remote-send ":{{line}}<CR>")'
+
 gui:
+  border: rounded
+  showCommandLog: false
+  showRandomTip: false
+  nerdFontsVersion: "3"
+  showFileIcons: true
   wrapLinesInStagingView: true
-  splitDiff: 'auto'
-  sidePanelWidth: 0.2
+  splitDiff: auto
+  sidePanelWidth: 0.22
+  # TokyoNight Night theme (matches Neovim colorscheme)
+  theme:
+    activeBorderColor:
+      - '#ff9e64'
+      - bold
+    inactiveBorderColor:
+      - '#27a1b9'
+    searchingActiveBorderColor:
+      - '#ff9e64'
+      - bold
+    optionsTextColor:
+      - '#7aa2f7'
+    selectedLineBgColor:
+      - '#283457'
+    inactiveViewSelectedLineBgColor:
+      - '#1f2335'
+    cherryPickedCommitFgColor:
+      - '#7aa2f7'
+    cherryPickedCommitBgColor:
+      - '#bb9af7'
+    markedBaseCommitFgColor:
+      - '#7aa2f7'
+    markedBaseCommitBgColor:
+      - '#e0af68'
+    unstagedChangesColor:
+      - '#db4b4b'
+    defaultFgColor:
+      - '#c0caf5'
+  authorColors:
+    '*': '#bb9af7'
+
 git:
   diffContextSize: 5
+  paging:
+    colorArg: always
+    pager: delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=base16-256 --minus-style='syntax #4a272f' --minus-emph-style='syntax #713137' --plus-style='syntax #243e4a' --plus-emph-style='syntax #2c5a66' --line-numbers-minus-style='#914c54' --line-numbers-plus-style='#449dab' --line-numbers-zero-style='#3b4261' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
   diffRenderers:
-    # Use delta with a custom syntax-theme to remove blocky high-contrast ANSI colors, applying subtle hex background colors instead.
     - command: >-
-        delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
+        delta --dark --paging=never --side-by-side --line-numbers --syntax-theme=base16-256 --minus-style='syntax #4a272f' --minus-emph-style='syntax #713137' --plus-style='syntax #243e4a' --plus-emph-style='syntax #2c5a66' --line-numbers-minus-style='#914c54' --line-numbers-plus-style='#449dab' --line-numbers-zero-style='#3b4261' --hyperlinks --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
+
 customCommands:
   - key: '<c-y>'
     context: 'global'
@@ -29,21 +70,18 @@ customCommands:
         filter: '(?P<file>.+)'
         valueFormat: '{{ .file }}'
         labelFormat: '{{ .file }}'
-    # Uses the same delta styling as the existing full-screen diff, but compares against main.
     command: >-
-      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" diff main -- {{.Form.File | quote}}
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=base16-256 --minus-style='syntax #4a272f' --minus-emph-style='syntax #713137' --plus-style='syntax #243e4a' --plus-emph-style='syntax #2c5a66' --line-numbers-minus-style='#914c54' --line-numbers-plus-style='#449dab' --line-numbers-zero-style='#3b4261'" diff main -- {{.Form.File | quote}}
     output: terminal
   - key: '<c-g>'
     context: 'files'
     description: 'Full-screen diff of selected file'
-    # Passes identical delta style arguments inline so full-screen mode matches the inner UI style
     command: >-
-      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" diff HEAD -- {{.SelectedFile.Name | quote}}
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=base16-256 --minus-style='syntax #4a272f' --minus-emph-style='syntax #713137' --plus-style='syntax #243e4a' --plus-emph-style='syntax #2c5a66' --line-numbers-minus-style='#914c54' --line-numbers-plus-style='#449dab' --line-numbers-zero-style='#3b4261'" diff HEAD -- {{.SelectedFile.Name | quote}}
     output: terminal
   - key: '<c-g>'
     context: 'commits'
     description: 'Full-screen diff of selected commit'
-    # Passes identical delta style arguments inline so full-screen mode matches the inner UI style
     command: >-
-      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=Dracula --minus-style='syntax #3f0001' --minus-emph-style='syntax #780000' --plus-style='syntax #003800' --plus-emph-style='syntax #007300'" show {{.SelectedLocalCommit.Sha}}
+      clear && git -c core.pager="delta --paging=always --dark --side-by-side --line-numbers --syntax-theme=base16-256 --minus-style='syntax #4a272f' --minus-emph-style='syntax #713137' --plus-style='syntax #243e4a' --plus-emph-style='syntax #2c5a66' --line-numbers-minus-style='#914c54' --line-numbers-plus-style='#449dab' --line-numbers-zero-style='#3b4261'" show {{.SelectedLocalCommit.Sha}}
     output: terminal
