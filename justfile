@@ -110,6 +110,7 @@ opencode: npm-global-bin
     ln -sfn {{justfile_directory()}}/opencode/tui.json ~/.config/opencode/tui.json
     ln -sfn {{justfile_directory()}}/opencode/cli.json ~/.config/opencode/cli.json
     ln -sfn {{justfile_directory()}}/opencode/rules.md ~/.config/opencode/rules.md
+    ln -sfn {{justfile_directory()}}/opencode/AGENTS.md ~/.config/opencode/AGENTS.md
     ln -sfn {{justfile_directory()}}/opencode/agents ~/.config/opencode/agents
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
     ln -sfn {{justfile_directory()}}/opencode/prompts ~/.config/opencode/prompts
@@ -118,6 +119,7 @@ opencode: npm-global-bin
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
     @echo "OpenCode 2 CLI config symlinked to ~/.config/opencode/cli.json"
     @echo "Opencode rules file symlinked to ~/.config/opencode/rules.md"
+    @echo "OpenCode instructions symlinked to ~/.config/opencode/AGENTS.md"
     @echo "Opencode agent directory symlinked to ~/.config/opencode/agents"
     @echo "Opencode commands directory symlinked to ~/.config/opencode/commands"
     @echo "Opencode plugins directory symlinked to ~/.config/opencode/plugins"
