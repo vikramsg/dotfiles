@@ -1,6 +1,6 @@
 # lch
 
-Thin watcher orchestrator for dotfiles jobs (`launchd` on macOS, `systemd --user` on Linux).
+Thin native orchestrator for path-triggered watchers and configured macOS services.
 
 It owns:
 
@@ -8,7 +8,7 @@ It owns:
 - LaunchAgent plist generation (macOS)
 - systemd user unit generation (Linux)
 - install/uninstall/status/logs flows
-- dispatch from native watcher into domain CLIs
+- dispatch from native jobs into domain CLIs
 
 ## Install
 
@@ -32,12 +32,14 @@ lch launchd list
 lch launchd page --page 1 --page-size 25
 lch install lch-screenshot-clipboard
 lch install lch-screenshot-sync
+lch install lch-opener-tunnel
 lch status lch-screenshot-clipboard
 lch status lch-screenshot-sync
 lch logs lch-screenshot-clipboard
 lch logs lch-screenshot-sync
 lch logs lch-screenshot-sync --follow
 lch logs lch-screenshot-sync --paths
+lch logs lch-opener-tunnel --follow
 lch run lch-screenshot-clipboard
 lch run lch-screenshot-sync
 lch uninstall lch-screenshot-clipboard
@@ -51,9 +53,13 @@ lch uninstall lch-screenshot-sync
 
 `lch config` reports the single effective config file path currently in use, the configured namespace, and the derived launchd paths.
 
-The repo-managed config source of truth lives at `lch/config.json`. Use `just lch` to symlink it into `~/.config/lch/config.json` and install the tool.
+The repo-managed config source of truth lives at `lch/config.toml`. Use `just lch` to symlink it into `~/.config/lch/config.toml` and install the tool.
 
 On Linux sink machines, `just lch` installs the `lch-screenshot-clipboard` watcher job only.
+
+Persistent services are loaded from the TOML `services` table on macOS. Their
+LaunchAgents use `RunAtLoad`, `KeepAlive`, and a restart throttle without
+`WatchPaths`; dispatch replaces LCH with the configured domain command.
 
 `lch launchd list` uses an interactive pager when stdout is a TTY and renders the full discovered launchd dataset. Use `lch launchd page` for deterministic, non-interactive pagination in tests and scripts.
 

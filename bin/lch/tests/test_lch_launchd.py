@@ -5,12 +5,12 @@ from click.testing import CliRunner
 
 def write_config(path: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(__import__("json").dumps(payload))
+    path.write_text(f'namespace = "{payload["namespace"]}"\n')
     return path
 
 
 def test_launch_agent_paths_follow_label_conventions(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     from lch.jobs import get_job_definition
@@ -25,7 +25,7 @@ def test_launch_agent_paths_follow_label_conventions(tmp_path, monkeypatch):
 
 
 def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     from lch.jobs import get_job_definition
@@ -47,8 +47,36 @@ def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path
     assert plist["StandardErrorPath"] == str(paths.stderr_log_path)
 
 
+def test_build_service_plist_has_persistent_policy_without_watch_paths(tmp_path):
+    from lch.jobs import ServiceDefinition
+    from lch.launchd import build_launch_agent_service_plist, get_job_paths
+
+    service = ServiceDefinition(
+        job_id="lch-opener-tunnel",
+        label="com.vikramsg.dotfiles.lch-opener-tunnel",
+        dispatch_command=["opener-tunnel", "run"],
+    )
+    paths = get_job_paths(service, home=tmp_path)
+
+    plist = build_launch_agent_service_plist(
+        service,
+        executable_path=Path("/Users/vikramsingh/.local/bin/lch"),
+        paths=paths,
+    )
+
+    assert plist["ProgramArguments"] == [
+        "/Users/vikramsingh/.local/bin/lch",
+        "run",
+        "lch-opener-tunnel",
+    ]
+    assert plist["RunAtLoad"] is True
+    assert plist["KeepAlive"] is True
+    assert plist["ThrottleInterval"] == 10
+    assert "WatchPaths" not in plist
+
+
 def test_launch_agent_paths_follow_label_conventions_for_sync_job(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     from lch.jobs import get_job_definition
@@ -64,7 +92,7 @@ def test_launch_agent_paths_follow_label_conventions_for_sync_job(tmp_path, monk
 
 def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     import lch.cli as cli_module

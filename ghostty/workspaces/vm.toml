@@ -5,10 +5,8 @@ focus_tab = 1
 # AUTOSSH_POLL=30: detect dead child ssh process quickly (default is 600s).
 # AUTOSSH_GATETIME=0: do not give up if first reconnect fails during Wi-Fi wake.
 # -M 0: disable autossh monitor port and rely on SSH ServerAlive* settings.
-# IMPORTANT: only one tab should own SSH forwards (local ports or RemoteForward sockets).
+# IMPORTANT: only one tab should own the shared local port forwards.
 # Other tabs force-clear inherited forwards via -o ClearAllForwardings=yes.
-# Helper SSH commands must do the same, otherwise a short-lived session can clobber
-# a live Unix-socket forward such as ~/.opener.sock and leave behind connection refused.
 
 [[tabs]]
 name = "dotfiles"

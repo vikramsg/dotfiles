@@ -73,3 +73,29 @@ def test_run_sync_job_invokes_expected_screenshot_command(monkeypatch):
 
     assert called[0][-2:] == ["sync", "run"]
     assert called[0][0].endswith("screenshot")
+
+
+def test_configured_service_dispatch_uses_exec(tmp_path, monkeypatch):
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        """
+namespace = "com.example"
+
+[services.lch-opener-tunnel]
+command = ["opener-tunnel", "run"]
+""".strip()
+        + "\n"
+    )
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+    import lch.launchd as launchd_module
+
+    calls: list[tuple[str, list[str]]] = []
+
+    def fake_execvp(executable: str, command: list[str]) -> None:
+        calls.append((executable, command))
+
+    monkeypatch.setattr(launchd_module.os, "execvp", fake_execvp)
+
+    launchd_module.run_job("lch-opener-tunnel")
+
+    assert calls == [("opener-tunnel", ["opener-tunnel", "run"])]

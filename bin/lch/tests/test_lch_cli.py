@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -6,12 +5,12 @@ from click.testing import CliRunner
 
 def write_config(path: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload))
+    path.write_text(f'namespace = "{payload["namespace"]}"\n')
     return path
 
 
 def test_job_definition_has_expected_label_dispatch_and_watch_path_command(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     from lch.jobs import get_job_definition
@@ -25,7 +24,7 @@ def test_job_definition_has_expected_label_dispatch_and_watch_path_command(tmp_p
 
 
 def test_sync_job_definition_has_expected_label_dispatch_and_watch_path_command(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     from lch.jobs import get_job_definition
@@ -93,7 +92,7 @@ def test_config_reports_effective_paths_and_namespace_format(monkeypatch):
     monkeypatch.setattr(
         cli_module,
         "render_lch_config",
-        lambda: "CONFIG_FILE  ~/.config/lch/config.json\nNAMESPACE  com.vikramsg.dotfiles\nLCH_BIN  ~/.local/bin/lch",
+        lambda: "CONFIG_FILE  ~/.config/lch/config.toml\nNAMESPACE  com.vikramsg.dotfiles\nLCH_BIN  ~/.local/bin/lch",
     )
 
     runner = CliRunner()
@@ -101,7 +100,7 @@ def test_config_reports_effective_paths_and_namespace_format(monkeypatch):
 
     assert result.exit_code == 0
     assert result.output.splitlines() == [
-        "CONFIG_FILE  ~/.config/lch/config.json",
+        "CONFIG_FILE  ~/.config/lch/config.toml",
         "NAMESPACE  com.vikramsg.dotfiles",
         "LCH_BIN  ~/.local/bin/lch",
     ]

@@ -64,39 +64,13 @@ When multiple SSH sessions run concurrently, avoid port collisions:
 
 If more than one session binds the same local ports, SSH fails with `Address already in use`.
 
-### Unix Socket Forwards Need One Owner Too
+### Browser Opener Tunnel
 
-This rule also applies to `RemoteForward` Unix sockets such as browser-opener bridges.
-
-- Keep the socket forward on one long-lived owner alias only.
-- Do not put the same socket `RemoteForward` on a broad host pattern such as `Host vm vm.*`.
-- Make all helper sessions opt out with `-o ClearAllForwardings=yes`, including short-lived commands like `ssh vm "tmux list-sessions"`.
-
-Why this matters:
-
-- A short-lived helper session can inherit the same `RemoteForward` socket path as the owner session.
-- With `StreamLocalBindUnlink yes`, that helper can replace the live socket path.
-- When the helper exits, the original session does not automatically reclaim the filesystem path.
-- The socket file may still exist, but clients will fail with `connection refused`.
-
-Sanitized example:
-
-```sshconfig
-Host vm vm.*
-    HostName <remote-host>
-    IdentityFile ~/.ssh/<key>
-    User <remote-user>
-
-Host vm.owner
-    RemoteForward /home/<remote-user>/.opener.sock /Users/<local-user>/.opener.sock
-```
-
-```bash
-# Good: helper commands do not inherit forwards
-ssh -o ClearAllForwardings=yes vm "tmux list-sessions"
-ssh -o ClearAllForwardings=yes vm "tmux has-session -t <name>"
-autossh -M 0 -o ClearAllForwardings=yes vm "tmux attach -d -t <name>"
-```
+The `opener-tunnel` service uses the existing private `vm` alias for HostName,
+User, and IdentityFile. Tunnel-specific SSH flags and the Unix socket
+`RemoteForward` are assembled from `opener_tunnel/config.toml`; they are not
+stored in shared or private SSH config. Run `just opener-tunnel` on the Mac to
+install the service.
 
 ---
 
@@ -186,30 +160,12 @@ Fix:
 2. Use `-o ClearAllForwardings=yes` for non-owner sessions.
 3. Close stale local SSH sessions that already own those ports.
 
-### Unix socket exists but clients get `connection refused`
+### Browser tunnel unavailable
 
-If a forwarded Unix socket path still exists on the remote host but tools like `lazygit`, `gh browse`, or `xdg-open` fail with `connection refused`, the usual cause is a transient SSH session inheriting and replacing the same `RemoteForward` path.
-
-Common pattern:
-
-1. A long-lived owner session creates the socket forward.
-2. A short-lived helper session also matches the same SSH host pattern and inherits that `RemoteForward`.
-3. The helper session replaces the socket path and then exits.
-4. The original session keeps running, but the socket path no longer points to its live listener.
-
-Fix:
-
-1. Move the Unix socket `RemoteForward` onto one owner alias only.
-2. Add `-o ClearAllForwardings=yes` to helper SSH commands and non-owner tabs.
-3. Reconnect the owner session so it recreates the socket cleanly.
-4. Verify both the path and the listener state.
-
-Useful checks:
-
-```bash
-ls -l ~/.opener.sock
-ss -xl | rg 'opener.sock'
-```
+On the Mac, reinstall with `just opener-tunnel`, inspect service lifecycle with
+`lch logs lch-opener-tunnel --follow`, and inspect live SSH output with
+`tmux attach -t lch-opener-tunnel`. The setup does not modify private SSH
+configuration.
 
 ### Applied successfully but `clientaliveinterval` is still 120
 

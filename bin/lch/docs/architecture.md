@@ -1,8 +1,12 @@
 # lch architecture
 
-`lch` is a thin native watcher orchestrator (`launchd` on macOS, `systemd --user` on Linux). It does not own screenshot rules or state; it only translates job definitions into OS watcher units and dispatch commands.
+`lch` is a thin native orchestrator for existing path watchers and configured
+macOS services. It does not own screenshot or opener behavior; it translates
+definitions into native jobs and dispatches domain commands.
 
-Its namespace configuration is repo-managed at `lch/config.json` and symlinked to `~/.config/lch/config.json`.
+Its configuration is repo-managed at `lch/config.toml` and symlinked to
+`~/.config/lch/config.toml`. Existing screenshot watcher definitions remain in
+Python; only persistent services come from the TOML `services` table.
 
 ## Job ownership
 
@@ -55,6 +59,19 @@ native watcher event
 ```
 
 On Linux sink machines, the installed watcher job is `lch-screenshot-clipboard` only.
+
+## Persistent service flow
+
+```text
+lch/config.toml [services.lch-opener-tunnel]
+  -> lch install lch-opener-tunnel
+  -> LaunchAgent: RunAtLoad + KeepAlive + ThrottleInterval
+  -> lch run lch-opener-tunnel
+  -> exec configured command: opener-tunnel run
+```
+
+Persistent services have no `WatchPaths`. They are not added to systemd; the
+existing Linux watcher path is unchanged.
 
 ## Discovery and pagination flow
 
