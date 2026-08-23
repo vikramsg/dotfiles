@@ -66,8 +66,10 @@ yazi:
     mkdir -p ~/.config/yazi
     mkdir -p ~/.config/yazi/profiles/screenshots
     ln -sfn {{justfile_directory()}}/yazi/yazi.toml ~/.config/yazi/yazi.toml
+    ln -sfn {{justfile_directory()}}/yazi/keymap.toml ~/.config/yazi/keymap.toml
     ln -sfn {{justfile_directory()}}/yazi/profiles/screenshots/yazi.toml ~/.config/yazi/profiles/screenshots/yazi.toml
     @echo "Yazi config symlink created at ~/.config/yazi/yazi.toml -> {{justfile_directory()}}/yazi/yazi.toml"
+    @echo "Yazi keymap symlink created at ~/.config/yazi/keymap.toml -> {{justfile_directory()}}/yazi/keymap.toml"
     @echo "Yazi Screenshots config symlink created at ~/.config/yazi/profiles/screenshots/yazi.toml -> {{justfile_directory()}}/yazi/profiles/screenshots/yazi.toml"
 
 # Set up Herdr config symlink while preserving its runtime directory
