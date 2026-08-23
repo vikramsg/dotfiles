@@ -23,3 +23,6 @@ bin/ocint/config/daemon.env
 
 # Vite
 .vite
+
+# Agents
+.agents/plans

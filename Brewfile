@@ -15,6 +15,8 @@ brew "lazygit"
 
 # Yazi file manager
 brew "yazi"
+# Parse Herdr API responses for the Yazi tab shortcut.
+brew "jq"
 
 # Shows current git branch/status directly in tmux status line.
 brew "gitmux"

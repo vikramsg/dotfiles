@@ -1,0 +1,11 @@
+#:schema https://yazi-rs.github.io/schemas/yazi.json
+
+[mgr]
+ratio = [1, 2, 5]
+sort_by = "mtime"
+sort_reverse = true
+show_hidden = true
+
+[preview]
+max_width = 2000
+max_height = 1600

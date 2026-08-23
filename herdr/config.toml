@@ -15,7 +15,8 @@
 # prefix+h / prefix+l / prefix+k / prefix+j: resize left / right / down / up
 # prefix+Shift+H/J/K/L: swap left / down / up / right
 # prefix+g: open LazyGit popup
-# prefix+e: open Yazi popup
+# prefix+e: open Yazi in a new tab
+# prefix+Shift+S: open Screenshots in a Yazi tab
 # prefix+v: pick and watch a Markdown file
 # prefix+Shift+T: open terminal popup
 # prefix+Shift+F: fuzzy find and edit a file
@@ -91,7 +92,7 @@ type = "shell"
 command = '"$HERDR_BIN_PATH" pane resize --direction up --pane "$HERDR_ACTIVE_PANE_ID"'
 description = "resize pane up"
 
-# Match the tmux popup commands. Herdr starts these in the focused pane's cwd.
+# Custom terminal tool launchers.
 [[keys.command]]
 key = "prefix+g"
 type = "popup"
@@ -102,11 +103,15 @@ height = "90%"
 
 [[keys.command]]
 key = "prefix+e"
-type = "popup"
-command = "yazi"
-description = "open Yazi popup"
-width = "90%"
-height = "90%"
+type = "shell"
+command = 'response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Yazi --env TERM=xterm-kitty --focus) && pane_id=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$pane_id" "exec yazi"'
+description = "open Yazi in a new tab"
+
+[[keys.command]]
+key = "prefix+shift+s"
+type = "shell"
+command = 'response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HOME/Desktop/Screenshots" --label Screenshots --env TERM=xterm-kitty --env YAZI_CONFIG_HOME="$HOME/.config/yazi/profiles/screenshots" --focus) && pane_id=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$pane_id" "exec yazi"'
+description = "open screenshots in Yazi"
 
 [[keys.command]]
 key = "prefix+v"
