@@ -7,5 +7,6 @@ sort_reverse = true
 show_hidden = true
 
 [preview]
-max_width = 2000
-max_height = 1600
+max_width = 1200
+max_height = 900
+image_quality = 60
