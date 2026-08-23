@@ -31,6 +31,7 @@ Pull request titles must use `scope: summary` with one of these explicit scopes:
 - `chore`
 - `ghostty`
 - `git`
+- `herdr`
 - `lch`
 - `nvim`
 - `ocint`

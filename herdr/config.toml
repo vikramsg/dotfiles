@@ -20,6 +20,9 @@ new_tab = "prefix+c"
 switch_tab = "prefix+1..9"
 previous_tab = "prefix+p"
 next_tab = "prefix+n"
+goto = ""
+edit_scrollback = ""
+rename_tab = ""
 close_pane = "prefix+x"
 zoom = "prefix+z"
 last_pane = "prefix+semicolon"
@@ -66,6 +69,39 @@ type = "shell"
 command = '"$HERDR_BIN_PATH" pane resize --direction up --pane "$HERDR_ACTIVE_PANE_ID"'
 description = "resize pane up"
 
+# Match the tmux popup commands. Herdr starts these in the focused pane's cwd.
+[[keys.command]]
+key = "prefix+g"
+type = "popup"
+command = "lazygit"
+description = "open LazyGit popup"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+e"
+type = "popup"
+command = "yazi"
+description = "open Yazi popup"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+shift+t"
+type = "popup"
+command = 'exec "${SHELL:-/bin/zsh}"'
+description = "open terminal popup"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+shift+f"
+type = "popup"
+command = "zsh -ic 'file=$(fzf --preview \"bat --style=numbers --color=always {} 2>/dev/null || cat {}\"); [ -n \"$file\" ] && nvim \"$file\"'"
+description = "fuzzy find and edit file"
+width = "90%"
+height = "90%"
+
 [ui]
 tab_bar_position = "top"
 pane_borders = true
@@ -75,3 +111,6 @@ mouse_capture = true
 copy_on_select = true
 confirm_close = true
 prompt_new_tab_name = false
+
+[experimental]
+kitty_graphics = true
