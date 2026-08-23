@@ -6,7 +6,10 @@
     "model.cycle_favorite_reverse": "<leader>left",
     "prompt.queue": "<leader>return"
   },
-  "plugins": ["./plugins/tui/zed-bell-v2.ts"],
+  "plugins": [
+    "./plugins/tui/zed-bell-v2.ts",
+    "./plugins/tui/herdr-tui-session-v2.ts"
+  ],
   "tabs": {
     "enabled": false
   },

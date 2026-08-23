@@ -25,11 +25,11 @@ brew "tmux"
 # Persistent terminal multiplexer alternative to tmux.
 brew "herdr"
 
-# Required to build/install local Go tooling like bin/marxual via `just marxual`.
-brew "go"
-
 # `cat` replacement used in terminal workflows for readable file previews.
 brew "mcat"
+
+# Terminal Markdown previewer used by the tmux and Herdr popups.
+brew "leaf-markdown-viewer"
 
 brew "zoxide"
 
