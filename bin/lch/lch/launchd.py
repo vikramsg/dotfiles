@@ -14,6 +14,7 @@ from lch.jobs import (
 
 
 SERVICE_RESTART_THROTTLE_SECONDS = 10
+LAUNCHD_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 @dataclass(frozen=True)
@@ -216,6 +217,7 @@ def build_launch_agent_service_plist(
         "ProgramArguments": [str(executable_path), "run", service.job_id],
         "StandardOutPath": str(paths.stdout_log_path),
         "StandardErrorPath": str(paths.stderr_log_path),
+        "EnvironmentVariables": {"PATH": LAUNCHD_PATH},
         "RunAtLoad": True,
         "KeepAlive": True,
         "ThrottleInterval": SERVICE_RESTART_THROTTLE_SECONDS,
@@ -293,10 +295,10 @@ def logs_job(job_id: str) -> tuple[Path, Path]:
 def run_job(job_id: str) -> None:
     job = get_launchd_job_definition(job_id)
     command = list(job.dispatch_command)
-    if isinstance(job, ServiceDefinition):
-        os.execvp(command[0], command)
-        return
     tool_path = get_tool_executable_path(command[0])
     if tool_path.exists():
         command[0] = str(tool_path)
+    if isinstance(job, ServiceDefinition):
+        os.execvp(command[0], command)
+        return
     subprocess.run(command, check=True)

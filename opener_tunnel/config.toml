@@ -29,7 +29,7 @@ args = [
 
 [vm]
 # Existing private SSH alias providing HostName, User, and IdentityFile.
-host = "vm"
+host = "vm-us"
 
 # Unix socket created on the remote VM by SSH RemoteForward.
 socket_path = "/home/vikram_orbio_earth/.opener.sock"

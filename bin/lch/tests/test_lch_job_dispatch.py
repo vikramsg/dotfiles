@@ -76,6 +76,11 @@ def test_run_sync_job_invokes_expected_screenshot_command(monkeypatch):
 
 
 def test_configured_service_dispatch_uses_exec(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    opener_tunnel_executable = home / ".local/bin/opener-tunnel"
+    opener_tunnel_executable.parent.mkdir(parents=True)
+    opener_tunnel_executable.write_text("#!/bin/sh\nexit 0\n")
+    opener_tunnel_executable.chmod(0o755)
     config_file = tmp_path / "config.toml"
     config_file.write_text(
         """
@@ -86,6 +91,7 @@ command = ["opener-tunnel", "run"]
 """.strip()
         + "\n"
     )
+    monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
     import lch.launchd as launchd_module
 
@@ -98,4 +104,6 @@ command = ["opener-tunnel", "run"]
 
     launchd_module.run_job("lch-opener-tunnel")
 
-    assert calls == [("opener-tunnel", ["opener-tunnel", "run"])]
+    assert calls == [
+        (str(opener_tunnel_executable), [str(opener_tunnel_executable), "run"])
+    ]

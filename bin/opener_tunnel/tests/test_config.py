@@ -23,7 +23,7 @@ def test_loads_commented_repository_config(monkeypatch, tmp_path):
     assert config.tmux.session == "lch-opener-tunnel"
     assert config.tmux.command == ("tmux",)
     assert config.ssh.command == "ssh"
-    assert config.vm.host == "vm"
+    assert config.vm.host == "vm-us"
     assert config.vm.socket_path == "/home/vikram_orbio_earth/.opener.sock"
 
 
