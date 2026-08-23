@@ -1,6 +1,5 @@
 # Shortcut reference (prefix: Ctrl+Space)
-# Ctrl+H / Ctrl+K: cycle to the previous pane
-# Ctrl+J / Ctrl+L: cycle to the next pane
+# Ctrl+H / Ctrl+J / Ctrl+K / Ctrl+L: focus left / down / up / right
 # prefix+q: reload configuration
 # prefix+?: show help
 # prefix+d: detach
@@ -52,15 +51,15 @@ split_horizontal = 'prefix+"'
 split_vertical = "prefix+%"
 new_workspace = "prefix+shift+c"
 
-# Direct pane cycling intentionally takes these keys from pane applications.
-cycle_pane_previous = ["ctrl+h", "ctrl+k"]
-cycle_pane_next = ["ctrl+j", "ctrl+l"]
+# Match vim-tmux-navigator's spatial pane movement.
+cycle_pane_previous = []
+cycle_pane_next = []
 
 # Prefix h/j/k/l are reserved for the tmux-compatible resize commands below.
-focus_pane_left = ""
-focus_pane_down = ""
-focus_pane_up = ""
-focus_pane_right = ""
+focus_pane_left = "ctrl+h"
+focus_pane_down = "ctrl+j"
+focus_pane_up = "ctrl+k"
+focus_pane_right = "ctrl+l"
 
 swap_pane_left = "prefix+shift+h"
 swap_pane_down = "prefix+shift+j"
