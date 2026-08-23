@@ -146,8 +146,8 @@ That smoke check verifies the live installed config layout from the current work
 OpenCode 2 uses two plugin layers under the installed `plugins` directory:
 
 ```text
-~/.config/opencode/plugins/*.ts       Server plugins
-~/.config/opencode/plugins/tui/*.ts   Terminal client plugins
+~/.config/opencode/plugins/*.{js,ts}       Server plugins
+~/.config/opencode/plugins/tui/*.{js,ts}   Terminal client plugins
 ```
 
 `mode-transition-reminder-v2.ts` is a server plugin. It adds a request-local
@@ -160,6 +160,16 @@ an execution finishes or requests permission. It runs in the TUI so the bell
 reaches the active terminal rather than the background service. `cli.json`
 loads it explicitly because the current V2 beta does not activate it through
 global `plugins/tui` auto-discovery in this symlinked configuration layout.
+
+The Herdr integration is also stored in this plugin tree.
+`tui/herdr-tui-session-v2.ts` reports the selected session and its lifecycle
+from the local terminal. Herdr 0.8.2 generates a legacy server plugin that is
+not compatible with OpenCode V2, so this repository uses only the adapted TUI
+plugin. Lifecycle reporting belongs to the TUI because the V2 background
+service is shared by multiple terminal clients and cannot associate an event
+with one Herdr pane. Do not run `herdr integration install opencode` without
+checking whether Herdr has added native OpenCode V2 support; until then,
+`herdr integration status` reports this custom integration as `not installed`.
 
 The previous V1 implementations remain under `plugins-v1/` for reference and
 tests. They are outside OpenCode 2's automatic plugin discovery path.
