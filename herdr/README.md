@@ -30,7 +30,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+c` | Create a tab |
 | `prefix+1..9` | Switch tabs |
 | `prefix+p` / `prefix+n` | Previous / next tab |
-| `prefix+Shift+R` | Rename the current tab |
+| `prefix+$` | Rename the current tab |
 | `prefix+v` | Pick and watch a Markdown file in a popup |
 | `prefix+"` / `prefix+%` | Stacked / side-by-side split |
 | `prefix+x` / `prefix+z` | Close / zoom pane |
