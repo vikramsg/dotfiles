@@ -9,14 +9,10 @@ at upstream commit `6ab9013a10c28f5046f7f999549cd5328a0b30d7`.
 The upstream `SKILL.md` was copied into this repository and adapted for the
 local OpenCode environment:
 
-- Mermaid guidance and the Mermaid sequence diagram were replaced with a
-  fixed-width ASCII sequence diagram because Mermaid cannot be previewed in
-  the terminal UI.
 - File-tree examples were converted from box-drawing characters to ASCII so
   every text diagram renders consistently in a terminal.
 - The Claude-style `Bash(open ...)` example was replaced with tool-neutral
   browser guidance suitable for OpenCode.
-- The description was updated to advertise ASCII diagrams.
 
 The remaining workflow and examples intentionally follow the upstream skill.
 
