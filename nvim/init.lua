@@ -645,6 +645,13 @@ require("lazy").setup({
 				mode = { "n", "t" },
 				desc = "Toggle Terminal",
 			},
+			{
+				"<leader>gd",
+				function()
+					Snacks.picker.git_diff()
+				end,
+				desc = "Git Diff (Hunks)",
+			},
 		},
 	},
 	{
@@ -1271,7 +1278,6 @@ require("lazy").setup({
 	-- "gc" to comment visual regions/lines
 	{ "numToStr/Comment.nvim", opts = {} },
 })
-
 
 require("noice").setup({
 	presets = {
