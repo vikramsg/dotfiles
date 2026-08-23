@@ -16,6 +16,7 @@
 # prefix+Shift+H/J/K/L: swap left / down / up / right
 # prefix+g: open LazyGit popup
 # prefix+e: open Yazi popup
+# prefix+v: pick and watch a Markdown file
 # prefix+Shift+T: open terminal popup
 # prefix+Shift+F: fuzzy find and edit a file
 
@@ -104,6 +105,14 @@ key = "prefix+e"
 type = "popup"
 command = "yazi"
 description = "open Yazi popup"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+v"
+type = "popup"
+command = "leaf --watch"
+description = "open Markdown preview"
 width = "90%"
 height = "90%"
 

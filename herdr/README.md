@@ -31,6 +31,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+1..9` | Switch tabs |
 | `prefix+p` / `prefix+n` | Previous / next tab |
 | `prefix+Shift+R` | Rename the current tab |
+| `prefix+v` | Pick and watch a Markdown file in a popup |
 | `prefix+"` / `prefix+%` | Stacked / side-by-side split |
 | `prefix+x` / `prefix+z` | Close / zoom pane |
 | `prefix+;` | Focus the last pane |
