@@ -1,0 +1,35 @@
+# Unix socket created on the Mac for forwarded browser requests.
+socket_path = "~/.opener.sock"
+
+[browser]
+# Command used to open a validated URL.
+command = ["open"]
+
+[tmux]
+# Detached tmux session containing the tunnel process.
+session = "lch-opener-tunnel"
+
+# Command used to manage tmux.
+command = ["tmux"]
+
+[ssh]
+# SSH executable resolved through PATH.
+command = "ssh"
+
+# Arguments controlling the headless tunnel connection.
+args = [
+  "-N",
+  "-T",
+  "-v",
+  "-o", "BatchMode=yes",
+  "-o", "ExitOnForwardFailure=yes",
+  "-o", "ServerAliveInterval=15",
+  "-o", "ServerAliveCountMax=3",
+]
+
+[vm]
+# Existing private SSH alias providing HostName, User, and IdentityFile.
+host = "vm-us"
+
+# Unix socket created on the remote VM by SSH RemoteForward.
+socket_path = "/home/vikram_orbio_earth/.opener.sock"

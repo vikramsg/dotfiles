@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -6,12 +5,12 @@ from click.testing import CliRunner
 
 def write_config(path: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload))
+    path.write_text(f'namespace = "{payload["namespace"]}"\n')
     return path
 
 
 def test_systemd_install_writes_units_and_enables_path(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.json", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 

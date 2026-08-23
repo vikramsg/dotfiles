@@ -1,4 +1,3 @@
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -66,9 +65,6 @@ def list_command() -> None:
 def render_lch_config() -> str:
     config_file = get_config_file()
     config = load_config()
-    example = {
-        "namespace": "com.vikramsg.dotfiles",
-    }
     lines = [
         f"CONFIG_FILE  {config_file}",
         f"NAMESPACE  {config.namespace}",
@@ -83,7 +79,10 @@ def render_lch_config() -> str:
         [
             "",
             "FORMAT",
-            json.dumps(example, indent=2),
+            'namespace = "com.vikramsg.dotfiles"',
+            "",
+            "[services.example]",
+            'command = ["example", "run"]',
         ]
     )
     return "\n".join(lines)

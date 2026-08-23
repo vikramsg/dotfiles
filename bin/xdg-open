@@ -14,17 +14,15 @@ fi
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     if [ -S "$SOCKET" ]; then
-        # Forward the URL to the opener daemon on the local machine
-        echo "$URL" | nc -U "$SOCKET"
+        # Forward the URL to the configured Mac-side opener service.
+        if ! printf '%s\n' "$URL" | nc -U "$SOCKET"; then
+            printf '%s\n' "Error: browser tunnel failed; URL: $URL" >&2
+            printf '%s\n' "On the Mac, run: just opener-tunnel" >&2
+            exit 1
+        fi
     else
-        echo "Error: .opener.sock not found at $SOCKET"
-        echo "To fix this:"
-        echo "1. Ensure 'opener' is running on your Mac (brew services start opener)"
-        echo "2. Add 'RemoteForward $SOCKET /Users/<your-mac-user>/.opener.sock' to your ~/.ssh/config"
-        echo "3. Restart your SSH session"
-        echo ""
-        echo "Fallback: Printing URL instead:"
-        echo "$URL"
+        printf '%s\n' "Error: browser tunnel socket not found at $SOCKET; URL: $URL" >&2
+        printf '%s\n' "On the Mac, run: just opener-tunnel" >&2
         exit 1
     fi
 else

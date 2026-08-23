@@ -5,7 +5,16 @@ from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
 
-from lch.jobs import JobDefinition, get_job_definition, list_job_definitions
+from lch.jobs import (
+    JobDefinition,
+    ServiceDefinition,
+    get_launchd_job_definition,
+    list_launchd_job_definitions,
+)
+
+
+SERVICE_RESTART_THROTTLE_SECONDS = 10
+LAUNCHD_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 @dataclass(frozen=True)
@@ -57,7 +66,9 @@ def get_home_directory(home: Path | None = None) -> Path:
     return Path(os.environ.get("HOME", str(Path.home()))).expanduser()
 
 
-def get_job_paths(job: JobDefinition, *, home: Path | None = None) -> JobPaths:
+def get_job_paths(
+    job: JobDefinition | ServiceDefinition, *, home: Path | None = None
+) -> JobPaths:
     resolved_home = get_home_directory(home)
     return JobPaths(
         plist_path=resolved_home / "Library/LaunchAgents" / f"{job.label}.plist",
@@ -195,16 +206,41 @@ def build_launch_agent_plist(
     }
 
 
+def build_launch_agent_service_plist(
+    service: ServiceDefinition,
+    *,
+    executable_path: Path,
+    paths: JobPaths,
+) -> dict[str, object]:
+    return {
+        "Label": service.label,
+        "ProgramArguments": [str(executable_path), "run", service.job_id],
+        "StandardOutPath": str(paths.stdout_log_path),
+        "StandardErrorPath": str(paths.stderr_log_path),
+        "EnvironmentVariables": {"PATH": LAUNCHD_PATH},
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "ThrottleInterval": SERVICE_RESTART_THROTTLE_SECONDS,
+    }
+
+
 def install_job(job_id: str) -> Path:
-    job = get_job_definition(job_id)
+    job = get_launchd_job_definition(job_id)
     paths = get_job_paths(job)
-    watch_path = resolve_watch_path(job)
-    plist_payload = build_launch_agent_plist(
-        job,
-        watch_path=watch_path,
-        executable_path=get_lch_executable_path(),
-        paths=paths,
-    )
+    if isinstance(job, ServiceDefinition):
+        plist_payload = build_launch_agent_service_plist(
+            job,
+            executable_path=get_lch_executable_path(),
+            paths=paths,
+        )
+    else:
+        watch_path = resolve_watch_path(job)
+        plist_payload = build_launch_agent_plist(
+            job,
+            watch_path=watch_path,
+            executable_path=get_lch_executable_path(),
+            paths=paths,
+        )
 
     paths.plist_path.parent.mkdir(parents=True, exist_ok=True)
     paths.stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -216,7 +252,7 @@ def install_job(job_id: str) -> Path:
 
 
 def uninstall_job(job_id: str) -> Path:
-    job = get_job_definition(job_id)
+    job = get_launchd_job_definition(job_id)
     paths = get_job_paths(job)
     if paths.plist_path.exists():
         subprocess.run(["launchctl", "unload", str(paths.plist_path)], capture_output=True, text=True)
@@ -225,7 +261,7 @@ def uninstall_job(job_id: str) -> Path:
 
 
 def status_job(job_id: str) -> str:
-    job = get_job_definition(job_id)
+    job = get_launchd_job_definition(job_id)
     result = subprocess.run(["launchctl", "list", job.label], capture_output=True, text=True)
     return "loaded" if result.returncode == 0 else "not loaded"
 
@@ -237,7 +273,7 @@ def is_job_loaded(label: str) -> bool:
 
 def list_known_jobs() -> list[KnownJobStatus]:
     rows: list[KnownJobStatus] = []
-    for job in list_job_definitions():
+    for job in list_launchd_job_definitions():
         paths = get_job_paths(job)
         rows.append(
             KnownJobStatus(
@@ -251,15 +287,18 @@ def list_known_jobs() -> list[KnownJobStatus]:
 
 
 def logs_job(job_id: str) -> tuple[Path, Path]:
-    job = get_job_definition(job_id)
+    job = get_launchd_job_definition(job_id)
     paths = get_job_paths(job)
     return paths.stdout_log_path, paths.stderr_log_path
 
 
 def run_job(job_id: str) -> None:
-    job = get_job_definition(job_id)
+    job = get_launchd_job_definition(job_id)
     command = list(job.dispatch_command)
     tool_path = get_tool_executable_path(command[0])
     if tool_path.exists():
         command[0] = str(tool_path)
+    if isinstance(job, ServiceDefinition):
+        os.execvp(command[0], command)
+        return
     subprocess.run(command, check=True)

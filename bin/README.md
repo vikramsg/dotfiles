@@ -10,6 +10,7 @@ Install tools from this repo with `uv`:
 uv tool install ./bin/ghostty_workspace --force
 uv tool install ./bin/screenshot --force
 uv tool install ./bin/lch --force
+uv tool install ./bin/opener_tunnel --force
 uv tool install ./bin/ocint --force
 uv tool install ./bin/gh_stats --force
 ```
@@ -20,6 +21,7 @@ Upgrade an installed local tool after changes:
 uv tool install ./bin/ghostty_workspace --force --no-cache
 uv tool install ./bin/screenshot --force --no-cache
 uv tool install ./bin/lch --force --no-cache
+uv tool install ./bin/opener_tunnel --force --no-cache
 uv tool install ./bin/ocint --force --no-cache
 uv tool install ./bin/gh_stats --force --no-cache
 ```
@@ -75,68 +77,14 @@ Summarize merged pull requests by week, repository, or both using the authentica
 - Test: from repo root, run `uv run --package gh-stats pytest bin/gh_stats/tests`
 - Docs: `bin/gh_stats/README.md`
 
-## xdg-open (Remote Browser Proxy)
+## opener-tunnel and xdg-open
 
-This script allows you to open URLs from this remote VM directly in your local Mac's web browser. It is designed to be used with the `opener` tool and SSH remote forwarding.
+Run `just opener-tunnel` on the Mac to install the config-driven listener and
+LCH service. The service uses the existing private `vm` SSH alias and keeps the
+live SSH process inspectable in tmux. The VM-side `xdg-open` wrapper continues
+to send one newline-terminated URL to `~/.opener.sock`.
 
-### Local Setup (On your Mac)
-
-1. **Install Opener**:
-   ```bash
-   brew install superbrothers/opener/opener
-   brew services start opener
-   ```
-
-2. **Configure SSH**:
-    Add the following to your `~/.ssh/config` on your Mac:
-    ```sshconfig
-    Host <owner-alias>
-      RemoteForward /home/<remote-user>/.opener.sock /Users/<local-user>/.opener.sock
-    ```
-
-    Keep this forward on one dedicated owner alias only. Do not attach the same socket
-    `RemoteForward` to a broad host pattern used by short-lived helper SSH sessions.
-
-3. **SSH Server Tweak (Optional but recommended)**:
-   If you experience issues with stale sockets, add this to the VM's `/etc/ssh/sshd_config` (requires sudo):
-   ```text
-   StreamLocalBindUnlink yes
-   ```
-
-### Usage
-
-Once configured, any tool that uses `xdg-open` (like `gh browse`, `lazygit`, or Neovim's `gx`) will automatically trigger your local browser.
-
-The script is OS-aware:
-- **On Linux**: It attempts to use the Unix socket bridge.
-- **On macOS**: It falls back to the native `open` command.
-
-### Troubleshooting
-
-If you see:
-
-```text
-nc: /home/<remote-user>/.opener.sock: connection refused
-```
-
-the socket file may still exist even though the forwarding session behind it is no longer alive.
-
-One common cause is a transient SSH session inheriting the same Unix-socket `RemoteForward`
-as your long-lived owner session. That helper session can replace the live socket path and,
-after it exits, leave behind a dead socket file that causes `connection refused`.
-
-To avoid this:
-
-- scope the opener `RemoteForward` to one owner alias only
-- use `-o ClearAllForwardings=yes` for non-owner sessions and helper SSH commands
-- reconnect the owner session if the socket has already been replaced
-
-Useful checks on the remote host:
-
-```bash
-ls -l ~/.opener.sock
-ss -xl | rg 'opener.sock'
-```
+See `bin/opener_tunnel/README.md` and `opener_tunnel/config.toml`.
 
 ---
 

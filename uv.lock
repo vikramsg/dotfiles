@@ -9,6 +9,7 @@ members = [
     "ghostty-workspace",
     "lch",
     "ocint",
+    "opener-tunnel",
     "router-battery-check",
     "screenshot",
 ]
@@ -610,6 +611,17 @@ dev = [
     { name = "tach" },
     { name = "ty" },
 ]
+
+[[package]]
+name = "opener-tunnel"
+version = "0.1.0"
+source = { editable = "bin/opener_tunnel" }
+dependencies = [
+    { name = "click" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "click" }]
 
 [[package]]
 name = "packaging"

@@ -1,0 +1,1 @@
+"""Browser opener tunnel."""

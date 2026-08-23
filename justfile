@@ -206,12 +206,24 @@ screenshot:
 lch:
     @echo "Setting up lch config symlink and tool..."
     mkdir -p ~/.config/lch
-    ln -sfn {{justfile_directory()}}/lch/config.json ~/.config/lch/config.json
+    ln -sfn {{justfile_directory()}}/lch/config.toml ~/.config/lch/config.toml
     uv tool install ./bin/lch --force --no-cache
     @if [ "$(uname)" = "Linux" ]; then \
         "$HOME/.local/bin/lch" install lch-screenshot-clipboard; \
     fi
-    @echo "lch config symlink created at ~/.config/lch/config.json -> {{justfile_directory()}}/lch/config.json"
+    @echo "lch config symlink created at ~/.config/lch/config.toml -> {{justfile_directory()}}/lch/config.toml"
+
+# Install the config-driven macOS browser-opener service
+opener-tunnel:
+    @if [ "$(uname)" != "Darwin" ]; then \
+        echo "ERROR: opener-tunnel setup requires macOS."; \
+        exit 1; \
+    fi; \
+    mkdir -p "$HOME/.config/opener-tunnel"; \
+    ln -sfn "{{justfile_directory()}}/opener_tunnel/config.toml" "$HOME/.config/opener-tunnel/config.toml"; \
+    uv tool install "{{justfile_directory()}}/bin/opener_tunnel" --force --no-cache; \
+    just lch; \
+    "$HOME/.local/bin/lch" install lch-opener-tunnel
 
 
 # Set up custom bin symlinks
