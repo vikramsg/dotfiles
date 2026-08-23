@@ -60,6 +60,13 @@ tmux:
         echo "TPM is already installed."; \
     fi
 
+# Set up Yazi config symlink
+yazi:
+    @echo "Setting up Yazi config symlink..."
+    mkdir -p ~/.config/yazi
+    ln -sfn {{justfile_directory()}}/yazi/yazi.toml ~/.config/yazi/yazi.toml
+    @echo "Yazi config symlink created at ~/.config/yazi/yazi.toml -> {{justfile_directory()}}/yazi/yazi.toml"
+
 # Set up Herdr config symlink while preserving its runtime directory
 herdr:
     @CONFIG_FILE="{{justfile_directory()}}/herdr/config.toml"; \
@@ -351,7 +358,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux yazi herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

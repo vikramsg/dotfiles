@@ -103,7 +103,7 @@ height = "90%"
 [[keys.command]]
 key = "prefix+e"
 type = "popup"
-command = "yazi"
+command = "TERM=xterm-kitty yazi"
 description = "open Yazi popup"
 width = "90%"
 height = "90%"
