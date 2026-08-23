@@ -7,7 +7,7 @@
 # prefix+c: create a tab
 # prefix+1..9: switch tabs
 # prefix+p / prefix+n: previous / next tab
-# prefix+Shift+R: rename the current tab
+# prefix+$: rename the current tab
 # prefix+" / prefix+%: stacked / side-by-side split
 # prefix+x / prefix+z: close / zoom pane
 # prefix+;: focus the last pane
@@ -45,7 +45,7 @@ previous_tab = "prefix+p"
 next_tab = "prefix+n"
 goto = "prefix+s"
 edit_scrollback = ""
-rename_tab = "prefix+shift+r"
+rename_tab = "prefix+$"
 close_pane = "prefix+x"
 zoom = "prefix+z"
 last_pane = "prefix+semicolon"
@@ -104,7 +104,7 @@ height = "90%"
 [[keys.command]]
 key = "prefix+e"
 type = "shell"
-command = 'response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Yazi --env TERM=xterm-kitty --focus) && pane_id=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$pane_id" "exec yazi"'
+command = '"$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Yazi --env TERM=xterm-kitty --env HERDR_START_YAZI=1 --focus'
 description = "open Yazi in a new tab"
 
 [[keys.command]]

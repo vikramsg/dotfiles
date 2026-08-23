@@ -1,0 +1,6 @@
+#:schema https://yazi-rs.github.io/schemas/keymap.json
+
+[mgr]
+prepend_keymap = [
+	{ on = "/", run = "plugin fzf", desc = "Fuzzy search files recursively" },
+]

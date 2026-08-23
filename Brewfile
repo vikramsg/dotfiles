@@ -1,6 +1,8 @@
 brew "autossh"
 
 brew "fzf"
+# Syntax highlighting for file previews in fzf.
+brew "bat"
 # Fast file finder used by snacks explorer search.
 brew "fd"
 
