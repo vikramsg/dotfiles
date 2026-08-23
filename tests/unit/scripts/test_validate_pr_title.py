@@ -14,6 +14,7 @@ EXPECTED_SCOPES = (
     "chore",
     "ghostty",
     "git",
+    "herdr",
     "lch",
     "nvim",
     "ocint",
