@@ -46,12 +46,6 @@ nvim:
     mkdir -p ~/.config
     ln -sfn {{justfile_directory()}}/nvim ~/.config/nvim
     @echo "Neovim symlink created at ~/.config/nvim -> {{justfile_directory()}}/nvim"
-    @if ! command -v marxual &> /dev/null; then \
-        echo "Installing marxual for markdown previews..."; \
-        just marxual; \
-    else \
-        echo "marxual is already installed."; \
-    fi
 
 # Set up Tmux symlink
 tmux:
@@ -116,6 +110,7 @@ opencode: npm-global-bin
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
     ln -sfn {{justfile_directory()}}/opencode/prompts ~/.config/opencode/prompts
     ln -sfn {{justfile_directory()}}/skills/show-me ~/.config/opencode/skills/show-me
+    ln -sfn {{justfile_directory()}}/skills/herdr ~/.config/opencode/skills/herdr
     @if [  -d {{justfile_directory()}}/opencode/plugins ]; then ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins; \
     fi
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
@@ -125,6 +120,7 @@ opencode: npm-global-bin
     @echo "Opencode agent directory symlinked to ~/.config/opencode/agents"
     @echo "Opencode commands directory symlinked to ~/.config/opencode/commands"
     @echo "OpenCode show-me skill symlinked to ~/.config/opencode/skills/show-me"
+    @echo "OpenCode Herdr skill symlinked to ~/.config/opencode/skills/herdr"
     @echo "Opencode plugins directory symlinked to ~/.config/opencode/plugins"
     @echo "OpenCode plugin/config changes only apply to newly started OpenCode processes."
     @echo "If you have an already-running OpenCode session, restart it after running 'just opencode'."
@@ -225,16 +221,6 @@ bin:
     ln -sfn {{justfile_directory()}}/bin/lc ~/.local/bin/lc
     ln -sfn {{justfile_directory()}}/bin/xdg-open ~/.local/bin/xdg-open
     @echo "bin symlinks created at ~/.local/bin"
-
-# Build and install marxual
-marxual:
-    @echo "Installing marxual..."
-    @if ! command -v go > /dev/null; then \
-        echo "Go is not installed. Run 'just brew' first."; \
-        exit 1; \
-    fi
-    @mkdir -p ~/.local/bin && cd {{justfile_directory()}}/bin/marxual && GOBIN="$HOME/.local/bin" go install .
-    @echo "marxual installed at ~/.local/bin/marxual"
 
 # Set up lazygit symlink
 lazygit:
