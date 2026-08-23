@@ -1,4 +1,32 @@
 #########################################
+# Setup PATH to use locally installed binaries
+export PATH="$HOME/.local/bin:$PATH"
+if [[ -d /opt/homebrew/opt/rustup/bin ]]; then
+    export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
+fi
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
+fi
+
+#########################################
+# Environment variables
+export EDITOR="nvim"
+export VISUAL="nvim"
+# Default options for yazi. Opens preview on right and uses Tokyo Night
+export FZF_DEFAULT_OPTS="--style full \
+--color='fg:#c0caf5,bg:#1a1b26,hl:#ff9e64,fg+:#c0caf5,bg+:#292e42,hl+:#ff9e64,info:#7dcfff,prompt:#7aa2f7,pointer:#9ece6a,marker:#9ece6a,spinner:#bb9af7,header:#565f89,border:#3b4261,label:#bb9af7,query:#c0caf5' \
+--preview 'fzf-preview.sh {}' \
+--bind 'focus:transform-header:file --brief {}'"
+
+if [[ ${HERDR_START_YAZI:-} == 1 ]]; then
+    unset HERDR_START_YAZI
+    exec yazi
+fi
+
+##################################################################################
+# The settings above are ones we need for fast setup
+# For example when opening a tab in herdr for Yazi we need some minimal setup
+##################################################################################
 # Install zinit
 # Home is $HOME/.local/share/zinit/
 # Directly copied from https://github.com/zdharma-continuum/zinit
@@ -68,26 +96,6 @@ setopt HIST_IGNORE_DUPS      # Don't record the same command twice in a row
 setopt HIST_IGNORE_ALL_DUPS  # Remove older duplicate entries from history
 setopt HIST_IGNORE_SPACE     # Don't record commands starting with a space
 setopt HIST_REDUCE_BLANKS    # Remove extra blanks from commands
-
-#########################################
-# Setup PATH to use locally installed binaries
-export PATH="$HOME/.local/bin:$PATH"
-if [[ -d /opt/homebrew/opt/rustup/bin ]]; then
-    export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
-fi
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
-fi
-
-#########################################
-# Environment variables
-export EDITOR="nvim"
-export VISUAL="nvim"
-# Default options for yazi. Opens preview on right and uses Tokyo Night
-export FZF_DEFAULT_OPTS="--style full \
---color='fg:#c0caf5,bg:#1a1b26,hl:#ff9e64,fg+:#c0caf5,bg+:#292e42,hl+:#ff9e64,info:#7dcfff,prompt:#7aa2f7,pointer:#9ece6a,marker:#9ece6a,spinner:#bb9af7,header:#565f89,border:#3b4261,label:#bb9af7,query:#c0caf5' \
---preview 'fzf-preview.sh {}' \
---bind 'focus:transform-header:file --brief {}'"
 
 #########################################
 # Common aliases

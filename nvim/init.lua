@@ -77,17 +77,36 @@ vim.o.cmdheight = 0 -- Remove gap between statusline and tmux
 vim.schedule(function()
 	vim.opt.clipboard = "unnamedplus"
 	if vim.fn.exists("$SSH_CONNECTION") == 1 or vim.fn.exists("$TMUX") == 1 then
-		vim.g.clipboard = {
+		local osc52 = require("vim.ui.clipboard.osc52")
+		local clipboard = {
 			name = "OSC 52",
 			copy = {
-				["+"] = require("vim.ui.clipboard.osc52").copy("+"),
-				["*"] = require("vim.ui.clipboard.osc52").copy("*"),
+				["+"] = osc52.copy("+"),
+				["*"] = osc52.copy("*"),
 			},
 			paste = {
-				["+"] = require("vim.ui.clipboard.osc52").paste("+"),
-				["*"] = require("vim.ui.clipboard.osc52").paste("*"),
+				["+"] = osc52.paste("+"),
+				["*"] = osc52.paste("*"),
 			},
 		}
+
+		if vim.env.HERDR_ENV == "1" then
+			-- Herdr forwards OSC 52 writes but not clipboard-read responses.
+			-- Use terminal paste for external content and the local register for `p`.
+			local function paste_from_nvim()
+				return {
+					vim.fn.getreg('"', 1, true),
+					vim.fn.getregtype('"'),
+				}
+			end
+
+			clipboard.paste = {
+				["+"] = paste_from_nvim,
+				["*"] = paste_from_nvim,
+			}
+		end
+
+		vim.g.clipboard = clipboard
 	end
 end)
 

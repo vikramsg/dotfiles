@@ -104,7 +104,7 @@ height = "90%"
 [[keys.command]]
 key = "prefix+e"
 type = "shell"
-command = 'response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Yazi --env TERM=xterm-kitty --focus) && pane_id=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$pane_id" "exec yazi"'
+command = '"$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Yazi --env TERM=xterm-kitty --env HERDR_START_YAZI=1 --focus'
 description = "open Yazi in a new tab"
 
 [[keys.command]]
