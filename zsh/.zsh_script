@@ -99,9 +99,21 @@ EOF
 
 # Fuzzy find and open file in Neovim
 fz() {
-    local file
-    file=$(fzf --preview 'bat --style=numbers --color=always {} 2>/dev/null || cat {}') || return
+    local file visible_files hidden_files
+    visible_files='fd --type f --strip-cwd-prefix --exclude .git'
+    hidden_files="$visible_files --hidden"
+
+    file=$(eval "$visible_files" | fzf \
+        --prompt='Files> ' \
+        --footer='Enter Open | Esc Close | Ctrl+/ Hidden: Off' \
+        --footer-border=line \
+        --bind="ctrl-/:transform:
+            if [[ \$FZF_PROMPT == 'Files> ' ]]; then
+                echo 'reload($hidden_files)+change-prompt(All files> )+change-footer(Enter Open | Esc Close | Ctrl+/ Hidden: On)'
+            else
+                echo 'reload($visible_files)+change-prompt(Files> )+change-footer(Enter Open | Esc Close | Ctrl+/ Hidden: Off)'
+            fi") || return
     if [[ -n "$file" ]]; then
-        ${EDITOR:-nvim} "$file"
+        ${EDITOR:-nvim} -- "$file"
     fi
 }

@@ -132,11 +132,9 @@ height = "90%"
 
 [[keys.command]]
 key = "prefix+shift+f"
-type = "popup"
-command = "zsh -ic 'file=$(fzf --preview \"bat --style=numbers --color=always {} 2>/dev/null || cat {}\"); [ -n \"$file\" ] && nvim \"$file\"'"
+type = "shell"
+command = 'response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label FZF --env TERM=xterm-kitty --focus) && pane_id=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$pane_id" "exec zsh -ic fz"'
 description = "fuzzy find and edit file"
-width = "90%"
-height = "90%"
 
 [ui]
 tab_bar_position = "top"
