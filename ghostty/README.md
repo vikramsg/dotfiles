@@ -40,6 +40,19 @@ By default, the padding uses the `background` color. If you have a solid-colored
 window-padding-color = extend
 ```
 
+## Recovering A Broken SSH Tab
+
+If an SSH connection to a tmux session drops abruptly, tmux may not get a
+chance to disable terminal mouse reporting. On reconnect, Ghostty can send
+mouse escape sequences to the replacement shell. This appears as repeated
+errors such as `zsh: command not found: 42M35` whenever the pointer moves or
+clicks.
+
+Open Ghostty's command palette with `Cmd+Shift+P`, search for **Reset
+Terminal**, and run it. This resets Ghostty's terminal state without closing
+the tab or abandoning the reconnecting `autossh` session. Avoid moving or
+clicking the mouse until the reset completes.
+
 ## Automating Multiple Tabs & SSH Sessions
 
 Ghostty 1.3 adds native AppleScript support on macOS, so multi-tab automation no longer needs simulated keystrokes.
