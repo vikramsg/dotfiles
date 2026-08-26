@@ -29,6 +29,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+[` | Enter copy mode |
 | `prefix+c` | Create a tab |
 | `prefix+1..9` | Switch tabs |
+| `prefix+Shift+1..9` | Focus agents |
 | `prefix+p` / `prefix+n` | Previous / next tab |
 | `prefix+$` | Rename the current tab |
 | `prefix+v` | Pick and watch a Markdown file in a popup |

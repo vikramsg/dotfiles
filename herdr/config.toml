@@ -6,6 +6,7 @@
 # prefix+[: enter copy mode
 # prefix+c: create a tab
 # prefix+1..9: switch tabs
+# prefix+Shift+1..9: focus agents
 # prefix+p / prefix+n: previous / next tab
 # prefix+$: rename the current tab
 # prefix+" / prefix+%: stacked / side-by-side split
@@ -20,6 +21,7 @@
 # prefix+v: pick and watch a Markdown file
 # prefix+w: Open workspace picker
 # prefix+Shift+T: open terminal popup
+# prefix+Shift+D: open Hunk diff review popup
 # prefix+f: open Snacks file picker
 
 onboarding = false
@@ -42,6 +44,7 @@ detach = "prefix+d"
 copy_mode = "prefix+["
 new_tab = "prefix+c"
 switch_tab = "prefix+1..9"
+focus_agent = "prefix+shift+1..9"
 previous_tab = "prefix+p"
 next_tab = "prefix+n"
 goto = "prefix+s"
@@ -127,6 +130,14 @@ key = "prefix+shift+t"
 type = "popup"
 command = 'exec "${SHELL:-/bin/zsh}"'
 description = "open terminal popup"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+shift+d"
+type = "popup"
+command = "hunk diff"
+description = "open Hunk diff review"
 width = "90%"
 height = "90%"
 

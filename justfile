@@ -123,6 +123,7 @@ opencode: npm-global-bin
     ln -sfn {{justfile_directory()}}/opencode/prompts ~/.config/opencode/prompts
     ln -sfn {{justfile_directory()}}/skills/show-me ~/.config/opencode/skills/show-me
     ln -sfn {{justfile_directory()}}/skills/herdr ~/.config/opencode/skills/herdr
+    ln -sfn {{justfile_directory()}}/skills/hunk-review ~/.config/opencode/skills/hunk-review
     @if [  -d {{justfile_directory()}}/opencode/plugins ]; then ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins; \
     fi
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
@@ -133,6 +134,7 @@ opencode: npm-global-bin
     @echo "Opencode commands directory symlinked to ~/.config/opencode/commands"
     @echo "OpenCode show-me skill symlinked to ~/.config/opencode/skills/show-me"
     @echo "OpenCode Herdr skill symlinked to ~/.config/opencode/skills/herdr"
+    @echo "OpenCode Hunk review skill symlinked to ~/.config/opencode/skills/hunk-review"
     @echo "Opencode plugins directory symlinked to ~/.config/opencode/plugins"
     @echo "OpenCode plugin/config changes only apply to newly started OpenCode processes."
     @echo "If you have an already-running OpenCode session, restart it after running 'just opencode'."
@@ -258,6 +260,16 @@ lazygit:
         echo "lazygit symlink created at ~/Library/Application Support/lazygit/config.yml"; \
     fi
 
+# Set up Hunk config and extensions symlink
+hunk:
+    @echo "Setting up Hunk config and extension symlinks..."
+    mkdir -p ~/.config/hunk
+    ln -sfn {{justfile_directory()}}/hunk/config.toml ~/.config/hunk/config.toml
+    @if [ -d {{justfile_directory()}}/hunk/extensions ]; then \
+        ln -sfn {{justfile_directory()}}/hunk/extensions ~/.config/hunk/extensions; \
+    fi
+    @echo "Hunk config symlinked to ~/.config/hunk"
+
 # Set up zsh symlink
 zsh:
     @echo "Setting up zsh symlink..."
@@ -375,7 +387,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux yazi herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux yazi herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit hunk television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
