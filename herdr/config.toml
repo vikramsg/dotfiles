@@ -6,6 +6,7 @@
 # prefix+[: enter copy mode
 # prefix+c: create a tab
 # prefix+1..9: switch tabs
+# prefix+Shift+1..9: focus agents
 # prefix+p / prefix+n: previous / next tab
 # prefix+$: rename the current tab
 # prefix+" / prefix+%: stacked / side-by-side split
@@ -43,6 +44,7 @@ detach = "prefix+d"
 copy_mode = "prefix+["
 new_tab = "prefix+c"
 switch_tab = "prefix+1..9"
+focus_agent = "prefix+shift+1..9"
 previous_tab = "prefix+p"
 next_tab = "prefix+n"
 goto = "prefix+s"

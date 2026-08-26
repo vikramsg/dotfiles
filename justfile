@@ -260,6 +260,16 @@ lazygit:
         echo "lazygit symlink created at ~/Library/Application Support/lazygit/config.yml"; \
     fi
 
+# Set up Hunk config and extensions symlink
+hunk:
+    @echo "Setting up Hunk config and extension symlinks..."
+    mkdir -p ~/.config/hunk
+    ln -sfn {{justfile_directory()}}/hunk/config.toml ~/.config/hunk/config.toml
+    @if [ -d {{justfile_directory()}}/hunk/extensions ]; then \
+        ln -sfn {{justfile_directory()}}/hunk/extensions ~/.config/hunk/extensions; \
+    fi
+    @echo "Hunk config symlinked to ~/.config/hunk"
+
 # Set up zsh symlink
 zsh:
     @echo "Setting up zsh symlink..."
@@ -377,7 +387,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux yazi herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit television harlequin
+all: npm-global-bin nvim tmux yazi herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit hunk television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
