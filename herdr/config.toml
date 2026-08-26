@@ -20,6 +20,7 @@
 # prefix+v: pick and watch a Markdown file
 # prefix+w: Open workspace picker
 # prefix+Shift+T: open terminal popup
+# prefix+Shift+D: open Hunk diff review popup
 # prefix+f: open Snacks file picker
 
 onboarding = false
@@ -127,6 +128,14 @@ key = "prefix+shift+t"
 type = "popup"
 command = 'exec "${SHELL:-/bin/zsh}"'
 description = "open terminal popup"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+shift+d"
+type = "popup"
+command = "hunk diff"
+description = "open Hunk diff review"
 width = "90%"
 height = "90%"
 
