@@ -148,7 +148,7 @@ Sources:
 - [capability probing](https://github.com/kovidgoyal/kitty/blob/54416498c89e1d07e5079c49d15470dd0d947ce7/kittens/icat/detect.go#L46-L108)
 - [conditional zlib compression](https://github.com/kovidgoyal/kitty/blob/54416498c89e1d07e5079c49d15470dd0d947ce7/tools/tui/graphics/command.go#L271-L309)
 
-Important benchmark result: its image-processing path was not fast for the screenshot corpus. The builtin engine took about 3 seconds for the largest resize-heavy PNG. Installing ImageMagick and selecting that engine did not improve the result in this environment. Its transport design is useful evidence; its observed image-processing performance is not a target to copy.
+Important benchmark & profiling result: its image-processing path was slow (~1.8–3 seconds) on the screenshot corpus. Profiling revealed the bottleneck was **not** Go, PNG decompression, or transport, but **full-resolution ICC color profile conversion** in `github.com/kovidgoyal/imaging`. Applying ICC curve math (`pow`/`log`/`exp`) on millions of source pixels accounted for ~81% of CPU time (~1.6s). Its transport design is useful evidence; its decode-order image processing is not a target to copy.
 
 ### mcat
 
@@ -676,6 +676,11 @@ Add only when measurements justify them:
 
 ## Decision Summary
 
+- **Why `icat` in Go was slow**: Profiling confirmed it was bottlenecked by full-resolution ICC color conversion (~81% CPU, ~1.6s).
+- **Core Strategy**:
+  - Prefer `t=f` for existing local PNGs (~0.7 ms sender time).
+  - If processing is necessary, resize *first*, then apply color transformations on the bounded target thumbnail size (~337 ms vs ~1,800 ms).
+  - Do not waste effort optimizing escape framing (takes <0.35 ms).
 - Use mcat as the measured performance baseline.
 - Implement direct resize-to-PNG transfer first for deterministic protocol validation and as the portable fallback.
 - Include `t=f` for an existing local PNG in V1 and treat it as the leading local fast-path candidate.

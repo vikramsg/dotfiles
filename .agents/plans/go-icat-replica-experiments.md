@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. This plan covers benchmark-only Go code and controlled experiments. It does not replace the broader renderer plan in `.agents/plans/go-terminal-image-renderer.md`.
+In progress. The benchmark-only Go replica is implemented in `.agents/experiments/go-icat-replica/`, and results are recorded in `.agents/data/go-kitty-renderer-experiments.md`. Sender-only baseline, architectural matrix, CPU profile, and color-conversion-order experiments are complete. Executable parity against pinned `kitten icat` and directly attached Ghostty experiments remain blocked by the current environment.
 
 ## Objective
 

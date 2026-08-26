@@ -279,6 +279,16 @@ local function set_snacks_explorer_ignored(picker, ignored)
 	end
 end
 
+---Toggle the files picker between normal view and "show everything" (hidden + ignored) mode.
+---@param picker snacks.Picker
+local function toggle_snacks_files_hidden_and_ignored(picker)
+	local show_all = not (picker.opts.hidden and picker.opts.ignored)
+	picker.opts.hidden = show_all
+	picker.opts.ignored = show_all
+	picker.list:set_target()
+	picker:find()
+end
+
 ---Toggle the explorer between normal view and "show everything" mode.
 ---The `.` mapping needs to flip both hidden and ignored filters so expanding a
 ---hidden directory continues to show nested ignored children like `.agents/tasks`.
@@ -433,6 +443,8 @@ require("lazy").setup({
 			-- registered there before the explorer is opened.
 			require("snacks.picker.actions").toggle_explorer_width = toggle_snacks_explorer_width
 			require("snacks.picker.actions").toggle_explorer_hidden = toggle_snacks_explorer_hidden
+			require("snacks.picker.actions").toggle_files_hidden_and_ignored =
+				toggle_snacks_files_hidden_and_ignored
 			require("snacks").setup(opts)
 
 			local group = vim.api.nvim_create_augroup("dotfiles-snacks-explorer-git-refresh", { clear = true })
@@ -459,18 +471,32 @@ require("lazy").setup({
 				enabled = true,
 				sources = {
 					files = {
-						title = "Files | Ctrl+/: toggle hidden",
+						title = "Files | Ctrl+/: toggle all",
 						win = {
 							input = {
 								keys = {
-									["<c-/>"] = { "toggle_hidden", mode = { "i", "n" }, desc = "Toggle Hidden Files" },
-									["<c-_>"] = { "toggle_hidden", mode = { "i", "n" }, desc = "Toggle Hidden Files" },
+									["<c-/>"] = {
+										"toggle_files_hidden_and_ignored",
+										mode = { "i", "n" },
+										desc = "Toggle Hidden & Ignored Files",
+									},
+									["<c-_>"] = {
+										"toggle_files_hidden_and_ignored",
+										mode = { "i", "n" },
+										desc = "Toggle Hidden & Ignored Files",
+									},
 								},
 							},
 							list = {
 								keys = {
-									["<c-/>"] = { "toggle_hidden", desc = "Toggle Hidden Files" },
-									["<c-_>"] = { "toggle_hidden", desc = "Toggle Hidden Files" },
+									["<c-/>"] = {
+										"toggle_files_hidden_and_ignored",
+										desc = "Toggle Hidden & Ignored Files",
+									},
+									["<c-_>"] = {
+										"toggle_files_hidden_and_ignored",
+										desc = "Toggle Hidden & Ignored Files",
+									},
 								},
 							},
 						},
