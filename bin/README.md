@@ -88,6 +88,16 @@ See `bin/opener_tunnel/README.md` and `opener_tunnel/config.toml`.
 
 ---
 
+## gocat
+
+High-performance Go terminal image renderer using Kitty graphics protocol (`t=f` fast path and `t=d` streaming fallback).
+
+- Build: `cd bin/gocat && go build -o gocat .`
+- Test: `cd bin/gocat && go test ./...`
+- Docs: `bin/gocat/README.md`, `bin/gocat/EXPERIMENT_LOG.md`
+
+---
+
 ## lc
 
 A wrapper for `ls`/`eza` and `cat`/`bat` that provides a consistent file/directory preview experience.
