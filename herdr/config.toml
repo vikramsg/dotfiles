@@ -19,7 +19,7 @@
 # prefix+Shift+S: open Screenshots in a Yazi tab
 # prefix+v: pick and watch a Markdown file
 # prefix+Shift+T: open terminal popup
-# prefix+Shift+F: fuzzy find and edit a file
+# prefix+f: open Snacks file picker
 
 onboarding = false
 
@@ -130,12 +130,10 @@ width = "90%"
 height = "90%"
 
 [[keys.command]]
-key = "prefix+shift+f"
-type = "popup"
-command = "zsh -ic 'file=$(fzf --preview \"bat --style=numbers --color=always {} 2>/dev/null || cat {}\"); [ -n \"$file\" ] && nvim \"$file\"'"
-description = "fuzzy find and edit file"
-width = "90%"
-height = "90%"
+key = "prefix+f"
+type = "shell"
+command = 'config_file=$(readlink "$HOME/.config/herdr/config.toml") && zsh "$(dirname "$config_file")/snacks-picker.zsh"'
+description = "open Snacks file picker"
 
 [ui]
 tab_bar_position = "top"

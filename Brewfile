@@ -45,6 +45,8 @@ brew "actionlint"
 
 # Neeovim
 brew "neovim"
+# Required by Snacks for image previews other than PNG.
+brew "imagemagick"
 
 # nvim-treesitter `main` shells out to this CLI when building parsers.
 brew "tree-sitter-cli"

@@ -458,6 +458,23 @@ require("lazy").setup({
 			picker = {
 				enabled = true,
 				sources = {
+					files = {
+						title = "Files | Ctrl+/: toggle hidden",
+						win = {
+							input = {
+								keys = {
+									["<c-/>"] = { "toggle_hidden", mode = { "i", "n" }, desc = "Toggle Hidden Files" },
+									["<c-_>"] = { "toggle_hidden", mode = { "i", "n" }, desc = "Toggle Hidden Files" },
+								},
+							},
+							list = {
+								keys = {
+									["<c-/>"] = { "toggle_hidden", desc = "Toggle Hidden Files" },
+									["<c-_>"] = { "toggle_hidden", desc = "Toggle Hidden Files" },
+								},
+							},
+						},
+					},
 					explorer = {
 						win = {
 							list = {
@@ -470,6 +487,9 @@ require("lazy").setup({
 						},
 					},
 				},
+			},
+			image = {
+				enabled = true,
 			},
 			explorer = {
 				enabled = true,
