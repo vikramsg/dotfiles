@@ -18,9 +18,9 @@
 # prefix+e: open Yazi in a new tab
 # prefix+Shift+S: open Screenshots in a Yazi tab
 # prefix+v: pick and watch a Markdown file
-# prefix+w: Open workspace picker 
+# prefix+w: Open workspace picker
 # prefix+Shift+T: open terminal popup
-# prefix+Shift+F: fuzzy find and edit a file
+# prefix+f: open Snacks file picker
 
 onboarding = false
 
@@ -131,10 +131,10 @@ width = "90%"
 height = "90%"
 
 [[keys.command]]
-key = "prefix+shift+f"
+key = "prefix+f"
 type = "shell"
-command = 'response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label FZF --env TERM=xterm-kitty --focus) && pane_id=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$pane_id" "exec zsh -ic fz"'
-description = "fuzzy find and edit file"
+command = 'config_file=$(readlink "$HOME/.config/herdr/config.toml") && zsh "$(dirname "$config_file")/snacks-picker.zsh"'
+description = "open Snacks file picker"
 
 [ui]
 tab_bar_position = "top"
