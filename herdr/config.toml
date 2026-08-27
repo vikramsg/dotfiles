@@ -22,6 +22,7 @@
 # prefix+w: Open workspace picker
 # prefix+Shift+T: open terminal popup
 # prefix+Shift+D: open Hunk diff review popup
+# prefix+Shift+G: open GitHub dashboard popup
 # prefix+f: open Snacks file picker
 
 onboarding = false
@@ -138,6 +139,14 @@ key = "prefix+shift+d"
 type = "popup"
 command = "hunk diff"
 description = "open Hunk diff review"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+shift+g"
+type = "popup"
+command = "gh dash"
+description = "open GitHub dashboard"
 width = "90%"
 height = "90%"
 

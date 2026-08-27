@@ -8,6 +8,7 @@ Neovim configurations independent and unchanged.
 
 ```sh
 just brew
+gh extension install dlvhdr/gh-dash
 just herdr
 herdr
 ```
@@ -39,6 +40,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+Shift+C` | Create a workspace |
 | `prefix+h/l/k/j` | Resize left / right / down / up |
 | `prefix+Shift+H/J/K/L` | Swap left / down / up / right |
+| `prefix+Shift+G` | Open GitHub dashboard in a popup |
 
 Pane focus is spatial but does not cross Neovim splits. The direct bindings also
 replace shell behavior such as `Ctrl+K` kill-line and `Ctrl+L` clear-screen
