@@ -103,6 +103,13 @@ herdr:
         fi; \
         echo "Herdr config symlink created at $TARGET -> $CONFIG_FILE"
 
+# Set up tuicr config symlink
+tuicr:
+    @echo "Setting up tuicr config symlink..."
+    mkdir -p ~/.config/tuicr
+    ln -sfn {{justfile_directory()}}/tuicr/config.toml ~/.config/tuicr/config.toml
+    @echo "tuicr config symlink created at ~/.config/tuicr/config.toml -> {{justfile_directory()}}/tuicr/config.toml"
+
 # Set up Opencode symlink
 opencode: npm-global-bin
     @echo "Setting up Opencode symlink..."
@@ -387,7 +394,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux yazi herdr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit hunk television harlequin
+all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit hunk television harlequin
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

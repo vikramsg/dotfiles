@@ -17,8 +17,11 @@ brew "eza"
 # Lazygit
 brew "lazygit"
 
-# GitHub CLI used by the gh-dash Herdr popup.
+# GitHub CLI used by the tuicr Herdr popup.
 brew "gh"
+
+# Terminal code review UI.
+brew "tuicr"
 
 # Yazi file manager
 brew "yazi"

@@ -22,7 +22,7 @@
 # prefix+w: Open workspace picker
 # prefix+Shift+T: open terminal popup
 # prefix+Shift+D: open Hunk diff review popup
-# prefix+Shift+G: open GitHub dashboard popup
+# prefix+Shift+G: open PR review popup
 # prefix+f: open Snacks file picker
 
 onboarding = false
@@ -145,8 +145,8 @@ height = "90%"
 [[keys.command]]
 key = "prefix+shift+g"
 type = "popup"
-command = "gh dash"
-description = "open GitHub dashboard"
+command = 'config_file=$(readlink "$HOME/.config/herdr/config.toml") && zsh "$(dirname "$config_file")/tuicr.zsh"'
+description = "open PR review"
 width = "90%"
 height = "90%"
 
