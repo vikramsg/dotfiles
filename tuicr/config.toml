@@ -1,0 +1,4 @@
+show_file_list = true
+show_pr_checks = true
+show_pr_comments = true
+mouse = true
