@@ -23,6 +23,12 @@ if [[ ${HERDR_START_YAZI:-} == 1 ]]; then
     exec yazi
 fi
 
+if [[ ${HERDR_START_TUICR:-} == 1 ]]; then
+    unset HERDR_START_TUICR
+    config_file=$(readlink "$HOME/.config/herdr/config.toml")
+    exec zsh "$(dirname "$config_file")/tuicr.zsh"
+fi
+
 ##################################################################################
 # The settings above are ones we need for fast setup
 # For example when opening a tab in herdr for Yazi we need some minimal setup
