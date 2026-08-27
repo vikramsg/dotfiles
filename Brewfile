@@ -17,6 +17,9 @@ brew "eza"
 # Lazygit
 brew "lazygit"
 
+# GitHub CLI used by the gh-dash Herdr popup.
+brew "gh"
+
 # Yazi file manager
 brew "yazi"
 # Parse Herdr API responses for the Yazi tab shortcut.
