@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
@@ -59,6 +60,25 @@ type BoundingBox struct {
 	MaxHeight int
 }
 
+// Timings records the duration of each image-processing stage.
+type Timings struct {
+	Decode     time.Duration
+	Dimensions time.Duration
+	Resize     time.Duration
+	Encode     time.Duration
+	Resized    bool
+}
+
+// ProcessedImage contains the encoded output and processing metadata.
+type ProcessedImage struct {
+	PNGData      []byte
+	SourceWidth  int
+	SourceHeight int
+	OutputWidth  int
+	OutputHeight int
+	Timings      Timings
+}
+
 // CalculateTargetDimensions computes target dimensions preserving aspect ratio.
 func CalculateTargetDimensions(origWidth, origHeight int, bbox BoundingBox) (int, int) {
 	if origWidth <= 0 || origHeight <= 0 {
@@ -105,25 +125,34 @@ func CalculateTargetDimensions(origWidth, origHeight int, bbox BoundingBox) (int
 }
 
 // ProcessImage reads an image from reader, downscales to bbox if needed, and encodes to PNG.
-func ProcessImage(r io.Reader, bbox BoundingBox) ([]byte, int, int, error) {
+
+func ProcessImage(r io.Reader, bbox BoundingBox) (ProcessedImage, error) {
+	var timings Timings
+	decodeStart := time.Now()
 	srcImg, _, err := image.Decode(r)
+	timings.Decode = time.Since(decodeStart)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("failed to decode image: %w", err)
+		return ProcessedImage{}, fmt.Errorf("failed to decode image: %w", err)
 	}
 
+	dimensionsStart := time.Now()
 	bounds := srcImg.Bounds()
 	origW := bounds.Dx()
 	origH := bounds.Dy()
 
 	targetW, targetH := CalculateTargetDimensions(origW, origH, bbox)
+	timings.Dimensions = time.Since(dimensionsStart)
 
 	var finalImg image.Image = srcImg
 
 	if targetW != origW || targetH != origH {
+		timings.Resized = true
+		resizeStart := time.Now()
 		dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
 		// Use BiLinear downscaling for balanced speed and quality
 		draw.BiLinear.Scale(dst, dst.Bounds(), srcImg, bounds, draw.Over, nil)
 		finalImg = dst
+		timings.Resize = time.Since(resizeStart)
 	}
 
 	var buf bytes.Buffer
@@ -131,9 +160,18 @@ func ProcessImage(r io.Reader, bbox BoundingBox) ([]byte, int, int, error) {
 		CompressionLevel: png.BestSpeed,
 	}
 
+	encodeStart := time.Now()
 	if err := enc.Encode(&buf, finalImg); err != nil {
-		return nil, 0, 0, fmt.Errorf("failed to encode PNG: %w", err)
+		return ProcessedImage{}, fmt.Errorf("failed to encode PNG: %w", err)
 	}
+	timings.Encode = time.Since(encodeStart)
 
-	return buf.Bytes(), targetW, targetH, nil
+	return ProcessedImage{
+		PNGData:      buf.Bytes(),
+		SourceWidth:  origW,
+		SourceHeight: origH,
+		OutputWidth:  targetW,
+		OutputHeight: targetH,
+		Timings:      timings,
+	}, nil
 }

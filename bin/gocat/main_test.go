@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -108,6 +109,77 @@ func TestCLIFastPath(t *testing.T) {
 	}
 	if !strings.Contains(out, "a=T") {
 		t.Errorf("expected Kitty action a=T, got: %s", out)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("expected timings to be disabled by default, got stderr: %s", stderr.String())
+	}
+}
+
+func TestCLITimings(t *testing.T) {
+	webpPath := createTestWebP(t, t.TempDir(), "sample.webp")
+
+	var stdout, stderr bytes.Buffer
+	exitCode := run([]string{"--timings", "--target", "50x50", webpPath}, nil, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d. Stderr: %s", exitCode, stderr.String())
+	}
+
+	report := stderr.String()
+	for _, field := range []string{
+		"gocat timings: mode=fallback",
+		"input=75x100 output=38x50",
+		"setup=",
+		"inspect=",
+		"decode=",
+		"dimensions=",
+		"resize=",
+		"encode=",
+		"protocol=",
+		"total=",
+	} {
+		if !strings.Contains(report, field) {
+			t.Errorf("expected timing report to contain %q, got: %s", field, report)
+		}
+	}
+	if strings.Contains(stdout.String(), "gocat timings:") {
+		t.Error("timing report was written to stdout")
+	}
+}
+
+func TestCLIFastPathTimings(t *testing.T) {
+	pngPath := createTestPNG(t, t.TempDir(), "sample.png", 400, 200)
+
+	var stdout, stderr bytes.Buffer
+	exitCode := run([]string{"--timings", pngPath}, nil, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d. Stderr: %s", exitCode, stderr.String())
+	}
+	report := stderr.String()
+	for _, field := range []string{"mode=passthrough", "setup=", "inspect=", "protocol=", "total="} {
+		if !strings.Contains(report, field) {
+			t.Errorf("expected timing report to contain %q, got: %s", field, report)
+		}
+	}
+	if strings.Contains(report, "decode=") {
+		t.Errorf("passthrough timing report unexpectedly contains decode timing: %s", report)
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
+}
+
+func TestCLIFlushError(t *testing.T) {
+	pngPath := createTestPNG(t, t.TempDir(), "sample.png", 10, 10)
+
+	var stderr bytes.Buffer
+	if exitCode := run([]string{pngPath}, nil, failingWriter{}, &stderr); exitCode == 0 {
+		t.Fatal("expected output flush failure")
+	}
+	if !strings.Contains(stderr.String(), "Error flushing protocol output: write failed") {
+		t.Fatalf("unexpected stderr: %s", stderr.String())
 	}
 }
 

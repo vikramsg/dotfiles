@@ -8,10 +8,30 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"gocat/pipeline"
 	"gocat/protocol"
 )
+
+func writeTimings(w io.Writer, mode string, setup, inspect, protocolWrite, total time.Duration, processed *pipeline.ProcessedImage) {
+	fmt.Fprintf(w, "gocat timings: mode=%s", mode)
+	if processed != nil {
+		fmt.Fprintf(w, " input=%dx%d output=%dx%d", processed.SourceWidth, processed.SourceHeight, processed.OutputWidth, processed.OutputHeight)
+	}
+	fmt.Fprintf(w, " setup=%s", setup)
+	if inspect > 0 {
+		fmt.Fprintf(w, " inspect=%s", inspect)
+	}
+	if processed != nil {
+		fmt.Fprintf(w, " decode=%s dimensions=%s", processed.Timings.Decode, processed.Timings.Dimensions)
+		if processed.Timings.Resized {
+			fmt.Fprintf(w, " resize=%s", processed.Timings.Resize)
+		}
+		fmt.Fprintf(w, " encode=%s", processed.Timings.Encode)
+	}
+	fmt.Fprintf(w, " protocol=%s total=%s\n", protocolWrite, total)
+}
 
 func parseGeometry(geom string) (int, int, error) {
 	if geom == "" {
@@ -33,6 +53,7 @@ func parseGeometry(geom string) (int, int, error) {
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	totalStart := time.Now()
 	flags := flag.NewFlagSet("gocat", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
@@ -46,6 +67,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	rowsFlag := flags.Int("rows", 0, "Target rows (Kitty r=N)")
 	quietFlag := flags.Int("quiet", 2, "Kitty protocol quiet mode (0, 1, 2; default 2)")
 	flags.IntVar(quietFlag, "q", 2, "Alias for --quiet")
+	timingsFlag := flags.Bool("timings", false, "Report processing stage timings to stderr")
 
 	flags.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: gocat [options] <image-file | ->\n\nOptions:\n")
@@ -80,7 +102,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	}
 
 	bufferedOut := bufio.NewWriterSize(stdout, 64*1024)
-	defer bufferedOut.Flush()
+	setupDuration := time.Since(totalStart)
 
 	// Handle stdin
 	if inputPath == "" || inputPath == "-" {
@@ -89,20 +111,31 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			return 1
 		}
 		bbox := pipeline.BoundingBox{MaxWidth: maxW, MaxHeight: maxH}
-		pngData, _, _, err := pipeline.ProcessImage(stdin, bbox)
+		processed, err := pipeline.ProcessImage(stdin, bbox)
 		if err != nil {
 			fmt.Fprintf(stderr, "Error processing stdin image: %v\n", err)
 			return 1
 		}
-		if err := protocol.WriteDirectStream(bufferedOut, pngData, opts); err != nil {
+		protocolStart := time.Now()
+		if err := protocol.WriteDirectStream(bufferedOut, processed.PNGData, opts); err != nil {
 			fmt.Fprintf(stderr, "Error writing protocol output: %v\n", err)
 			return 1
+		}
+		if err := bufferedOut.Flush(); err != nil {
+			fmt.Fprintf(stderr, "Error flushing protocol output: %v\n", err)
+			return 1
+		}
+		protocolDuration := time.Since(protocolStart)
+		if *timingsFlag {
+			writeTimings(stderr, "fallback", setupDuration, 0, protocolDuration, time.Since(totalStart), &processed)
 		}
 		return 0
 	}
 
 	// Local file path provided
+	inspectStart := time.Now()
 	isPNG, absPath, _ := pipeline.FastPathCheck(inputPath)
+	inspectDuration := time.Since(inspectStart)
 
 	// Decision logic for mode
 	usePassthrough := false
@@ -126,9 +159,18 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	}
 
 	if usePassthrough {
+		protocolStart := time.Now()
 		if err := protocol.WriteFilePassthrough(bufferedOut, absPath, opts); err != nil {
 			fmt.Fprintf(stderr, "Error writing passthrough protocol: %v\n", err)
 			return 1
+		}
+		if err := bufferedOut.Flush(); err != nil {
+			fmt.Fprintf(stderr, "Error flushing protocol output: %v\n", err)
+			return 1
+		}
+		protocolDuration := time.Since(protocolStart)
+		if *timingsFlag {
+			writeTimings(stderr, "passthrough", setupDuration, inspectDuration, protocolDuration, time.Since(totalStart), nil)
 		}
 		return 0
 	}
@@ -142,15 +184,24 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	defer f.Close()
 
 	bbox := pipeline.BoundingBox{MaxWidth: maxW, MaxHeight: maxH}
-	pngData, _, _, err := pipeline.ProcessImage(f, bbox)
+	processed, err := pipeline.ProcessImage(f, bbox)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error processing image %s: %v\n", inputPath, err)
 		return 1
 	}
 
-	if err := protocol.WriteDirectStream(bufferedOut, pngData, opts); err != nil {
+	protocolStart := time.Now()
+	if err := protocol.WriteDirectStream(bufferedOut, processed.PNGData, opts); err != nil {
 		fmt.Fprintf(stderr, "Error writing direct stream: %v\n", err)
 		return 1
+	}
+	if err := bufferedOut.Flush(); err != nil {
+		fmt.Fprintf(stderr, "Error flushing protocol output: %v\n", err)
+		return 1
+	}
+	protocolDuration := time.Since(protocolStart)
+	if *timingsFlag {
+		writeTimings(stderr, "fallback", setupDuration, inspectDuration, protocolDuration, time.Since(totalStart), &processed)
 	}
 
 	return 0

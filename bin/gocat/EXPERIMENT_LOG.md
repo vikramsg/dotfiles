@@ -41,15 +41,330 @@ This experiment log documents the architectural validation, micro-benchmarks, en
    - Payload size is fixed to **~140 bytes**, eliminating all sender-side decompression, downsampling, PNG re-compression, and PTY base64 ballooning.
 2. **Deterministic Scalar Fallback (`t=d`)**:
    - For WebP, JPEG, GIF, stdin streams, or non-PNG inputs: decode, downscale preserving aspect ratio to bounding box (`draw.BiLinear`), encode with `png.BestSpeed`, and transmit chunked Base64 stream (`m=1`/`m=0`).
-   - The current scaling operation is exactly:
-
-     ```go
-     draw.BiLinear.Scale(dst, dst.Bounds(), srcImg, bounds, draw.Over, nil)
-     ```
-
-   - `golang.org/x/image/draw` executes scalar Go loops for this path. WebP decoding supplies a YCbCr 4:2:0 source image, so this operation performs horizontal scaling and YCbCr-to-RGBA color conversion without AVX2 acceleration.
 3. **Chunk Framing**:
    - Standard 4096-byte chunking matching Kitty protocol specification with standard string terminators (`\x1b\`).
+
+### Current WebP Scaling Algorithm
+
+The fallback pipeline calls `golang.org/x/image/draw` v0.45.0 exactly as follows:
+
+```go
+draw.BiLinear.Scale(dst, dst.Bounds(), srcImg, bounds, draw.Over, nil)
+```
+
+`draw.BiLinear` is a separable tent-kernel resampler. Its one-dimensional kernel has support 1 and weight function:
+
+```text
+k(t) = 1 - t, for 0 <= t < 1
+k(t) = 0,     otherwise
+```
+
+For each axis, the scaler precomputes the source-pixel contributions for every destination coordinate. Given source length `src` and destination length `dst`, it calculates:
+
+```text
+scale = src / dst
+center(x) = (x + 0.5) * scale - 0.5
+```
+
+When downscaling (`scale > 1`), it widens the kernel support from `1` to `scale` and evaluates the kernel at `distance / scale`. This causes every covered source pixel to contribute rather than sampling only the nearest four pixels. The contribution weights for each destination coordinate are normalized so that they sum to one.
+
+Scaling is performed in two passes:
+
+1. **Horizontal pass**: `scaleX_YCbCr420` produces a `destination width x source height` temporary image represented as `[4]float64` values per pixel.
+2. **Vertical pass**: `scaleY_RGBA_Src` applies the independently precomputed vertical tent weights to the temporary image, normalizes and clamps the channels, and writes the final `image.RGBA` destination.
+
+For an 8000x2000 benchmark image fitted into the 720x420 bounding box, GoCAT calculates a 720x180 destination. Both axis scale ratios are approximately 11.11, so each destination coordinate accumulates contributions from approximately 22 source coordinates per pass. The horizontal intermediate buffer contains `720 * 2000` entries of `[4]float64`, which occupies 46,080,000 bytes.
+
+For the benchmark WebPs, `golang.org/x/image/webp` decodes the source into `image.YCbCr` with 4:2:0 chroma subsampling. During the horizontal pass, each contributing source pixel is converted to 16-bit-range RGB using the integer equations from `image/color.YCbCr.RGBA`:
+
+```text
+Y1 = Y * 0x10101
+Cb1 = Cb - 128
+Cr1 = Cr - 128
+
+R = (Y1 + 91881 * Cr1) >> 8
+G = (Y1 - 22554 * Cb1 - 46802 * Cr1) >> 8
+B = (Y1 + 116130 * Cb1) >> 8
+```
+
+Each channel is clamped to `[0, 65535]`, multiplied by its horizontal tent weight, accumulated as `float64`, normalized, and stored in the temporary buffer. The vertical pass repeats the weighted accumulation and normalization over temporary rows, then converts each channel to 8-bit RGBA output.
+
+Although GoCAT passes `draw.Over`, the decoded YCbCr source is opaque. The scaler detects this and changes the operation to `draw.Src`, so the final pixels replace the newly allocated destination pixels directly. The implementation executes these contribution and conversion loops as scalar Go code.
+
+#### Pseudocode
+
+```text
+function build_contributions(source_length, destination_length):
+    scale = source_length / destination_length
+    half_width = 1
+    kernel_argument_scale = 1
+
+    if scale > 1:
+        half_width = scale
+        kernel_argument_scale = 1 / scale
+
+    distribution = []
+
+    for destination_coordinate in 0 .. destination_length - 1:
+        center = (destination_coordinate + 0.5) * scale - 0.5
+        first_source = max(0, floor(center - half_width))
+        last_source = min(source_length, ceil(center + half_width))
+
+        contributions = []
+        total_weight = 0
+
+        for source_coordinate in first_source .. last_source - 1:
+            distance = abs(center - source_coordinate) * kernel_argument_scale
+            if distance >= 1:
+                continue
+
+            weight = 1 - distance
+            contributions.append((source_coordinate, weight))
+            total_weight += weight
+
+        distribution.append((contributions, 1 / total_weight))
+
+    return distribution
+
+
+horizontal = build_contributions(source_width, destination_width)
+vertical = build_contributions(source_height, destination_height)
+temporary = array[destination_width * source_height] of four float64 values
+
+# Horizontal pass: YCbCr 4:2:0 source to normalized RGB float values.
+for source_y in 0 .. source_height - 1:
+    for destination_x in 0 .. destination_width - 1:
+        red_sum = 0
+        green_sum = 0
+        blue_sum = 0
+        contributions, inverse_total_weight = horizontal[destination_x]
+
+        for source_x, weight in contributions:
+            y = source.Y[source_y, source_x]
+            cb = source.Cb[source_y / 2, source_x / 2]
+            cr = source.Cr[source_y / 2, source_x / 2]
+
+            red, green, blue = ycbcr_to_rgb16(y, cb, cr)
+            red_sum += red * weight
+            green_sum += green * weight
+            blue_sum += blue * weight
+
+        temporary[source_y, destination_x] = (
+            red_sum * inverse_total_weight / 65535,
+            green_sum * inverse_total_weight / 65535,
+            blue_sum * inverse_total_weight / 65535,
+            1,
+        )
+
+# Vertical pass: normalized RGB float values to the RGBA destination.
+for destination_x in 0 .. destination_width - 1:
+    for destination_y in 0 .. destination_height - 1:
+        red_sum = 0
+        green_sum = 0
+        blue_sum = 0
+        alpha_sum = 0
+        contributions, inverse_total_weight = vertical[destination_y]
+
+        for source_y, weight in contributions:
+            red, green, blue, alpha = temporary[source_y, destination_x]
+            red_sum += red * weight
+            green_sum += green * weight
+            blue_sum += blue * weight
+            alpha_sum += alpha * weight
+
+        destination[destination_y, destination_x] = rgba8(
+            red_sum * inverse_total_weight,
+            green_sum * inverse_total_weight,
+            blue_sum * inverse_total_weight,
+            alpha_sum * inverse_total_weight,
+        )
+```
+
+The following Python implements the same contribution calculation:
+
+```python
+from math import ceil, floor
+
+
+def build_contributions(source_length: int, destination_length: int):
+    scale = source_length / destination_length
+    half_width = scale if scale > 1 else 1.0
+    kernel_argument_scale = 1 / scale if scale > 1 else 1.0
+    distribution = []
+
+    for destination_coordinate in range(destination_length):
+        center = (destination_coordinate + 0.5) * scale - 0.5
+        first_source = max(0, floor(center - half_width))
+        last_source = min(source_length, ceil(center + half_width))
+
+        contributions = []
+        for source_coordinate in range(first_source, last_source):
+            distance = abs(center - source_coordinate) * kernel_argument_scale
+            if distance < 1:
+                contributions.append((source_coordinate, 1 - distance))
+
+        total_weight = sum(weight for _, weight in contributions)
+        distribution.append([
+            (coordinate, weight / total_weight)
+            for coordinate, weight in contributions
+        ])
+
+    return distribution
+```
+
+The YCbCr-to-RGB operation inside each horizontal contribution is equivalent to:
+
+```python
+def ycbcr_to_rgb16(y: int, cb: int, cr: int):
+    y1 = y * 0x10101
+    cb1 = cb - 128
+    cr1 = cr - 128
+
+    red = (y1 + 91881 * cr1) >> 8
+    green = (y1 - 22554 * cb1 - 46802 * cr1) >> 8
+    blue = (y1 + 116130 * cb1) >> 8
+
+    clamp = lambda channel: min(0xFFFF, max(0, channel))
+    return clamp(red), clamp(green), clamp(blue)
+```
+
+For the observed GoCAT path (opaque, zero-origin YCbCr 4:2:0 source; zero-origin RGBA destination; no masks), the top-level Python equivalent of the Go call is:
+
+```python
+def bilinear_scale_ycbcr420(src_y, src_cb, src_cr, destination_width, destination_height):
+    """Run the two-pass tent-kernel scaler for a YCbCr 4:2:0 source.
+
+    Args:
+        src_y: Two-dimensional, full-resolution luma plane indexed as [y][x].
+        src_cb: Two-dimensional blue-difference chroma plane at half width and height.
+        src_cr: Two-dimensional red-difference chroma plane at half width and height.
+        destination_width: Width in pixels of the RGBA output.
+        destination_height: Height in pixels of the RGBA output.
+
+    Returns:
+        A destination_height by destination_width matrix of 8-bit RGBA tuples.
+    """
+    source_height = len(src_y)
+    source_width = len(src_y[0])
+    horizontal = build_contributions(source_width, destination_width)
+    vertical = build_contributions(source_height, destination_height)
+
+    # Go allocates one [4]float64 entry for every element represented here.
+    temporary = [
+        [(0.0, 0.0, 0.0, 1.0) for _ in range(destination_width)]
+        for _ in range(source_height)
+    ]
+
+    for source_y in range(source_height):
+        for destination_x, contributions in enumerate(horizontal):
+            red_sum = green_sum = blue_sum = 0.0
+
+            for source_x, weight in contributions:
+                red, green, blue = ycbcr_to_rgb16(
+                    src_y[source_y][source_x],
+                    src_cb[source_y // 2][source_x // 2],
+                    src_cr[source_y // 2][source_x // 2],
+                )
+                red_sum += red * weight
+                green_sum += green * weight
+                blue_sum += blue * weight
+
+            temporary[source_y][destination_x] = (
+                red_sum / 65535,
+                green_sum / 65535,
+                blue_sum / 65535,
+                1.0,
+            )
+
+    destination = [
+        [(0, 0, 0, 0) for _ in range(destination_width)]
+        for _ in range(destination_height)
+    ]
+
+    def float_to_rgba8(channel):
+        value16 = min(65535, max(0, int(65535 * channel + 0.5)))
+        return value16 >> 8
+
+    for destination_x in range(destination_width):
+        for destination_y, contributions in enumerate(vertical):
+            red_sum = green_sum = blue_sum = alpha_sum = 0.0
+
+            for source_y, weight in contributions:
+                red, green, blue, alpha = temporary[source_y][destination_x]
+                red_sum += red * weight
+                green_sum += green * weight
+                blue_sum += blue * weight
+                alpha_sum += alpha * weight
+
+            destination[destination_y][destination_x] = (
+                float_to_rgba8(min(red_sum, alpha_sum)),
+                float_to_rgba8(min(green_sum, alpha_sum)),
+                float_to_rgba8(min(blue_sum, alpha_sum)),
+                float_to_rgba8(alpha_sum),
+            )
+
+    return destination
+```
+
+The specialized function above does not have the same argument interface as Go's public `Scale` method. A Python wrapper with one-to-one argument correspondence is:
+
+```python
+OVER = "over"
+SRC = "src"
+
+
+def bilinear_scale(dst, dst_rect, src_img, src_rect, op, options):
+    """Scale src_img into dst using the branch exercised by GoCAT.
+
+    Args:
+        dst: Existing RGBA destination image that is mutated in place.
+        dst_rect: Rectangle within dst to fill with the scaled pixels.
+        src_img: Decoded source image; this path expects opaque YCbCr 4:2:0.
+        src_rect: Rectangle within src_img to read and scale.
+        op: Compositing operation requested by the caller, initially OVER.
+        options: Optional masks and mask offsets; GoCAT passes None.
+    """
+    # These are the concrete conditions of GoCAT's WebP call.
+    assert options is None
+    assert src_rect == src_img.bounds()
+    assert dst_rect == dst.bounds()
+    assert src_img.mode == "YCbCr420"
+
+    # kernelScaler.Scale changes Over to Src when the source is opaque.
+    if op == OVER and src_img.opaque():
+        op = SRC
+    assert op == SRC
+
+    scaled_pixels = bilinear_scale_ycbcr420(
+        src_img.y,
+        src_img.cb,
+        src_img.cr,
+        dst_rect.width,
+        dst_rect.height,
+    )
+    dst.replace_rgba(dst_rect, scaled_pixels)
+```
+
+The six arguments then map positionally:
+
+```go
+draw.BiLinear.Scale(dst, dst.Bounds(), srcImg, bounds, draw.Over, nil)
+```
+
+```python
+bilinear_scale(dst, dst.bounds(), src_img, bounds, OVER, None)
+```
+
+| Go argument | Python argument | Meaning in this call |
+|---|---|---|
+| `dst` | `dst` | Existing RGBA destination mutated in place |
+| `dst.Bounds()` | `dst.bounds()` | Complete destination rectangle, 720x180 for the benchmark |
+| `srcImg` | `src_img` | Decoded, opaque YCbCr 4:2:0 WebP image |
+| `bounds` | `bounds` | Complete 8000x2000 source rectangle |
+| `draw.Over` | `OVER` | Requested compositing operation; internally changed to `Src` because the source is opaque |
+| `nil` | `None` | No source mask, destination mask, or option overrides |
+
+This wrapper documents the exact branch selected by GoCAT. It deliberately asserts those branch conditions rather than implementing the other image types, partial rectangles, masks, and compositing cases supported by the general Go API.
 
 ---
 

@@ -40,6 +40,7 @@ cat image.png | ./gocat -
 - `-q, --quiet [0|1|2]`: Kitty quiet mode (default `2` to suppress terminal OK replies).
 - `--cols C`: Target terminal columns (`c=N`).
 - `--rows R`: Target terminal rows (`r=N`).
+- `--timings`: Report processing stage timings to standard error.
 
 ## Benchmarks & Performance
 

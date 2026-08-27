@@ -136,17 +136,20 @@ func TestProcessImage(t *testing.T) {
 
 	// Downscale to max 100x100
 	bbox := BoundingBox{MaxWidth: 100, MaxHeight: 100}
-	outPNG, outW, outH, err := ProcessImage(bytes.NewReader(rawPNG.Bytes()), bbox)
+	processed, err := ProcessImage(bytes.NewReader(rawPNG.Bytes()), bbox)
 	if err != nil {
 		t.Fatalf("ProcessImage failed: %v", err)
 	}
 
-	if outW != 100 || outH != 50 {
-		t.Errorf("expected target 100x50, got %dx%d", outW, outH)
+	if processed.OutputWidth != 100 || processed.OutputHeight != 50 {
+		t.Errorf("expected target 100x50, got %dx%d", processed.OutputWidth, processed.OutputHeight)
+	}
+	if !processed.Timings.Resized {
+		t.Error("expected resize timing to be recorded")
 	}
 
 	// Decode result to verify valid PNG output
-	decoded, err := png.Decode(bytes.NewReader(outPNG))
+	decoded, err := png.Decode(bytes.NewReader(processed.PNGData))
 	if err != nil {
 		t.Fatalf("failed to decode output PNG: %v", err)
 	}
