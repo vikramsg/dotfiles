@@ -108,13 +108,13 @@ Replace `right` with `down` when appropriate. Read the new pane ID from `.result
 An available shell pane must be at its interactive prompt, with the shell itself in the foreground and no foreground command, editor, or agent running. Start a supported agent in that pane with a useful unique name:
 
 ```bash
-herdr agent start reviewer --kind codex --pane <returned-pane-id>
+herdr agent start <unique-agent-name> --kind <agent-kind> --pane <returned-pane-id>
 ```
 
 Use the kind requested by the user. Run `herdr agent` to inspect the installed kind list and options. Pass native agent arguments only after `--`:
 
 ```bash
-herdr agent start reviewer --kind codex --pane <returned-pane-id> -- <agent-args...>
+herdr agent start <unique-agent-name> --kind <agent-kind> --pane <returned-pane-id> -- <agent-args...>
 ```
 
 A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Wait until the agent becomes idle before prompting it. Startup defaults to a 30-second timeout.
@@ -122,7 +122,7 @@ A successful `agent start` returns only after Herdr detects the expected agent i
 Submit work through the agent surface:
 
 ```bash
-herdr agent prompt reviewer "Review the current diff and report only actionable findings." --wait --timeout 120000
+herdr agent prompt <unique-agent-name> "<task>" --wait
 ```
 
 `agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter after a short delay. It rejects an agent already waiting at an approval or question dialog with `agent_blocked` before sending any input. Inspect the blocked UI and ask the user before answering it. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`.
@@ -132,7 +132,7 @@ A prompt sent from a non-working state must produce an observed lifecycle change
 Use `--until` only for a state-specific workflow, such as waiting for an already-running agent to request input:
 
 ```bash
-herdr agent wait reviewer --until blocked --timeout 120000
+herdr agent wait <unique-agent-name> --until blocked
 ```
 
 Without `--until`, standalone `agent wait` uses the same settled-state defaults as `agent prompt --wait`.
@@ -140,18 +140,48 @@ Without `--until`, standalone `agent wait` uses the same settled-state defaults 
 Use logical keys for interactive agent UI controls:
 
 ```bash
-herdr agent send-keys reviewer esc
-herdr agent send-keys reviewer ctrl+c
+herdr agent send-keys <unique-agent-name> esc
+herdr agent send-keys <unique-agent-name> ctrl+c
 ```
 
 Herdr validates all keys before writing any bytes. Read the result through the resolved agent:
 
 ```bash
-herdr agent get reviewer
-herdr agent read reviewer --source recent-unwrapped --lines 120
+herdr agent get <unique-agent-name>
+herdr agent read <unique-agent-name> --source recent-unwrapped
 ```
 
 If a wait fails or returns `blocked`, inspect `agent get` and `agent read` before deciding what input to send. Use the pane surface only when raw terminal control is intentional.
+
+## Coordinate background OpenCode work
+
+When an OpenCode agent should work in a background tab, create the tab in the current workspace. Do not create another workspace. Choose a task-specific tab label and unique agent name. Preserve the caller's working directory, keep focus on the caller's tab, and read the root pane ID from the creation response:
+
+```bash
+herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label <task-label> --no-focus
+herdr agent start <unique-agent-name> --kind opencode --pane <returned-root-pane-id>
+```
+
+Submit the task through the OpenCode shell tool with `background=true`. Run the complete Herdr prompt-and-wait operation as the background shell command:
+
+```text
+shell(
+  command='herdr agent prompt <unique-agent-name> "<delegated-task>" --wait',
+  background=true
+)
+```
+
+The shell call must return control after moving the command into the background. Do not run this command in the caller's foreground, append `&`, poll the agent, or replace it with repeated state checks.
+
+`agent prompt --wait` observes prompt delivery and finishes at the first settled `idle`, `done`, or `blocked` state. Do not stop at `working` and then wait only for `done`; a focused tab settles as `idle`, so a done-only wait can hang.
+
+When the background shell task completes, inspect its result. If it completed successfully, read the delegated agent's output:
+
+```bash
+herdr agent read <unique-agent-name> --source recent-unwrapped
+```
+
+Report or act on the delegated result only after reading it. If the shell tool does not support `background=true`, stop and report that this OpenCode environment cannot perform this asynchronous workflow. Do not substitute a foreground wait.
 
 ## Run an ordinary command in another pane
 
