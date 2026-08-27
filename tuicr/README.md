@@ -1,8 +1,8 @@
 # tuicr
 
 tuicr provides local and remote pull request review in the terminal. The Herdr
-`prefix+Shift+G` popup opens the current branch's pull request when one exists,
-then falls back to tuicr's normal selector.
+`prefix+Shift+G` shortcut opens a new tab for the current branch's pull request
+when one exists, then falls back to tuicr's normal selector.
 
 ## Setup
 

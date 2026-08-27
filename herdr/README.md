@@ -40,7 +40,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+Shift+C` | Create a workspace |
 | `prefix+h/l/k/j` | Resize left / right / down / up |
 | `prefix+Shift+H/J/K/L` | Swap left / down / up / right |
-| `prefix+Shift+G` | Review the current PR in a popup |
+| `prefix+Shift+G` | Review the current PR in a new tab |
 
 Pane focus is spatial but does not cross Neovim splits. The direct bindings also
 replace shell behavior such as `Ctrl+K` kill-line and `Ctrl+L` clear-screen

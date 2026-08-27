@@ -22,7 +22,7 @@
 # prefix+w: Open workspace picker
 # prefix+Shift+T: open terminal popup
 # prefix+Shift+D: open Hunk diff review popup
-# prefix+Shift+G: open PR review popup
+# prefix+Shift+G: open PR review tab
 # prefix+f: open Snacks file picker
 
 onboarding = false
@@ -144,11 +144,9 @@ height = "90%"
 
 [[keys.command]]
 key = "prefix+shift+g"
-type = "popup"
-command = 'config_file=$(readlink "$HOME/.config/herdr/config.toml") && zsh "$(dirname "$config_file")/tuicr.zsh"'
-description = "open PR review"
-width = "90%"
-height = "90%"
+type = "shell"
+command = '"$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Review --env HERDR_START_TUICR=1 --focus'
+description = "open PR review in a new tab"
 
 [[keys.command]]
 key = "prefix+f"
