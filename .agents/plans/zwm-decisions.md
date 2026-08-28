@@ -26,12 +26,20 @@ zwm-v1-7aef9c52-meanderx-kunda-wt
 ```
 
 - `zwm-v1` identifies ZWM ownership and the naming-schema version.
-- `<session-id>` is the unique durable tmux-session identifier.
+- `<session-id>` is the first eight lowercase hexadecimal characters of the
+  SHA-256 hash of the normalized absolute Git worktree root.
 - `<parent>` and `<leaf>` are human-readable reconciliation hints.
 - The complete worktree path is not encoded in the tmux session name.
 
-The canonical remote worktree path comes from Zed's database, not from parsing
-the tmux session name.
+The terminal hook derives the normalized root with `git -C "$PWD" rev-parse
+--show-toplevel` and POSIX path cleaning. Local ZWM applies the same path
+normalization to Zed's recorded worktree directory, hashes it, and matches the
+result to the tmux session ID. Zed's path is authoritative; terminal titles are
+not part of the ZWM identity model.
+
+ZWM creates one durable tmux session per worktree. If an eight-character hash
+collision is detected for distinct normalized roots, ZWM uses a longer hash
+form for the colliding session and records the condition.
 
 ## Terminal Initialization
 
@@ -43,9 +51,14 @@ zwm terminal-init-command
 ```
 
 That ZWM subcommand runs in the worktree working directory supplied by Zed. It
-resolves the existing ZWM tmux session for that worktree or creates one, then
-attaches the Terminal Thread to it. It owns creation of the ZWM tmux session
-name and replaces the current shell-only `zed-<parent>-<leaf>` initialization.
+derives the deterministic session ID and session name, attaches to the existing
+tmux session for that worktree or creates it, then attaches the Terminal Thread
+to it. It owns creation of the ZWM tmux session name and replaces the current
+shell-only `zed-<parent>-<leaf>` initialization.
+
+`zwm terminal-init-command` does not read Zed's database, ZWM's SQLite state,
+or LCH configuration. It only uses its current worktree directory and the VM's
+tmux server.
 
 ZWM must therefore be available on the VM for terminal initialization, in
 addition to the local ZWM process managed by LCH.
@@ -62,16 +75,17 @@ Local Zed database, read-only
   -> remote identity, Terminal Thread metadata, and canonical working directory
 ```
 
-The reconciliation binds a tmux session ID to the matching canonical Zed
-worktree path. ZWM persists that binding in its own local state so it remains
-available after Zed removes Terminal Thread metadata during a disconnect.
+The reconciliation hashes the normalized Zed worktree path and binds the
+matching tmux session ID to that path. ZWM persists that binding in its own
+local state so it remains available after Zed removes Terminal Thread metadata
+during a disconnect.
 
 ZWM never writes to Zed's database.
 
 ## Service Lifecycle
 
 ZWM runs as a persistent local service managed by LCH. It is not a timer-driven
-or one-shot OCINT-style daemon job.
+or one-shot OCINT-style daemon job. The daemon reconciles every 10 minutes.
 
 ```text
 LCH persistent service
@@ -79,16 +93,48 @@ LCH persistent service
   -> periodic remote tmux scan + local Zed-database reconciliation
 ```
 
+The LCH service definition is:
+
+```toml
+[services.lch-zwm]
+command = ["zwm", "daemon"]
+```
+
+LCH derives the persistent service label:
+
+```text
+com.vikramsg.dotfiles.lch-zwm
+```
+
+LCH lifecycle remains owned by `just lch`, not `just zwm`.
+
 ## Go Project Layout
 
 ZWM is a Go command organized as cohesive capability packages. The executable
 entry point is isolated under `cmd/`; non-public code is under `internal/`.
+
+ZWM configuration follows the repository's configuration pattern and is not
+part of the implementation package:
+
+```text
+zwm/config.json
+  -> ~/.config/zwm/config.json
+```
+
+The initial configuration contains the one supported remote host:
+
+```json
+{
+  "host": "vm-us"
+}
+```
 
 ```text
 bin/zwm/
 ├── go.mod
 ├── go.sum
 ├── README.md
+├── justfile
 ├── cmd/
 │   └── zwm/
 │       └── main.go
@@ -149,6 +195,16 @@ Unit tests are colocated with the package under test. Static fixtures are kept
 in that package's `testdata/` directory. The noninteractive real-environment
 compatibility scripts are kept in `bin/zwm/scripts/`.
 
+The package justfile separates local build, remote platform discovery,
+cross-compilation, remote copy, and remote installation into individual
+recipes. The top-level `just zwm` recipe creates the active configuration
+symlink and delegates installation to the package justfile.
+
+`just zwm` reads the configured host, discovers the VM platform with `ssh` and
+`uname`, cross-compiles a Linux binary on the Mac, and installs it at
+`~/.local/bin/zwm` on the configured VM. It also installs the native local
+binary at `~/.local/bin/zwm`. The VM does not need Go installed.
+
 ## Go Libraries
 
 ZWM uses established Go packages for standard infrastructure rather than
@@ -164,7 +220,7 @@ or UUID implementation. The direct dependency set stays deliberately small.
 | Daemon lifecycle | `context`, `os/signal`, and `syscall` | Cancellation and controlled daemon shutdown. |
 | Filesystem and paths | `path/filepath`, `os`, and `io/fs` | Local configuration and state access. |
 | Session ID generation | `crypto/rand` and `encoding/hex` | Opaque session IDs without a UUID dependency. |
-| Zed metadata decoding | `encoding/json` | Decode Zed JSON metadata. |
+| Zed metadata and ZWM configuration decoding | `encoding/json` | Decode Zed JSON metadata and `zwm/config.json`. |
 | Unit tests | `testing` | Standard Go testing framework. |
 | Semantic test comparisons | `github.com/google/go-cmp/cmp` | Compare structured values without rendered-output snapshots. |
 | Optional property tests | `testing/quick` | Property tests for durable rules such as session-name parsing. |
@@ -180,11 +236,10 @@ github.com/google/go-cmp
 ZWM does not add `viper`, `testify`, `sqlmock`, `mockery`, `zap`, `zerolog`,
 `afero`, `urfave/cli`, or `google/uuid` without an approved requirement.
 
-ZWM's own persisted-state format remains undecided. If configuration needs
-TOML, use `github.com/pelletier/go-toml/v2`; if it needs JSON, use
-`encoding/json`; if it needs SQLite, reuse `database/sql` and
-`modernc.org/sqlite`. The state-format decision precedes adding any additional
-dependency.
+ZWM's own persisted state uses a separate local SQLite database at
+`$XDG_STATE_HOME/zwm/zwm.sqlite`, defaulting to
+`~/.local/state/zwm/zwm.sqlite`. It is implemented with `database/sql` and
+`modernc.org/sqlite`. ZWM never deletes that database or Zed's database.
 
 ## Command Surface
 
@@ -271,6 +326,24 @@ Real Zed, SSH, tmux, LCH, shell commands, and VM behavior are validated only by
 a minimal set of noninteractive scripts in `bin/zwm/scripts/`. These scripts
 are not part of the unit-test suite.
 
+`vm-us` is the currently confirmed real test VM. A noninteractive SSH check
+with BatchMode authentication succeeded on 2026-08-28. The compatibility
+scripts use this host for their real-environment checks; connectivity alone is
+not accepted as proof that terminal initialization or restoration works.
+
+#### Zed Database Observation Rule
+
+ZWM and its compatibility scripts use Zed's database only as a read-only
+observation source. They do not seed, insert, update, delete, reset, copy over,
+or otherwise mutate Zed database state. They do not use a test-only Zed action
+driver to manufacture Terminal Thread state.
+
+Zed database records verify only facts Zed itself persisted, including
+workspace identity, remote connection, working directory, terminal metadata,
+`last_active_terminal_id`, and `last_created_entry_kind`. If a required fact is
+not observable in Zed's database, ZWM verifies it from another read-only source
+such as VM tmux state, or reports it as unobserved.
+
 The integration checks cover:
 
 - terminal initialization: real Zed invokes `zwm terminal-init-command`, which
@@ -344,7 +417,6 @@ checklist:
 
 ## Explicitly Not Decided
 
-- Binary language, package location, and storage format.
 - Reconciliation interval and retry/backoff policy.
 - Exact LCH service identifier and configuration changes.
 - Exact Zed setting string and terminal-init create/attach algorithm.
