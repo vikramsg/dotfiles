@@ -63,6 +63,12 @@ tmux server.
 ZWM must therefore be available on the VM for terminal initialization, in
 addition to the local ZWM process managed by LCH.
 
+Zed invokes the hook with this setting:
+
+```json
+"terminal_init_command": "exec zwm terminal-init-command"
+```
+
 ## Reconciliation
 
 ZWM periodically reconciles two sources:
@@ -219,7 +225,7 @@ or UUID implementation. The direct dependency set stays deliberately small.
 | Command execution | `os/exec` | `ssh`, `tmux`, and `zed` execution at real system boundaries only. |
 | Daemon lifecycle | `context`, `os/signal`, and `syscall` | Cancellation and controlled daemon shutdown. |
 | Filesystem and paths | `path/filepath`, `os`, and `io/fs` | Local configuration and state access. |
-| Session ID generation | `crypto/rand` and `encoding/hex` | Opaque session IDs without a UUID dependency. |
+| Session ID derivation | `crypto/sha256` and `encoding/hex` | Deterministic eight-character worktree-path hash. |
 | Zed metadata and ZWM configuration decoding | `encoding/json` | Decode Zed JSON metadata and `zwm/config.json`. |
 | Unit tests | `testing` | Standard Go testing framework. |
 | Semantic test comparisons | `github.com/google/go-cmp/cmp` | Compare structured values without rendered-output snapshots. |
@@ -417,7 +423,7 @@ checklist:
 
 ## Explicitly Not Decided
 
-- Reconciliation interval and retry/backoff policy.
-- Exact LCH service identifier and configuration changes.
-- Exact Zed setting string and terminal-init create/attach algorithm.
-- Ambiguous-match handling beyond recording and reporting the condition.
+- Exact longer-hash collision fallback length and tmux metadata format.
+- Behavior after a reconciliation failure, beyond retaining the last successful inventory and logging the failure.
+- Whether every live tmux session remains eligible after an intentional Zed Terminal Thread close.
+- Exact delay or readiness condition between sequential Zed workspace opens during restore.
