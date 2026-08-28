@@ -1,6 +1,7 @@
 [
   {
     "bindings": {
+      // Move the projects in the threads sidebr
       "ctrl-cmd-shift-up": "multi_workspace::MoveProjectUp",
       "ctrl-cmd-shift-down": "multi_workspace::MoveProjectDown",
     },
