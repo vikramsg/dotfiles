@@ -38,8 +38,10 @@ result to the tmux session ID. Zed's path is authoritative; terminal titles are
 not part of the ZWM identity model.
 
 ZWM creates one durable tmux session per worktree. If an eight-character hash
-collision is detected for distinct normalized roots, ZWM uses a longer hash
-form for the colliding session and records the condition.
+collision is detected for distinct normalized roots, ZWM uses the first 16 hash
+characters for the colliding session and records the condition. ZWM stores the
+normalized root in the tmux `@zwm_worktree` session option so the hook can
+distinguish an existing worktree session from a collision.
 
 ## Terminal Initialization
 
@@ -86,12 +88,19 @@ matching tmux session ID to that path. ZWM persists that binding in its own
 local state so it remains available after Zed removes Terminal Thread metadata
 during a disconnect.
 
+Every live ZWM tmux session remains eligible for restoration. ZWM does not
+classify whether Zed lost the corresponding Terminal Thread through a
+disconnect, restart, or intentional close.
+
 ZWM never writes to Zed's database.
 
 ## Service Lifecycle
 
 ZWM runs as a persistent local service managed by LCH. It is not a timer-driven
 or one-shot OCINT-style daemon job. The daemon reconciles every 10 minutes.
+After a reconciliation failure, it retains the last successful inventory, logs
+the failure, and retries at the next scheduled cycle without immediate retry or
+backoff behavior.
 
 ```text
 LCH persistent service
@@ -268,6 +277,10 @@ ZWM's own persisted state uses a separate local SQLite database at
 The interface deliberately has no manual registration, individual-worktree
 restore, individual-session restore, `--live` variants, or `forget` command.
 
+`zwm restore` opens the first workspace with `zed -n`, then each remaining
+workspace with `zed -r`, waiting three seconds between open requests. The delay
+is internal MVP behavior, not a user-facing flag or configuration setting.
+
 ## Record Provenance
 
 Every command that shows persisted data must identify its source and timestamp.
@@ -423,7 +436,4 @@ checklist:
 
 ## Explicitly Not Decided
 
-- Exact longer-hash collision fallback length and tmux metadata format.
-- Behavior after a reconciliation failure, beyond retaining the last successful inventory and logging the failure.
-- Whether every live tmux session remains eligible after an intentional Zed Terminal Thread close.
-- Exact delay or readiness condition between sequential Zed workspace opens during restore.
+No remaining product decisions block the MVP implementation.
