@@ -1,8 +1,8 @@
 [
   {
     "bindings": {
-      "cmd-alt-shift-up": "multi_workspace::MoveProjectUp",
-      "cmd-alt-shift-down": "multi_workspace::MoveProjectDown",
+      "ctrl-cmd-shift-up": "multi_workspace::MoveProjectUp",
+      "ctrl-cmd-shift-down": "multi_workspace::MoveProjectDown",
     },
   },
   {
