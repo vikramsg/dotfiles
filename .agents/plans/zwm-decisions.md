@@ -79,6 +79,113 @@ LCH persistent service
   -> periodic remote tmux scan + local Zed-database reconciliation
 ```
 
+## Go Project Layout
+
+ZWM is a Go command organized as cohesive capability packages. The executable
+entry point is isolated under `cmd/`; non-public code is under `internal/`.
+
+```text
+bin/zwm/
+├── go.mod
+├── go.sum
+├── README.md
+├── cmd/
+│   └── zwm/
+│       └── main.go
+├── internal/
+│   ├── app/
+│   │   └── app.go
+│   ├── cli/
+│   │   ├── cli.go
+│   │   └── cli_test.go
+│   ├── config/
+│   │   ├── config.go
+│   │   └── config_test.go
+│   ├── inventory/
+│   │   ├── record.go
+│   │   ├── reconcile.go
+│   │   ├── reconcile_test.go
+│   │   └── testdata/
+│   ├── terminal/
+│   │   ├── init.go
+│   │   ├── init_test.go
+│   │   └── testdata/
+│   ├── restore/
+│   │   ├── restore.go
+│   │   └── restore_test.go
+│   ├── state/
+│   │   ├── store.go
+│   │   ├── events.go
+│   │   └── store_test.go
+│   ├── zed/
+│   │   ├── reader.go
+│   │   └── opener.go
+│   └── tmux/
+│       └── client.go
+└── scripts/
+    ├── terminal-init-check.sh
+    └── restore-check.sh
+```
+
+| Package | Owns |
+|---|---|
+| `cmd/zwm` | Process entry point only. Calls `app.New()` and exits with the resulting status. |
+| `app` | Application assembly: loads configuration, creates concrete dependencies, and wires CLI commands. |
+| `cli` | Argument parsing and rendering command results. It does not contain reconciliation rules. |
+| `config` | ZWM configuration and validation. |
+| `inventory` | ZWM session records and reconciliation rules between tmux inventory and Zed terminal/worktree records. |
+| `terminal` | `zwm terminal-init-command`: resolve, create, and attach the appropriate ZWM tmux session. |
+| `restore` | Turn the latest valid inventory into Zed workspace-open requests. |
+| `state` | Persisted ZWM inventory, reconciliation timestamps, and event log. |
+| `zed` | Read Zed state read-only and invoke Zed to open workspaces. |
+| `tmux` | Inspect and operate ZWM-managed tmux sessions. |
+
+Each package defines the small interfaces it consumes. There is no central
+`ports` package. The project does not start with generic `pkg`, `common`,
+`helpers`, `utils`, `models`, `domain`, `adapters`, or `testutils`
+directories.
+
+Unit tests are colocated with the package under test. Static fixtures are kept
+in that package's `testdata/` directory. The noninteractive real-environment
+compatibility scripts are kept in `bin/zwm/scripts/`.
+
+## Go Libraries
+
+ZWM uses established Go packages for standard infrastructure rather than
+hand-building a command parser, SQLite driver, logger, test assertion library,
+or UUID implementation. The direct dependency set stays deliberately small.
+
+| Need | Package | Use |
+|---|---|---|
+| CLI commands and flags | `github.com/spf13/cobra` | Command tree for `daemon`, `reconcile`, `restore`, `terminal-init-command`, `status`, `list`, `logs`, and `doctor`. |
+| SQLite access | `database/sql` and `modernc.org/sqlite` | Read-only Zed database access without CGO requirements. |
+| Structured application logging | `log/slog` | Structured ZWM event logging. |
+| Command execution | `os/exec` | `ssh`, `tmux`, and `zed` execution at real system boundaries only. |
+| Daemon lifecycle | `context`, `os/signal`, and `syscall` | Cancellation and controlled daemon shutdown. |
+| Filesystem and paths | `path/filepath`, `os`, and `io/fs` | Local configuration and state access. |
+| Session ID generation | `crypto/rand` and `encoding/hex` | Opaque session IDs without a UUID dependency. |
+| Zed metadata decoding | `encoding/json` | Decode Zed JSON metadata. |
+| Unit tests | `testing` | Standard Go testing framework. |
+| Semantic test comparisons | `github.com/google/go-cmp/cmp` | Compare structured values without rendered-output snapshots. |
+| Optional property tests | `testing/quick` | Property tests for durable rules such as session-name parsing. |
+
+The expected direct dependencies are:
+
+```text
+github.com/spf13/cobra
+modernc.org/sqlite
+github.com/google/go-cmp
+```
+
+ZWM does not add `viper`, `testify`, `sqlmock`, `mockery`, `zap`, `zerolog`,
+`afero`, `urfave/cli`, or `google/uuid` without an approved requirement.
+
+ZWM's own persisted-state format remains undecided. If configuration needs
+TOML, use `github.com/pelletier/go-toml/v2`; if it needs JSON, use
+`encoding/json`; if it needs SQLite, reuse `database/sql` and
+`modernc.org/sqlite`. The state-format decision precedes adding any additional
+dependency.
+
 ## Command Surface
 
 | Command / flag | Purpose | Information required |
@@ -161,8 +268,8 @@ behavior rather than an internal refactor.
 ### Manual Integration Checks
 
 Real Zed, SSH, tmux, LCH, shell commands, and VM behavior are validated only by
-a minimal set of noninteractive scripts in `scripts/`. These scripts are not
-part of the unit-test suite.
+a minimal set of noninteractive scripts in `bin/zwm/scripts/`. These scripts
+are not part of the unit-test suite.
 
 The integration checks cover:
 
@@ -175,6 +282,65 @@ The integration checks cover:
 These scripts are compatibility checks for installed versions and environment
 configuration. They are run for relevant Zed, ZWM, LCH, SSH, or terminal-init
 changes, rather than being expanded into a broad integration test suite.
+
+## Review Discipline
+
+This decision record is authoritative during implementation. A review
+sub-agent supplies evidence; it does not decide product scope or redesign the
+solution.
+
+Every review request must constrain findings to:
+
+```text
+- violations of this decision record;
+- defects that prevent an agreed command or acceptance criterion from working;
+- safety violations, especially writing to Zed's database;
+- regressions against an existing repository convention.
+```
+
+Reviewers must not recommend new commands, flags, workflows, configuration,
+generic packages, abstractions, compatibility layers, retry/fallback behavior,
+or broader tests based only on hypothetical future requirements. They must
+classify every finding as one of:
+
+1. Direct decision-record violation.
+2. Demonstrable correctness or safety bug.
+3. Optional improvement outside scope.
+
+| Review finding | Implementation response |
+|---|---|
+| Direct decision-record violation | Fix it. |
+| Demonstrable bug in an agreed behavior | Fix it. |
+| Existing repository rule is violated | Fix it. |
+| Requires changing commands, package layout, testing boundary, persistence policy, or Zed/tmux behavior | Ask for approval before changing scope. |
+| Generic defensive suggestion without an observed failure mode or decision-record requirement | Do not adopt it. |
+| “Could be useful later” abstraction or compatibility code | Do not adopt it. |
+
+Implementation reviews must preserve these boundaries:
+
+```text
+- No CLI flags beyond the documented command surface.
+- No manual registration, per-worktree restore, per-session restore, --live, or forget.
+- No Zed database writes.
+- No generic domain/adapter/ports/helper layer.
+- No real Zed, SSH, tmux, LCH, shell, or SQLite-file execution in unit tests.
+- No expansion of the two compatibility scripts into an integration suite.
+- No remote-side behavior beyond zwm terminal-init-command without approval.
+```
+
+Before completion, implementation is checked against this decision-record
+checklist:
+
+```text
+[ ] Package layout matches the documented Go structure.
+[ ] Each command matches the documented command table.
+[ ] Local-only commands do not independently inspect the VM.
+[ ] Daemon, reconcile, and doctor use VM plus local Zed state as specified.
+[ ] Terminal initialization is owned by zwm terminal-init-command.
+[ ] Zed database access is read-only.
+[ ] Unit tests meet the acceptance criteria.
+[ ] Real-environment checks remain only in bin/zwm/scripts/.
+```
 
 ## Explicitly Not Decided
 
