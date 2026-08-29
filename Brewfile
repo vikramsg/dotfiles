@@ -73,3 +73,7 @@ brew "gdal"
 
 # For runnin Terraform format
 brew "terraform"
+
+# Screenshot shelf automation and image browser.
+cask "hammerspoon"
+cask "flowvision"

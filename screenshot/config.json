@@ -12,20 +12,6 @@
           "Screenshot *.png",
           "Screen Shot *.png"
         ]
-      },
-      {
-        "id": "macshot-history",
-        "local_dir": "/Users/vikramsingh/Library/Containers/com.sw33tlie.macshot.macshot/Data/Library/Application Support/com.sw33tlie.macshot/history",
-        "vm_host": "vm-us",
-        "remote_dir": "~/Desktop/macshot/Screenshots/",
-        "include": ["*.png"],
-        "exclude": [
-          "*_preview.png",
-          "*_thumb.png",
-          "*_raw.png",
-          "*_annotations.json",
-          "*_edit.json"
-        ]
       }
     ]
   }

@@ -117,7 +117,7 @@ export async function resolveSyncedAttachment(
 }
 
 export default Plugin.define({
-  id: "dotfiles.macshot-history-attachment-v2",
+  id: "dotfiles.screenshot-sync-attachment-v2",
 
   async setup(ctx) {
     const options = PluginOptionsSchema.parse(ctx.options ?? {});
