@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/inventory"
 	_ "modernc.org/sqlite"
+	"zwm/internal/inventory"
 )
 
 type Reader struct {

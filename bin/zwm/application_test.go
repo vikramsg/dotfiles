@@ -1,4 +1,4 @@
-package app
+package zwm
 
 import (
 	"context"
@@ -8,9 +8,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/config"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/inventory"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/state"
+	"zwm/internal/inventory"
 )
 
 type fakeSessionReader struct {
@@ -32,16 +30,16 @@ func (reader fakeWorktreeReader) Worktrees(context.Context) ([]inventory.Worktre
 }
 
 type fakeStateRepository struct {
-	active      []state.Mapping
+	active      []StateMapping
 	activeError error
 	saveError   error
 	saved       bool
 	saveCalls   int
-	events      []state.Event
+	events      []StateEvent
 	appendError error
 }
 
-func (repository *fakeStateRepository) ActiveMappings(context.Context) ([]state.Mapping, error) {
+func (repository *fakeStateRepository) ActiveMappings(context.Context) ([]StateMapping, error) {
 	return repository.active, repository.activeError
 }
 
@@ -51,19 +49,19 @@ func (repository *fakeStateRepository) SaveSnapshot(_ context.Context, _ string,
 	return repository.saveError
 }
 
-func (repository *fakeStateRepository) AppendEvent(_ context.Context, event state.Event) error {
+func (repository *fakeStateRepository) AppendEvent(_ context.Context, event StateEvent) error {
 	repository.events = append(repository.events, event)
 	return repository.appendError
 }
 
-func (repository *fakeStateRepository) LatestEvent(context.Context, ...string) (state.Event, bool, error) {
-	return state.Event{}, false, nil
+func (repository *fakeStateRepository) LatestEvent(context.Context, ...string) (StateEvent, bool, error) {
+	return StateEvent{}, false, nil
 }
 
 func TestReconcilePreservesPriorInventoryWhenTmuxReadFails(t *testing.T) {
-	repository := &fakeStateRepository{active: []state.Mapping{{SessionName: "zwm-v1-aaaaaaaa-parent-leaf"}}}
+	repository := &fakeStateRepository{active: []StateMapping{{SessionName: "zwm-v1-aaaaaaaa-parent-leaf"}}}
 	application := Application{
-		Configuration: config.Config{Host: "vm-us"},
+		Configuration: Configuration{Host: "vm-us"},
 		State:         repository,
 		SessionReader: fakeSessionReader{err: errors.New("tmux unavailable")},
 	}
@@ -75,7 +73,7 @@ func TestReconcilePreservesPriorInventoryWhenTmuxReadFails(t *testing.T) {
 	if repository.saved {
 		t.Fatal("SaveSnapshot ran after tmux read failure")
 	}
-	if difference := cmp.Diff([]state.Mapping{{SessionName: "zwm-v1-aaaaaaaa-parent-leaf"}}, repository.active); difference != "" {
+	if difference := cmp.Diff([]StateMapping{{SessionName: "zwm-v1-aaaaaaaa-parent-leaf"}}, repository.active); difference != "" {
 		t.Fatalf("active inventory changed (-want +got):\n%s", difference)
 	}
 	if len(repository.events) != 1 || repository.events[0].Kind != "reconcile.failed" {
@@ -89,9 +87,9 @@ func TestReconcileRecordsNoopForUnchangedInventory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("derive session: %v", err)
 	}
-	repository := &fakeStateRepository{active: []state.Mapping{{SessionName: session.Name, Worktree: worktree}}}
+	repository := &fakeStateRepository{active: []StateMapping{{SessionName: session.Name, Worktree: worktree}}}
 	application := Application{
-		Configuration:  config.Config{Host: "vm-us"},
+		Configuration:  Configuration{Host: "vm-us"},
 		State:          repository,
 		SessionReader:  fakeSessionReader{sessions: []inventory.Session{session}},
 		WorktreeReader: fakeWorktreeReader{records: []inventory.WorktreeRecord{{Host: "vm-us", TerminalID: "terminal-1", Worktree: worktree}}},
@@ -116,7 +114,7 @@ func TestReconcilePreviewDoesNotPersistOrRecordEvents(t *testing.T) {
 	}
 	repository := &fakeStateRepository{}
 	application := Application{
-		Configuration:  config.Config{Host: "vm-us"},
+		Configuration:  Configuration{Host: "vm-us"},
 		State:          repository,
 		SessionReader:  fakeSessionReader{sessions: []inventory.Session{session}},
 		WorktreeReader: fakeWorktreeReader{records: []inventory.WorktreeRecord{{Host: "vm-us", TerminalID: "terminal-1", Worktree: worktree}}},
@@ -141,7 +139,7 @@ func TestReconcileRecordsUnresolvedLiveSession(t *testing.T) {
 	}
 	repository := &fakeStateRepository{}
 	application := Application{
-		Configuration:  config.Config{Host: "vm-us"},
+		Configuration:  Configuration{Host: "vm-us"},
 		State:          repository,
 		SessionReader:  fakeSessionReader{sessions: []inventory.Session{session}},
 		WorktreeReader: fakeWorktreeReader{},
@@ -161,7 +159,7 @@ func TestReconcileRecordsUnresolvedLiveSession(t *testing.T) {
 func TestReconcileRecordsFailureWhenReadingPriorInventoryFails(t *testing.T) {
 	repository := &fakeStateRepository{activeError: errors.New("state unavailable")}
 	application := Application{
-		Configuration:  config.Config{Host: "vm-us"},
+		Configuration:  Configuration{Host: "vm-us"},
 		State:          repository,
 		SessionReader:  fakeSessionReader{},
 		WorktreeReader: fakeWorktreeReader{},
@@ -178,7 +176,7 @@ func TestReconcileRecordsFailureWhenReadingPriorInventoryFails(t *testing.T) {
 func TestReconcileRecordsFailureWhenPersistingSnapshotFails(t *testing.T) {
 	repository := &fakeStateRepository{saveError: errors.New("state write failed")}
 	application := Application{
-		Configuration:  config.Config{Host: "vm-us"},
+		Configuration:  Configuration{Host: "vm-us"},
 		State:          repository,
 		SessionReader:  fakeSessionReader{},
 		WorktreeReader: fakeWorktreeReader{},

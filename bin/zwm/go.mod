@@ -1,4 +1,4 @@
-module github.com/vikramsg/dotfiles/bin/zwm
+module zwm
 
 go 1.27.0
 

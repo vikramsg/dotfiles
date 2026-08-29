@@ -1,4 +1,4 @@
-package state
+package zwm
 
 import (
 	"context"
@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/inventory"
 	_ "modernc.org/sqlite"
+	"zwm/internal/inventory"
 )
 
-type Mapping struct {
+type StateMapping struct {
 	Host                  string
 	SessionID             string
 	SessionName           string
@@ -25,18 +25,18 @@ type Mapping struct {
 	ZedDatabaseObservedAt time.Time
 }
 
-type Event struct {
+type StateEvent struct {
 	ID      int64
 	At      time.Time
 	Kind    string
 	Message string
 }
 
-type Store struct {
+type StateStore struct {
 	database *sql.DB
 }
 
-func Open(databasePath string) (*Store, error) {
+func OpenStateStore(databasePath string) (*StateStore, error) {
 	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
 		return nil, fmt.Errorf("create state directory: %w", err)
 	}
@@ -44,7 +44,7 @@ func Open(databasePath string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open state database: %w", err)
 	}
-	store := &Store{database: database}
+	store := &StateStore{database: database}
 	if err := store.migrate(context.Background()); err != nil {
 		database.Close()
 		return nil, err
@@ -52,11 +52,11 @@ func Open(databasePath string) (*Store, error) {
 	return store, nil
 }
 
-func (store *Store) Close() error {
+func (store *StateStore) Close() error {
 	return store.database.Close()
 }
 
-func (store *Store) migrate(context context.Context) error {
+func (store *StateStore) migrate(context context.Context) error {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS mappings (
 			host TEXT NOT NULL,
@@ -86,7 +86,7 @@ func (store *Store) migrate(context context.Context) error {
 	return nil
 }
 
-func (store *Store) SaveSnapshot(context context.Context, host string, at time.Time, live []inventory.Session, mappings []inventory.Mapping) error {
+func (store *StateStore) SaveSnapshot(context context.Context, host string, at time.Time, live []inventory.Session, mappings []inventory.Mapping) error {
 	transaction, err := store.database.BeginTx(context, nil)
 	if err != nil {
 		return fmt.Errorf("begin state snapshot: %w", err)
@@ -153,7 +153,7 @@ func (store *Store) SaveSnapshot(context context.Context, host string, at time.T
 	return nil
 }
 
-func (store *Store) AppendEvent(context context.Context, event Event) error {
+func (store *StateStore) AppendEvent(context context.Context, event StateEvent) error {
 	_, err := store.database.ExecContext(context, `INSERT INTO events (occurred_at, kind, message) VALUES (?, ?, ?)`, event.At.Format(time.RFC3339Nano), event.Kind, event.Message)
 	if err != nil {
 		return fmt.Errorf("append event: %w", err)
@@ -161,7 +161,7 @@ func (store *Store) AppendEvent(context context.Context, event Event) error {
 	return nil
 }
 
-func (store *Store) ActiveMappings(context context.Context) ([]Mapping, error) {
+func (store *StateStore) ActiveMappings(context context.Context) ([]StateMapping, error) {
 	rows, err := store.database.QueryContext(context, `
 		SELECT host, session_id, session_name, worktree, terminal_id, recorded_at,
 			last_seen_on_vm_at, last_matched_to_zed_at, zed_database_observed_at
@@ -173,7 +173,7 @@ func (store *Store) ActiveMappings(context context.Context) ([]Mapping, error) {
 	}
 	defer rows.Close()
 
-	mappings := make([]Mapping, 0)
+	mappings := make([]StateMapping, 0)
 	for rows.Next() {
 		mapping, err := scanMapping(rows)
 		if err != nil {
@@ -187,7 +187,7 @@ func (store *Store) ActiveMappings(context context.Context) ([]Mapping, error) {
 	return mappings, nil
 }
 
-func (store *Store) Events(context context.Context, limit int) ([]Event, error) {
+func (store *StateStore) Events(context context.Context, limit int) ([]StateEvent, error) {
 	rows, err := store.database.QueryContext(context, `
 		SELECT id, occurred_at, kind, message
 		FROM events
@@ -198,10 +198,10 @@ func (store *Store) Events(context context.Context, limit int) ([]Event, error) 
 	}
 	defer rows.Close()
 
-	events := make([]Event, 0)
+	events := make([]StateEvent, 0)
 	for rows.Next() {
 		var occurredAt string
-		var event Event
+		var event StateEvent
 		if err := rows.Scan(&event.ID, &occurredAt, &event.Kind, &event.Message); err != nil {
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
@@ -218,9 +218,9 @@ func (store *Store) Events(context context.Context, limit int) ([]Event, error) 
 	return events, nil
 }
 
-func (store *Store) LatestEvent(context context.Context, kinds ...string) (Event, bool, error) {
+func (store *StateStore) LatestEvent(context context.Context, kinds ...string) (StateEvent, bool, error) {
 	if len(kinds) == 0 {
-		return Event{}, false, nil
+		return StateEvent{}, false, nil
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(kinds)), ",")
 	arguments := make([]any, len(kinds))
@@ -233,17 +233,17 @@ func (store *Store) LatestEvent(context context.Context, kinds ...string) (Event
 		WHERE kind IN (`+placeholders+`)
 		ORDER BY id DESC
 		LIMIT 1`, arguments...)
-	var event Event
+	var event StateEvent
 	var occurredAt string
 	if err := row.Scan(&event.ID, &occurredAt, &event.Kind, &event.Message); err != nil {
 		if err == sql.ErrNoRows {
-			return Event{}, false, nil
+			return StateEvent{}, false, nil
 		}
-		return Event{}, false, fmt.Errorf("read latest event: %w", err)
+		return StateEvent{}, false, fmt.Errorf("read latest event: %w", err)
 	}
 	at, err := time.Parse(time.RFC3339Nano, occurredAt)
 	if err != nil {
-		return Event{}, false, fmt.Errorf("parse latest event timestamp: %w", err)
+		return StateEvent{}, false, fmt.Errorf("parse latest event timestamp: %w", err)
 	}
 	event.At = at
 	return event, true, nil
@@ -253,9 +253,9 @@ type scanner interface {
 	Scan(...any) error
 }
 
-func scanMapping(row scanner) (Mapping, error) {
+func scanMapping(row scanner) (StateMapping, error) {
 	var values [4]string
-	mapping := Mapping{}
+	mapping := StateMapping{}
 	if err := row.Scan(
 		&mapping.Host,
 		&mapping.SessionID,
@@ -267,7 +267,7 @@ func scanMapping(row scanner) (Mapping, error) {
 		&values[2],
 		&values[3],
 	); err != nil {
-		return Mapping{}, fmt.Errorf("scan mapping: %w", err)
+		return StateMapping{}, fmt.Errorf("scan mapping: %w", err)
 	}
 	timestamps := []*time.Time{
 		&mapping.RecordedAt,
@@ -281,7 +281,7 @@ func scanMapping(row scanner) (Mapping, error) {
 		}
 		parsed, err := time.Parse(time.RFC3339Nano, value)
 		if err != nil {
-			return Mapping{}, fmt.Errorf("parse mapping timestamp: %w", err)
+			return StateMapping{}, fmt.Errorf("parse mapping timestamp: %w", err)
 		}
 		*timestamps[index] = parsed
 	}

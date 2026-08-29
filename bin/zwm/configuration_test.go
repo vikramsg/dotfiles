@@ -1,4 +1,4 @@
-package config
+package zwm
 
 import (
 	"os"
@@ -13,7 +13,7 @@ func TestLoadReadsConfiguredHost(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	configuration, err := Load(path)
+	configuration, err := LoadConfiguration(path)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestLoadRejectsMissingHost(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	if _, err := Load(path); err == nil {
+	if _, err := LoadConfiguration(path); err == nil {
 		t.Fatal("Load succeeded without a host")
 	}
 }

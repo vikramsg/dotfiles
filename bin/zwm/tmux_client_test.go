@@ -1,4 +1,4 @@
-package tmux
+package zwm
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ func TestListTreatsMissingDefaultSocketAsEmptyInventory(t *testing.T) {
 }
 
 func TestShellCommandPreservesTmuxFormatArgument(t *testing.T) {
-	command := shellCommand([]string{remoteTmux, "list-sessions", "-F", "#{session_name}\t#{@zwm_worktree}"})
+	command := remoteShellCommand([]string{remoteTmux, "list-sessions", "-F", "#{session_name}\t#{@zwm_worktree}"})
 	want := "'/home/linuxbrew/.linuxbrew/bin/tmux' 'list-sessions' '-F' '#{session_name}\t#{@zwm_worktree}'"
 	if command != want {
 		t.Fatalf("shell command = %q, want %q", command, want)
@@ -23,7 +23,7 @@ func TestShellCommandPreservesTmuxFormatArgument(t *testing.T) {
 }
 
 func TestSSHArgumentsDisableTTYAllocationForInventoryCommands(t *testing.T) {
-	arguments := sshArguments("vm-us", []string{"list-sessions", "-F", "#{session_name}\t#{@zwm_worktree}"})
+	arguments := tmuxSSHArguments("vm-us", []string{"list-sessions", "-F", "#{session_name}\t#{@zwm_worktree}"})
 	if arguments[0] != "-T" {
 		t.Fatalf("ssh arguments = %#v, want explicit -T", arguments)
 	}
@@ -33,7 +33,7 @@ func TestSSHArgumentsDisableTTYAllocationForInventoryCommands(t *testing.T) {
 }
 
 func TestParseSessionsPreservesEmptyMetadataOnFinalRow(t *testing.T) {
-	sessions := parseSessions("zwm-v1-1beec1f3-meanderx-kunda\t\nzwm-v1-f7c9927e-meanderx-kunda-wt2\t\n")
+	sessions := parseTmuxSessions("zwm-v1-1beec1f3-meanderx-kunda\t\nzwm-v1-f7c9927e-meanderx-kunda-wt2\t\n")
 	if len(sessions) != 2 {
 		t.Fatalf("sessions = %#v, want two", sessions)
 	}

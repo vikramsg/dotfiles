@@ -1,4 +1,4 @@
-package state
+package zwm
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/inventory"
+	"zwm/internal/inventory"
 )
 
 type fakeScanner struct {
@@ -41,7 +41,7 @@ func TestScanMappingRepresentsMissingZedTimestampsAsUnobserved(t *testing.T) {
 }
 
 func TestSaveSnapshotClearsStaleTerminalMatchForUnresolvedSession(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "state-test"))
+	store, err := OpenStateStore(filepath.Join(t.TempDir(), "state-test"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

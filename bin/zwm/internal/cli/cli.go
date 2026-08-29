@@ -11,14 +11,11 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/app"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/restore"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/state"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/tmux"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/zed"
+	"zwm"
+	"zwm/internal/zed"
 )
 
-func Execute(arguments []string, factory app.Factory) error {
+func Execute(arguments []string, factory zwm.Factory) error {
 	root := &cobra.Command{
 		Use:           "zwm",
 		SilenceUsage:  true,
@@ -38,11 +35,11 @@ func Execute(arguments []string, factory app.Factory) error {
 }
 
 type applicationHandle struct {
-	factory     app.Factory
-	application *app.Application
+	factory     zwm.Factory
+	application *zwm.Application
 }
 
-func (handle *applicationHandle) get() (*app.Application, error) {
+func (handle *applicationHandle) get() (*zwm.Application, error) {
 	if handle.application != nil {
 		return handle.application, nil
 	}
@@ -54,12 +51,12 @@ func (handle *applicationHandle) get() (*app.Application, error) {
 	return application, nil
 }
 
-func openState() (*state.Store, error) {
-	path, err := app.DefaultStatePath()
+func openState() (*zwm.StateStore, error) {
+	path, err := zwm.DefaultStatePath()
 	if err != nil {
 		return nil, err
 	}
-	return state.Open(path)
+	return zwm.OpenStateStore(path)
 }
 
 func terminalInitCommandSession() *cobra.Command {
@@ -68,7 +65,7 @@ func terminalInitCommandSession() *cobra.Command {
 		Short:  "Print the shell initializer for the current ZWM tmux session",
 		Hidden: true,
 		RunE: func(command *cobra.Command, _ []string) error {
-			return app.RunTerminalInitCommandSession(command.Context())
+			return zwm.RunTerminalInitCommandSession(command.Context())
 		},
 	}
 }
@@ -232,8 +229,8 @@ func restoreCommand(handle *applicationHandle) *cobra.Command {
 			defer application.Close()
 
 			source := "persisted"
-			var live app.Inventory
-			var mappings []state.Mapping
+			var live zwm.Inventory
+			var mappings []zwm.StateMapping
 			if latest {
 				live, err = application.Reconcile(command.Context(), time.Now().UTC(), !dryRun)
 				if err != nil {
@@ -248,7 +245,7 @@ func restoreCommand(handle *applicationHandle) *cobra.Command {
 				}
 			}
 
-			plan, err := restore.Build(mappings, worktrees)
+			plan, err := zwm.BuildRestorePlan(mappings, worktrees)
 			if err != nil {
 				return err
 			}
@@ -280,10 +277,10 @@ func restoreCommand(handle *applicationHandle) *cobra.Command {
 	return command
 }
 
-func stateMappings(inventory app.Inventory) []state.Mapping {
-	mappings := make([]state.Mapping, 0, len(inventory.Mappings))
+func stateMappings(inventory zwm.Inventory) []zwm.StateMapping {
+	mappings := make([]zwm.StateMapping, 0, len(inventory.Mappings))
 	for _, mapping := range inventory.Mappings {
-		mappings = append(mappings, state.Mapping{
+		mappings = append(mappings, zwm.StateMapping{
 			Host:        mapping.Host,
 			SessionID:   mapping.Session.ID,
 			SessionName: mapping.Session.Name,
@@ -295,20 +292,20 @@ func stateMappings(inventory app.Inventory) []state.Mapping {
 }
 
 type workspaceOpener interface {
-	Open(context.Context, string, state.Mapping) error
+	Open(context.Context, string, string, string) error
 }
 
 type eventAppender interface {
-	AppendEvent(context.Context, state.Event) error
+	AppendEvent(context.Context, zwm.StateEvent) error
 }
 
-func executeRestore(context context.Context, opens []restore.Open, opener workspaceOpener, events eventAppender, pause func(time.Duration)) error {
+func executeRestore(context context.Context, opens []zwm.RestoreAction, opener workspaceOpener, events eventAppender, pause func(time.Duration)) error {
 	for index, open := range opens {
-		if err := opener.Open(context, open.Mode, open.Mapping); err != nil {
-			_ = events.AppendEvent(context, state.Event{At: time.Now().UTC(), Kind: "restore.failed", Message: open.Mapping.Worktree + ": " + err.Error()})
+		if err := opener.Open(context, open.Mode, open.Mapping.Host, open.Mapping.Worktree); err != nil {
+			_ = events.AppendEvent(context, zwm.StateEvent{At: time.Now().UTC(), Kind: "restore.failed", Message: open.Mapping.Worktree + ": " + err.Error()})
 			return err
 		}
-		if err := events.AppendEvent(context, state.Event{At: time.Now().UTC(), Kind: "restore.opened", Message: open.Mapping.Worktree}); err != nil {
+		if err := events.AppendEvent(context, zwm.StateEvent{At: time.Now().UTC(), Kind: "restore.opened", Message: open.Mapping.Worktree}); err != nil {
 			return err
 		}
 		if index < len(opens)-1 {
@@ -330,7 +327,7 @@ func doctorCommand(handle *applicationHandle) *cobra.Command {
 			if _, err := os.Stat(application.ZedPath); err != nil {
 				return fmt.Errorf("Zed database: %w", err)
 			}
-			if _, err := (tmux.Runner{Host: application.Configuration.Host}).List(command.Context()); err != nil {
+			if _, err := (zwm.TmuxRunner{Host: application.Configuration.Host}).List(command.Context()); err != nil {
 				return fmt.Errorf("remote tmux: %w", err)
 			}
 			fmt.Printf("host: %s\nzed_database: %s\n", application.Configuration.Host, application.ZedPath)
@@ -346,7 +343,7 @@ func formatTimestamp(value time.Time) string {
 	return value.Format(time.RFC3339)
 }
 
-func mappingOutput(mapping state.Mapping) string {
+func mappingOutput(mapping zwm.StateMapping) string {
 	return fmt.Sprintf("source: zwm local state\nsession: %s\nhost: %s\nworktree: %s\nrecorded_at: %s\nlast_seen_on_vm_at: %s\nlast_matched_to_zed_at: %s\nzed_database_observed_at: %s\n\n",
 		mapping.SessionName,
 		mapping.Host,
@@ -377,12 +374,12 @@ func parseLaunchctlState(output string) string {
 	return "loaded"
 }
 
-func latestReconciliationAttempt(success state.Event, hasSuccess bool, failure state.Event, hasFailure bool) (state.Event, bool, string) {
+func latestReconciliationAttempt(success zwm.StateEvent, hasSuccess bool, failure zwm.StateEvent, hasFailure bool) (zwm.StateEvent, bool, string) {
 	if hasFailure && (!hasSuccess || failure.At.After(success.At)) {
 		return failure, true, "failed"
 	}
 	if hasSuccess {
 		return success, true, "succeeded"
 	}
-	return state.Event{}, false, "unobserved"
+	return zwm.StateEvent{}, false, "unobserved"
 }

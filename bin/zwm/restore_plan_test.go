@@ -1,13 +1,11 @@
-package restore
+package zwm
 
 import (
 	"testing"
-
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/state"
 )
 
 func TestBuildSortsWorktreesAndUsesNewThenReuse(t *testing.T) {
-	plan, err := Build([]state.Mapping{
+	plan, err := BuildRestorePlan([]StateMapping{
 		{Worktree: "/work/zeta"},
 		{Worktree: "/work/alpha"},
 	}, nil)
@@ -28,7 +26,7 @@ func TestBuildSortsWorktreesAndUsesNewThenReuse(t *testing.T) {
 }
 
 func TestBuildSelectsRequestedWorktreesAndReportsMissingOnes(t *testing.T) {
-	plan, err := Build([]state.Mapping{{Worktree: "/work/alpha"}, {Worktree: "/work/zeta"}}, []string{"/work/zeta", "/work/missing"})
+	plan, err := BuildRestorePlan([]StateMapping{{Worktree: "/work/alpha"}, {Worktree: "/work/zeta"}}, []string{"/work/zeta", "/work/missing"})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

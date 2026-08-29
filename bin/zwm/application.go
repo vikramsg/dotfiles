@@ -1,4 +1,4 @@
-package app
+package zwm
 
 import (
 	"context"
@@ -10,16 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/config"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/inventory"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/state"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/terminal"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/tmux"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/zed"
+	"zwm/internal/inventory"
+	"zwm/internal/zed"
 )
 
 type Application struct {
-	Configuration  config.Config
+	Configuration  Configuration
 	State          StateRepository
 	SessionReader  SessionReader
 	WorktreeReader WorktreeReader
@@ -45,20 +41,20 @@ type WorktreeReader interface {
 }
 
 type StateRepository interface {
-	ActiveMappings(context.Context) ([]state.Mapping, error)
+	ActiveMappings(context.Context) ([]StateMapping, error)
 	SaveSnapshot(context.Context, string, time.Time, []inventory.Session, []inventory.Mapping) error
-	AppendEvent(context.Context, state.Event) error
-	LatestEvent(context.Context, ...string) (state.Event, bool, error)
+	AppendEvent(context.Context, StateEvent) error
+	LatestEvent(context.Context, ...string) (StateEvent, bool, error)
 }
 
 type Factory struct{}
 
-func New() Factory {
+func NewFactory() Factory {
 	return Factory{}
 }
 
 func (Factory) Open() (*Application, error) {
-	return Open()
+	return OpenApplication()
 }
 
 func DefaultConfigPath() (string, error) {
@@ -81,12 +77,12 @@ func DefaultStatePath() (string, error) {
 	return filepath.Join(stateHome, "zwm", "zwm.sqlite"), nil
 }
 
-func Open() (*Application, error) {
+func OpenApplication() (*Application, error) {
 	configPath, err := DefaultConfigPath()
 	if err != nil {
 		return nil, err
 	}
-	configuration, err := config.Load(configPath)
+	configuration, err := LoadConfiguration(configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +90,7 @@ func Open() (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	store, err := state.Open(statePath)
+	store, err := OpenStateStore(statePath)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +102,7 @@ func Open() (*Application, error) {
 	return &Application{
 		Configuration:  configuration,
 		State:          store,
-		SessionReader:  tmux.Runner{Host: configuration.Host},
+		SessionReader:  TmuxRunner{Host: configuration.Host},
 		WorktreeReader: zed.Reader{Path: zedPath},
 		ZedPath:        zedPath,
 		closer:         store,
@@ -158,11 +154,11 @@ func (application *Application) PersistInventory(context context.Context, now ti
 	if unchanged {
 		kind = "reconcile.noop"
 	}
-	if err := application.State.AppendEvent(context, state.Event{At: now, Kind: kind, Message: message}); err != nil {
+	if err := application.State.AppendEvent(context, StateEvent{At: now, Kind: kind, Message: message}); err != nil {
 		return err
 	}
 	if len(inventory.Unresolved) > 0 {
-		if err := application.State.AppendEvent(context, state.Event{At: now, Kind: "reconcile.unresolved", Message: fmt.Sprintf("host=%s sessions=%d", application.Configuration.Host, len(inventory.Unresolved))}); err != nil {
+		if err := application.State.AppendEvent(context, StateEvent{At: now, Kind: "reconcile.unresolved", Message: fmt.Sprintf("host=%s sessions=%d", application.Configuration.Host, len(inventory.Unresolved))}); err != nil {
 			return err
 		}
 	}
@@ -170,7 +166,7 @@ func (application *Application) PersistInventory(context context.Context, now ti
 	return nil
 }
 
-func sameInventory(sessions []inventory.Session, mappings []state.Mapping) bool {
+func sameInventory(sessions []inventory.Session, mappings []StateMapping) bool {
 	if len(sessions) != len(mappings) {
 		return false
 	}
@@ -187,7 +183,7 @@ func sameInventory(sessions []inventory.Session, mappings []state.Mapping) bool 
 }
 
 func (application *Application) recordFailure(context context.Context, now time.Time, cause error) {
-	_ = application.State.AppendEvent(context, state.Event{
+	_ = application.State.AppendEvent(context, StateEvent{
 		At:      now,
 		Kind:    "reconcile.failed",
 		Message: cause.Error(),
@@ -203,16 +199,16 @@ func RunTerminalInitCommandSession(context context.Context) error {
 	if err != nil {
 		return err
 	}
-	runner := tmux.Runner{Executable: tmux.Executable()}
+	runner := TmuxRunner{Executable: TmuxExecutable()}
 	sessions, err := runner.List(context)
 	if err != nil {
 		return err
 	}
-	plan, err := terminal.PlanForWorktree(root, sessions)
+	plan, err := PlanTerminal(root, sessions)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprint(os.Stdout, terminalInitScript(plan.Session, tmux.Executable()))
+	_, err = fmt.Fprint(os.Stdout, terminalInitScript(plan.Session, TmuxExecutable()))
 	return err
 }
 
@@ -229,10 +225,10 @@ fi
 title="$(basename "$(dirname "$worktree")")/$(basename "$worktree")"
 printf '\033]2;%%s\007' "$title"
 exec "$tmux_command" attach-session -t "$session"
-`, shellQuote(session.Name), shellQuote(session.Worktree), shellQuote(tmuxExecutable))
+`, shellQuoteValue(session.Name), shellQuoteValue(session.Worktree), shellQuoteValue(tmuxExecutable))
 }
 
-func shellQuote(value string) string {
+func shellQuoteValue(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 

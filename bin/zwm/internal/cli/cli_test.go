@@ -9,10 +9,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/app"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/inventory"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/restore"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/state"
+	"zwm"
+	"zwm/internal/inventory"
 )
 
 func TestFormatTimestampMarksUnobservedValues(t *testing.T) {
@@ -30,7 +28,7 @@ func TestFormatTimestampUsesRFC3339(t *testing.T) {
 
 func TestMappingOutputIncludesRequiredProvenance(t *testing.T) {
 	at := time.Date(2026, time.August, 29, 12, 0, 0, 0, time.UTC)
-	output := mappingOutput(state.Mapping{
+	output := mappingOutput(zwm.StateMapping{
 		SessionName:           "zwm-v1-deadbeef-meanderx-kunda-wt",
 		Host:                  "vm-us",
 		Worktree:              "/home/vikram/projects/meanderx/kunda-wt",
@@ -54,9 +52,9 @@ func TestMappingOutputIncludesRequiredProvenance(t *testing.T) {
 }
 
 func TestStatusOutputShowsLiveInventoryAndLatestAttempt(t *testing.T) {
-	success := state.Event{At: time.Date(2026, time.August, 29, 12, 0, 0, 0, time.UTC)}
-	failure := state.Event{At: time.Date(2026, time.August, 29, 12, 10, 0, 0, time.UTC)}
-	output := newRenderer(&bytes.Buffer{}, false).status(app.Inventory{
+	success := zwm.StateEvent{At: time.Date(2026, time.August, 29, 12, 0, 0, 0, time.UTC)}
+	failure := zwm.StateEvent{At: time.Date(2026, time.August, 29, 12, 10, 0, 0, time.UTC)}
+	output := newRenderer(&bytes.Buffer{}, false).status(zwm.Inventory{
 		Sessions: []inventory.Session{{Name: "zwm-v1-deadbeef-meanderx-kunda"}},
 		Records:  []inventory.WorktreeRecord{{TerminalID: "terminal-1"}},
 		Mappings: []inventory.Mapping{{Worktree: "/work/kunda", Session: inventory.Session{Name: "zwm-v1-deadbeef-meanderx-kunda"}}},
@@ -94,15 +92,15 @@ type fakeWorkspaceOpener struct {
 	err error
 }
 
-func (opener fakeWorkspaceOpener) Open(context.Context, string, state.Mapping) error {
+func (opener fakeWorkspaceOpener) Open(context.Context, string, string, string) error {
 	return opener.err
 }
 
 type fakeEventAppender struct {
-	events []state.Event
+	events []zwm.StateEvent
 }
 
-func (appender *fakeEventAppender) AppendEvent(_ context.Context, event state.Event) error {
+func (appender *fakeEventAppender) AppendEvent(_ context.Context, event zwm.StateEvent) error {
 	appender.events = append(appender.events, event)
 	return nil
 }
@@ -110,9 +108,9 @@ func (appender *fakeEventAppender) AppendEvent(_ context.Context, event state.Ev
 func TestExecuteRestoreRecordsOpenedOutcomes(t *testing.T) {
 	appender := &fakeEventAppender{}
 	paused := 0
-	err := executeRestore(context.Background(), []restore.Open{
-		{Mode: "-n", Mapping: state.Mapping{Worktree: "/work/one"}},
-		{Mode: "-r", Mapping: state.Mapping{Worktree: "/work/two"}},
+	err := executeRestore(context.Background(), []zwm.RestoreAction{
+		{Mode: "-n", Mapping: zwm.StateMapping{Worktree: "/work/one"}},
+		{Mode: "-r", Mapping: zwm.StateMapping{Worktree: "/work/two"}},
 	}, fakeWorkspaceOpener{}, appender, func(time.Duration) { paused++ })
 	if err != nil {
 		t.Fatalf("execute restore: %v", err)
@@ -128,7 +126,7 @@ func TestExecuteRestoreRecordsOpenedOutcomes(t *testing.T) {
 func TestExecuteRestoreRecordsFailedOutcome(t *testing.T) {
 	appender := &fakeEventAppender{}
 	cause := errors.New("Zed unavailable")
-	err := executeRestore(context.Background(), []restore.Open{{Mapping: state.Mapping{Worktree: "/work/one"}}}, fakeWorkspaceOpener{err: cause}, appender, func(time.Duration) {})
+	err := executeRestore(context.Background(), []zwm.RestoreAction{{Mapping: zwm.StateMapping{Worktree: "/work/one"}}}, fakeWorkspaceOpener{err: cause}, appender, func(time.Duration) {})
 	if !errors.Is(err, cause) {
 		t.Fatalf("execute restore error = %v, want %v", err, cause)
 	}
@@ -138,13 +136,13 @@ func TestExecuteRestoreRecordsFailedOutcome(t *testing.T) {
 }
 
 func TestRestorePlanOutputDescribesLatestPlanWithoutHidingMissingTargets(t *testing.T) {
-	output := newRenderer(&bytes.Buffer{}, false).restorePlan("latest", app.Inventory{
+	output := newRenderer(&bytes.Buffer{}, false).restorePlan("latest", zwm.Inventory{
 		Sessions:   []inventory.Session{{Name: "zwm-v1-deadbeef-meanderx-kunda", Worktree: "/work/kunda"}},
 		Records:    []inventory.WorktreeRecord{{Host: "vm-us", TerminalID: "terminal-1", Worktree: "/work/kunda"}},
 		Mappings:   []inventory.Mapping{{Host: "vm-us", Session: inventory.Session{Name: "zwm-v1-deadbeef-meanderx-kunda"}, TerminalID: "terminal-1", Worktree: "/work/kunda"}},
 		Unresolved: []inventory.Session{{Name: "zwm-v1-feedface-meanderx-missing"}},
-	}, restore.Plan{
-		Opens:   []restore.Open{{Mode: "-n", Mapping: state.Mapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}},
+	}, zwm.RestorePlan{
+		Opens:   []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}},
 		Missing: []string{"/work/missing"},
 	})
 
@@ -167,7 +165,7 @@ func TestRestorePlanOutputDescribesLatestPlanWithoutHidingMissingTargets(t *test
 }
 
 func TestRestorePlanOutputExplainsAnEmptyPlan(t *testing.T) {
-	output := newRenderer(&bytes.Buffer{}, false).restorePlan("latest", app.Inventory{}, restore.Plan{})
+	output := newRenderer(&bytes.Buffer{}, false).restorePlan("latest", zwm.Inventory{}, zwm.RestorePlan{})
 	if !strings.Contains(output, "EMPTY No restorable worktrees found.") {
 		t.Fatalf("restore plan output = %q", output)
 	}
@@ -177,9 +175,9 @@ func TestRestorePlanOutputExplainsAnEmptyPlan(t *testing.T) {
 }
 
 func TestStyledAndPlainRestorePlansHaveTheSameContent(t *testing.T) {
-	plan := restore.Plan{Opens: []restore.Open{{Mode: "-n", Mapping: state.Mapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}}}
-	plain := newRenderer(&bytes.Buffer{}, false).restorePlan("latest", app.Inventory{}, plan)
-	styled := newRenderer(&bytes.Buffer{}, true).restorePlan("latest", app.Inventory{}, plan)
+	plan := zwm.RestorePlan{Opens: []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}}}
+	plain := newRenderer(&bytes.Buffer{}, false).restorePlan("latest", zwm.Inventory{}, plan)
+	styled := newRenderer(&bytes.Buffer{}, true).restorePlan("latest", zwm.Inventory{}, plan)
 	if !strings.Contains(styled, "\x1b[") {
 		t.Fatalf("styled output has no ANSI sequences: %q", styled)
 	}
@@ -192,8 +190,8 @@ func TestStyledAndPlainRestorePlansHaveTheSameContent(t *testing.T) {
 }
 
 func TestNarrowRestorePlanStacksFieldValues(t *testing.T) {
-	plan := restore.Plan{Opens: []restore.Open{{Mode: "-n", Mapping: state.Mapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}}}
-	output := newRendererAtWidth(&bytes.Buffer{}, false, 60).restorePlan("latest", app.Inventory{}, plan)
+	plan := zwm.RestorePlan{Opens: []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}}}
+	output := newRendererAtWidth(&bytes.Buffer{}, false, 60).restorePlan("latest", zwm.Inventory{}, plan)
 	if !strings.Contains(output, "  Worktree\n  /work/kunda\n") {
 		t.Fatalf("narrow fields are not stacked:\n%s", output)
 	}

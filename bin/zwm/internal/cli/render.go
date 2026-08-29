@@ -10,10 +10,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/app"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/restore"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/state"
 	"golang.org/x/term"
+	"zwm"
 )
 
 type renderer struct {
@@ -59,7 +57,7 @@ func newRendererAtWidth(output io.Writer, styled bool, width int) renderer {
 	}
 }
 
-func (renderer renderer) restorePlan(source string, inventory app.Inventory, plan restore.Plan) string {
+func (renderer renderer) restorePlan(source string, inventory zwm.Inventory, plan zwm.RestorePlan) string {
 	var output strings.Builder
 	fmt.Fprintf(&output, "%s  %s\n\n", renderer.heading.Render("RESTORE PLAN"), renderer.dim.Render(strings.ToUpper(source)))
 	if source == "latest" {
@@ -102,7 +100,7 @@ func (renderer renderer) restoreField(label string, value string) string {
 	return fmt.Sprintf("  %s %s\n", renderer.label.Render(label), value)
 }
 
-func (renderer renderer) status(current app.Inventory, persistedCount int, latestSuccess state.Event, hasSuccess bool, latestFailure state.Event, hasFailure bool, daemonState string, now time.Time) string {
+func (renderer renderer) status(current zwm.Inventory, persistedCount int, latestSuccess zwm.StateEvent, hasSuccess bool, latestFailure zwm.StateEvent, hasFailure bool, daemonState string, now time.Time) string {
 	var output strings.Builder
 	output.WriteString(renderer.heading.Render("ZWM STATUS") + "\n\n")
 	output.WriteString(renderer.section.Render("LIVE INVENTORY") + "\n")

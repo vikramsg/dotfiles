@@ -1,13 +1,13 @@
-package terminal
+package zwm
 
 import (
 	"testing"
 
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/inventory"
+	"zwm/internal/inventory"
 )
 
 func TestPlanForWorktreeCreatesShortSessionWhenNoSessionExists(t *testing.T) {
-	plan, err := PlanForWorktree("/home/vikram/projects/meanderx/kunda-wt", nil)
+	plan, err := PlanTerminal("/home/vikram/projects/meanderx/kunda-wt", nil)
 	if err != nil {
 		t.Fatalf("plan terminal init: %v", err)
 	}
@@ -25,7 +25,7 @@ func TestPlanForWorktreeAttachesExistingMatchingSession(t *testing.T) {
 		t.Fatalf("derive session: %v", err)
 	}
 
-	plan, err := PlanForWorktree(session.Worktree, []inventory.Session{session})
+	plan, err := PlanTerminal(session.Worktree, []inventory.Session{session})
 	if err != nil {
 		t.Fatalf("plan terminal init: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestPlanForWorktreeRepairsContinuumSessionWithoutMetadata(t *testing.T) {
 	}
 	session.Worktree = ""
 
-	plan, err := PlanForWorktree(worktree, []inventory.Session{session})
+	plan, err := PlanTerminal(worktree, []inventory.Session{session})
 	if err != nil {
 		t.Fatalf("plan terminal init: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestPlanForWorktreeUsesLongIDAfterShortNameCollision(t *testing.T) {
 	}
 	short.Worktree = "/other/root/kunda-wt"
 
-	plan, err := PlanForWorktree(worktree, []inventory.Session{short})
+	plan, err := PlanTerminal(worktree, []inventory.Session{short})
 	if err != nil {
 		t.Fatalf("plan terminal init: %v", err)
 	}

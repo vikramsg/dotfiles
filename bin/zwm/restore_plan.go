@@ -1,32 +1,31 @@
-package restore
+package zwm
 
 import (
 	"fmt"
 	"sort"
 
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/inventory"
-	"github.com/vikramsg/dotfiles/bin/zwm/internal/state"
+	"zwm/internal/inventory"
 )
 
-type Open struct {
+type RestoreAction struct {
 	Mode    string
-	Mapping state.Mapping
+	Mapping StateMapping
 }
 
-type Plan struct {
-	Opens   []Open
+type RestorePlan struct {
+	Opens   []RestoreAction
 	Missing []string
 }
 
-func Build(mappings []state.Mapping, worktrees []string) (Plan, error) {
+func BuildRestorePlan(mappings []StateMapping, worktrees []string) (RestorePlan, error) {
 	selected, missing, err := selectMappings(mappings, worktrees)
 	if err != nil {
-		return Plan{}, err
+		return RestorePlan{}, err
 	}
-	return Plan{Opens: opensFor(selected), Missing: missing}, nil
+	return RestorePlan{Opens: restoreActionsFor(selected), Missing: missing}, nil
 }
 
-func (plan Plan) ValidationError() error {
+func (plan RestorePlan) ValidationError() error {
 	if len(plan.Missing) > 0 {
 		return fmt.Errorf("requested worktrees are not restorable: %v", plan.Missing)
 	}
@@ -36,15 +35,15 @@ func (plan Plan) ValidationError() error {
 	return nil
 }
 
-func selectMappings(mappings []state.Mapping, worktrees []string) ([]state.Mapping, []string, error) {
+func selectMappings(mappings []StateMapping, worktrees []string) ([]StateMapping, []string, error) {
 	if len(worktrees) == 0 {
 		return mappings, nil, nil
 	}
-	byWorktree := make(map[string]state.Mapping, len(mappings))
+	byWorktree := make(map[string]StateMapping, len(mappings))
 	for _, mapping := range mappings {
 		byWorktree[mapping.Worktree] = mapping
 	}
-	selected := make([]state.Mapping, 0, len(worktrees))
+	selected := make([]StateMapping, 0, len(worktrees))
 	missing := make([]string, 0)
 	seen := make(map[string]bool, len(worktrees))
 	for _, worktree := range worktrees {
@@ -66,18 +65,18 @@ func selectMappings(mappings []state.Mapping, worktrees []string) ([]state.Mappi
 	return selected, missing, nil
 }
 
-func opensFor(mappings []state.Mapping) []Open {
-	sorted := append([]state.Mapping(nil), mappings...)
+func restoreActionsFor(mappings []StateMapping) []RestoreAction {
+	sorted := append([]StateMapping(nil), mappings...)
 	sort.Slice(sorted, func(left int, right int) bool {
 		return sorted[left].Worktree < sorted[right].Worktree
 	})
-	opens := make([]Open, 0, len(sorted))
+	opens := make([]RestoreAction, 0, len(sorted))
 	for index, mapping := range sorted {
 		mode := "-r"
 		if index == 0 {
 			mode = "-n"
 		}
-		opens = append(opens, Open{Mode: mode, Mapping: mapping})
+		opens = append(opens, RestoreAction{Mode: mode, Mapping: mapping})
 	}
 	return opens
 }
