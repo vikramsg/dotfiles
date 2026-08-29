@@ -56,18 +56,27 @@ function matchesSource(filename: string, source: SyncSource): boolean {
   );
 }
 
+function matchesLocalDirectory(filePath: string, localDirectory: string): boolean {
+  const directory = path.dirname(filePath);
+  if (localDirectory.startsWith("~/")) {
+    return path.isAbsolute(filePath) && directory.endsWith(localDirectory.slice(1));
+  }
+  return directory === localDirectory;
+}
+
 function extractDroppedPath(text: string, source: SyncSource): { raw: string; path: string } | undefined {
-  const roots = [source.local_dir, source.local_dir.replaceAll(" ", "\\ ")];
+  const portableSuffix = source.local_dir.startsWith("~/") ? source.local_dir.slice(1) : undefined;
+  const roots = [source.local_dir, portableSuffix].filter((root): root is string => root !== undefined);
   for (const root of roots) {
-    const start = text.indexOf(root);
-    if (start < 0) continue;
+    const rootStart = text.indexOf(root);
+    if (rootStart < 0) continue;
+    const prefix = text.slice(0, rootStart);
+    const escapedPathPrefix = prefix.match(/(?:^|\s)((?:\\.|[^\s])*)$/)?.[1] ?? "";
+    const start = rootStart - escapedPathPrefix.length;
     const candidate = text.slice(start).match(/^.*?\.png(?=\s|$)/)?.[0];
     if (!candidate) continue;
     const normalized = candidate.replace(/\\(.)/g, "$1");
-    const relative = path.relative(source.local_dir, normalized);
-    if (!relative || relative.startsWith("..") || path.dirname(relative) !== ".") {
-      continue;
-    }
+    if (!matchesLocalDirectory(normalized, source.local_dir)) continue;
     if (!matchesSource(path.basename(normalized), source)) continue;
     return { raw: candidate, path: normalized };
   }
@@ -132,7 +141,10 @@ export default Plugin.define({
           name: resolved.attachment.name,
         });
       }
-      event.prompt.text = event.prompt.text.replace(resolved.dropped.raw, "[attached screenshot]");
+      event.prompt.text = event.prompt.text.replace(
+        resolved.dropped.raw,
+        `[attached screenshot: ${resolved.attachment.name}]`,
+      );
     });
 
     return () => registration.dispose();

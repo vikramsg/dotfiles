@@ -10,7 +10,7 @@ import screenshotSyncAttachment, {
 
 const SCREENSHOT_DIRECTORY = "/Users/vikramsingh/Desktop/Screenshots";
 
-async function config(root: string, remoteDir: string) {
+async function config(root: string, remoteDir: string, localDir = SCREENSHOT_DIRECTORY) {
   const file = path.join(root, "screenshot.json");
   await writeFile(
     file,
@@ -19,7 +19,7 @@ async function config(root: string, remoteDir: string) {
         sources: [
           {
             id: "system",
-            local_dir: SCREENSHOT_DIRECTORY,
+            local_dir: localDir,
             vm_host: "vm-us",
             remote_dir: remoteDir,
             include: ["*.png"],
@@ -56,6 +56,39 @@ describe("screenshot sync attachment V2 plugin", () => {
     expect(resolved?.dropped.path).toBe(dropped(filename));
     expect(resolved?.attachment.name).toBe(filename);
     expect(resolved?.attachment.uri).toBe(`file://${path.join(remoteDir, filename)}`);
+  });
+
+  it("matches a dropped Mac path using a portable home-relative source directory", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "macshot-plugin-"));
+    const remoteDir = path.join(root, "remote");
+    const filename = "Screenshot 2026-08-29 at 21.32.06.png";
+    await mkdir(remoteDir, { recursive: true });
+    await writeFile(path.join(remoteDir, filename), "png");
+    const screenshotConfig = await config(root, remoteDir, "~/Desktop/Screenshots");
+
+    const resolved = await resolveSyncedAttachment(
+      `Please inspect ${dropped(filename).replaceAll(" ", "\\ ")}`,
+      { screenshot_config: screenshotConfig, wait_ms: 0 },
+    );
+
+    expect(resolved?.dropped.path).toBe(dropped(filename));
+    expect(resolved?.attachment.name).toBe(filename);
+  });
+
+  it("does not match the same filename outside the configured home-relative directory", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "macshot-plugin-"));
+    const remoteDir = path.join(root, "remote");
+    const filename = "capture.png";
+    await mkdir(remoteDir, { recursive: true });
+    await writeFile(path.join(remoteDir, filename), "png");
+    const screenshotConfig = await config(root, remoteDir, "~/Desktop/Screenshots");
+
+    const resolved = await resolveSyncedAttachment(`/Users/vikramsingh/Downloads/${filename}`, {
+      screenshot_config: screenshotConfig,
+      wait_ms: 0,
+    });
+
+    expect(resolved).toBeUndefined();
   });
 
   it.each(["capture_preview.png", "capture_thumb.png", "capture_raw.png", "capture.json"]) (
@@ -110,7 +143,7 @@ describe("screenshot sync attachment V2 plugin", () => {
 
     await handler?.(event);
 
-    expect(event.prompt.text).toBe("Please inspect [attached screenshot]");
+    expect(event.prompt.text).toBe("Please inspect [attached screenshot: capture.png]");
     expect(event.prompt.files).toEqual([
       {
         uri: `file://${path.join(remoteDir, filename)}`,
