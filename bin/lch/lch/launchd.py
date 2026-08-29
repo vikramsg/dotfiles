@@ -14,7 +14,7 @@ from lch.jobs import (
 
 
 SERVICE_RESTART_THROTTLE_SECONDS = 10
-LAUNCHD_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+LAUNCHD_PATH = f"{Path.home() / '.local/bin'}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 @dataclass(frozen=True)

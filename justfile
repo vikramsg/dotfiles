@@ -210,6 +210,12 @@ zed:
     @echo "Zed settings symlink created at ~/.config/zed/settings.json -> {{justfile_directory()}}/zed/settings.json"
     @echo "Zed keymap symlink created at ~/.config/zed/keymap.json -> {{justfile_directory()}}/zed/keymap.json"
 
+# Install ZWM locally and on the configured VM.
+zwm:
+    @mkdir -p "$HOME/.config/zwm"
+    ln -sfn "{{justfile_directory()}}/zwm/config.json" "$HOME/.config/zwm/config.json"
+    just --justfile "{{justfile_directory()}}/bin/zwm/justfile" install
+
 
 # Set up screenshot config symlink, install tool, and apply macOS location
 screenshot:
@@ -234,6 +240,8 @@ lch:
         "$HOME/.local/bin/lch" install lch-macshot-history-sync; \
     elif [ "$(uname)" = "Linux" ]; then \
         "$HOME/.local/bin/lch" install lch-screenshot-clipboard; \
+    elif [ "$(uname)" = "Darwin" ]; then \
+        "$HOME/.local/bin/lch" install lch-zwm; \
     fi
     @echo "lch config symlink created at ~/.config/lch/config.toml -> {{justfile_directory()}}/lch/config.toml"
 

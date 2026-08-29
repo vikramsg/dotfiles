@@ -53,14 +53,16 @@ zwm terminal-init-command
 ```
 
 That ZWM subcommand runs in the worktree working directory supplied by Zed. It
-derives the deterministic session ID and session name, attaches to the existing
-tmux session for that worktree or creates it, then attaches the Terminal Thread
-to it. It owns creation of the ZWM tmux session name and replaces the current
-shell-only `zed-<parent>-<leaf>` initialization.
+derives the deterministic session ID and session name, then prints a complete
+shell initializer. Zed evaluates that initializer in its original shell, which
+creates or finds the tmux session, records `@zwm_worktree`, sets the title, and
+execs tmux attachment. It replaces the current shell-only
+`zed-<parent>-<leaf>` session-name derivation.
 
 `zwm terminal-init-command` does not read Zed's database, ZWM's SQLite state,
 or LCH configuration. It only uses its current worktree directory and the VM's
-tmux server.
+tmux server. It prints only shell code on stdout; it does not create or attach
+tmux itself.
 
 ZWM must therefore be available on the VM for terminal initialization, in
 addition to the local ZWM process managed by LCH.
@@ -68,7 +70,7 @@ addition to the local ZWM process managed by LCH.
 Zed invokes the hook with this setting:
 
 ```json
-"terminal_init_command": "exec zwm terminal-init-command"
+"terminal_init_command": "eval \"$(zwm terminal-init-command-session)\""
 ```
 
 ## Reconciliation
@@ -260,22 +262,20 @@ ZWM's own persisted state uses a separate local SQLite database at
 
 | Command / flag | Purpose | Information required |
 |---|---|---|
-| `zwm daemon` | Persistent LCH-managed reconciliation service. | Remote VM + local DB |
-| `zwm reconcile` | Run one reconciliation pass immediately. | Remote VM + local DB |
-| `zwm terminal-init-command` | Zed-invoked remote terminal initializer. Resolve/create the worktree's ZWM tmux session and attach to it. | Remote VM only |
 | `zwm list` | List persisted reconciled sessions and worktrees. | Local DB only |
-| `zwm status` | Show tracker state, latest scan, counts, and failures. | Local DB only |
+| `zwm status` | Show live inventory, persisted mappings, daemon state, and reconciliation freshness. | Remote VM + local DB |
 | `zwm restore` | Reopen all worktrees from the latest successful reconciliation. | Local DB only for selection; Zed connects to the VM while opening workspaces |
+| `zwm restore --latest` | Reconcile current tmux and Zed inventory, persist it, and restore it. | Remote VM + local DB |
 | `zwm restore --new-window` | Restore into a new Zed window. | Local DB only for selection |
 | `zwm restore --reuse-window` | Restore into an existing compatible Zed window. | Local DB only for selection |
-| `zwm restore --dry-run` | Show planned Zed opens without opening them. | Local DB only |
+| `zwm restore --dry-run` | Render the same restore plan without persisting or opening Zed. | Depends on persisted or `--latest` source |
 | `zwm logs` | Show recent ZWM actions, no-ops, skips, failures, and restore attempts. | Local DB only |
 | `zwm logs --lines <count>` | Set the number of recent log entries. | Local DB only |
 | `zwm logs --follow` | Stream new local ZWM log entries. | Local DB only |
 | `zwm doctor` | Verify local state, LCH, SSH, tmux, and reconciliation prerequisites. | Remote VM + local DB |
 
-The interface deliberately has no manual registration, individual-worktree
-restore, individual-session restore, `--live` variants, or `forget` command.
+Daemon reconciliation and terminal initialization are hidden integration
+commands. `--worktree <absolute-path>` may be repeated to scope a restore.
 
 `zwm restore` opens the first workspace with `zed -n`, then each remaining
 workspace with `zed -r`, waiting three seconds between open requests. The delay
@@ -365,11 +365,10 @@ such as VM tmux state, or reports it as unobserved.
 
 The integration checks cover:
 
-- terminal initialization: real Zed invokes `zwm terminal-init-command`, which
-  creates or attaches to a real ZWM tmux session on the VM;
-- restoration: a real Zed/VM/tmux/LCH environment restores the recorded
-  worktrees and reattaches replacement Zed Terminal Threads to their durable
-  tmux sessions.
+- terminal initialization: inspect Zed-persisted Terminal Thread state and the
+  matching real ZWM tmux session after Zed's normal terminal workflow runs;
+- restoration: inspect the persisted ZWM inventory and planned restoration;
+  `restore-check.sh --apply` runs the real Zed/VM/tmux/LCH restoration sequence.
 
 These scripts are compatibility checks for installed versions and environment
 configuration. They are run for relevant Zed, ZWM, LCH, SSH, or terminal-init
