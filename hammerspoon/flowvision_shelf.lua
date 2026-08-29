@@ -190,7 +190,7 @@ function Shelf:show()
 
     local focusedWindow = self.hs.window.focusedWindow()
     self.returnWindowID = focusedWindow and focusedWindow:id() or nil
-    self.targetScreen = focusedWindow and focusedWindow:screen() or self.hs.screen.mainScreen()
+    self.targetScreen = self.hs.screen.mainScreen()
     local previousIDs = self:_currentWindowIDs()
     if not self.hs.urlevent.openURLWithBundle(M.folderURL(self.folder), "netdcy.FlowVision") then
         self.hs.alert.show("Could not open FlowVision screenshot shelf")
