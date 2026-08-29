@@ -75,6 +75,10 @@ function Shelf:_forgetWindow()
         self.openTimer:stop()
         self.openTimer = nil
     end
+    if self.pinTimer then
+        self.pinTimer:stop()
+        self.pinTimer = nil
+    end
     if self.escapeHotkey then
         self.escapeHotkey:disable()
     end
@@ -106,12 +110,19 @@ function Shelf:_positionAndPin(window)
     window:setFrame(M.windowFrame(self.targetScreen:frame(), self.width, self.height))
     window:focus()
 
-    local application = window:application()
-    local pinMenuPath = M.pinMenuPath()
-    local pinItem = application and application:findMenuItem(pinMenuPath) or nil
-    if pinItem and not pinItem.ticked then
-        application:selectMenuItem(pinMenuPath)
-    end
+    local windowID = window:id()
+    self.pinTimer = self.hs.timer.doAfter(0.2, function()
+        self.pinTimer = nil
+        if self.windowID ~= windowID then
+            return
+        end
+        local application = window:application()
+        local pinMenuPath = M.pinMenuPath()
+        local pinItem = application and application:findMenuItem(pinMenuPath) or nil
+        if pinItem and not pinItem.ticked then
+            application:selectMenuItem(pinMenuPath)
+        end
+    end)
     self.escapeHotkey:enable()
     self.mouseTap:start()
 end

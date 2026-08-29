@@ -67,7 +67,9 @@ Mac /Users/Shared/Screenshots
   -> VM clipboard
 ```
 
-`lch-screenshot-clipboard` also watches local macOS screenshots and copies the latest path to the local clipboard.
+`lch-screenshot-sync-system` watches screenshots on macOS. `lch-screenshot-clipboard`
+watches the synchronized directory on the VM and copies the latest path to its clipboard.
+Keep `/Users/Shared/Screenshots` writable on both hosts; see `screenshot/README.md` for setup.
 
 ### Browser opener tunnel
 
