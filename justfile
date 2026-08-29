@@ -238,15 +238,15 @@ lch:
     @if [ "$(uname)" = "Darwin" ]; then \
         "$HOME/.local/bin/lch" install lch-screenshot-sync; \
         "$HOME/.local/bin/lch" install lch-macshot-history-sync; \
+        "$HOME/.local/bin/lch" install lch-zwm; \
     elif [ "$(uname)" = "Linux" ]; then \
         "$HOME/.local/bin/lch" install lch-screenshot-clipboard; \
-    elif [ "$(uname)" = "Darwin" ]; then \
-        "$HOME/.local/bin/lch" install lch-zwm; \
     fi
     @echo "lch config symlink created at ~/.config/lch/config.toml -> {{justfile_directory()}}/lch/config.toml"
 
-# Install the config-driven macOS browser-opener service
-opener-tunnel:
+# Install the browser-opener binary and its config without reinstalling LCH.
+[private]
+opener-tunnel-install:
     @if [ "$(uname)" != "Darwin" ]; then \
         echo "ERROR: opener-tunnel setup requires macOS."; \
         exit 1; \
@@ -254,8 +254,19 @@ opener-tunnel:
     mkdir -p "$HOME/.config/opener-tunnel"; \
     ln -sfn "{{justfile_directory()}}/opener_tunnel/config.toml" "$HOME/.config/opener-tunnel/config.toml"; \
     uv tool install "{{justfile_directory()}}/bin/opener_tunnel" --force --no-cache; \
-    just lch; \
     "$HOME/.local/bin/lch" install lch-opener-tunnel
+
+# Install the config-driven macOS browser-opener service.
+opener-tunnel: lch opener-tunnel-install
+
+# Install the browser-opener service from `all` only on supported hosts.
+[private]
+opener-tunnel-if-supported:
+    @if [ "$(uname)" = "Darwin" ]; then \
+        just --justfile "{{justfile()}}" opener-tunnel-install; \
+    else \
+        echo "Skipping opener-tunnel: setup requires macOS."; \
+    fi
 
 
 # Set up custom bin symlinks
@@ -397,6 +408,15 @@ harlequin:
     ln -sfn {{justfile_directory()}}/harlequin/config.toml ~/.config/harlequin/config.toml
     @echo "Harlequin symlink created at ~/.config/harlequin/config.toml -> {{justfile_directory()}}/harlequin/config.toml"
 
+# Keep `all` usable when the intentionally untracked local credentials are absent.
+[private]
+harlequin-if-configured:
+    @if [ -f "{{justfile_directory()}}/harlequin/config.toml" ]; then \
+        just --justfile "{{justfile()}}" harlequin; \
+    else \
+        echo "Skipping Harlequin: create harlequin/config.toml from config.example.toml to enable it."; \
+    fi
+
 # Install or update terminal-browser
 # Installs binary to ~/.local/bin/terminal-browser (already exported in ~/.zshrc)
 # the installation also links the agent skill into ~/.agents/skills for automatic OpenCode/agent discovery.
@@ -405,7 +425,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot lch ocint gh-stats bin zsh lazygit hunk television harlequin
+all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot zwm lch opener-tunnel-if-supported ocint gh-stats bin zsh lazygit hunk television harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
