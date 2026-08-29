@@ -59,15 +59,17 @@ In addition we also have custom binaries managed through this repo for managing 
 - LCH watcher/orchestration: `bin/lch/`
 
 ```bash
-Mac ~/Desktop/Screenshots
+Mac /Users/Shared/Screenshots
   -> lch-screenshot-sync
   -> rsync
-  -> vm-us:~/Desktop/Screenshots
+  -> vm-us:/Users/Shared/Screenshots
   -> lch-screenshot-clipboard
   -> VM clipboard
 ```
 
-`lch-screenshot-clipboard` also watches local macOS screenshots and copies the latest path to the local clipboard.
+`lch-screenshot-sync-system` watches screenshots on macOS. `lch-screenshot-clipboard`
+watches the synchronized directory on the VM and copies the latest path to its clipboard.
+Keep `/Users/Shared/Screenshots` writable on both hosts; see `screenshot/README.md` for setup.
 
 ### Browser opener tunnel
 

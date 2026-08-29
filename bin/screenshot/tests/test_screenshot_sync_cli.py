@@ -109,10 +109,10 @@ def test_sync_list_cli_prints_configured_source_ids_in_order(tmp_path, monkeypat
                         "include": ["*.png"],
                     },
                     {
-                        "id": "macshot-history",
-                        "local_dir": "~/Library/macshot/history",
+                        "id": "screenshot-archive",
+                        "local_dir": "~/Pictures/screenshot-archive",
                         "vm_host": "test-vm",
-                        "remote_dir": "/remote/macshot/",
+                        "remote_dir": "/remote/archive/",
                         "include": ["*.png"],
                     },
                 ]
@@ -126,7 +126,7 @@ def test_sync_list_cli_prints_configured_source_ids_in_order(tmp_path, monkeypat
     result = CliRunner().invoke(main, ["sync", "list"])
 
     assert result.exit_code == 0
-    assert result.output.splitlines() == ["system", "macshot-history"]
+    assert result.output.splitlines() == ["system", "screenshot-archive"]
 
 
 def test_sync_list_cli_is_empty_without_configured_sources(tmp_path, monkeypatch):
@@ -141,7 +141,7 @@ def test_sync_list_cli_is_empty_without_configured_sources(tmp_path, monkeypatch
     assert result.output == ""
 
 
-def test_macshot_history_source_applies_configured_exclusions(tmp_path):
+def test_archive_source_applies_configured_exclusions(tmp_path):
     from screenshot.sync import build_rsync_command
 
     config_file = write_config(
@@ -150,10 +150,10 @@ def test_macshot_history_source_applies_configured_exclusions(tmp_path):
             "sync": {
                 "sources": [
                     {
-                        "id": "macshot-history",
+                        "id": "screenshot-archive",
                         "local_dir": str(tmp_path / "history"),
                         "vm_host": "test-vm",
-                        "remote_dir": "/remote/macshot/",
+                        "remote_dir": "/remote/archive/",
                         "include": ["*.png"],
                         "exclude": ["*_preview.png", "*_thumb.png"],
                     }
@@ -162,10 +162,10 @@ def test_macshot_history_source_applies_configured_exclusions(tmp_path):
         },
     )
 
-    command = build_rsync_command("macshot-history", config_file=config_file)
+    command = build_rsync_command("screenshot-archive", config_file=config_file)
 
     assert command[0:2] == ["rsync", "-avz"]
     assert "--exclude=*_preview.png" in command
     assert "--exclude=*_thumb.png" in command
     assert "--include=*.png" in command
-    assert command[-1] == "test-vm:/remote/macshot/"
+    assert command[-1] == "test-vm:/remote/archive/"

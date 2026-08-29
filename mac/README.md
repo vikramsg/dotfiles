@@ -1,16 +1,16 @@
 # Screenshots
 
-Use `macshot`.
-https://github.com/sw33tLie/macshot
-
-It was installed via Brew.
+Use the native macOS screenshot tool. The repo-managed `screenshot` configuration
+sets `/Users/Shared/Screenshots` as its save location.
 
 ## Shortcuts
 
 ```bash
-cmd + shift + s # Take screenshot and save 
-cmd + shift + h # See history of screenshots to easy copy 
+cmd + shift + 3 # Capture the screen and save
+cmd + shift + 4 # Capture a selection and save
+cmd + shift + 5 # Open native screenshot controls
+cmd + shift + h # Open screenshot history in FlowVision
 ```
 
-Can also do `gifs` but haven't explored that yet.
-Also don't know how to do 
+Adding `control` copies a capture to the clipboard without creating a file, so
+clipboard-only captures do not appear in FlowVision or sync to the VM.

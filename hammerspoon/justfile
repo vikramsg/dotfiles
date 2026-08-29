@@ -1,0 +1,4 @@
+set positional-arguments := true
+
+test:
+    cd "{{justfile_directory()}}" && luajit tests/flowvision_shelf_test.lua
