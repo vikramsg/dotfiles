@@ -10,6 +10,20 @@ def write_config(path: Path, payload: dict) -> Path:
     return path
 
 
+def system_sync(local_dir: str, vm_host: str, remote_dir: str) -> dict:
+    return {
+        "sources": [
+            {
+                "id": "system",
+                "local_dir": local_dir,
+                "vm_host": vm_host,
+                "remote_dir": remote_dir,
+                "include": ["Screenshot *.png", "Screen Shot *.png"],
+            }
+        ]
+    }
+
+
 def test_build_rsync_command_preserves_existing_filters(tmp_path):
     from screenshot.sync import build_rsync_command
 
@@ -17,14 +31,11 @@ def test_build_rsync_command_preserves_existing_filters(tmp_path):
         tmp_path / ".config/screenshot/config.json",
         {
             "screenshot_dir": str(tmp_path / "Screenshots"),
-            "sync": {
-                "vm_host": "test-vm",
-                "remote_dir": "/remote/path/",
-            },
+                "sync": system_sync(str(tmp_path / "Screenshots"), "test-vm", "/remote/path/"),
         },
     )
 
-    command = build_rsync_command(config_file=config_file)
+    command = build_rsync_command("system", config_file=config_file)
 
     assert command[0] == "rsync"
     assert "-avz" in command
@@ -40,10 +51,7 @@ def test_sync_run_executes_rsync_command(tmp_path, monkeypatch):
         tmp_path / ".config/screenshot/config.json",
         {
             "screenshot_dir": str(tmp_path / "Screenshots"),
-            "sync": {
-                "vm_host": "test-vm",
-                "remote_dir": "/remote/path/",
-            },
+                "sync": system_sync(str(tmp_path / "Screenshots"), "test-vm", "/remote/path/"),
         },
     )
     monkeypatch.setenv("SCREENSHOT_CONFIG_FILE", str(config_file))
@@ -59,9 +67,12 @@ def test_sync_run_executes_rsync_command(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sync_module.subprocess, "run", fake_run)
 
-    sync_module.run_sync()
+    sync_module.run_sync("system")
 
-    assert called == [sync_module.build_rsync_command(config_file=config_file)]
+    assert called == [
+        ["ssh", "test-vm", "mkdir", "-p", "/remote/path/"],
+        sync_module.build_rsync_command("system", config_file=config_file),
+    ]
 
 
 def test_sync_command_cli_prints_command(tmp_path, monkeypatch):
@@ -69,10 +80,7 @@ def test_sync_command_cli_prints_command(tmp_path, monkeypatch):
         tmp_path / ".config/screenshot/config.json",
         {
             "screenshot_dir": str(tmp_path / "Screenshots"),
-            "sync": {
-                "vm_host": "test-vm",
-                "remote_dir": "/remote/path/",
-            },
+                "sync": system_sync(str(tmp_path / "Screenshots"), "test-vm", "/remote/path/"),
         },
     )
     monkeypatch.setenv("SCREENSHOT_CONFIG_FILE", str(config_file))
@@ -85,3 +93,33 @@ def test_sync_command_cli_prints_command(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert "rsync -avz" in result.output
     assert "test-vm:/remote/path/" in result.output
+
+
+def test_macshot_history_source_applies_configured_exclusions(tmp_path):
+    from screenshot.sync import build_rsync_command
+
+    config_file = write_config(
+        tmp_path / "screenshot.json",
+        {
+            "sync": {
+                "sources": [
+                    {
+                        "id": "macshot-history",
+                        "local_dir": str(tmp_path / "history"),
+                        "vm_host": "test-vm",
+                        "remote_dir": "/remote/macshot/",
+                        "include": ["*.png"],
+                        "exclude": ["*_preview.png", "*_thumb.png"],
+                    }
+                ]
+            }
+        },
+    )
+
+    command = build_rsync_command("macshot-history", config_file=config_file)
+
+    assert command[0:2] == ["rsync", "-avz"]
+    assert "--exclude=*_preview.png" in command
+    assert "--exclude=*_thumb.png" in command
+    assert "--include=*.png" in command
+    assert command[-1] == "test-vm:/remote/macshot/"

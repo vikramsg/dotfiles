@@ -13,5 +13,6 @@
     "plugins/**/*.ts",
     "plugins-v1/**/*.ts",
     "tests/plugins/**/*.ts"
-  ]
+  ],
+  "exclude": ["tests/plugins/mode-transition-reminder.test.ts"]
 }

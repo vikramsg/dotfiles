@@ -1,8 +1,8 @@
-import json
 import os
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 DEFAULT_CLIPBOARD_HISTORY_LIMIT = 5
 DEFAULT_FILENAME_PATTERNS = (
@@ -12,26 +12,57 @@ DEFAULT_FILENAME_PATTERNS = (
 DEFAULT_SCREENSHOT_DIR = "~/Desktop/Screenshots"
 
 
-@dataclass(frozen=True)
-class SyncConfig:
-    vm_host: str
-    remote_dir: str
-
-
-@dataclass(frozen=True)
-class ScreenshotConfig:
-    screenshot_dir: Path
-    clipboard_history_limit: int
-    filename_patterns: tuple[str, ...]
-    sync: SyncConfig
-
-
 def _expand_path(raw_path: str | Path) -> Path:
     return Path(raw_path).expanduser()
 
 
 def get_default_screenshot_dir() -> Path:
     return _expand_path(DEFAULT_SCREENSHOT_DIR)
+
+
+NonEmptyString = Annotated[str, Field(min_length=1)]
+
+
+class SyncSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: NonEmptyString
+    local_dir: Path
+    vm_host: NonEmptyString
+    remote_dir: NonEmptyString
+    include: tuple[NonEmptyString, ...] = Field(min_length=1)
+    exclude: tuple[NonEmptyString, ...] = ()
+
+    @field_validator("local_dir")
+    @classmethod
+    def expand_local_directory(cls, value: Path) -> Path:
+        return value.expanduser()
+
+
+class SyncConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    sources: tuple[SyncSource, ...] = ()
+
+    @model_validator(mode="after")
+    def require_unique_source_ids(self) -> "SyncConfig":
+        if len({source.id for source in self.sources}) != len(self.sources):
+            raise ValueError("sync source ids must be unique")
+        return self
+
+
+class ScreenshotConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    screenshot_dir: Path = Field(default_factory=get_default_screenshot_dir)
+    clipboard_history_limit: int = Field(default=DEFAULT_CLIPBOARD_HISTORY_LIMIT, ge=1)
+    filename_patterns: tuple[NonEmptyString, ...] = DEFAULT_FILENAME_PATTERNS
+    sync: SyncConfig = SyncConfig()
+
+    @field_validator("screenshot_dir")
+    @classmethod
+    def expand_screenshot_directory(cls, value: Path) -> Path:
+        return value.expanduser()
 
 
 def get_default_config_file() -> Path:
@@ -46,15 +77,9 @@ def get_config_file(config_file: Path | None = None) -> Path:
 
 def load_config(config_file: Path | None = None) -> ScreenshotConfig:
     resolved_config_file = get_config_file(config_file)
-    data = json.loads(resolved_config_file.read_text()) if resolved_config_file.exists() else {}
-    sync_data = data.get("sync", {})
-    configured_dir = os.environ.get("SCREENSHOT_DIR") or data.get("screenshot_dir") or str(get_default_screenshot_dir())
-    return ScreenshotConfig(
-        screenshot_dir=_expand_path(configured_dir),
-        clipboard_history_limit=int(data.get("clipboard_history_limit", DEFAULT_CLIPBOARD_HISTORY_LIMIT)),
-        filename_patterns=tuple(data.get("filename_patterns", DEFAULT_FILENAME_PATTERNS)),
-        sync=SyncConfig(
-            vm_host=sync_data.get("vm_host", ""),
-            remote_dir=sync_data.get("remote_dir", ""),
-        ),
+    config = ScreenshotConfig.model_validate_json(
+        resolved_config_file.read_text() if resolved_config_file.exists() else "{}"
     )
+    if override := os.environ.get("SCREENSHOT_DIR"):
+        return config.model_copy(update={"screenshot_dir": _expand_path(override)})
+    return config

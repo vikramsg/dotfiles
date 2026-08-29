@@ -10,6 +10,20 @@ def write_config(path: Path, payload: dict) -> Path:
     return path
 
 
+def system_sync(local_dir: str, vm_host: str, remote_dir: str) -> dict:
+    return {
+        "sources": [
+            {
+                "id": "system",
+                "local_dir": local_dir,
+                "vm_host": vm_host,
+                "remote_dir": remote_dir,
+                "include": ["Screenshot *.png", "Screen Shot *.png"],
+            }
+        ]
+    }
+
+
 def test_load_config_reads_screenshot_and_sync_settings(tmp_path, monkeypatch):
     monkeypatch.delenv("SCREENSHOT_DIR", raising=False)
     config_file = write_config(
@@ -17,10 +31,7 @@ def test_load_config_reads_screenshot_and_sync_settings(tmp_path, monkeypatch):
         {
             "screenshot_dir": "~/Desktop/Screenshots",
             "clipboard_history_limit": 7,
-            "sync": {
-                "vm_host": "test-vm",
-                "remote_dir": "~/Desktop/Screenshots/",
-            },
+            "sync": system_sync("~/Desktop/Screenshots", "test-vm", "~/Desktop/Screenshots/"),
         },
     )
 
@@ -30,8 +41,9 @@ def test_load_config_reads_screenshot_and_sync_settings(tmp_path, monkeypatch):
 
     assert config.screenshot_dir == Path.home() / "Desktop/Screenshots"
     assert config.clipboard_history_limit == 7
-    assert config.sync.vm_host == "test-vm"
-    assert config.sync.remote_dir == "~/Desktop/Screenshots/"
+    assert config.sync.sources[0].id == "system"
+    assert config.sync.sources[0].vm_host == "test-vm"
+    assert config.sync.sources[0].remote_dir == "~/Desktop/Screenshots/"
     assert config.filename_patterns == DEFAULT_FILENAME_PATTERNS
 
 
@@ -40,10 +52,7 @@ def test_load_config_uses_defaults_when_values_are_omitted(tmp_path, monkeypatch
     config_file = write_config(
         tmp_path / ".config/screenshot/config.json",
         {
-            "sync": {
-                "vm_host": "test-vm",
-                "remote_dir": "/remote/path",
-            }
+            "sync": system_sync("~/Desktop/Screenshots", "test-vm", "/remote/path")
         },
     )
 
@@ -61,10 +70,7 @@ def test_screenshot_dir_env_override_wins_over_config(tmp_path, monkeypatch):
         tmp_path / ".config/screenshot/config.json",
         {
             "screenshot_dir": "~/Ignored",
-            "sync": {
-                "vm_host": "test-vm",
-                "remote_dir": "/remote/path",
-            },
+            "sync": system_sync("~/Ignored", "test-vm", "/remote/path"),
         },
     )
     monkeypatch.setenv("SCREENSHOT_DIR", "/tmp/screenshots")
@@ -81,10 +87,7 @@ def test_load_config_uses_default_file_location_when_not_explicit(tmp_path, monk
     config_file = write_config(
         home / ".config/screenshot/config.json",
         {
-            "sync": {
-                "vm_host": "demo-vm",
-                "remote_dir": "/srv/screenshots",
-            },
+            "sync": system_sync("~/Desktop/Screenshots", "demo-vm", "/srv/screenshots"),
         },
     )
     monkeypatch.setenv("HOME", str(home))
@@ -96,7 +99,42 @@ def test_load_config_uses_default_file_location_when_not_explicit(tmp_path, monk
     config = load_config()
 
     assert config.screenshot_dir == home / "Desktop/Screenshots"
-    assert config.sync.vm_host == "demo-vm"
+    assert config.sync.sources[0].vm_host == "demo-vm"
+
+
+def test_load_config_reads_multiple_configured_sync_sources(tmp_path, monkeypatch):
+    monkeypatch.delenv("SCREENSHOT_DIR", raising=False)
+    config_file = write_config(
+        tmp_path / "screenshot.json",
+        {
+            "sync": {
+                "sources": [
+                    {
+                        "id": "system",
+                        "local_dir": "~/Desktop/Screenshots",
+                        "vm_host": "test-vm",
+                        "remote_dir": "~/Desktop/Screenshots/",
+                        "include": ["Screenshot *.png"],
+                    },
+                    {
+                        "id": "macshot-history",
+                        "local_dir": "/Users/test/Library/Containers/macshot/history",
+                        "vm_host": "test-vm",
+                        "remote_dir": "~/Desktop/macshot/Screenshots/",
+                        "include": ["*.png"],
+                        "exclude": ["*_thumb.png"],
+                    },
+                ]
+            }
+        },
+    )
+
+    from screenshot.config import load_config
+
+    config = load_config(config_file=config_file)
+
+    assert [source.id for source in config.sync.sources] == ["system", "macshot-history"]
+    assert config.sync.sources[1].exclude == ("*_thumb.png",)
 
 
 def test_config_command_shows_effective_paths_and_format(tmp_path, monkeypatch):
@@ -106,10 +144,7 @@ def test_config_command_shows_effective_paths_and_format(tmp_path, monkeypatch):
         {
             "screenshot_dir": "~/Shots",
             "clipboard_history_limit": 9,
-            "sync": {
-                "vm_host": "cfg-vm",
-                "remote_dir": "/srv/shots",
-            },
+            "sync": system_sync("~/Shots", "cfg-vm", "/srv/shots"),
         },
     )
     state_file = home / "state/screenshot-history.json"
@@ -128,6 +163,7 @@ def test_config_command_shows_effective_paths_and_format(tmp_path, monkeypatch):
     assert f"STATE_FILE  {state_file}" in result.output
     assert f"SCREENSHOT_DIR  {home / 'Shots'}" in result.output
     assert '"clipboard_history_limit": 5' in result.output
+    assert '"sources": [' in result.output
     assert '"vm_host": "my-vm"' in result.output
     assert '"screenshot_dir": "~/Desktop/Screenshots"' in result.output
     assert '"remote_dir": "~/Desktop/Screenshots/"' in result.output

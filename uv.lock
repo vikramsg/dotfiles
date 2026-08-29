@@ -972,10 +972,14 @@ version = "0.1.0"
 source = { editable = "bin/screenshot" }
 dependencies = [
     { name = "click" },
+    { name = "pydantic" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "click" }]
+requires-dist = [
+    { name = "click" },
+    { name = "pydantic", specifier = ">=2.12,<3" },
+]
 
 [[package]]
 name = "smmap"

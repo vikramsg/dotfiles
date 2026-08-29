@@ -229,7 +229,10 @@ lch:
     mkdir -p ~/.config/lch
     ln -sfn {{justfile_directory()}}/lch/config.toml ~/.config/lch/config.toml
     uv tool install ./bin/lch --force --no-cache
-    @if [ "$(uname)" = "Linux" ]; then \
+    @if [ "$(uname)" = "Darwin" ]; then \
+        "$HOME/.local/bin/lch" install lch-screenshot-sync; \
+        "$HOME/.local/bin/lch" install lch-macshot-history-sync; \
+    elif [ "$(uname)" = "Linux" ]; then \
         "$HOME/.local/bin/lch" install lch-screenshot-clipboard; \
     fi
     @echo "lch config symlink created at ~/.config/lch/config.toml -> {{justfile_directory()}}/lch/config.toml"
