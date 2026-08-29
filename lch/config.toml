@@ -4,3 +4,7 @@ namespace = "com.vikramsg.dotfiles"
 [services.lch-opener-tunnel]
 # Domain command run as a persistent macOS LaunchAgent.
 command = ["opener-tunnel", "run"]
+
+[services.lch-zwm]
+# Domain command that reconciles Zed worktrees and durable VM tmux sessions.
+command = ["zwm", "daemon"]

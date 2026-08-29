@@ -73,7 +73,7 @@ def test_build_service_plist_has_persistent_policy_without_watch_paths(tmp_path)
     assert plist["KeepAlive"] is True
     assert plist["ThrottleInterval"] == 10
     assert plist["EnvironmentVariables"] == {
-        "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        "PATH": "/Users/vikramsingh/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     }
     assert "WatchPaths" not in plist
 
