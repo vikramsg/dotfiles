@@ -45,3 +45,30 @@ The summary must be non-empty and the title must not contain leading, trailing, 
 
 All changes, including releases, must go through a pull request. Never commit or push directly to
 `main`.
+
+## vm workflows
+
+We use the repo local `lch` binary to launch `launchd` services on Mac and `systemd` services on Linux.
+The repo is used to manage configuration on the 2 machines, local dev on Mac and remote dev on remote VM which uses Linux.
+In addition we also have custom binaries managed through this repo for managing custom workflows.
+
+### Screenshot workflow
+
+- Configuration: `screenshot/config.json`
+- Screenshot CLI and sync implementation: `bin/screenshot/`
+- LCH watcher/orchestration: `bin/lch/`
+
+```bash
+Mac ~/Desktop/Screenshots
+  -> lch-screenshot-sync
+  -> rsync
+  -> vm-us:~/Desktop/Screenshots
+  -> lch-screenshot-clipboard
+  -> VM clipboard
+```
+
+`lch-screenshot-clipboard` also watches local macOS screenshots and copies the latest path to the local clipboard.
+
+### Browser opener tunnel
+
+`lch-opener-tunnel` maintains the Mac-side SSH reverse socket tunnel so processes on `vm-us` can open URLs in the Mac browser. Its implementation is `bin/opener_tunnel/` and its configuration is `opener_tunnel/config.toml`.
