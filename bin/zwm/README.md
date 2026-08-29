@@ -11,9 +11,10 @@ just zwm
 just lch
 ```
 
-`just zwm` symlinks `zwm/config.json` to `~/.config/zwm/config.json`, installs
-the native macOS binary, cross-compiles the configured Linux target, verifies
-the transferred artifact, and installs it on the VM.
+`just zwm` symlinks `zwm/config.json` to `~/.config/zwm/config.json` and installs
+the native binary. On macOS, it also cross-compiles the configured Linux target,
+verifies the transferred artifact, and installs it on the VM. On Linux, remote
+deployment is skipped because the command is already running on the VM.
 
 `just lch` installs the persistent `lch-zwm` LaunchAgent that runs `zwm daemon`.
 

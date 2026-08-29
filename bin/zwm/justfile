@@ -31,7 +31,7 @@ remote-host:
 
 # Print the configured VM's Go target platform.
 remote-platform:
-    @HOST="$(just --justfile "{{justfile()}}" remote-host)"; \
+    @set -e; HOST="$(just --justfile "{{justfile()}}" remote-host)"; \
     OS="$(ssh -T -o BatchMode=yes "$HOST" uname -s)"; \
     ARCH="$(ssh -T -o BatchMode=yes "$HOST" uname -m)"; \
     case "$OS/$ARCH" in \
@@ -42,7 +42,7 @@ remote-platform:
 
 # Cross-compile ZWM for the configured VM and print the artifact path.
 build-remote:
-    @TARGET="$(just --justfile "{{justfile()}}" remote-platform)"; \
+    @set -e; TARGET="$(just --justfile "{{justfile()}}" remote-platform)"; \
     GOOS="${TARGET%/*}"; \
     GOARCH="${TARGET#*/}"; \
     CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zwm"; \
@@ -75,11 +75,15 @@ cleanup-remote remote_name:
     @HOST="$(just --justfile "{{justfile()}}" remote-host)"; \
     ssh -T -o BatchMode=yes "$HOST" 'rm -f "$HOME/.local/bin/{{remote_name}}"'
 
-# Build and install ZWM locally and on the configured VM.
+# Build ZWM locally, and deploy it to the configured VM from macOS.
 install: build-local
-    @set -e; ARTIFACT="$(just --justfile "{{justfile()}}" build-remote)"; \
-    REMOTE_NAME="zwm.$(basename "$ARTIFACT").new"; \
-    trap 'rm -f "$ARTIFACT"; just --justfile "{{justfile()}}" cleanup-remote "$REMOTE_NAME" >/dev/null 2>&1 || true' EXIT; \
-    just --justfile "{{justfile()}}" copy-remote "$ARTIFACT" "$REMOTE_NAME"; \
-    just --justfile "{{justfile()}}" verify-remote "$ARTIFACT" "$REMOTE_NAME"; \
-    just --justfile "{{justfile()}}" install-remote "$REMOTE_NAME"
+    @if [ "$(uname -s)" = "Darwin" ]; then \
+        set -e; ARTIFACT="$(just --justfile "{{justfile()}}" build-remote)"; \
+        REMOTE_NAME="zwm.$(basename "$ARTIFACT").new"; \
+        trap 'rm -f "$ARTIFACT"; just --justfile "{{justfile()}}" cleanup-remote "$REMOTE_NAME" >/dev/null 2>&1 || true' EXIT; \
+        just --justfile "{{justfile()}}" copy-remote "$ARTIFACT" "$REMOTE_NAME"; \
+        just --justfile "{{justfile()}}" verify-remote "$ARTIFACT" "$REMOTE_NAME"; \
+        just --justfile "{{justfile()}}" install-remote "$REMOTE_NAME"; \
+    else \
+        echo "Skipping remote ZWM deployment: this host is not macOS."; \
+    fi

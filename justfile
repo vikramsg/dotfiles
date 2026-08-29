@@ -210,7 +210,7 @@ zed:
     @echo "Zed settings symlink created at ~/.config/zed/settings.json -> {{justfile_directory()}}/zed/settings.json"
     @echo "Zed keymap symlink created at ~/.config/zed/keymap.json -> {{justfile_directory()}}/zed/keymap.json"
 
-# Install ZWM locally and on the configured VM.
+# Install ZWM locally and, from macOS, on the configured VM.
 zwm:
     @SOURCE="{{justfile_directory()}}/zwm/config.json"; \
     TARGET="$HOME/.config/zwm/config.json"; \
