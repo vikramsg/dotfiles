@@ -18,6 +18,7 @@ from lch.launchd import (
 from lch.launchd import (
     install_job as install_job_launchd,
 )
+from lch.launchd import install_watcher as install_watcher_launchd
 from lch.launchd import (
     list_known_jobs as list_known_jobs_launchd,
 )
@@ -34,6 +35,7 @@ from lch.launchd import (
     uninstall_job as uninstall_job_launchd,
 )
 from lch.systemd import install_job as install_job_systemd
+from lch.systemd import install_watcher as install_watcher_systemd
 from lch.systemd import list_known_jobs as list_known_jobs_systemd
 from lch.systemd import logs_job as logs_job_systemd
 from lch.systemd import status_job as status_job_systemd
@@ -148,6 +150,30 @@ def install_command(job_id: str) -> None:
         click.echo(str(install_job_systemd(job_id)))
         return
     click.echo(str(install_job_launchd(job_id)))
+
+
+@main.command("install-watcher")
+@click.argument("job_id")
+@click.argument("watch_path", type=click.Path(path_type=Path))
+@click.argument("dispatch_command", nargs=-1, required=True)
+def install_watcher_command(
+    job_id: str, watch_path: Path, dispatch_command: tuple[str, ...]
+) -> None:
+    """Install a watcher with an explicit path and dispatch command."""
+    install_watcher = (
+        install_watcher_systemd
+        if sys.platform.startswith("linux")
+        else install_watcher_launchd
+    )
+    click.echo(
+        str(
+            install_watcher(
+                job_id,
+                watch_path=watch_path,
+                dispatch_command=list(dispatch_command),
+            )
+        )
+    )
 
 
 @main.command("uninstall")

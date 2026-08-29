@@ -77,6 +77,10 @@ screenshot macos apply
 ## Sync flow
 
 ```text
+screenshot sync list
+  -> load screenshot config
+  -> print each configured source ID
+
 screenshot sync run <source-id>
   -> load screenshot config
   -> select configured sync source

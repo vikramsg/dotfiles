@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import click
 
@@ -104,6 +103,13 @@ def sync_group() -> None:
 def sync_config_path_command() -> None:
     """Print the screenshot config path."""
     click.echo(str(get_config_file()))
+
+
+@sync_group.command("list")
+def sync_list_command() -> None:
+    """List configured sync source IDs."""
+    for source in load_config().sync.sources:
+        click.echo(source.id)
 
 
 @sync_group.command("command")

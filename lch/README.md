@@ -22,6 +22,7 @@ That command:
 - creates `~/.config/lch`
 - symlinks `lch/config.toml` to `~/.config/lch/config.toml`
 - installs the `lch` CLI with `uv tool install ./bin/lch --force --no-cache`
+- on macOS, enumerates `screenshot/config.json` sources and installs explicit LCH watchers
 - on Linux sink machines, installs `lch-screenshot-clipboard` so new files in the screenshot directory dispatch `screenshot clipboard on-event`
 
 ## Format
@@ -36,7 +37,7 @@ command = ["opener-tunnel", "run"]
 ```
 
 `namespace` is used to derive watcher labels such as `com.vikramsg.dotfiles.lch-screenshot-clipboard`.
-The optional `services` table defines persistent macOS services; existing
-screenshot watchers remain owned by LCH's watcher registry.
+The optional `services` table defines persistent macOS services. Domain-specific
+watcher definitions are supplied to LCH by setup orchestration.
 
 Use `lch config` to see the single effective config path currently in use.

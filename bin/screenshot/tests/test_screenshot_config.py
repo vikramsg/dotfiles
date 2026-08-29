@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
+from pydantic import ValidationError
 
 
 def write_config(path: Path, payload: dict) -> Path:
@@ -135,6 +137,33 @@ def test_load_config_reads_multiple_configured_sync_sources(tmp_path, monkeypatc
 
     assert [source.id for source in config.sync.sources] == ["system", "macshot-history"]
     assert config.sync.sources[1].exclude == ("*_thumb.png",)
+
+
+@pytest.mark.parametrize(
+    "source_id", ["System", "macshot_history", "macshot history", "-system"]
+)
+def test_sync_source_ids_must_be_lowercase_hyphenated_slugs(tmp_path, source_id):
+    config_file = write_config(
+        tmp_path / "screenshot.json",
+        {
+            "sync": {
+                "sources": [
+                    {
+                        "id": source_id,
+                        "local_dir": "~/Desktop/Screenshots",
+                        "vm_host": "test-vm",
+                        "remote_dir": "~/Desktop/Screenshots/",
+                        "include": ["*.png"],
+                    }
+                ]
+            }
+        },
+    )
+
+    from screenshot.config import load_config
+
+    with pytest.raises(ValidationError):
+        load_config(config_file=config_file)
 
 
 def test_config_command_shows_effective_paths_and_format(tmp_path, monkeypatch):

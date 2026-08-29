@@ -5,8 +5,9 @@ macOS services. It does not own screenshot or opener behavior; it translates
 definitions into native jobs and dispatches domain commands.
 
 Its configuration is repo-managed at `lch/config.toml` and symlinked to
-`~/.config/lch/config.toml`. Existing screenshot watcher definitions remain in
-Python; only persistent services come from the TOML `services` table.
+`~/.config/lch/config.toml`. Clipboard remains a static watcher and persistent
+services come from the TOML `services` table. Domain-specific orchestration can
+install a watcher by supplying its job ID, watch path, and dispatch command.
 
 ## Job ownership
 
@@ -47,15 +48,23 @@ lch install lch-screenshot-clipboard
   -> on Linux: write ~/.config/systemd/user/<label>.{path,service} and enable path unit
 ```
 
+```text
+lch install-watcher <job-id> <watch-path> <command>...
+  -> derive the native label from the LCH namespace and job ID
+  -> persist the explicit watch path and command in the native job
+  -> load the native job
+```
+
+`lch list` merges configured definitions with installed native watcher identities
+under the configured namespace and deduplicates them by job ID.
+
 ## Runtime flow
 
 ```text
 native watcher event
-  -> ProgramArguments: ~/.local/bin/lch run lch-screenshot-clipboard
-     or ~/.local/bin/lch run lch-screenshot-sync
-  -> lch resolves dispatch command
-  -> run: screenshot clipboard on-event
-     or: screenshot sync run
+  -> static watcher: ~/.local/bin/lch run lch-screenshot-clipboard
+     -> lch resolves and runs screenshot clipboard on-event
+  -> explicit watcher: run the command persisted by `lch install-watcher`
 ```
 
 On Linux sink machines, the installed watcher job is `lch-screenshot-clipboard` only.

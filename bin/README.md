@@ -44,7 +44,7 @@ Canonical screenshot-domain tool for screenshot config, macOS screenshot locatio
 
 ## lch
 
-Thin `launchd` orchestrator that installs, manages, and dispatches LaunchAgents into domain CLIs such as `lch-screenshot-clipboard` and `lch-screenshot-sync`.
+Thin native lifecycle adapter that installs and manages launchd/systemd watchers and configured services.
 
 - Install: `uv tool install ./bin/lch --force`
 - Test: from `bin/lch`, run `uv run pytest`

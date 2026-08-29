@@ -95,6 +95,52 @@ def test_sync_command_cli_prints_command(tmp_path, monkeypatch):
     assert "test-vm:/remote/path/" in result.output
 
 
+def test_sync_list_cli_prints_configured_source_ids_in_order(tmp_path, monkeypatch):
+    config_file = write_config(
+        tmp_path / ".config/screenshot/config.json",
+        {
+            "sync": {
+                "sources": [
+                    {
+                        "id": "system",
+                        "local_dir": "~/Desktop/Screenshots",
+                        "vm_host": "test-vm",
+                        "remote_dir": "/remote/system/",
+                        "include": ["*.png"],
+                    },
+                    {
+                        "id": "macshot-history",
+                        "local_dir": "~/Library/macshot/history",
+                        "vm_host": "test-vm",
+                        "remote_dir": "/remote/macshot/",
+                        "include": ["*.png"],
+                    },
+                ]
+            }
+        },
+    )
+    monkeypatch.setenv("SCREENSHOT_CONFIG_FILE", str(config_file))
+
+    from screenshot.cli import main
+
+    result = CliRunner().invoke(main, ["sync", "list"])
+
+    assert result.exit_code == 0
+    assert result.output.splitlines() == ["system", "macshot-history"]
+
+
+def test_sync_list_cli_is_empty_without_configured_sources(tmp_path, monkeypatch):
+    config_file = write_config(tmp_path / "screenshot.json", {})
+    monkeypatch.setenv("SCREENSHOT_CONFIG_FILE", str(config_file))
+
+    from screenshot.cli import main
+
+    result = CliRunner().invoke(main, ["sync", "list"])
+
+    assert result.exit_code == 0
+    assert result.output == ""
+
+
 def test_macshot_history_source_applies_configured_exclusions(tmp_path):
     from screenshot.sync import build_rsync_command
 

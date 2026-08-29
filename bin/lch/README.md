@@ -31,19 +31,18 @@ lch list
 lch launchd list
 lch launchd page --page 1 --page-size 25
 lch install lch-screenshot-clipboard
-lch install lch-screenshot-sync
+lch install-watcher lch-example-watcher /path/to/watch /path/to/command arg
 lch install lch-opener-tunnel
 lch status lch-screenshot-clipboard
-lch status lch-screenshot-sync
+lch status lch-example-watcher
 lch logs lch-screenshot-clipboard
-lch logs lch-screenshot-sync
-lch logs lch-screenshot-sync --follow
-lch logs lch-screenshot-sync --paths
+lch logs lch-example-watcher
+lch logs lch-example-watcher --follow
+lch logs lch-example-watcher --paths
 lch logs lch-opener-tunnel --follow
 lch run lch-screenshot-clipboard
-lch run lch-screenshot-sync
 lch uninstall lch-screenshot-clipboard
-lch uninstall lch-screenshot-sync
+lch uninstall lch-example-watcher
 ```
 
 ## Docs
@@ -54,6 +53,10 @@ lch uninstall lch-screenshot-sync
 `lch config` reports the single effective config file path currently in use, the configured namespace, and the derived launchd paths.
 
 The repo-managed config source of truth lives at `lch/config.toml`. Use `just lch` to symlink it into `~/.config/lch/config.toml` and install the tool.
+
+`install-watcher` accepts a job ID, watch path, and dispatch command. The native job stores that command directly; LCH does not rediscover domain configuration when an event occurs.
+
+`lch list` combines configured jobs and services with installed namespace-owned LaunchAgents or systemd path units, deduplicated by job ID.
 
 On Linux sink machines, `just lch` installs the `lch-screenshot-clipboard` watcher job only.
 

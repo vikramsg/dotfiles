@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 
 from lch.config import load_config
@@ -18,6 +19,12 @@ class ServiceDefinition:
     dispatch_command: list[str]
 
 
+@dataclass(frozen=True)
+class JobIdentity:
+    job_id: str
+    label: str
+
+
 JOBS = {
     "lch-screenshot-clipboard": JobDefinition(
         job_id="lch-screenshot-clipboard",
@@ -25,18 +32,6 @@ JOBS = {
         dispatch_command=["screenshot", "clipboard", "on-event"],
         watch_path_command=["screenshot", "watch-path"],
     ),
-    "lch-screenshot-sync": JobDefinition(
-        job_id="lch-screenshot-sync",
-        label="",
-        dispatch_command=["screenshot", "sync", "run", "system"],
-        watch_path_command=["screenshot", "sync", "watch-path", "system"],
-    ),
-    "lch-macshot-history-sync": JobDefinition(
-        job_id="lch-macshot-history-sync",
-        label="",
-        dispatch_command=["screenshot", "sync", "run", "macshot-history"],
-        watch_path_command=["screenshot", "sync", "watch-path", "macshot-history"],
-    )
 }
 
 
@@ -57,6 +52,12 @@ def get_job_definition(job_id: str) -> JobDefinition:
         dispatch_command=list(job.dispatch_command),
         watch_path_command=list(job.watch_path_command),
     )
+
+
+def get_job_identity(job_id: str) -> JobIdentity:
+    if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", job_id) is None:
+        raise ValueError(f"Invalid job ID: {job_id}")
+    return JobIdentity(job_id=job_id, label=f"{load_config().namespace}.{job_id}")
 
 
 def list_service_definitions() -> list[ServiceDefinition]:

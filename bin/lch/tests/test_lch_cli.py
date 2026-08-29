@@ -23,32 +23,6 @@ def test_job_definition_has_expected_label_dispatch_and_watch_path_command(tmp_p
     assert job.watch_path_command == ["screenshot", "watch-path"]
 
 
-def test_sync_job_definition_has_expected_label_dispatch_and_watch_path_command(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
-    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
-
-    from lch.jobs import get_job_definition
-
-    job = get_job_definition("lch-screenshot-sync")
-
-    assert job.job_id == "lch-screenshot-sync"
-    assert job.label == "com.vikramsg.dotfiles.lch-screenshot-sync"
-    assert job.dispatch_command == ["screenshot", "sync", "run", "system"]
-    assert job.watch_path_command == ["screenshot", "sync", "watch-path", "system"]
-
-
-def test_macshot_history_job_uses_configured_source_id(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
-    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
-
-    from lch.jobs import get_job_definition
-
-    job = get_job_definition("lch-macshot-history-sync")
-
-    assert job.dispatch_command == ["screenshot", "sync", "run", "macshot-history"]
-    assert job.watch_path_command == ["screenshot", "sync", "watch-path", "macshot-history"]
-
-
 def test_help_lists_install_and_run_commands():
     from lch.cli import main
 
@@ -67,6 +41,7 @@ def test_list_shows_known_jobs_with_install_and_load_status(monkeypatch):
 
     import lch.cli as cli_module
 
+    monkeypatch.setattr(cli_module.sys, "platform", "linux")
     monkeypatch.setattr(
         cli_module,
         "list_known_jobs_systemd",
@@ -78,10 +53,10 @@ def test_list_shows_known_jobs_with_install_and_load_status(monkeypatch):
                 label="com.vikramsg.dotfiles.lch-screenshot-clipboard",
             ),
             SimpleNamespace(
-                job_id="lch-screenshot-sync",
+                job_id="lch-zwm",
                 installed=True,
                 loaded=True,
-                label="com.vikramsg.dotfiles.lch-screenshot-sync",
+                label="com.vikramsg.dotfiles.lch-zwm",
             )
         ],
     )
@@ -92,10 +67,10 @@ def test_list_shows_known_jobs_with_install_and_load_status(monkeypatch):
     assert result.exit_code == 0
     assert "JOB" in result.output
     assert "lch-screenshot-clipboard" in result.output
-    assert "lch-screenshot-sync" in result.output
+    assert "lch-zwm" in result.output
     assert "yes" in result.output
     assert "com.vikramsg.dotfiles.lch-screenshot-clipboard" in result.output
-    assert "com.vikramsg.dotfiles.lch-screenshot-sync" in result.output
+    assert "com.vikramsg.dotfiles.lch-zwm" in result.output
 
 
 def test_config_reports_effective_paths_and_namespace_format(monkeypatch):

@@ -52,6 +52,82 @@ def test_systemd_install_writes_units_and_enables_path(tmp_path, monkeypatch):
     ]
 
 
+def test_systemd_install_watcher_writes_explicit_dispatch_command(
+    tmp_path, monkeypatch
+):
+    config_file = write_config(
+        tmp_path / ".config/lch/config.toml", {"namespace": "com.example"}
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
+    import lch.systemd as systemd_module
+
+    monkeypatch.setattr(systemd_module.sys, "platform", "linux")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        systemd_module.subprocess,
+        "run",
+        lambda command, **_kwargs: calls.append(command),
+    )
+
+    path_unit = systemd_module.install_watcher(
+        "lch-example-watcher",
+        watch_path=tmp_path / "watched",
+        dispatch_command=["/usr/local/bin/example", "run", "source"],
+    )
+    service_unit = path_unit.with_suffix(".service")
+
+    assert "PathModified=" + str(tmp_path / "watched") in path_unit.read_text()
+    assert "ExecStart=/usr/local/bin/example run source" in service_unit.read_text()
+    assert calls == [
+        ["systemctl", "--user", "daemon-reload"],
+        [
+            "systemctl",
+            "--user",
+            "enable",
+            "--now",
+            "com.example.lch-example-watcher.path",
+        ],
+    ]
+
+
+def test_systemd_list_includes_installed_generic_watchers_without_duplicates(
+    tmp_path, monkeypatch
+):
+    config_file = write_config(
+        tmp_path / ".config/lch/config.toml", {"namespace": "com.example"}
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
+    import lch.systemd as systemd_module
+
+    unit_directory = tmp_path / ".config/systemd/user"
+    unit_directory.mkdir(parents=True)
+    for label in [
+        "com.example.lch-screenshot-clipboard",
+        "com.example.lch-example-watcher",
+    ]:
+        (unit_directory / f"{label}.path").write_text("")
+    monkeypatch.setattr(
+        systemd_module,
+        "is_job_loaded",
+        lambda label: label == "com.example.lch-example-watcher",
+    )
+
+    jobs = systemd_module.list_known_jobs()
+
+    assert [job.job_id for job in jobs] == [
+        "lch-example-watcher",
+        "lch-screenshot-clipboard",
+    ]
+    assert jobs[0].installed is True
+    assert jobs[0].loaded is True
+    assert jobs[1].installed is True
+    assert jobs[1].loaded is False
+
+
 def test_cli_install_uses_systemd_on_linux(monkeypatch):
     import lch.cli as cli_module
 
@@ -96,8 +172,8 @@ def test_cli_logs_runs_journalctl_on_linux(monkeypatch):
         cli_module,
         "logs_job_systemd",
         lambda _job_id: (
-            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.service",
-            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.path",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
         ),
     )
 
@@ -116,7 +192,9 @@ def test_cli_logs_runs_journalctl_on_linux(monkeypatch):
     monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
 
     runner = CliRunner()
-    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--lines", "50"])
+    result = runner.invoke(
+        cli_module.main, ["logs", "lch-example-watcher", "--lines", "50"]
+    )
 
     assert result.exit_code == 0
     assert calls == [
@@ -126,9 +204,9 @@ def test_cli_logs_runs_journalctl_on_linux(monkeypatch):
             "-n",
             "50",
             "-u",
-            "com.vikramsg.dotfiles.lch-screenshot-sync.service",
+            "com.vikramsg.dotfiles.lch-example-watcher.service",
             "-u",
-            "com.vikramsg.dotfiles.lch-screenshot-sync.path",
+            "com.vikramsg.dotfiles.lch-example-watcher.path",
         ]
     ]
 
@@ -141,8 +219,8 @@ def test_cli_logs_can_follow_journalctl_on_linux(monkeypatch):
         cli_module,
         "logs_job_systemd",
         lambda _job_id: (
-            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.service",
-            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.path",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
         ),
     )
 
@@ -161,7 +239,10 @@ def test_cli_logs_can_follow_journalctl_on_linux(monkeypatch):
     monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
 
     runner = CliRunner()
-    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--follow", "--lines", "50"])
+    result = runner.invoke(
+        cli_module.main,
+        ["logs", "lch-example-watcher", "--follow", "--lines", "50"],
+    )
 
     assert result.exit_code == 0
     assert calls == [
@@ -172,9 +253,9 @@ def test_cli_logs_can_follow_journalctl_on_linux(monkeypatch):
             "50",
             "-f",
             "-u",
-            "com.vikramsg.dotfiles.lch-screenshot-sync.service",
+            "com.vikramsg.dotfiles.lch-example-watcher.service",
             "-u",
-            "com.vikramsg.dotfiles.lch-screenshot-sync.path",
+            "com.vikramsg.dotfiles.lch-example-watcher.path",
         ]
     ]
 
@@ -187,16 +268,16 @@ def test_cli_logs_can_print_journalctl_commands_on_linux(monkeypatch):
         cli_module,
         "logs_job_systemd",
         lambda _job_id: (
-            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.service",
-            "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.path",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
+            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
         ),
     )
 
     runner = CliRunner()
-    result = runner.invoke(cli_module.main, ["logs", "lch-screenshot-sync", "--paths"])
+    result = runner.invoke(cli_module.main, ["logs", "lch-example-watcher", "--paths"])
 
     assert result.exit_code == 0
     assert result.output.splitlines() == [
-        "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.service",
-        "journalctl --user -u com.vikramsg.dotfiles.lch-screenshot-sync.path",
+        "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
+        "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
     ]

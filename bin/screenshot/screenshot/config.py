@@ -21,12 +21,13 @@ def get_default_screenshot_dir() -> Path:
 
 
 NonEmptyString = Annotated[str, Field(min_length=1)]
+SyncSourceId = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
 
 
 class SyncSource(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    id: NonEmptyString
+    id: SyncSourceId
     local_dir: Path
     vm_host: NonEmptyString
     remote_dir: NonEmptyString
