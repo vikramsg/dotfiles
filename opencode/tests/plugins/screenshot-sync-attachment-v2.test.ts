@@ -8,7 +8,7 @@ import screenshotSyncAttachment, {
   resolveSyncedAttachment,
 } from "../../plugins/screenshot-sync-attachment-v2.ts";
 
-const SCREENSHOT_DIRECTORY = "/Users/vikramsingh/Desktop/Screenshots";
+const SCREENSHOT_DIRECTORY = "/Users/test/Desktop/Screenshots";
 
 async function config(root: string, remoteDir: string, localDir = SCREENSHOT_DIRECTORY) {
   const file = path.join(root, "screenshot.json");
@@ -83,7 +83,7 @@ describe("screenshot sync attachment V2 plugin", () => {
     await writeFile(path.join(remoteDir, filename), "png");
     const screenshotConfig = await config(root, remoteDir, "~/Desktop/Screenshots");
 
-    const resolved = await resolveSyncedAttachment(`/Users/vikramsingh/Downloads/${filename}`, {
+    const resolved = await resolveSyncedAttachment(`/Users/test/Downloads/${filename}`, {
       screenshot_config: screenshotConfig,
       wait_ms: 0,
     });
