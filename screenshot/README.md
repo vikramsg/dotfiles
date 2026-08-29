@@ -26,7 +26,7 @@ That command:
 - installs the `screenshot` CLI with `uv tool install ./bin/screenshot --force --no-cache`
 - on macOS, creates the configured screenshot directory if needed and applies it to the system screenshot location
 
-On Linux, directory watching/orchestration is owned by `lch`. Run `just lch` to install the sink watcher job (`lch-screenshot-clipboard`) that dispatches `screenshot clipboard on-event`.
+On Linux, directory watching/orchestration is owned by `lch`. On macOS, `lch` watches each configured screenshot sync source, including macshot history.
 
 For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_script` to `~/.zsh_script`. That helper adds:
 
@@ -42,8 +42,15 @@ For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_script` to `~/.zsh_scri
   "screenshot_dir": "~/Desktop/Screenshots",
   "clipboard_history_limit": 5,
   "sync": {
-    "vm_host": "dev-vm-vikram.europe-west3-b.orbio-development",
-    "remote_dir": "~/Desktop/Screenshots/"
+    "sources": [
+      {
+        "id": "system",
+        "local_dir": "~/Desktop/Screenshots",
+        "vm_host": "vm-us",
+        "remote_dir": "~/Desktop/Screenshots/",
+        "include": ["Screenshot *.png", "Screen Shot *.png"]
+      }
+    ]
   }
 }
 ```

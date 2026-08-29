@@ -16,8 +16,15 @@ def test_apply_macos_screenshot_location_creates_directory_and_runs_defaults(tmp
         {
             "screenshot_dir": "~/Desktop/Screenshots",
             "sync": {
-                "vm_host": "test-vm",
-                "remote_dir": "~/Desktop/Screenshots/",
+                "sources": [
+                    {
+                        "id": "system",
+                        "local_dir": "~/Desktop/Screenshots",
+                        "vm_host": "test-vm",
+                        "remote_dir": "~/Desktop/Screenshots/",
+                        "include": ["Screenshot *.png", "Screen Shot *.png"],
+                    }
+                ]
             },
         },
     )
@@ -52,8 +59,15 @@ def test_macos_apply_command_exits_cleanly_with_applied_path(monkeypatch, tmp_pa
         {
             "screenshot_dir": "~/Desktop/Screenshots",
             "sync": {
-                "vm_host": "test-vm",
-                "remote_dir": "~/Desktop/Screenshots/",
+                "sources": [
+                    {
+                        "id": "system",
+                        "local_dir": "~/Desktop/Screenshots",
+                        "vm_host": "test-vm",
+                        "remote_dir": "~/Desktop/Screenshots/",
+                        "include": ["Screenshot *.png", "Screen Shot *.png"],
+                    }
+                ]
             },
         },
     )

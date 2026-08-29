@@ -11,7 +11,7 @@ def build_config(screenshot_dir: Path) -> ScreenshotConfig:
         screenshot_dir=screenshot_dir,
         clipboard_history_limit=5,
         filename_patterns=DEFAULT_FILENAME_PATTERNS,
-        sync=SyncConfig(vm_host="", remote_dir=""),
+        sync=SyncConfig(sources=()),
     )
 
 

@@ -8,7 +8,7 @@ from screenshot.config import get_config_file, load_config
 from screenshot.macos import apply_macos_screenshot_location
 from screenshot.paths import format_user_path
 from screenshot.state import get_state_file
-from screenshot.sync import format_rsync_command, run_sync
+from screenshot.sync import format_rsync_command, get_sync_source, run_sync
 
 
 @click.group()
@@ -24,8 +24,15 @@ def render_screenshot_config() -> str:
         "screenshot_dir": "~/Desktop/Screenshots",
         "clipboard_history_limit": 5,
         "sync": {
-            "vm_host": "my-vm",
-            "remote_dir": "~/Desktop/Screenshots/",
+            "sources": [
+                {
+                    "id": "system",
+                    "local_dir": "~/Desktop/Screenshots",
+                    "vm_host": "my-vm",
+                    "remote_dir": "~/Desktop/Screenshots/",
+                    "include": ["Screenshot *.png", "Screen Shot *.png"],
+                }
+            ]
         },
     }
     lines = [
@@ -100,15 +107,33 @@ def sync_config_path_command() -> None:
 
 
 @sync_group.command("command")
-def sync_command_command() -> None:
+@click.argument("source_id", required=False, default="system")
+def sync_command_command(source_id: str) -> None:
     """Print the rsync command that would run."""
-    click.echo(format_rsync_command())
+    try:
+        click.echo(format_rsync_command(source_id))
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 @sync_group.command("run")
-def sync_run_command() -> None:
+@click.argument("source_id", required=False, default="system")
+def sync_run_command(source_id: str) -> None:
     """Run the screenshot sync command."""
-    run_sync()
+    try:
+        run_sync(source_id)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@sync_group.command("watch-path")
+@click.argument("source_id")
+def sync_watch_path_command(source_id: str) -> None:
+    """Print the watched local path for one sync source."""
+    try:
+        click.echo(str(get_sync_source(source_id).local_dir.resolve()))
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 @main.group("macos")

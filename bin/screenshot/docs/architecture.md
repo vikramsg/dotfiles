@@ -13,8 +13,9 @@ Its repo-managed config source of truth is `screenshot/config.json`, symlinked t
 | - screenshot_dir          |
 | - filename_patterns       |
 | - clipboard_history_limit |
-| - sync.vm_host            |
-| - sync.remote_dir         |
+| - sync.sources[]          |
+|   - local_dir, filters    |
+|   - vm_host, remote_dir   |
 +-------------+-------------+
               |
               v
@@ -76,14 +77,15 @@ screenshot macos apply
 ## Sync flow
 
 ```text
-screenshot sync run
+screenshot sync run <source-id>
   -> load screenshot config
-  -> build rsync command
+  -> select configured sync source
+  -> build rsync command from its filters and destinations
      rsync -avz
-       --include=Screenshot *.png
-       --include=Screen Shot *.png
-       --exclude=*
-       <screenshot_dir>/
-       <vm_host>:<remote_dir>
+        --exclude=<configured patterns>
+        --include=<configured patterns>
+        --exclude=*
+        <local_dir>/
+        <vm_host>:<remote_dir>
   -> execute command
 ```

@@ -71,8 +71,24 @@ def test_run_sync_job_invokes_expected_screenshot_command(monkeypatch):
 
     launchd_module.run_job("lch-screenshot-sync")
 
-    assert called[0][-2:] == ["sync", "run"]
+    assert called[0][-3:] == ["sync", "run", "system"]
     assert called[0][0].endswith("screenshot")
+
+
+def test_run_macshot_history_sync_job_invokes_configured_source(monkeypatch):
+    import lch.launchd as launchd_module
+
+    called: list[list[str]] = []
+
+    def fake_run(command: list[str], *, check: bool) -> None:
+        assert check is True
+        called.append(command)
+
+    monkeypatch.setattr(launchd_module.subprocess, "run", fake_run)
+
+    launchd_module.run_job("lch-macshot-history-sync")
+
+    assert called[0][-3:] == ["sync", "run", "macshot-history"]
 
 
 def test_configured_service_dispatch_uses_exec(tmp_path, monkeypatch):

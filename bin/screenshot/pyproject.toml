@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Screenshot domain tool for config, clipboard, and sync workflows"
 dependencies = [
     "click",
+    "pydantic>=2.12,<3",
 ]
 
 [project.scripts]

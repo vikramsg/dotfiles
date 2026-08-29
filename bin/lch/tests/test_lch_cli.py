@@ -33,8 +33,20 @@ def test_sync_job_definition_has_expected_label_dispatch_and_watch_path_command(
 
     assert job.job_id == "lch-screenshot-sync"
     assert job.label == "com.vikramsg.dotfiles.lch-screenshot-sync"
-    assert job.dispatch_command == ["screenshot", "sync", "run"]
-    assert job.watch_path_command == ["screenshot", "watch-path"]
+    assert job.dispatch_command == ["screenshot", "sync", "run", "system"]
+    assert job.watch_path_command == ["screenshot", "sync", "watch-path", "system"]
+
+
+def test_macshot_history_job_uses_configured_source_id(tmp_path, monkeypatch):
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
+    from lch.jobs import get_job_definition
+
+    job = get_job_definition("lch-macshot-history-sync")
+
+    assert job.dispatch_command == ["screenshot", "sync", "run", "macshot-history"]
+    assert job.watch_path_command == ["screenshot", "sync", "watch-path", "macshot-history"]
 
 
 def test_help_lists_install_and_run_commands():

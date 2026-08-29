@@ -22,13 +22,16 @@ macOS screenshot location apply
 lch install lch-screenshot-clipboard
 or
 lch install lch-screenshot-sync
+or
+lch install lch-macshot-history-sync
   -> get job definition
-  -> run `screenshot watch-path`
+   -> run `screenshot watch-path` or `screenshot sync watch-path <source-id>`
   -> receive absolute screenshot directory
   -> on macOS: write LaunchAgent plist
   -> on Linux: write systemd user .path/.service units
         Label = com.vikramsg.dotfiles.lch-screenshot-clipboard
           or  = com.vikramsg.dotfiles.lch-screenshot-sync
+          or  = com.vikramsg.dotfiles.lch-macshot-history-sync
    -> activate with launchctl (macOS) or systemctl --user (Linux)
 ```
 
@@ -42,7 +45,8 @@ file written to screenshot_dir
   -> screenshot finds newest matching screenshot
   -> screenshot copies absolute path to clipboard
   -> screenshot updates last-5 history state
-  -> optional source-machine flow: `lch run lch-screenshot-sync` -> `screenshot sync run`
+  -> configured source flow: `lch run lch-screenshot-sync` -> `screenshot sync run system`
+  -> configured macshot flow: `lch run lch-macshot-history-sync` -> `screenshot sync run macshot-history`
 ```
 
 ## State and command contract
@@ -52,7 +56,7 @@ lch contract with screenshot
   watch-path command: screenshot watch-path
   dispatch commands:
     screenshot clipboard on-event
-    screenshot sync run
+    screenshot sync run <source-id>
 
 screenshot state file
   ~/.local/state/screenshot/clipboard-history.json

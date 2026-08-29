@@ -35,8 +35,9 @@ screenshot watch-path
 screenshot clipboard on-event
 screenshot clipboard list
 screenshot clipboard copy --index 2
-screenshot sync command
-screenshot sync run
+screenshot sync command <source-id>
+screenshot sync run <source-id>
+screenshot sync watch-path <source-id>
 ```
 
 `screenshot config` reports the single effective config file path, state file path, screenshot directory, and the expected JSON format.
@@ -51,6 +52,8 @@ The repo-managed config source of truth lives at `screenshot/config.json`. Use `
 - `ss <index>` -> `screenshot clipboard copy --index <index>`
 - `ss cp <dest>` -> copy the current history item 1 file into `<dest>`
 - `vm-tab` -> pick an existing remote tmux session with `fzf`, rename the current Ghostty tab, and attach via `autossh`
+
+Sync sources are configured in `screenshot/config.json`. Each source owns its local directory, matching rules, VM host, and remote destination; the CLI does not hard-code macshot paths or filename filters.
 
 ## Docs
 

@@ -28,8 +28,14 @@ JOBS = {
     "lch-screenshot-sync": JobDefinition(
         job_id="lch-screenshot-sync",
         label="",
-        dispatch_command=["screenshot", "sync", "run"],
-        watch_path_command=["screenshot", "watch-path"],
+        dispatch_command=["screenshot", "sync", "run", "system"],
+        watch_path_command=["screenshot", "sync", "watch-path", "system"],
+    ),
+    "lch-macshot-history-sync": JobDefinition(
+        job_id="lch-macshot-history-sync",
+        label="",
+        dispatch_command=["screenshot", "sync", "run", "macshot-history"],
+        watch_path_command=["screenshot", "sync", "watch-path", "macshot-history"],
     )
 }
 
