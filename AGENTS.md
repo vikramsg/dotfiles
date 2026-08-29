@@ -59,10 +59,10 @@ In addition we also have custom binaries managed through this repo for managing 
 - LCH watcher/orchestration: `bin/lch/`
 
 ```bash
-Mac ~/Desktop/Screenshots
+Mac /Users/Shared/Screenshots
   -> lch-screenshot-sync
   -> rsync
-  -> vm-us:~/Desktop/Screenshots
+  -> vm-us:/Users/Shared/Screenshots
   -> lch-screenshot-clipboard
   -> VM clipboard
 ```

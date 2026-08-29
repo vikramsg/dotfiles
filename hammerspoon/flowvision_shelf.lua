@@ -52,6 +52,10 @@ function M.openArguments(folder)
     return { "-g", "-a", "FlowVision", folder }
 end
 
+function M.pinMenuPath()
+    return { "View", "Keep Current Window on Top" }
+end
+
 function M.windowFrame(screenFrame, width, height)
     local resolvedWidth = math.min(width, screenFrame.w - 40)
     local resolvedHeight = math.min(height, screenFrame.h - 40)
@@ -103,9 +107,10 @@ function Shelf:_positionAndPin(window)
     window:focus()
 
     local application = window:application()
-    local pinItem = application and application:findMenuItem({ "View", "Pin Window" }) or nil
+    local pinMenuPath = M.pinMenuPath()
+    local pinItem = application and application:findMenuItem(pinMenuPath) or nil
     if pinItem and not pinItem.ticked then
-        application:selectMenuItem({ "View", "Pin Window" })
+        application:selectMenuItem(pinMenuPath)
     end
     self.escapeHotkey:enable()
     self.mouseTap:start()
@@ -137,14 +142,19 @@ end
 
 function Shelf:_currentWindowIDs()
     local ids = {}
-    for _, window in ipairs(self.windowFilter:getWindows()) do
+    for _, window in ipairs(self:_windows()) do
         ids[window:id()] = true
     end
     return ids
 end
 
+function Shelf:_windows()
+    local application = self.hs.application.get("FlowVision")
+    return application and application:allWindows() or {}
+end
+
 function Shelf:_captureNewWindow(previousIDs)
-    for _, window in ipairs(self.windowFilter:getWindows()) do
+    for _, window in ipairs(self:_windows()) do
         if not previousIDs[window:id()] then
             self.windowID = window:id()
             self:_positionAndPin(window)
@@ -178,7 +188,7 @@ function Shelf:show()
     local attempts = 0
     self.openTimer = self.hs.timer.waitUntil(function()
         attempts = attempts + 1
-        return self:_captureNewWindow(previousIDs) or attempts >= 100
+        return self:_captureNewWindow(previousIDs) or attempts >= 300
     end, function()
         self.openTimer = nil
         if not self.windowID then

@@ -11,7 +11,7 @@ It owns:
 - sync configuration
 - event handling for "copy newest screenshot path to clipboard"
 
-Clipboard and CLI path output use shell-safe `~`-relative paths such as `~/Desktop/Screenshots/Screen\ Shot\ 2026-03-14\ at\ 10.11.00\ AM.png`.
+Clipboard and CLI path output use shell-safe paths such as `/Users/Shared/Screenshots/Screen\ Shot\ 2026-03-14\ at\ 10.11.00\ AM.png`.
 
 ## Install
 
@@ -54,7 +54,7 @@ The repo-managed config source of truth lives at `screenshot/config.json`. Use `
 - `ss cp <dest>` -> copy the current history item 1 file into `<dest>`
 - `vm-tab` -> pick an existing remote tmux session with `fzf`, rename the current Ghostty tab, and attach via `autossh`
 
-Sync sources are configured in `screenshot/config.json`. Each source owns its stable lowercase slug ID, local directory, matching rules, VM host, and remote destination; the CLI does not hard-code macshot paths or filename filters. `screenshot sync list` prints the configured source IDs for orchestrators such as LCH.
+Sync sources are configured in `screenshot/config.json`. Each source owns its stable lowercase slug ID, local directory, matching rules, VM host, and remote destination; the CLI does not hard-code source paths or filename filters. `screenshot sync list` prints the configured source IDs for orchestrators such as LCH.
 
 ## Docs
 

@@ -20,15 +20,15 @@ def render_screenshot_config() -> str:
     state_file = get_state_file()
     config = load_config()
     example = {
-        "screenshot_dir": "~/Desktop/Screenshots",
+        "screenshot_dir": "/Users/Shared/Screenshots",
         "clipboard_history_limit": 5,
         "sync": {
             "sources": [
                 {
                     "id": "system",
-                    "local_dir": "~/Desktop/Screenshots",
+                    "local_dir": "/Users/Shared/Screenshots",
                     "vm_host": "my-vm",
-                    "remote_dir": "~/Desktop/Screenshots/",
+                    "remote_dir": "/Users/Shared/Screenshots/",
                     "include": ["Screenshot *.png", "Screen Shot *.png"],
                 }
             ]

@@ -28,6 +28,9 @@ assertEqual(shelf.pointInFrame(bounds, { x = 99, y = 250 }), false, "outside poi
 local arguments = shelf.openArguments("/Users/test/Screen Shots")
 assertEqual(table.concat(arguments, "|"), "-g|-a|FlowVision|/Users/test/Screen Shots", "open arguments")
 
+local pinMenuPath = shelf.pinMenuPath()
+assertEqual(table.concat(pinMenuPath, "|"), "View|Keep Current Window on Top", "pin menu path")
+
 local frame = shelf.windowFrame({ x = 100, y = 200, w = 1400, h = 900 }, 1200, 420)
 assertEqual(frame.x, 200, "centered x")
 assertEqual(frame.y, 220, "top y")

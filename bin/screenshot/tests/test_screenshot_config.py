@@ -119,10 +119,10 @@ def test_load_config_reads_multiple_configured_sync_sources(tmp_path, monkeypatc
                         "include": ["Screenshot *.png"],
                     },
                     {
-                        "id": "macshot-history",
-                        "local_dir": "/Users/test/Library/Containers/macshot/history",
+                        "id": "screenshot-archive",
+                        "local_dir": "/Users/test/Pictures/screenshot-archive",
                         "vm_host": "test-vm",
-                        "remote_dir": "~/Desktop/macshot/Screenshots/",
+                        "remote_dir": "~/Pictures/screenshot-archive/",
                         "include": ["*.png"],
                         "exclude": ["*_thumb.png"],
                     },
@@ -135,12 +135,12 @@ def test_load_config_reads_multiple_configured_sync_sources(tmp_path, monkeypatc
 
     config = load_config(config_file=config_file)
 
-    assert [source.id for source in config.sync.sources] == ["system", "macshot-history"]
+    assert [source.id for source in config.sync.sources] == ["system", "screenshot-archive"]
     assert config.sync.sources[1].exclude == ("*_thumb.png",)
 
 
 @pytest.mark.parametrize(
-    "source_id", ["System", "macshot_history", "macshot history", "-system"]
+    "source_id", ["System", "screenshot_archive", "screenshot archive", "-system"]
 )
 def test_sync_source_ids_must_be_lowercase_hyphenated_slugs(tmp_path, source_id):
     config_file = write_config(
@@ -194,5 +194,5 @@ def test_config_command_shows_effective_paths_and_format(tmp_path, monkeypatch):
     assert '"clipboard_history_limit": 5' in result.output
     assert '"sources": [' in result.output
     assert '"vm_host": "my-vm"' in result.output
-    assert '"screenshot_dir": "~/Desktop/Screenshots"' in result.output
-    assert '"remote_dir": "~/Desktop/Screenshots/"' in result.output
+    assert '"screenshot_dir": "/Users/Shared/Screenshots"' in result.output
+    assert '"remote_dir": "/Users/Shared/Screenshots/"' in result.output
