@@ -8,6 +8,8 @@
 - `just zwm` delegates to `bin/zwm/justfile`. The package justfile keeps local
   build, remote platform discovery, cross-compilation, transfer, and remote
   installation as separate recipes.
+- Installation is host-aware: macOS builds locally and deploys to the configured
+  VM, while Linux builds only its local native binary.
 - The package justfile builds the remote Linux binary on the Mac. The VM does
   not need Go installed. It uses resumable compressed `rsync` for the remote
   artifact transfer because the configured SSH path stalls on large `scp`
