@@ -48,8 +48,10 @@ function M.pointInFrame(frame, point)
         and point.y <= frame.y + frame.h
 end
 
-function M.openArguments(folder)
-    return { "-g", "-a", "FlowVision", folder }
+function M.folderURL(folder)
+    return "file://" .. folder:gsub("([^%w%-._~/])", function(character)
+        return string.format("%%%02X", string.byte(character))
+    end)
 end
 
 function M.pinMenuPath()
@@ -160,7 +162,7 @@ function Shelf:_currentWindowIDs()
 end
 
 function Shelf:_windows()
-    local application = self.hs.application.get("FlowVision")
+    local application = self.hs.application.get("netdcy.FlowVision")
     return application and application:allWindows() or {}
 end
 
@@ -190,8 +192,7 @@ function Shelf:show()
     self.returnWindowID = focusedWindow and focusedWindow:id() or nil
     self.targetScreen = focusedWindow and focusedWindow:screen() or self.hs.screen.mainScreen()
     local previousIDs = self:_currentWindowIDs()
-    local task = self.hs.task.new("/usr/bin/open", nil, M.openArguments(self.folder))
-    if not task or not task:start() then
+    if not self.hs.urlevent.openURLWithBundle(M.folderURL(self.folder), "netdcy.FlowVision") then
         self.hs.alert.show("Could not open FlowVision screenshot shelf")
         return
     end
