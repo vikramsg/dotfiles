@@ -25,8 +25,11 @@ assertEqual(shelf.pointInFrame(bounds, { x = 100, y = 200 }), true, "top-left po
 assertEqual(shelf.pointInFrame(bounds, { x = 600, y = 500 }), true, "bottom-right point")
 assertEqual(shelf.pointInFrame(bounds, { x = 99, y = 250 }), false, "outside point")
 
-local arguments = shelf.openArguments("/Users/test/Screen Shots")
-assertEqual(table.concat(arguments, "|"), "-g|-a|FlowVision|/Users/test/Screen Shots", "open arguments")
+assertEqual(
+    shelf.folderURL("/Users/test/Screen Shots"),
+    "file:///Users/test/Screen%20Shots",
+    "folder URL"
+)
 
 local pinMenuPath = shelf.pinMenuPath()
 assertEqual(table.concat(pinMenuPath, "|"), "View|Keep Current Window on Top", "pin menu path")
