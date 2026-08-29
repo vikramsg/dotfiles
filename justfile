@@ -332,13 +332,16 @@ hunk:
     fi
     @echo "Hunk config symlinked to ~/.config/hunk"
 
-# Set up zsh symlink
+# Set up zsh and prompt configuration symlinks
 zsh:
-    @echo "Setting up zsh symlink..."
+    @echo "Setting up zsh and prompt configuration symlinks..."
+    mkdir -p ~/.config
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
     ln -sfn {{justfile_directory()}}/zsh/.zsh_script ~/.zsh_script
+    ln -sfn {{justfile_directory()}}/zsh/starship.toml ~/.config/starship.toml
     @echo ".zshrc symlink created at ~/.zshrc -> {{justfile_directory()}}/zsh/.zshrc"
     @echo ".zsh_script symlink created at ~/.zsh_script -> {{justfile_directory()}}/zsh/.zsh_script"
+    @echo "starship.toml symlink created at ~/.config/starship.toml -> {{justfile_directory()}}/zsh/starship.toml"
     @if [ "$(uname)" = "Linux" ]; then \
         if command -v loginctl >/dev/null 2>&1; then \
             echo "Linux detected: Enabling systemd lingering to preserve background processes (like tmux) across SSH disconnects..."; \
