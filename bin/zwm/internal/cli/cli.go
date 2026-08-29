@@ -61,9 +61,8 @@ func openState() (*zwm.StateStore, error) {
 
 func terminalInitCommandSession() *cobra.Command {
 	return &cobra.Command{
-		Use:    "terminal-init-command-session",
-		Short:  "Print the shell initializer for the current ZWM tmux session",
-		Hidden: true,
+		Use:   "terminal-init-command-session",
+		Short: "Print the shell initializer for the current ZWM tmux session",
 		RunE: func(command *cobra.Command, _ []string) error {
 			return zwm.RunTerminalInitCommandSession(command.Context())
 		},
@@ -72,9 +71,8 @@ func terminalInitCommandSession() *cobra.Command {
 
 func reconcileCommand(handle *applicationHandle) *cobra.Command {
 	return &cobra.Command{
-		Use:    "reconcile",
-		Short:  "Reconcile Zed worktrees with live ZWM tmux sessions",
-		Hidden: true,
+		Use:   "reconcile",
+		Short: "Reconcile Zed worktrees with live ZWM tmux sessions",
 		RunE: func(command *cobra.Command, _ []string) error {
 			application, err := handle.get()
 			if err != nil {
@@ -88,9 +86,8 @@ func reconcileCommand(handle *applicationHandle) *cobra.Command {
 
 func daemonCommand(handle *applicationHandle) *cobra.Command {
 	return &cobra.Command{
-		Use:    "daemon",
-		Short:  "Run the persistent ZWM reconciliation daemon",
-		Hidden: true,
+		Use:   "daemon",
+		Short: "Run the persistent ZWM reconciliation daemon",
 		RunE: func(command *cobra.Command, _ []string) error {
 			application, err := handle.get()
 			if err != nil {

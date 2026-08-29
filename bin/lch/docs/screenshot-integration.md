@@ -9,10 +9,10 @@ screenshot owns                     lch owns
 -------------------------------     ---------------------------------
 screenshot_dir                      launchd labels
 filename filters                    plist generation
-                                    systemd user unit generation
+                                     systemd user unit generation
 clipboard history limit             install/uninstall/status/logs
-clipboard history state             dispatch into screenshot command
-sync config                         watch-path lookup invocation
+clipboard history state             persist explicit watcher commands
+sync config                         native lifecycle operations
 macOS screenshot location apply
 ```
 
@@ -21,18 +21,11 @@ macOS screenshot location apply
 ```text
 lch install lch-screenshot-clipboard
 or
-lch install lch-screenshot-sync
-or
-lch install lch-macshot-history-sync
-  -> get job definition
-   -> run `screenshot watch-path` or `screenshot sync watch-path <source-id>`
-  -> receive absolute screenshot directory
-  -> on macOS: write LaunchAgent plist
-  -> on Linux: write systemd user .path/.service units
-        Label = com.vikramsg.dotfiles.lch-screenshot-clipboard
-          or  = com.vikramsg.dotfiles.lch-screenshot-sync
-          or  = com.vikramsg.dotfiles.lch-macshot-history-sync
-   -> activate with launchctl (macOS) or systemctl --user (Linux)
+root setup enumerates `screenshot sync list`
+  -> derive `lch-screenshot-sync-<source-id>`
+  -> resolve `screenshot sync watch-path <source-id>`
+  -> call `lch install-watcher` with the job ID, path, and direct command
+  -> write and load the native watcher
 ```
 
 ## Runtime interaction
@@ -45,8 +38,7 @@ file written to screenshot_dir
   -> screenshot finds newest matching screenshot
   -> screenshot copies absolute path to clipboard
   -> screenshot updates last-5 history state
-  -> configured source flow: `lch run lch-screenshot-sync` -> `screenshot sync run system`
-  -> configured macshot flow: `lch run lch-macshot-history-sync` -> `screenshot sync run macshot-history`
+  -> configured source watcher directly runs `screenshot sync run <source-id>`
 ```
 
 ## State and command contract
@@ -68,3 +60,5 @@ screenshot state file
 ```
 
 Linux sink machines install only `lch-screenshot-clipboard`.
+
+`screenshot/config.json` is the source of truth for sync sources. Root setup owns source enumeration and job naming; LCH remains domain-agnostic. Clipboard behavior remains separate.

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/spf13/cobra"
 	"zwm"
 	"zwm/internal/inventory"
 )
@@ -85,6 +86,14 @@ func TestRendererStylesTTYOutputOnly(t *testing.T) {
 func TestParseLaunchctlState(t *testing.T) {
 	if state := parseLaunchctlState("path = /tmp/job\n\tstate = running\n"); state != "running" {
 		t.Fatalf("state = %q, want running", state)
+	}
+}
+
+func TestAllCommandsRemainVisible(t *testing.T) {
+	for _, command := range []*cobra.Command{terminalInitCommandSession(), reconcileCommand(&applicationHandle{}), daemonCommand(&applicationHandle{}), listCommand(), statusCommand(&applicationHandle{}), logsCommand(), restoreCommand(&applicationHandle{}), doctorCommand(&applicationHandle{})} {
+		if command.Hidden {
+			t.Fatalf("command %q is hidden", command.Name())
+		}
 	}
 }
 

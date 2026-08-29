@@ -26,7 +26,7 @@ That command:
 - installs the `screenshot` CLI with `uv tool install ./bin/screenshot --force --no-cache`
 - on macOS, creates the configured screenshot directory if needed and applies it to the system screenshot location
 
-On Linux, directory watching/orchestration is owned by `lch`. On macOS, `lch` watches each configured screenshot sync source, including macshot history.
+On Linux, directory watching/orchestration is owned by `lch`. On macOS, root setup derives `lch-screenshot-sync-<source-id>` jobs from this file and gives LCH each explicit watch path and dispatch command.
 
 For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_script` to `~/.zsh_script`. That helper adds:
 
@@ -55,7 +55,7 @@ For shell shortcuts, run `just zsh` to symlink `zsh/.zsh_script` to `~/.zsh_scri
 }
 ```
 
-Use `screenshot config` to see the effective config.
+Source IDs must be lowercase hyphenated slugs. Use `screenshot config` to see the effective config and `screenshot sync list` to list configured source IDs.
 
 - macOS: `screenshot macos apply`
 

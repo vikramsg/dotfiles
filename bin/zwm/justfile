@@ -17,8 +17,13 @@ test:
 
 # Build the native ZWM binary for this machine.
 build-local:
-    @mkdir -p "$HOME/.local/bin"
-    cd "{{package_root}}" && go build -o "$HOME/.local/bin/zwm" ./cmd/zwm
+    @CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zwm"; \
+    mkdir -p "$CACHE_DIR" "$HOME/.local/bin"; \
+    ARTIFACT="$(mktemp "$CACHE_DIR/zwm-local.XXXXXX")"; \
+    trap 'rm -f "$ARTIFACT"' EXIT; \
+    cd "{{package_root}}" && go build -o "$ARTIFACT" ./cmd/zwm; \
+    chmod 755 "$ARTIFACT"; \
+    mv -f "$ARTIFACT" "$HOME/.local/bin/zwm"
 
 # Print the configured remote host.
 remote-host:
@@ -27,8 +32,8 @@ remote-host:
 # Print the configured VM's Go target platform.
 remote-platform:
     @HOST="$(just --justfile "{{justfile()}}" remote-host)"; \
-    OS="$(ssh -o BatchMode=yes "$HOST" uname -s)"; \
-    ARCH="$(ssh -o BatchMode=yes "$HOST" uname -m)"; \
+    OS="$(ssh -T -o BatchMode=yes "$HOST" uname -s)"; \
+    ARCH="$(ssh -T -o BatchMode=yes "$HOST" uname -m)"; \
     case "$OS/$ARCH" in \
         Linux/x86_64) printf 'linux/amd64\n' ;; \
         Linux/aarch64) printf 'linux/arm64\n' ;; \
@@ -46,28 +51,35 @@ build-remote:
     cd "{{package_root}}" && GOOS="$GOOS" GOARCH="$GOARCH" go build -o "$ARTIFACT" ./cmd/zwm; \
     printf '%s\n' "$ARTIFACT"
 
-# Copy a cross-compiled artifact to the configured VM.
-copy-remote artifact:
+# Copy a cross-compiled artifact to a unique path on the configured VM.
+copy-remote artifact remote_name:
     @HOST="$(just --justfile "{{justfile()}}" remote-host)"; \
-    ssh -o BatchMode=yes "$HOST" 'mkdir -p "$HOME/.local/bin"'; \
-    rsync -az --partial -e 'ssh -o BatchMode=yes' "{{artifact}}" "$HOST:~/.local/bin/zwm.new"
+    ssh -T -o BatchMode=yes "$HOST" 'mkdir -p "$HOME/.local/bin"'; \
+    rsync -az --partial -e 'ssh -T -o BatchMode=yes' "{{artifact}}" "$HOST:~/.local/bin/{{remote_name}}"
 
 # Verify that the configured VM received the exact cross-compiled artifact.
-verify-remote artifact:
+verify-remote artifact remote_name:
     @HOST="$(just --justfile "{{justfile()}}" remote-host)"; \
     LOCAL_HASH="$(shasum -a 256 "{{artifact}}" | awk '{print $1}')"; \
-    REMOTE_HASH="$(ssh -o BatchMode=yes "$HOST" 'sha256sum "$HOME/.local/bin/zwm.new" | awk "{print \$1}"')"; \
+    REMOTE_HASH="$(ssh -T -o BatchMode=yes "$HOST" 'sha256sum "$HOME/.local/bin/{{remote_name}}" | awk "{print \$1}"')"; \
     test "$LOCAL_HASH" = "$REMOTE_HASH"
 
 # Atomically activate the copied ZWM binary on the configured VM.
-install-remote:
+install-remote remote_name:
     @HOST="$(just --justfile "{{justfile()}}" remote-host)"; \
-    ssh -o BatchMode=yes "$HOST" 'mkdir -p "$HOME/.local/bin" && install -m 755 "$HOME/.local/bin/zwm.new" "$HOME/.local/bin/zwm" && rm -f "$HOME/.local/bin/zwm.new"'
+    ssh -T -o BatchMode=yes "$HOST" 'chmod 755 "$HOME/.local/bin/{{remote_name}}" && mv -f "$HOME/.local/bin/{{remote_name}}" "$HOME/.local/bin/zwm"'
+
+# Remove a per-run remote artifact after an interrupted install.
+[private]
+cleanup-remote remote_name:
+    @HOST="$(just --justfile "{{justfile()}}" remote-host)"; \
+    ssh -T -o BatchMode=yes "$HOST" 'rm -f "$HOME/.local/bin/{{remote_name}}"'
 
 # Build and install ZWM locally and on the configured VM.
 install: build-local
     @set -e; ARTIFACT="$(just --justfile "{{justfile()}}" build-remote)"; \
-    trap 'rm -f "$ARTIFACT"' EXIT; \
-    just --justfile "{{justfile()}}" copy-remote "$ARTIFACT"; \
-    just --justfile "{{justfile()}}" verify-remote "$ARTIFACT"; \
-    just --justfile "{{justfile()}}" install-remote
+    REMOTE_NAME="zwm.$(basename "$ARTIFACT").new"; \
+    trap 'rm -f "$ARTIFACT"; just --justfile "{{justfile()}}" cleanup-remote "$REMOTE_NAME" >/dev/null 2>&1 || true' EXIT; \
+    just --justfile "{{justfile()}}" copy-remote "$ARTIFACT" "$REMOTE_NAME"; \
+    just --justfile "{{justfile()}}" verify-remote "$ARTIFACT" "$REMOTE_NAME"; \
+    just --justfile "{{justfile()}}" install-remote "$REMOTE_NAME"

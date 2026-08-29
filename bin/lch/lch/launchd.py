@@ -5,9 +5,12 @@ from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
 
+from lch.config import load_config
 from lch.jobs import (
     JobDefinition,
+    JobIdentity,
     ServiceDefinition,
+    get_job_identity,
     get_launchd_job_definition,
     list_launchd_job_definitions,
 )
@@ -67,7 +70,7 @@ def get_home_directory(home: Path | None = None) -> Path:
 
 
 def get_job_paths(
-    job: JobDefinition | ServiceDefinition, *, home: Path | None = None
+    job: JobDefinition | JobIdentity | ServiceDefinition, *, home: Path | None = None
 ) -> JobPaths:
     resolved_home = get_home_directory(home)
     return JobPaths(
@@ -224,6 +227,35 @@ def build_launch_agent_service_plist(
     }
 
 
+def build_watcher_plist(
+    job: JobIdentity,
+    *,
+    watch_path: Path,
+    dispatch_command: list[str],
+    paths: JobPaths,
+) -> dict[str, object]:
+    return {
+        "Label": job.label,
+        "ProgramArguments": dispatch_command,
+        "WatchPaths": [str(watch_path)],
+        "StandardOutPath": str(paths.stdout_log_path),
+        "StandardErrorPath": str(paths.stderr_log_path),
+        "RunAtLoad": True,
+    }
+
+
+def write_and_load_plist(paths: JobPaths, plist_payload: dict[str, object]) -> Path:
+    paths.plist_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.plist_path.write_bytes(plistlib.dumps(plist_payload))
+
+    subprocess.run(
+        ["launchctl", "unload", str(paths.plist_path)], capture_output=True, text=True
+    )
+    subprocess.run(["launchctl", "load", str(paths.plist_path)], check=True)
+    return paths.plist_path
+
+
 def install_job(job_id: str) -> Path:
     job = get_launchd_job_definition(job_id)
     paths = get_job_paths(job)
@@ -242,17 +274,25 @@ def install_job(job_id: str) -> Path:
             paths=paths,
         )
 
-    paths.plist_path.parent.mkdir(parents=True, exist_ok=True)
-    paths.stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
-    paths.plist_path.write_bytes(plistlib.dumps(plist_payload))
+    return write_and_load_plist(paths, plist_payload)
 
-    subprocess.run(["launchctl", "unload", str(paths.plist_path)], capture_output=True, text=True)
-    subprocess.run(["launchctl", "load", str(paths.plist_path)], check=True)
-    return paths.plist_path
+
+def install_watcher(
+    job_id: str, *, watch_path: Path, dispatch_command: list[str]
+) -> Path:
+    job = get_job_identity(job_id)
+    paths = get_job_paths(job)
+    plist_payload = build_watcher_plist(
+        job,
+        watch_path=watch_path.expanduser().resolve(),
+        dispatch_command=dispatch_command,
+        paths=paths,
+    )
+    return write_and_load_plist(paths, plist_payload)
 
 
 def uninstall_job(job_id: str) -> Path:
-    job = get_launchd_job_definition(job_id)
+    job = get_job_identity(job_id)
     paths = get_job_paths(job)
     if paths.plist_path.exists():
         subprocess.run(["launchctl", "unload", str(paths.plist_path)], capture_output=True, text=True)
@@ -261,7 +301,7 @@ def uninstall_job(job_id: str) -> Path:
 
 
 def status_job(job_id: str) -> str:
-    job = get_launchd_job_definition(job_id)
+    job = get_job_identity(job_id)
     result = subprocess.run(["launchctl", "list", job.label], capture_output=True, text=True)
     return "loaded" if result.returncode == 0 else "not loaded"
 
@@ -272,22 +312,38 @@ def is_job_loaded(label: str) -> bool:
 
 
 def list_known_jobs() -> list[KnownJobStatus]:
-    rows: list[KnownJobStatus] = []
+    rows: dict[str, KnownJobStatus] = {}
     for job in list_launchd_job_definitions():
         paths = get_job_paths(job)
-        rows.append(
-            KnownJobStatus(
-                job_id=job.job_id,
-                label=job.label,
-                installed=paths.plist_path.exists(),
-                loaded=is_job_loaded(job.label),
-            )
+        rows[job.job_id] = KnownJobStatus(
+            job_id=job.job_id,
+            label=job.label,
+            installed=paths.plist_path.exists(),
+            loaded=is_job_loaded(job.label),
         )
-    return rows
+
+    namespace_prefix = f"{load_config().namespace}."
+    discovered_jobs = discover_launchd_jobs(
+        search_roots=[get_launchagents_directory()]
+    )
+    for job in discovered_jobs:
+        if not job.label.startswith(namespace_prefix):
+            continue
+        job_id = job.label.removeprefix(namespace_prefix)
+        rows.setdefault(
+            job_id,
+            KnownJobStatus(
+                job_id=job_id,
+                label=job.label,
+                installed=True,
+                loaded=job.loaded,
+            ),
+        )
+    return [rows[job_id] for job_id in sorted(rows)]
 
 
 def logs_job(job_id: str) -> tuple[Path, Path]:
-    job = get_launchd_job_definition(job_id)
+    job = get_job_identity(job_id)
     paths = get_job_paths(job)
     return paths.stdout_log_path, paths.stderr_log_path
 

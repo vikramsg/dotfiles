@@ -212,8 +212,20 @@ zed:
 
 # Install ZWM locally and on the configured VM.
 zwm:
-    @mkdir -p "$HOME/.config/zwm"
-    ln -sfn "{{justfile_directory()}}/zwm/config.json" "$HOME/.config/zwm/config.json"
+    @SOURCE="{{justfile_directory()}}/zwm/config.json"; \
+    TARGET="$HOME/.config/zwm/config.json"; \
+    mkdir -p "$HOME/.config/zwm"; \
+    if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
+        :; \
+    elif [ -e "$TARGET" ] && [ ! -L "$TARGET" ]; then \
+        echo "ERROR: $TARGET exists and is not a symlink."; \
+        exit 1; \
+    else \
+        TEMP_DIR="$(mktemp -d "$HOME/.config/zwm/.link.XXXXXX")"; \
+        trap 'rm -f "$TEMP_DIR/config.json"; rmdir "$TEMP_DIR" 2>/dev/null || true' EXIT; \
+        ln -s "$SOURCE" "$TEMP_DIR/config.json"; \
+        mv -f "$TEMP_DIR/config.json" "$TARGET"; \
+    fi
     just --justfile "{{justfile_directory()}}/bin/zwm/justfile" install
 
 
@@ -236,8 +248,15 @@ lch:
     ln -sfn {{justfile_directory()}}/lch/config.toml ~/.config/lch/config.toml
     uv tool install ./bin/lch --force --no-cache
     @if [ "$(uname)" = "Darwin" ]; then \
-        "$HOME/.local/bin/lch" install lch-screenshot-sync; \
-        "$HOME/.local/bin/lch" install lch-macshot-history-sync; \
+        SCREENSHOT="$HOME/.local/bin/screenshot"; \
+        LCH="$HOME/.local/bin/lch"; \
+        for source_id in $("$SCREENSHOT" sync list); do \
+            watch_path=$("$SCREENSHOT" sync watch-path "$source_id"); \
+            "$LCH" install-watcher \
+                "lch-screenshot-sync-$source_id" \
+                "$watch_path" \
+                "$SCREENSHOT" sync run "$source_id"; \
+        done; \
         "$HOME/.local/bin/lch" install lch-zwm; \
     elif [ "$(uname)" = "Linux" ]; then \
         "$HOME/.local/bin/lch" install lch-screenshot-clipboard; \
