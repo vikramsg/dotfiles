@@ -9,6 +9,7 @@ SCOPES = (
     "git",
     "herdr",
     "lch",
+    "macflow",
     "nvim",
     "ocint",
     "opencode",
