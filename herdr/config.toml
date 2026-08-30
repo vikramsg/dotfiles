@@ -24,6 +24,7 @@
 # prefix+Shift+D: open Hunk diff review popup
 # prefix+Shift+G: open PR review tab
 # prefix+f: open Snacks file picker
+# prefix+Shift+O: append OpenCode and Vim project tabs
 
 onboarding = false
 
@@ -147,6 +148,12 @@ key = "prefix+shift+g"
 type = "shell"
 command = '"$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Review --env HERDR_START_TUICR=1 --focus'
 description = "open PR review in a new tab"
+
+[[keys.command]]
+key = "prefix+shift+o"
+type = "shell"
+command = 'project_cwd="$HERDR_ACTIVE_PANE_CWD" && response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$project_cwd" --label OpenCode --no-focus) && opencode_tab=$(printf "%s\n" "$response" | jq -r ".result.tab.tab_id") && opencode_pane=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$opencode_pane" "exec opencode2" && response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$project_cwd" --label nvim --no-focus) && vim_pane=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$vim_pane" "exec nvim ." && "$HERDR_BIN_PATH" tab focus "$opencode_tab"'
+description = "append OpenCode and Vim project tabs"
 
 [[keys.command]]
 key = "prefix+f"
