@@ -1,0 +1,55 @@
+# NOTE: Use $VAR for shell variables, $(...) for command substitution, and
+# {{...}} only for just-level interpolation.
+
+package_root := justfile_directory()
+
+default:
+    @just --justfile "{{justfile()}}" --list
+
+test:
+    swift test --package-path "{{package_root}}"
+
+build:
+    swift build --package-path "{{package_root}}" --configuration release
+
+install: test build
+    @if [ "$(uname)" != "Darwin" ]; then \
+        echo "ERROR: macflow requires macOS."; \
+        exit 1; \
+    fi
+    @APP="$HOME/Applications/Macflow.app"; \
+        OLD_APP="$HOME/Applications/Mac Workflow Permissions.app"; \
+        LCH="$(command -v lch || true)"; \
+        if [ -z "$LCH" ]; then \
+            echo "ERROR: lch is required; run 'just lch' first."; \
+            exit 1; \
+        fi; \
+        "$LCH" uninstall lch-macflow >/dev/null 2>&1 || true; \
+        launchctl bootout "gui/$(id -u)/dev.vikramsingh.dotfiles.mac-workflow" 2>/dev/null || true; \
+        pkill -x MacWorkflowPermissions 2>/dev/null || true; \
+        pkill -x macflow 2>/dev/null || true; \
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do \
+            if ! pgrep -x MacWorkflowPermissions >/dev/null 2>&1 && ! pgrep -x macflow >/dev/null 2>&1; then break; fi; \
+            sleep 0.1; \
+        done; \
+        if pgrep -x MacWorkflowPermissions >/dev/null 2>&1 || pgrep -x macflow >/dev/null 2>&1; then \
+            echo "ERROR: macflow did not stop before installation."; \
+            exit 1; \
+        fi; \
+        if [ -d "$OLD_APP" ] && [ ! -e "$APP" ]; then mv "$OLD_APP" "$APP"; fi; \
+        mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$HOME/.local/bin"; \
+        rm -f "$APP/Contents/MacOS/MacWorkflowPermissions"; \
+        cp "{{package_root}}/.build/release/macflow" "$APP/Contents/MacOS/macflow"; \
+        cp "{{package_root}}/Resources/Info.plist" "$APP/Contents/Info.plist"; \
+        codesign --force --sign - --requirements '=designated => identifier "dev.vikramsingh.dotfiles.mac-workflow"' "$APP"; \
+        cp "{{package_root}}/.build/release/macflow" "$HOME/.local/bin/macflow"; \
+        rm -f "$HOME/.local/bin/mac-workflow"; \
+        rm -f "$HOME/.config/mac-workflow/config.json"; \
+        rmdir "$HOME/.config/mac-workflow" 2>/dev/null || true; \
+        rm -f "$HOME/Library/LaunchAgents/dev.vikramsingh.dotfiles.mac-workflow.plist"; \
+        "$LCH" install lch-macflow; \
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do \
+            "$HOME/.local/bin/macflow" health >/dev/null 2>&1 && break; \
+            sleep 0.2; \
+        done; \
+        "$HOME/.local/bin/macflow" health

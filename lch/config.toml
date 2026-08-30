@@ -8,3 +8,7 @@ command = ["opener-tunnel", "run"]
 [services.lch-zwm]
 # Domain command that reconciles Zed worktrees and durable VM tmux sessions.
 command = ["zwm", "daemon"]
+
+[services.lch-macflow]
+# Launch and supervise the permissioned macOS workflow application.
+command = ["macflow", "serve"]

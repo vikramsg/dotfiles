@@ -14,6 +14,13 @@ Prefer interacting with the settings file directly in this repo
 rather than in the home directory.
 Only interact with their default locations to debug if the config is not correctly setup.
 
+## Custom Tool Layout
+
+- Keep each custom tool's implementation, package-local build definition and `justfile`, tests, and implementation docs in `bin/<tool>/`.
+- Keep user-editable configuration and user-facing configuration docs in `<tool>/` at the repository root.
+- Declare persistent service lifecycle in `lch/config.toml`.
+- Keep the root `justfile` limited to linking tool configuration and delegating build and installation to `bin/<tool>/justfile`.
+
 ## Justfile Variable Guardrail
 
 When editing `justfile` recipes in this repo:
@@ -33,6 +40,7 @@ Pull request titles must use `scope: summary` with one of these explicit scopes:
 - `git`
 - `herdr`
 - `lch`
+- `macflow`
 - `nvim`
 - `ocint`
 - `opencode`

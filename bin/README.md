@@ -15,6 +15,12 @@ uv tool install ./bin/ocint --force
 uv tool install ./bin/gh_stats --force
 ```
 
+Native tools with package-local build recipes are installed with `just`:
+
+```bash
+just macflow
+```
+
 Upgrade an installed local tool after changes:
 
 ```bash
@@ -27,6 +33,15 @@ uv tool install ./bin/gh_stats --force --no-cache
 ```
 
 Each tool keeps its own package-local tests under `bin/<tool>/tests`.
+
+## macflow
+
+Native macOS automation host and HTTP CLI for configured layouts, screenshot
+capture, overlays, and the draggable screenshot shelf.
+
+- Install: `just macflow`
+- Test: `just --justfile bin/macflow/justfile test`
+- Docs: `bin/macflow/README.md`, `macflow/README.md`
 
 Run all Python tests from repo root:
 

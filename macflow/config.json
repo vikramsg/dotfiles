@@ -1,0 +1,103 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 17421
+  },
+  "applications": {
+    "ghostty": {
+      "bundle_id": "com.mitchellh.ghostty"
+    },
+    "zed": {
+      "bundle_id": "dev.zed.Zed"
+    }
+  },
+  "layouts": {
+    "ghostty_full": {
+      "type": "maximize",
+      "applications": ["ghostty"],
+      "focus": "ghostty"
+    },
+    "zed_full": {
+      "type": "maximize",
+      "applications": ["zed"],
+      "focus": "zed"
+    },
+    "ghostty_zed": {
+      "type": "columns",
+      "applications": ["ghostty", "zed"],
+      "ratios": [0.5, 0.5],
+      "target_screen_application": "ghostty",
+      "focus": "ghostty",
+      "gap": 8
+    },
+    "zed_ghostty": {
+      "type": "columns",
+      "applications": ["zed", "ghostty"],
+      "ratios": [0.5, 0.5],
+      "target_screen_application": "ghostty",
+      "focus": "zed",
+      "gap": 8
+    }
+  },
+  "shelves": {
+    "screenshots": {
+      "directory_from": "screenshot/config.json",
+      "directory_key": "screenshot_dir",
+      "extensions": ["png", "jpg", "jpeg", "webp"],
+      "max_items": 5,
+      "width": 1156,
+      "height": 180,
+      "thumbnail_width": 220,
+      "spacing": 8,
+      "margin": 12,
+      "close_after_drag": true,
+      "close_delay": 0.2,
+      "restore_focus": true
+    }
+  },
+  "hotkeys": [
+    {
+      "modifiers": ["cmd", "shift"],
+      "key": "1",
+      "scope": "global",
+      "action": { "type": "apply_layout", "layout": "ghostty_full" }
+    },
+    {
+      "modifiers": ["cmd", "shift"],
+      "key": "2",
+      "scope": "global",
+      "action": { "type": "apply_layout", "layout": "zed_full" }
+    },
+    {
+      "modifiers": ["cmd", "shift"],
+      "key": "3",
+      "scope": "global",
+      "action": { "type": "apply_layout", "layout": "ghostty_zed" }
+    },
+    {
+      "modifiers": ["cmd", "shift"],
+      "key": "4",
+      "scope": "global",
+      "action": { "type": "apply_layout", "layout": "zed_ghostty" }
+    },
+    {
+      "modifiers": ["cmd", "shift"],
+      "key": "h",
+      "scope": "global",
+      "action": { "type": "show_file_shelf", "shelf": "screenshots" }
+    }
+  ],
+  "screenshots": {
+    "config_file": "screenshot/config.json",
+    "extensions": ["png", "jpg", "jpeg", "webp"],
+    "debounce_seconds": 0.2,
+    "capture_settle_seconds": 0.15,
+    "preview": {
+      "width": 360,
+      "max_height": 260,
+      "margin": 24,
+      "timeout_seconds": 8,
+      "corner_radius": 12
+    }
+  }
+}

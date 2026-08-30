@@ -200,21 +200,6 @@ ghostty:
     @echo "Ghostty symlink created at ~/.config/ghostty/config -> {{justfile_directory()}}/ghostty/config"
     @echo "Ghostty workspaces symlink created at ~/.config/ghostty/workspaces -> {{justfile_directory()}}/ghostty/workspaces"
 
-# Set up the Hammerspoon configuration.
-hammerspoon:
-    @if [ "$(uname)" = "Darwin" ]; then \
-        test -d /Applications/Hammerspoon.app || { echo "ERROR: Hammerspoon is missing; run 'just brew'."; exit 1; }; \
-        test -d /Applications/FlowVision.app || { echo "ERROR: FlowVision is missing; run 'just brew'."; exit 1; }; \
-        mkdir -p "$HOME/.hammerspoon"; \
-        ln -sfn "{{justfile_directory()}}/hammerspoon/init.lua" "$HOME/.hammerspoon/init.lua"; \
-        rm -f "$HOME/.hammerspoon/screenshot_shelf.lua"; \
-        ln -sfn "{{justfile_directory()}}/hammerspoon/flowvision_shelf.lua" "$HOME/.hammerspoon/flowvision_shelf.lua"; \
-        echo "Hammerspoon config symlinked to ~/.hammerspoon/init.lua"; \
-    else \
-        echo "Skipping Hammerspoon: setup requires macOS."; \
-    fi
-
-
 # Set up Zed symlink
 zed:
     @echo "Setting up Zed symlink..."
@@ -331,6 +316,12 @@ hunk:
         ln -sfn {{justfile_directory()}}/hunk/extensions ~/.config/hunk/extensions; \
     fi
     @echo "Hunk config symlinked to ~/.config/hunk"
+
+# Link macflow configuration and delegate installation to its package.
+macflow:
+    mkdir -p "$HOME/.config/macflow"
+    ln -sfn "{{justfile_directory()}}/macflow/config.json" "$HOME/.config/macflow/config.json"
+    just --justfile "{{justfile_directory()}}/bin/macflow/justfile" install
 
 # Set up zsh and prompt configuration symlinks
 zsh:
@@ -461,7 +452,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty hammerspoon zed screenshot zwm lch opener-tunnel-if-supported ocint gh-stats bin zsh lazygit hunk television harlequin-if-configured
+all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats bin zsh lazygit hunk television harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

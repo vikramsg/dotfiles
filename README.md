@@ -22,6 +22,15 @@ Then do the following to setup dotfiles.
 just all
 ```
 
+## Custom tools
+
+Custom tools use a split layout:
+
+- `bin/<tool>/` contains the implementation, package-local build definition and `justfile`, tests, and implementation docs.
+- `<tool>/` at the repository root contains user-editable configuration and user-facing configuration docs.
+- `lch/config.toml` declares persistent service lifecycle.
+- The root `justfile` only links tool configuration and delegates build and installation to `bin/<tool>/justfile`.
+
 ## Troubleshooting
 
 1. When initially installing on a machine, prefer first installing
