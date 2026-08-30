@@ -60,9 +60,28 @@ The repo-managed config source of truth lives at `lch/config.toml`. Use `just lc
 
 On Linux sink machines, `just lch` installs the `lch-screenshot-clipboard` watcher job only.
 
-Persistent services are loaded from the TOML `services` table on macOS. Their
-LaunchAgents use `RunAtLoad`, `KeepAlive`, and a restart throttle without
-`WatchPaths`; dispatch replaces LCH with the configured domain command.
+Persistent services are loaded from the TOML `services` table on macOS. A
+service is either a foreground command or a platform-specific application.
+Their LaunchAgents use `RunAtLoad`, `KeepAlive`, and a restart throttle without
+`WatchPaths`.
+
+```toml
+[services.example-command]
+command = ["example", "run"]
+
+[services.example-app.application]
+type = "macos"
+path = "~/Applications/Example.app"
+```
+
+Command dispatch replaces LCH with the configured process, which directly
+inherits launchd lifecycle and stdout/stderr. A macOS application is launched
+through LaunchServices to preserve its signed bundle identity; LCH waits for
+it, sends its stdout/stderr to the standard LCH service logs, and terminates it
+when the service stops. Starting a managed application first stops an existing
+current-user instance of that exact bundle executable so LaunchServices can
+attach the configured log files. The `linux` application discriminator is
+reserved and validated but launching Linux applications is not yet implemented.
 
 `lch launchd list` uses an interactive pager when stdout is a TTY and renders the full discovered launchd dataset. Use `lch launchd page` for deterministic, non-interactive pagination in tests and scripts.
 

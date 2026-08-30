@@ -1,5 +1,4 @@
 import AppKit
-import Darwin
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var runtime: AutomationRuntime?
@@ -59,44 +58,9 @@ func runApplication() {
     app.run()
 }
 
-func runServiceLauncher() -> Never {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-    process.arguments = [
-        "-W",
-        "-g",
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Macflow.app").path,
-    ]
-
-    signal(SIGTERM, SIG_IGN)
-    signal(SIGINT, SIG_IGN)
-    let terminate = {
-        NSRunningApplication.runningApplications(withBundleIdentifier: "dev.vikramsingh.dotfiles.mac-workflow")
-            .forEach { $0.terminate() }
-        process.terminate()
-    }
-    let terminationSignal = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
-    terminationSignal.setEventHandler(handler: terminate)
-    terminationSignal.resume()
-    let interruptSignal = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
-    interruptSignal.setEventHandler(handler: terminate)
-    interruptSignal.resume()
-
-    do {
-        try process.run()
-        process.waitUntilExit()
-        exit(process.terminationStatus)
-    } catch {
-        fputs("macflow: \(error.localizedDescription)\n", stderr)
-        exit(1)
-    }
-}
-
 let arguments = Array(CommandLine.arguments.dropFirst())
 if Bundle.main.bundleURL.pathExtension == "app" {
     runApplication()
-} else if arguments.first == "serve" {
-    runServiceLauncher()
 } else {
     runCLI(arguments: arguments)
 }

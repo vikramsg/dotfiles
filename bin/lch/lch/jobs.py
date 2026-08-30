@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 
-from lch.config import load_config
+from lch.config import Service, load_config
 
 
 @dataclass(frozen=True)
@@ -16,7 +16,7 @@ class JobDefinition:
 class ServiceDefinition:
     job_id: str
     label: str
-    dispatch_command: list[str]
+    service: Service
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ def list_service_definitions() -> list[ServiceDefinition]:
         ServiceDefinition(
             job_id=service_id,
             label=f"{config.namespace}.{service_id}",
-            dispatch_command=list(config.services[service_id]),
+            service=config.services[service_id],
         )
         for service_id in sorted(config.services)
     ]

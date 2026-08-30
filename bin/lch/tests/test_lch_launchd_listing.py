@@ -20,6 +20,9 @@ def test_discover_launchd_jobs_reads_labels_and_skips_invalid_plists(tmp_path, m
     write_plist(daemon_dir / "good.daemon.plist", {"Label": "com.example.daemon"})
     write_plist(agent_dir / "missing-label.plist", {"ProgramArguments": ["true"]})
     (agent_dir / "broken.plist").write_text("not a plist")
+    (agent_dir / "broken-xml.plist").write_text(
+        "<?xml version='1.0'?><plist><string>&</string></plist>"
+    )
 
     monkeypatch.setattr(launchd_module, "is_job_loaded", lambda label: label == "com.example.agent")
 

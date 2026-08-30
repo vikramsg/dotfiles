@@ -26,6 +26,22 @@ public struct WorkflowConfiguration: Codable, Equatable {
             case type, applications, ratios, focus, gap
             case targetScreenApplication = "target_screen_application"
         }
+
+        public init(
+            type: LayoutType,
+            applications: [String],
+            ratios: [Double]? = nil,
+            targetScreenApplication: String? = nil,
+            focus: String,
+            gap: Double? = nil
+        ) {
+            self.type = type
+            self.applications = applications
+            self.ratios = ratios
+            self.targetScreenApplication = targetScreenApplication
+            self.focus = focus
+            self.gap = gap
+        }
     }
 
     public struct Shelf: Codable, Equatable {
@@ -158,7 +174,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
         for (name, layout) in layouts {
             let applicationsExist = !layout.applications.isEmpty
                 && layout.applications.allSatisfy { applications[$0] != nil }
-                && applications[layout.focus] != nil
+                && layout.applications.contains(layout.focus)
                 && layout.targetScreenApplication.map { applications[$0] != nil } != false
             let geometryIsValid: Bool
             switch layout.type {

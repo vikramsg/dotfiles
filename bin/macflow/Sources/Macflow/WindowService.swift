@@ -129,7 +129,7 @@ final class WindowService {
         try set(window.element, kAXSizeAttribute as CFString, dimensions)
     }
 
-    func focus(_ window: WindowRecord) throws {
+    func raise(_ window: WindowRecord) throws {
         if window.minimized {
             try unminimize(window)
         }
@@ -140,6 +140,10 @@ final class WindowService {
         try set(application, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
         let result = AXUIElementPerformAction(window.element, kAXRaiseAction as CFString)
         if result != .success { throw AutomationError.accessibility(result, "raise") }
+    }
+
+    func focus(_ window: WindowRecord) throws {
+        try raise(window)
         try set(window.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     }
 

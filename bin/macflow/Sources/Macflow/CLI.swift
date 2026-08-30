@@ -9,7 +9,6 @@ struct CLIError: LocalizedError {
 func usage() -> Never {
     print("""
     Usage:
-      macflow serve
       macflow health
       macflow permissions
       macflow request-permission <accessibility|screen-recording>

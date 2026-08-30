@@ -1,11 +1,25 @@
 import os
 import plistlib
+import re
+import signal
 import subprocess
+import sys
+import time
+from xml.parsers.expat import ExpatError
 from dataclasses import dataclass
+from functools import singledispatch
 from math import ceil
 from pathlib import Path
 
-from lch.config import load_config
+from lch.config import (
+    ApplicationDefinition,
+    ApplicationService,
+    CommandService,
+    LinuxApplication,
+    MacOSApplication,
+    Service,
+    load_config,
+)
 from lch.jobs import (
     JobDefinition,
     JobIdentity,
@@ -128,7 +142,7 @@ def discover_launchd_jobs(*, search_roots: list[Path] | None = None) -> list[Dis
         for plist_path in sorted(root.glob("*.plist")):
             try:
                 payload = plistlib.loads(plist_path.read_bytes())
-            except (OSError, plistlib.InvalidFileException):
+            except (OSError, ExpatError, plistlib.InvalidFileException):
                 continue
             label = payload.get("Label")
             if not isinstance(label, str) or not label:
@@ -244,6 +258,34 @@ def build_watcher_plist(
     }
 
 
+@singledispatch
+def build_install_payload(
+    job: JobDefinition | ServiceDefinition,
+    *,
+    paths: JobPaths,
+) -> dict[str, object]:
+    raise TypeError(f"Unsupported job definition: {type(job).__name__}")
+
+
+@build_install_payload.register
+def _(job: JobDefinition, *, paths: JobPaths) -> dict[str, object]:
+    return build_launch_agent_plist(
+        job,
+        watch_path=resolve_watch_path(job),
+        executable_path=get_lch_executable_path(),
+        paths=paths,
+    )
+
+
+@build_install_payload.register
+def _(job: ServiceDefinition, *, paths: JobPaths) -> dict[str, object]:
+    return build_launch_agent_service_plist(
+        job,
+        executable_path=get_lch_executable_path(),
+        paths=paths,
+    )
+
+
 def write_and_load_plist(paths: JobPaths, plist_payload: dict[str, object]) -> Path:
     paths.plist_path.parent.mkdir(parents=True, exist_ok=True)
     paths.stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -259,22 +301,7 @@ def write_and_load_plist(paths: JobPaths, plist_payload: dict[str, object]) -> P
 def install_job(job_id: str) -> Path:
     job = get_launchd_job_definition(job_id)
     paths = get_job_paths(job)
-    if isinstance(job, ServiceDefinition):
-        plist_payload = build_launch_agent_service_plist(
-            job,
-            executable_path=get_lch_executable_path(),
-            paths=paths,
-        )
-    else:
-        watch_path = resolve_watch_path(job)
-        plist_payload = build_launch_agent_plist(
-            job,
-            watch_path=watch_path,
-            executable_path=get_lch_executable_path(),
-            paths=paths,
-        )
-
-    return write_and_load_plist(paths, plist_payload)
+    return write_and_load_plist(paths, build_install_payload(job, paths=paths))
 
 
 def install_watcher(
@@ -348,13 +375,155 @@ def logs_job(job_id: str) -> tuple[Path, Path]:
     return paths.stdout_log_path, paths.stderr_log_path
 
 
-def run_job(job_id: str) -> None:
-    job = get_launchd_job_definition(job_id)
+def resolve_application_executable(application_path: Path) -> Path:
+    info_path = application_path / "Contents/Info.plist"
+    if not application_path.is_dir() or not info_path.is_file():
+        raise RuntimeError(f"Invalid macOS application bundle: {application_path}")
+    try:
+        info = plistlib.loads(info_path.read_bytes())
+    except (OSError, plistlib.InvalidFileException) as exc:
+        raise RuntimeError(f"Invalid macOS application Info.plist: {info_path}") from exc
+    executable = info.get("CFBundleExecutable")
+    if not isinstance(executable, str) or not executable:
+        raise RuntimeError(f"Missing CFBundleExecutable in {info_path}")
+    executable_path = application_path / "Contents/MacOS" / executable
+    if not executable_path.is_file():
+        raise RuntimeError(f"Missing macOS application executable: {executable_path}")
+    return executable_path
+
+
+def application_pids(executable_path: Path) -> set[int]:
+    pattern = rf"(^| ){re.escape(str(executable_path))}( |$)"
+    result = subprocess.run(
+        ["/usr/bin/pgrep", "-U", str(os.getuid()), "-f", pattern],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return {
+        int(raw_pid)
+        for raw_pid in result.stdout.splitlines()
+        if raw_pid.isdigit()
+    }
+
+
+def stop_application(executable_path: Path, *, timeout: float = 5) -> None:
+    pids = application_pids(executable_path)
+    if not pids:
+        return
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except (PermissionError, ProcessLookupError):
+            continue
+
+    deadline = time.monotonic() + timeout
+    while application_pids(executable_path):
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"Application did not stop: {executable_path}")
+        time.sleep(0.1)
+
+
+def run_macos_application(application_path: Path, *, paths: JobPaths) -> None:
+    if sys.platform != "darwin":
+        raise RuntimeError("macOS application services can only run on macOS")
+    executable_path = resolve_application_executable(application_path)
+    stop_application(executable_path)
+    paths.stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.stdout_log_path.touch(exist_ok=True)
+    paths.stderr_log_path.touch(exist_ok=True)
+    stopping = False
+
+    def request_stop(_signum: int, _frame: object) -> None:
+        nonlocal stopping
+        stopping = True
+
+    previous_term = signal.signal(signal.SIGTERM, request_stop)
+    previous_interrupt = signal.signal(signal.SIGINT, request_stop)
+    try:
+        process = subprocess.Popen(
+            [
+                "/usr/bin/open",
+                "-W",
+                "-g",
+                "--stdout",
+                str(paths.stdout_log_path),
+                "--stderr",
+                str(paths.stderr_log_path),
+                str(application_path),
+            ]
+        )
+        while process.poll() is None and not stopping:
+            time.sleep(0.1)
+        if stopping:
+            stop_application(executable_path)
+            if process.poll() is None:
+                process.terminate()
+        return_code = process.wait()
+        if return_code != 0 and not stopping:
+            raise subprocess.CalledProcessError(return_code, process.args)
+    finally:
+        signal.signal(signal.SIGTERM, previous_term)
+        signal.signal(signal.SIGINT, previous_interrupt)
+
+
+@singledispatch
+def run_application(application: ApplicationDefinition, *, paths: JobPaths) -> None:
+    raise TypeError(f"Unsupported application definition: {type(application).__name__}")
+
+
+@run_application.register
+def _(application: MacOSApplication, *, paths: JobPaths) -> None:
+    run_macos_application(application.path, paths=paths)
+
+
+@run_application.register
+def _(application: LinuxApplication, *, paths: JobPaths) -> None:
+    raise RuntimeError("Linux application services are not implemented")
+
+
+@singledispatch
+def run_service(service: Service, *, paths: JobPaths) -> None:
+    raise TypeError(f"Unsupported service definition: {type(service).__name__}")
+
+
+@run_service.register
+def _(service: CommandService, *, paths: JobPaths) -> None:
+    command = list(service.command)
+    tool_path = get_tool_executable_path(command[0])
+    if tool_path.exists():
+        command[0] = str(tool_path)
+    os.execvp(command[0], command)
+
+
+@run_service.register
+def _(service: ApplicationService, *, paths: JobPaths) -> None:
+    run_application(service.application, paths=paths)
+
+
+@singledispatch
+def run_definition(
+    job: JobDefinition | ServiceDefinition,
+    *,
+    paths: JobPaths,
+) -> None:
+    raise TypeError(f"Unsupported job definition: {type(job).__name__}")
+
+
+@run_definition.register
+def _(job: JobDefinition, *, paths: JobPaths) -> None:
     command = list(job.dispatch_command)
     tool_path = get_tool_executable_path(command[0])
     if tool_path.exists():
         command[0] = str(tool_path)
-    if isinstance(job, ServiceDefinition):
-        os.execvp(command[0], command)
-        return
     subprocess.run(command, check=True)
+
+
+@run_definition.register
+def _(job: ServiceDefinition, *, paths: JobPaths) -> None:
+    run_service(job.service, paths=paths)
+
+
+def run_job(job_id: str) -> None:
+    job = get_launchd_job_definition(job_id)
+    run_definition(job, paths=get_job_paths(job))

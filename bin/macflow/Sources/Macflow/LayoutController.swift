@@ -37,8 +37,7 @@ final class LayoutController {
             case let .failure(error): completion(.failure(error))
             case let .success(resolved):
                 do {
-                    try self.arrange(layout: layout, windows: resolved)
-                    completion(.success(()))
+                    try self.arrange(layout: layout, windows: resolved, completion: completion)
                 } catch {
                     completion(.failure(error))
                 }
@@ -121,7 +120,11 @@ final class LayoutController {
         }
     }
 
-    private func arrange(layout: WorkflowConfiguration.Layout, windows resolved: [String: WindowRecord]) throws {
+    private func arrange(
+        layout: WorkflowConfiguration.Layout,
+        windows resolved: [String: WindowRecord],
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) throws {
         guard let firstAlias = layout.applications.first, let firstWindow = resolved[firstAlias] else {
             throw AutomationError.windowNotFound("layout")
         }
@@ -131,26 +134,51 @@ final class LayoutController {
             throw AutomationError.windowNotFound("screen")
         }
 
-        if layout.type == .maximize {
-            try windows.setFrame(screen.visibleFrame, for: firstWindow)
-        } else if layout.type == .columns {
-            let ratios = layout.ratios ?? Array(repeating: 1, count: layout.applications.count)
-            let frames = LayoutGeometry.columns(
-                in: screen.visibleFrame.workflowFrame,
-                ratios: ratios,
-                gap: layout.gap ?? 0
-            )
-            for (alias, frame) in zip(layout.applications, frames) {
-                guard let window = resolved[alias] else { continue }
+        let plan = try LayoutPlanner.plan(layout: layout, screen: screen.visibleFrame.workflowFrame)
+        execute(plan.operations, index: 0, windows: resolved, completion: completion)
+    }
+
+    private func execute(
+        _ operations: [LayoutOperation],
+        index: Int,
+        windows resolved: [String: WindowRecord],
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard index < operations.count else {
+            completion(.success(()))
+            return
+        }
+
+        do {
+            let operation = operations[index]
+            switch operation {
+            case let .setFrame(alias, frame):
+                guard let window = resolved[alias] else {
+                    throw AutomationError.windowNotFound(alias)
+                }
                 try windows.setFrame(
                     CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
                     for: window
                 )
+            case let .raise(alias):
+                guard let window = resolved[alias] else {
+                    throw AutomationError.windowNotFound(alias)
+                }
+                try windows.raise(window)
+            case let .wait(seconds):
+                DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                    self?.execute(operations, index: index + 1, windows: resolved, completion: completion)
+                }
+                return
+            case let .focus(alias):
+                guard let window = resolved[alias] else {
+                    throw AutomationError.windowNotFound(alias)
+                }
+                try windows.focus(window)
             }
-        }
-
-        if let focus = resolved[layout.focus] {
-            try windows.focus(focus)
+            execute(operations, index: index + 1, windows: resolved, completion: completion)
+        } catch {
+            completion(.failure(error))
         }
     }
 }
