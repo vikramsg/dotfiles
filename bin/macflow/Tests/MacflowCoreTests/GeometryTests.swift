@@ -24,4 +24,5 @@ final class GeometryTests: XCTestCase {
         XCTAssertEqual(frames[1].x, 753.5)
         XCTAssertEqual(frames[1].width, 346.5)
     }
+
 }

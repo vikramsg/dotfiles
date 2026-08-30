@@ -67,8 +67,10 @@ cmd + shift + h  Show the draggable screenshot shelf
 cmd + shift + 5  Open the native macOS screenshot controls
 ```
 
-The native `cmd + shift + 3/4` screenshot shortcuts must remain disabled because
-the workflow app owns those keys. Capture through `cmd + shift + 5` instead.
+Every configured shortcut declares `"scope": "global"`. Macflow consumes these
+global chords before macOS or the focused application receives them; shortcuts
+that are not configured continue through the normal event path. Capture through
+`cmd + shift + 5` while Macflow owns `cmd + shift + 3/4`.
 
 If a configured application has no usable window on the current Space, the app
 launches it or sends its standard `cmd + n` new-window shortcut, then waits for
@@ -89,9 +91,11 @@ screen containing the mouse pointer.
 ## Screenshot Shelf
 
 `cmd + shift + h` opens a top-center horizontal shelf populated directly from
-the configured screenshot directory, newest first. Dragging a thumbnail starts
-a native file drag containing the original file URL, so compatible applications
-receive the existing file rather than a copy maintained by Mac Workflow.
+the configured screenshot directory, newest first, up to the shelf's configured
+`max_items` limit. The limit defaults to five when omitted. Dragging a thumbnail
+starts a native file drag containing the original file URL, so compatible
+applications receive the existing file rather than a copy maintained by
+Macflow.
 
 Escape closes the shelf. A completed drag closes it after the configured delay.
 Both paths restore the application and window that were focused before the

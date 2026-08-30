@@ -68,7 +68,11 @@ final class AutomationRuntime {
     func start() throws {
         for binding in configuration.hotkeys {
             do {
-                try hotKeys.register(modifiers: binding.modifiers, key: binding.key) { [weak self] in
+                try hotKeys.register(
+                    modifiers: binding.modifiers,
+                    key: binding.key,
+                    scope: binding.scope
+                ) { [weak self] in
                     self?.execute(binding.action)
                 }
             } catch {

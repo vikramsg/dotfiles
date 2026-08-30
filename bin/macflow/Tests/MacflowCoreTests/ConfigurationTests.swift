@@ -34,6 +34,7 @@ final class ConfigurationTests: XCTestCase {
             {
               "modifiers": ["cmd", "shift"],
               "key": "g",
+              "scope": "global",
               "action": {"type": "apply_layout", "layout": "full"}
             }
           ],
@@ -67,10 +68,37 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.applications["first"]?.bundleID, "example.first")
         XCTAssertEqual(configuration.server.host, "127.0.0.1")
         XCTAssertEqual(configuration.hotkeys.first?.action.layout, "full")
+        XCTAssertEqual(configuration.hotkeys.first?.scope, .global)
     }
 
     func testValidConfigurationPassesValidation() throws {
         XCTAssertNoThrow(try decode(validConfigurationJSON).validate())
+    }
+
+    func testShelfDefaultsToFiveItemsWhenLimitIsOmitted() throws {
+        let configuration = try decode(validConfigurationJSON)
+        XCTAssertEqual(configuration.shelves["images"]?.maxItems, 5)
+    }
+
+    func testShelfUsesConfiguredItemLimit() throws {
+        let text = validConfigurationJSON.replacingOccurrences(
+            of: "\"extensions\": [\"png\"]",
+            with: "\"extensions\": [\"png\"], \"max_items\": 3"
+        )
+        let configuration = try decode(text)
+        XCTAssertEqual(configuration.shelves["images"]?.maxItems, 3)
+    }
+
+    func testConfigurationRejectsNonpositiveShelfItemLimit() throws {
+        for limit in [0, -1] {
+            let text = validConfigurationJSON.replacingOccurrences(
+                of: "\"extensions\": [\"png\"]",
+                with: "\"extensions\": [\"png\"], \"max_items\": \(limit)"
+            )
+            XCTAssertThrowsError(try decode(text).validate()) { error in
+                XCTAssertEqual(error as? WorkflowValidationError, .invalidShelf("images"))
+            }
+        }
     }
 
     func testConfigurationRejectsUnknownLayoutAction() throws {
@@ -104,6 +132,47 @@ final class ConfigurationTests: XCTestCase {
         )
         XCTAssertThrowsError(try decode(text).validate()) { error in
             XCTAssertEqual(error as? WorkflowValidationError, .invalidAction(0))
+        }
+    }
+
+    func testConfigurationRequiresSupportedHotKeyScope() {
+        let missing = validConfigurationJSON.replacingOccurrences(of: "\"scope\": \"global\",", with: "")
+        XCTAssertThrowsError(try decode(missing))
+
+        let unsupported = validConfigurationJSON.replacingOccurrences(
+            of: "\"scope\": \"global\"",
+            with: "\"scope\": \"application\""
+        )
+        XCTAssertThrowsError(try decode(unsupported))
+    }
+
+    func testConfigurationRejectsDuplicateGlobalShortcut() throws {
+        let duplicate = validConfigurationJSON.replacingOccurrences(
+            of: """
+            {
+                  "modifiers": ["cmd", "shift"],
+                  "key": "g",
+                  "scope": "global",
+                  "action": {"type": "apply_layout", "layout": "full"}
+                }
+            """,
+            with: """
+            {
+                  "modifiers": ["cmd", "shift"],
+                  "key": "g",
+                  "scope": "global",
+                  "action": {"type": "apply_layout", "layout": "full"}
+                },
+                {
+                  "modifiers": ["command", "shift"],
+                  "key": "g",
+                  "scope": "global",
+                  "action": {"type": "apply_layout", "layout": "full"}
+                }
+            """
+        )
+        XCTAssertThrowsError(try decode(duplicate).validate()) { error in
+            XCTAssertEqual(error as? WorkflowValidationError, .duplicateHotKey(1))
         }
     }
 

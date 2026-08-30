@@ -23,7 +23,8 @@ final class FileShelfController {
         hide(restoreFocus: false)
         let items = FileCatalog.items(
             in: directory,
-            supportedExtensions: Set(configuration.extensions.map { $0.lowercased() })
+            supportedExtensions: Set(configuration.extensions.map { $0.lowercased() }),
+            maximumCount: configuration.maxItems
         )
         guard !items.isEmpty else { return false }
 

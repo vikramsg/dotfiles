@@ -1,85 +1,109 @@
-import Carbon.HIToolbox
+import CoreGraphics
 import Foundation
 import MacflowCore
 
 final class HotKeyService {
-    private static let signature = OSType(0x4D57464C) // MWFL
-    private var handler: EventHandlerRef?
-    private var hotKeys: [UInt32: (ref: EventHotKeyRef, callback: () -> Void)] = [:]
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    private var callbacks: [UInt32: () -> Void] = [:]
+    private var router = GlobalHotKeyRouter()
     private var nextID: UInt32 = 1
 
     init() throws {
-        var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let status = InstallEventHandler(
-            GetApplicationEventTarget(),
-            { _, event, context in
-                guard let event, let context else { return noErr }
-                var identifier = EventHotKeyID()
-                let result = GetEventParameter(
-                    event,
-                    EventParamName(kEventParamDirectObject),
-                    EventParamType(typeEventHotKeyID),
-                    nil,
-                    MemoryLayout<EventHotKeyID>.size,
-                    nil,
-                    &identifier
-                )
-                guard result == noErr else { return result }
+        let mask = (CGEventMask(1) << CGEventType.keyDown.rawValue)
+            | (CGEventMask(1) << CGEventType.keyUp.rawValue)
+        guard let eventTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: { _, type, event, context in
+                guard let context else { return Unmanaged.passUnretained(event) }
                 let service = Unmanaged<HotKeyService>.fromOpaque(context).takeUnretainedValue()
-                service.hotKeys[identifier.id]?.callback()
-                return noErr
+                return service.handle(type: type, event: event)
             },
-            1,
-            &type,
-            Unmanaged.passUnretained(self).toOpaque(),
-            &handler
-        )
-        if status != noErr { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else {
+            throw NSError(
+                domain: "Macflow.HotKey",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Could not install global hotkey event tap; Accessibility permission is required"]
+            )
+        }
+
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+        self.eventTap = eventTap
+        runLoopSource = source
     }
 
     @discardableResult
-    func register(modifiers: [String], key: String, callback: @escaping () -> Void) throws -> UInt32 {
-        guard let keyCode = KeyCodeResolver.resolve(key) else {
-            throw NSError(domain: "MacWorkflow.HotKey", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported key: \(key)"])
+    func register(
+        modifiers: [String],
+        key: String,
+        scope: HotKeyScope = .global,
+        callback: @escaping () -> Void
+    ) throws -> UInt32 {
+        guard scope == .global, let chord = HotKeyChord(modifiers: modifiers, key: key) else {
+            throw NSError(
+                domain: "Macflow.HotKey",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Unsupported global hotkey: \(modifiers)+\(key)"]
+            )
         }
         let id = nextID
-        nextID += 1
-        let hotKeyID = EventHotKeyID(signature: Self.signature, id: id)
-        var reference: EventHotKeyRef?
-        let status = RegisterEventHotKey(
-            keyCode,
-            modifierFlags(modifiers),
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &reference
-        )
-        guard status == noErr, let reference else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        guard router.register(chord, bindingID: id) else {
+            throw NSError(
+                domain: "Macflow.HotKey",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Duplicate global hotkey: \(modifiers)+\(key)"]
+            )
         }
-        hotKeys[id] = (reference, callback)
+        nextID += 1
+        callbacks[id] = callback
         return id
     }
 
     func unregister(_ id: UInt32) {
-        guard let hotKey = hotKeys.removeValue(forKey: id) else { return }
-        UnregisterEventHotKey(hotKey.ref)
+        callbacks.removeValue(forKey: id)
+        router.unregister(bindingID: id)
     }
 
-    private func modifierFlags(_ modifiers: [String]) -> UInt32 {
-        modifiers.reduce(0) { flags, modifier in
-            switch modifier.lowercased() {
-            case "cmd", "command": return flags | UInt32(cmdKey)
-            case "shift": return flags | UInt32(shiftKey)
-            case "option", "alt": return flags | UInt32(optionKey)
-            case "control", "ctrl": return flags | UInt32(controlKey)
-            default: return flags
-            }
+    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            router.resetPressState()
+            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+            return Unmanaged.passUnretained(event)
         }
+        guard type == .keyDown || type == .keyUp else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        let input = HotKeyInputEvent(
+            phase: type == .keyDown ? .keyDown : .keyUp,
+            keyCode: UInt32(event.getIntegerValueField(.keyboardEventKeycode)),
+            modifiers: modifiers(from: event.flags),
+            isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        )
+        let decision = router.handle(input)
+        if let id = decision.triggeredBindingID, let callback = callbacks[id] {
+            DispatchQueue.main.async(execute: callback)
+        }
+        return decision.consume ? nil : Unmanaged.passUnretained(event)
+    }
+
+    private func modifiers(from flags: CGEventFlags) -> Set<HotKeyModifier> {
+        var modifiers = Set<HotKeyModifier>()
+        if flags.contains(.maskCommand) { modifiers.insert(.command) }
+        if flags.contains(.maskShift) { modifiers.insert(.shift) }
+        if flags.contains(.maskAlternate) { modifiers.insert(.option) }
+        if flags.contains(.maskControl) { modifiers.insert(.control) }
+        return modifiers
     }
 
     deinit {
-        hotKeys.values.forEach { UnregisterEventHotKey($0.ref) }
-        if let handler { RemoveEventHandler(handler) }
+        if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
+        if let eventTap { CFMachPortInvalidate(eventTap) }
     }
 }

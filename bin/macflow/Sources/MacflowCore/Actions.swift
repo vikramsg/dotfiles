@@ -15,6 +15,7 @@ public enum WorkflowValidationError: LocalizedError, Equatable {
     case invalidServerHost(String)
     case invalidLayout(String)
     case invalidAction(Int)
+    case duplicateHotKey(Int)
     case invalidShelf(String)
 
     public var errorDescription: String? {
@@ -22,6 +23,7 @@ public enum WorkflowValidationError: LocalizedError, Equatable {
         case let .invalidServerHost(host): return "Server host must be loopback, got: \(host)"
         case let .invalidLayout(name): return "Invalid layout configuration: \(name)"
         case let .invalidAction(index): return "Invalid hotkey action at index \(index)"
+        case let .duplicateHotKey(index): return "Duplicate hotkey at index \(index)"
         case let .invalidShelf(name): return "Invalid shelf configuration: \(name)"
         }
     }

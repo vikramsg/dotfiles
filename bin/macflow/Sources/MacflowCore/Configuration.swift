@@ -29,6 +29,8 @@ public struct WorkflowConfiguration: Codable, Equatable {
     }
 
     public struct Shelf: Codable, Equatable {
+        public static let defaultMaxItems = 5
+
         public let directoryFrom: String
         public let directoryKey: String
         public let extensions: [String]
@@ -40,6 +42,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
         public let closeAfterDrag: Bool
         public let closeDelay: Double
         public let restoreFocus: Bool
+        public let maxItems: Int
 
         enum CodingKeys: String, CodingKey {
             case extensions, width, height, spacing, margin
@@ -49,6 +52,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
             case closeAfterDrag = "close_after_drag"
             case closeDelay = "close_delay"
             case restoreFocus = "restore_focus"
+            case maxItems = "max_items"
         }
 
         public init(
@@ -62,7 +66,8 @@ public struct WorkflowConfiguration: Codable, Equatable {
             margin: Double,
             closeAfterDrag: Bool,
             closeDelay: Double,
-            restoreFocus: Bool
+            restoreFocus: Bool,
+            maxItems: Int = defaultMaxItems
         ) {
             self.directoryFrom = directoryFrom
             self.directoryKey = directoryKey
@@ -75,6 +80,23 @@ public struct WorkflowConfiguration: Codable, Equatable {
             self.closeAfterDrag = closeAfterDrag
             self.closeDelay = closeDelay
             self.restoreFocus = restoreFocus
+            self.maxItems = maxItems
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            directoryFrom = try container.decode(String.self, forKey: .directoryFrom)
+            directoryKey = try container.decode(String.self, forKey: .directoryKey)
+            extensions = try container.decode([String].self, forKey: .extensions)
+            width = try container.decode(Double.self, forKey: .width)
+            height = try container.decode(Double.self, forKey: .height)
+            thumbnailWidth = try container.decode(Double.self, forKey: .thumbnailWidth)
+            spacing = try container.decode(Double.self, forKey: .spacing)
+            margin = try container.decode(Double.self, forKey: .margin)
+            closeAfterDrag = try container.decode(Bool.self, forKey: .closeAfterDrag)
+            closeDelay = try container.decode(Double.self, forKey: .closeDelay)
+            restoreFocus = try container.decode(Bool.self, forKey: .restoreFocus)
+            maxItems = try container.decodeIfPresent(Int.self, forKey: .maxItems) ?? Self.defaultMaxItems
         }
     }
 
@@ -87,6 +109,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
     public struct HotKey: Codable, Equatable {
         public let modifiers: [String]
         public let key: String
+        public let scope: HotKeyScope
         public let action: Action
     }
 
@@ -151,6 +174,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
             }
         }
 
+        var chords = Set<HotKeyChord>()
         for (index, hotkey) in hotkeys.enumerated() {
             let valid: Bool
             switch hotkey.action.type {
@@ -162,8 +186,14 @@ public struct WorkflowConfiguration: Codable, Equatable {
             let modifiersAreValid = hotkey.modifiers.allSatisfy {
                 KeyCodeResolver.supportedModifiers.contains($0.lowercased())
             }
-            if KeyCodeResolver.resolve(hotkey.key) == nil || !modifiersAreValid || !valid {
+            guard let chord = HotKeyChord(modifiers: hotkey.modifiers, key: hotkey.key),
+                  modifiersAreValid,
+                  valid
+            else {
                 throw WorkflowValidationError.invalidAction(index)
+            }
+            if !chords.insert(chord).inserted {
+                throw WorkflowValidationError.duplicateHotKey(index)
             }
         }
 
@@ -171,7 +201,8 @@ public struct WorkflowConfiguration: Codable, Equatable {
             || shelf.width <= 0
             || shelf.height <= 0
             || shelf.thumbnailWidth <= 0
-            || shelf.closeDelay < 0 {
+            || shelf.closeDelay < 0
+            || shelf.maxItems <= 0 {
             throw WorkflowValidationError.invalidShelf(name)
         }
     }

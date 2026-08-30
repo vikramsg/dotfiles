@@ -44,11 +44,12 @@
       "directory_from": "screenshot/config.json",
       "directory_key": "screenshot_dir",
       "extensions": ["png", "jpg", "jpeg", "webp"],
-      "width": 1200,
-      "height": 420,
-      "thumbnail_width": 240,
-      "spacing": 12,
-      "margin": 20,
+      "max_items": 5,
+      "width": 1156,
+      "height": 180,
+      "thumbnail_width": 220,
+      "spacing": 8,
+      "margin": 12,
       "close_after_drag": true,
       "close_delay": 0.2,
       "restore_focus": true
@@ -58,26 +59,31 @@
     {
       "modifiers": ["cmd", "shift"],
       "key": "1",
+      "scope": "global",
       "action": { "type": "apply_layout", "layout": "ghostty_full" }
     },
     {
       "modifiers": ["cmd", "shift"],
       "key": "2",
+      "scope": "global",
       "action": { "type": "apply_layout", "layout": "zed_full" }
     },
     {
       "modifiers": ["cmd", "shift"],
       "key": "3",
+      "scope": "global",
       "action": { "type": "apply_layout", "layout": "ghostty_zed" }
     },
     {
       "modifiers": ["cmd", "shift"],
       "key": "4",
+      "scope": "global",
       "action": { "type": "apply_layout", "layout": "zed_ghostty" }
     },
     {
       "modifiers": ["cmd", "shift"],
       "key": "h",
+      "scope": "global",
       "action": { "type": "show_file_shelf", "shelf": "screenshots" }
     }
   ],

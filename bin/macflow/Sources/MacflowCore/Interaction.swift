@@ -24,6 +24,120 @@ public enum KeyCodeResolver {
     }
 }
 
+public enum HotKeyScope: String, Codable, Equatable {
+    case global
+}
+
+public enum HotKeyModifier: String, Hashable {
+    case command
+    case shift
+    case option
+    case control
+
+    public init?(configurationValue: String) {
+        switch configurationValue.lowercased() {
+        case "cmd", "command": self = .command
+        case "shift": self = .shift
+        case "option", "alt": self = .option
+        case "control", "ctrl": self = .control
+        default: return nil
+        }
+    }
+}
+
+public struct HotKeyChord: Hashable {
+    public let keyCode: UInt32
+    public let modifiers: Set<HotKeyModifier>
+
+    public init?(modifiers: [String], key: String) {
+        guard let keyCode = KeyCodeResolver.resolve(key) else { return nil }
+        let normalized = modifiers.compactMap(HotKeyModifier.init(configurationValue:))
+        guard normalized.count == modifiers.count else { return nil }
+        self.keyCode = keyCode
+        self.modifiers = Set(normalized)
+    }
+
+    public init(keyCode: UInt32, modifiers: Set<HotKeyModifier>) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+    }
+}
+
+public enum HotKeyEventPhase {
+    case keyDown
+    case keyUp
+}
+
+public struct HotKeyInputEvent {
+    public let phase: HotKeyEventPhase
+    public let keyCode: UInt32
+    public let modifiers: Set<HotKeyModifier>
+    public let isRepeat: Bool
+
+    public init(
+        phase: HotKeyEventPhase,
+        keyCode: UInt32,
+        modifiers: Set<HotKeyModifier>,
+        isRepeat: Bool = false
+    ) {
+        self.phase = phase
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+        self.isRepeat = isRepeat
+    }
+}
+
+public struct HotKeyDecision: Equatable {
+    public let consume: Bool
+    public let triggeredBindingID: UInt32?
+}
+
+public struct GlobalHotKeyRouter {
+    private var bindings: [HotKeyChord: [UInt32]] = [:]
+    private var consumedKeyCodes = Set<UInt32>()
+
+    public init() {}
+
+    @discardableResult
+    public mutating func register(_ chord: HotKeyChord, bindingID: UInt32) -> Bool {
+        guard bindings[chord]?.contains(bindingID) != true else { return false }
+        bindings[chord, default: []].append(bindingID)
+        return true
+    }
+
+    public mutating func unregister(bindingID: UInt32) {
+        bindings = bindings.compactMapValues { ids in
+            let remaining = ids.filter { $0 != bindingID }
+            return remaining.isEmpty ? nil : remaining
+        }
+    }
+
+    public mutating func resetPressState() {
+        consumedKeyCodes.removeAll()
+    }
+
+    public mutating func handle(_ event: HotKeyInputEvent) -> HotKeyDecision {
+        switch event.phase {
+        case .keyDown:
+            if consumedKeyCodes.contains(event.keyCode) {
+                return HotKeyDecision(consume: true, triggeredBindingID: nil)
+            }
+            let chord = HotKeyChord(keyCode: event.keyCode, modifiers: event.modifiers)
+            guard let bindingID = bindings[chord]?.last else {
+                return HotKeyDecision(consume: false, triggeredBindingID: nil)
+            }
+            let inserted = consumedKeyCodes.insert(event.keyCode).inserted
+            return HotKeyDecision(
+                consume: true,
+                triggeredBindingID: inserted && !event.isRepeat ? bindingID : nil
+            )
+        case .keyUp:
+            let consumed = consumedKeyCodes.remove(event.keyCode) != nil
+            return HotKeyDecision(consume: consumed, triggeredBindingID: nil)
+        }
+    }
+}
+
 public struct SuspensionGate {
     private var count = 0
 

@@ -13,9 +13,10 @@ public struct FileCatalogItem: Equatable {
 public enum FileCatalog {
     public static func sortedItems(
         candidates: [ScreenshotCandidate],
-        supportedExtensions: Set<String>
+        supportedExtensions: Set<String>,
+        maximumCount: Int
     ) -> [FileCatalogItem] {
-        candidates
+        Array(candidates
             .filter { $0.regularFile && supportedExtensions.contains($0.url.pathExtension.lowercased()) }
             .map { FileCatalogItem(url: $0.url, modificationDate: $0.modificationDate) }
             .sorted {
@@ -24,9 +25,14 @@ public enum FileCatalog {
                 }
                 return $0.modificationDate > $1.modificationDate
             }
+            .prefix(max(0, maximumCount)))
     }
 
-    public static func items(in directory: URL, supportedExtensions: Set<String>) -> [FileCatalogItem] {
+    public static func items(
+        in directory: URL,
+        supportedExtensions: Set<String>,
+        maximumCount: Int = .max
+    ) -> [FileCatalogItem] {
         let keys: Set<URLResourceKey> = [.isRegularFileKey, .contentModificationDateKey]
         guard let urls = try? FileManager.default.contentsOfDirectory(
             at: directory,
@@ -41,6 +47,10 @@ public enum FileCatalog {
                 regularFile: values?.isRegularFile == true
             )
         }
-        return sortedItems(candidates: candidates, supportedExtensions: supportedExtensions)
+        return sortedItems(
+            candidates: candidates,
+            supportedExtensions: supportedExtensions,
+            maximumCount: maximumCount
+        )
     }
 }
