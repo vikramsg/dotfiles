@@ -2,13 +2,23 @@
 namespace = "com.vikramsg.dotfiles"
 
 [services.lch-opener-tunnel]
-# Domain command run as a persistent macOS LaunchAgent.
+# Command services replace `lch run` with the configured foreground command.
+# The command inherits launchd lifecycle and stdout/stderr directly.
 command = ["opener-tunnel", "run"]
 
 [services.lch-zwm]
-# Domain command that reconciles Zed worktrees and durable VM tmux sessions.
+# Command services replace `lch run` with the configured foreground command.
+# The command inherits launchd lifecycle and stdout/stderr directly.
 command = ["zwm", "daemon"]
 
-[services.lch-macflow]
-# Launch and supervise the permissioned macOS workflow application.
-command = ["macflow", "serve"]
+# macOS application services launch through LaunchServices so the signed bundle
+# keeps its TCC identity. LCH waits for the app, routes its stdout/stderr to the
+# normal service logs, and terminates the app when the service stops.
+[services.lch-macflow.application]
+type = "macos"
+path = "~/Applications/Macflow.app"
+
+# Linux application configuration is reserved but not yet implemented:
+# [services.example-linux-application.application]
+# type = "linux"
+# path = "~/.local/share/applications/example.desktop"

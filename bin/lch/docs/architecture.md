@@ -1,8 +1,8 @@
 # lch architecture
 
 `lch` is a thin native orchestrator for existing path watchers and configured
-macOS services. It does not own screenshot or opener behavior; it translates
-definitions into native jobs and dispatches domain commands.
+macOS services. It does not own screenshot, opener, or application behavior; it
+translates definitions into native jobs and dispatches commands or applications.
 
 Its configuration is repo-managed at `lch/config.toml` and symlinked to
 `~/.config/lch/config.toml`. Clipboard remains a static watcher and persistent
@@ -78,6 +78,25 @@ lch/config.toml [services.lch-opener-tunnel]
   -> lch run lch-opener-tunnel
   -> exec configured command: opener-tunnel run
 ```
+
+Command services replace the `lch run` process and directly inherit launchd's
+lifecycle and stdout/stderr.
+
+```text
+lch/config.toml [services.lch-macflow.application]
+  -> lch install lch-macflow
+  -> LaunchAgent: RunAtLoad + KeepAlive + ThrottleInterval
+  -> lch run lch-macflow
+  -> stop an existing current-user instance of the exact bundle executable
+  -> LaunchServices opens the configured signed app bundle
+  -> app stdout/stderr use the normal LCH log paths
+  -> LCH waits for the app and terminates it when the service stops
+```
+
+The service configuration is an untagged union of command and application
+services. The nested application definition is discriminated by `type`.
+`type = "macos"` is implemented; `type = "linux"` is reserved and validated but
+its runtime lifecycle is not yet implemented.
 
 Persistent services have no `WatchPaths`. They are not added to systemd; the
 existing Linux watcher path is unchanged.

@@ -32,12 +32,23 @@ That command:
 namespace = "com.vikramsg.dotfiles"
 
 [services.lch-opener-tunnel]
-# Domain command run as a persistent macOS LaunchAgent.
+# Command services replace `lch run` with the configured foreground command and
+# inherit launchd lifecycle and stdout/stderr directly.
 command = ["opener-tunnel", "run"]
+
+# macOS application services launch through LaunchServices to preserve the
+# signed bundle's TCC identity. LCH waits for the app, routes stdout/stderr to
+# its normal service logs, and terminates the app when the service stops.
+[services.lch-macflow.application]
+type = "macos"
+path = "~/Applications/Macflow.app"
 ```
 
 `namespace` is used to derive watcher labels such as `com.vikramsg.dotfiles.lch-screenshot-clipboard`.
-The optional `services` table defines persistent macOS services. Domain-specific
-watcher definitions are supplied to LCH by setup orchestration.
+The optional `services` table accepts either a foreground `command` or an
+`application`. Application definitions use a platform discriminator. The
+`macos` type is supported; the reserved `linux` type is parsed but launching it
+is not yet implemented. Domain-specific watcher definitions are supplied to LCH
+by setup orchestration.
 
 Use `lch config` to see the single effective config path currently in use.

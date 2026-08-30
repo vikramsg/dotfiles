@@ -49,13 +49,14 @@ def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path
 
 
 def test_build_service_plist_has_persistent_policy_without_watch_paths(tmp_path):
+    from lch.config import CommandService
     from lch.jobs import ServiceDefinition
     from lch.launchd import build_launch_agent_service_plist, get_job_paths
 
     service = ServiceDefinition(
         job_id="lch-opener-tunnel",
         label="com.vikramsg.dotfiles.lch-opener-tunnel",
-        dispatch_command=["opener-tunnel", "run"],
+        service=CommandService(command=("opener-tunnel", "run")),
     )
     paths = get_job_paths(service, home=tmp_path)
 

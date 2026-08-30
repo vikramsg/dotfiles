@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -97,19 +100,73 @@ command = ["opener-tunnel", "run"]
 
     config = load_config(config_file)
 
-    assert config.services == {"lch-opener-tunnel": ("opener-tunnel", "run")}
+    from lch.config import CommandService
+
+    configured_service = config.services["lch-opener-tunnel"]
+    assert isinstance(configured_service, CommandService)
+    assert configured_service.command == ("opener-tunnel", "run")
 
     from lch.jobs import get_launchd_job_definition
 
     service = get_launchd_job_definition("lch-opener-tunnel")
     assert service.label == "com.example.dotfiles.lch-opener-tunnel"
-    assert service.dispatch_command == ["opener-tunnel", "run"]
+    assert service.service == configured_service
 
 
 def test_repository_toml_loads_with_configured_service():
-    from lch.config import load_config
+    from lch.config import ApplicationService, CommandService, MacOSApplication, load_config
 
     config = load_config(REPOSITORY_ROOT / "lch/config.toml")
 
     assert config.namespace == "com.vikramsg.dotfiles"
-    assert config.services["lch-opener-tunnel"] == ("opener-tunnel", "run")
+    assert isinstance(config.services["lch-opener-tunnel"], CommandService)
+    macflow = config.services["lch-macflow"]
+    assert isinstance(macflow, ApplicationService)
+    assert isinstance(macflow.application, MacOSApplication)
+    assert macflow.application.path == Path.home() / "Applications/Macflow.app"
+
+
+def test_load_config_accepts_reserved_linux_application(tmp_path):
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        """
+namespace = "com.example"
+
+[services.example.application]
+type = "linux"
+path = "~/.local/share/applications/example.desktop"
+""".strip()
+        + "\n"
+    )
+
+    from lch.config import ApplicationService, LinuxApplication, load_config
+
+    service = load_config(config_file).services["example"]
+    assert isinstance(service, ApplicationService)
+    assert isinstance(service.application, LinuxApplication)
+    assert service.application.path == Path.home() / ".local/share/applications/example.desktop"
+
+
+@pytest.mark.parametrize(
+    "service_body",
+    [
+        "",
+        'command = []',
+        'command = ["example", ""]',
+        'command = ["example"]\napplication = {type = "macos", path = "/Applications/Example.app"}',
+        'application = {path = "/Applications/Example.app"}',
+        'application = {type = "windows", path = "C:/Example.exe"}',
+        'application = {type = "macos", path = ""}',
+        'application = {type = "macos", path = "/Applications/Example.app", typo = true}',
+    ],
+)
+def test_load_config_rejects_invalid_service_shapes(tmp_path, service_body):
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        f'namespace = "com.example"\n\n[services.example]\n{service_body}\n'
+    )
+
+    from lch.config import load_config
+
+    with pytest.raises(ValidationError):
+        load_config(config_file)

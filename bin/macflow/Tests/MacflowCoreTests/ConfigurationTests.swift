@@ -111,6 +111,18 @@ final class ConfigurationTests: XCTestCase {
         }
     }
 
+    func testConfigurationRejectsFocusOutsideLayoutParticipants() throws {
+        let text = validConfigurationJSON
+            .replacingOccurrences(
+                of: "\"applications\": {\"first\": {\"bundle_id\": \"example.first\"}}",
+                with: "\"applications\": {\"first\": {\"bundle_id\": \"example.first\"}, \"other\": {\"bundle_id\": \"example.other\"}}"
+            )
+            .replacingOccurrences(of: "\"focus\": \"first\"", with: "\"focus\": \"other\"")
+        XCTAssertThrowsError(try decode(text).validate()) { error in
+            XCTAssertEqual(error as? WorkflowValidationError, .invalidLayout("full"))
+        }
+    }
+
     func testConfigurationRejectsNonLoopbackServer() throws {
         let text = validConfigurationJSON.replacingOccurrences(of: "\"127.0.0.1\"", with: "\"0.0.0.0\"")
         XCTAssertThrowsError(try decode(text).validate()) { error in

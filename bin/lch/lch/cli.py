@@ -85,6 +85,10 @@ def render_lch_config() -> str:
             "",
             "[services.example]",
             'command = ["example", "run"]',
+            "",
+            "[services.example-app.application]",
+            'type = "macos"',
+            'path = "~/Applications/Example.app"',
         ]
     )
     return "\n".join(lines)

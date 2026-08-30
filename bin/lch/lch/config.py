@@ -1,16 +1,64 @@
 import os
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 DEFAULT_NAMESPACE = "com.vikramsg.dotfiles"
+NonEmptyString = Annotated[str, Field(min_length=1)]
 
 
-@dataclass(frozen=True)
-class LchConfig:
-    namespace: str
-    services: dict[str, tuple[str, ...]]
+class CommandService(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    command: tuple[NonEmptyString, ...] = Field(min_length=1)
+
+
+class ApplicationDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: Path
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def expand_application_path(cls, value: object) -> Path:
+        if not isinstance(value, (str, Path)) or not str(value):
+            raise ValueError("application path must not be empty")
+        return Path(value).expanduser()
+
+
+class MacOSApplication(ApplicationDefinition):
+    type: Literal["macos"]
+
+
+class LinuxApplication(ApplicationDefinition):
+    """Reserved configuration shape; Linux application launch is not implemented."""
+
+    type: Literal["linux"]
+
+
+Application = Annotated[
+    MacOSApplication | LinuxApplication,
+    Field(discriminator="type"),
+]
+
+
+class ApplicationService(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    application: Application
+
+
+Service = CommandService | ApplicationService
+
+
+class LchConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    namespace: NonEmptyString = DEFAULT_NAMESPACE
+    services: dict[str, Service] = Field(default_factory=dict)
 
 
 def _expand_path(raw_path: str | Path) -> Path:
@@ -30,24 +78,4 @@ def get_config_file(config_file: Path | None = None) -> Path:
 def load_config(config_file: Path | None = None) -> LchConfig:
     resolved_config_file = get_config_file(config_file)
     data = tomllib.loads(resolved_config_file.read_text()) if resolved_config_file.exists() else {}
-    raw_services = data.get("services", {})
-    if not isinstance(raw_services, dict):
-        raise ValueError("services must be a TOML table")
-    services: dict[str, tuple[str, ...]] = {}
-    for service_id, raw_service in raw_services.items():
-        if not isinstance(raw_service, dict):
-            raise ValueError(f"services.{service_id} must be a TOML table")
-        command = raw_service.get("command")
-        if (
-            not isinstance(command, list)
-            or not command
-            or any(not isinstance(argument, str) or not argument for argument in command)
-        ):
-            raise ValueError(
-                f"services.{service_id}.command must be a non-empty array of strings"
-            )
-        services[service_id] = tuple(command)
-    namespace = data.get("namespace", DEFAULT_NAMESPACE)
-    if not isinstance(namespace, str) or not namespace:
-        raise ValueError("namespace must be a non-empty string")
-    return LchConfig(namespace=namespace, services=services)
+    return LchConfig.model_validate(data)

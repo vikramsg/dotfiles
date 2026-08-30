@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Thin launchd orchestrator for dotfiles jobs"
 dependencies = [
     "click",
+    "pydantic>=2,<3",
 ]
 
 [project.scripts]
