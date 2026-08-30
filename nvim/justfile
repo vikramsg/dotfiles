@@ -1,0 +1,10 @@
+# List available NeoVim maintenance commands.
+default:
+    @just --justfile "{{justfile()}}" --list
+
+# Refresh the local Lazy lockfile for cross-platform maintenance; 
+# The lock file is intentionally untracked so macOS and Linux can update independently.
+# and we don't have to deal with constant updates
+# Use it via just --justfile nvim/justfile update-lock from the repository root.
+update-lock:
+    nvim --headless '+Lazy! update' '+qa!'
