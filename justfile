@@ -317,44 +317,11 @@ hunk:
     fi
     @echo "Hunk config symlinked to ~/.config/hunk"
 
-# Build and install the local native workflow utility.
-mac-workflow: screenshot
-    @if [ "$(uname)" != "Darwin" ]; then \
-        echo "ERROR: mac-workflow requires macOS."; \
-        exit 1; \
-    fi
-    @swift build --package-path "{{justfile_directory()}}/mac/workflow" --configuration release
-    @APP="$HOME/Applications/Mac Workflow Permissions.app"; \
-        launchctl bootout "gui/$(id -u)/dev.vikramsingh.dotfiles.mac-workflow" 2>/dev/null || true; \
-        pkill -x MacWorkflowPermissions 2>/dev/null || true; \
-        for attempt in 1 2 3 4 5 6 7 8 9 10; do \
-            pgrep -x MacWorkflowPermissions >/dev/null 2>&1 || break; \
-            sleep 0.1; \
-        done; \
-        if pgrep -x MacWorkflowPermissions >/dev/null 2>&1; then \
-            echo "ERROR: Mac Workflow did not stop before installation."; \
-            exit 1; \
-        fi; \
-        mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"; \
-        cp "{{justfile_directory()}}/mac/workflow/.build/release/MacWorkflowPermissions" "$APP/Contents/MacOS/MacWorkflowPermissions"; \
-        cp "{{justfile_directory()}}/mac/workflow/Resources/Info.plist" "$APP/Contents/Info.plist"; \
-        codesign --force --sign - --requirements '=designated => identifier "dev.vikramsingh.dotfiles.mac-workflow"' "$APP"; \
-        mkdir -p "$HOME/.config/mac-workflow" "$HOME/.local/bin"; \
-        ln -sfn "{{justfile_directory()}}/mac/workflow/config.json" "$HOME/.config/mac-workflow/config.json"; \
-        cp "{{justfile_directory()}}/mac/workflow/.build/release/mac-workflow" "$HOME/.local/bin/mac-workflow"; \
-        mkdir -p "$HOME/Library/LaunchAgents"; \
-        sed "s|__HOME__|$HOME|g" "{{justfile_directory()}}/mac/workflow/Resources/dev.vikramsingh.dotfiles.mac-workflow.plist" > "$HOME/Library/LaunchAgents/dev.vikramsingh.dotfiles.mac-workflow.plist"; \
-        launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.vikramsingh.dotfiles.mac-workflow.plist"; \
-        open -g "$APP"; \
-        for attempt in 1 2 3 4 5 6 7 8 9 10; do \
-            "$HOME/.local/bin/mac-workflow" health >/dev/null 2>&1 && break; \
-            sleep 0.2; \
-        done; \
-        "$HOME/.local/bin/mac-workflow" health
-
-# Report the permissions held by the installed app identity.
-mac-workflow-permissions: mac-workflow
-    "$HOME/.local/bin/mac-workflow" permissions
+# Link macflow configuration and delegate installation to its package.
+macflow:
+    mkdir -p "$HOME/.config/macflow"
+    ln -sfn "{{justfile_directory()}}/macflow/config.json" "$HOME/.config/macflow/config.json"
+    just --justfile "{{justfile_directory()}}/bin/macflow/justfile" install
 
 # Set up zsh and prompt configuration symlinks
 zsh:
@@ -485,7 +452,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot mac-workflow zwm lch opener-tunnel-if-supported ocint gh-stats bin zsh lazygit hunk television harlequin-if-configured
+all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats bin zsh lazygit hunk television harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

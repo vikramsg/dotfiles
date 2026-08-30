@@ -86,7 +86,7 @@ complete.
 Request Accessibility access from the installed application:
 
 ```bash
-macflow request-accessibility
+macflow request-permission accessibility
 ```
 
 Open **System Settings > Privacy & Security > Accessibility**, then enable
@@ -105,7 +105,7 @@ for window layouts, focus management, hotkeys, and synthetic input.
 Request Screen Recording access from the installed application:
 
 ```bash
-macflow request-screen-recording
+macflow request-permission screen-recording
 ```
 
 Open **System Settings > Privacy & Security > Screen & System Audio

@@ -31,4 +31,4 @@ bin/ocint/config/daemon.env
 lazy-lock.json
 
 # Local Swift workflow utility build products.
-mac/workflow/.build
+bin/macflow/.build
