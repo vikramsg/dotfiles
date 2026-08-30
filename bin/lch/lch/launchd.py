@@ -1,23 +1,19 @@
 import os
 import plistlib
-import re
 import signal
 import subprocess
 import sys
 import time
 from xml.parsers.expat import ExpatError
 from dataclasses import dataclass
-from functools import singledispatch
 from math import ceil
 from pathlib import Path
 
 from lch.config import (
-    ApplicationDefinition,
     ApplicationService,
     CommandService,
     LinuxApplication,
     MacOSApplication,
-    Service,
     load_config,
 )
 from lch.jobs import (
@@ -258,32 +254,25 @@ def build_watcher_plist(
     }
 
 
-@singledispatch
 def build_install_payload(
     job: JobDefinition | ServiceDefinition,
     *,
     paths: JobPaths,
 ) -> dict[str, object]:
-    raise TypeError(f"Unsupported job definition: {type(job).__name__}")
-
-
-@build_install_payload.register
-def _(job: JobDefinition, *, paths: JobPaths) -> dict[str, object]:
-    return build_launch_agent_plist(
-        job,
-        watch_path=resolve_watch_path(job),
-        executable_path=get_lch_executable_path(),
-        paths=paths,
-    )
-
-
-@build_install_payload.register
-def _(job: ServiceDefinition, *, paths: JobPaths) -> dict[str, object]:
-    return build_launch_agent_service_plist(
-        job,
-        executable_path=get_lch_executable_path(),
-        paths=paths,
-    )
+    match job:
+        case JobDefinition():
+            return build_launch_agent_plist(
+                job,
+                watch_path=resolve_watch_path(job),
+                executable_path=get_lch_executable_path(),
+                paths=paths,
+            )
+        case ServiceDefinition():
+            return build_launch_agent_service_plist(
+                job,
+                executable_path=get_lch_executable_path(),
+                paths=paths,
+            )
 
 
 def write_and_load_plist(paths: JobPaths, plist_payload: dict[str, object]) -> Path:
@@ -393,18 +382,18 @@ def resolve_application_executable(application_path: Path) -> Path:
 
 
 def application_pids(executable_path: Path) -> set[int]:
-    pattern = rf"(^| ){re.escape(str(executable_path))}( |$)"
     result = subprocess.run(
-        ["/usr/bin/pgrep", "-U", str(os.getuid()), "-f", pattern],
+        ["/bin/ps", "-ww", "-U", str(os.getuid()), "-o", "pid=,comm="],
         capture_output=True,
         text=True,
-        check=False,
+        check=True,
     )
-    return {
-        int(raw_pid)
-        for raw_pid in result.stdout.splitlines()
-        if raw_pid.isdigit()
-    }
+    pids: set[int] = set()
+    for line in result.stdout.splitlines():
+        fields = line.strip().split(maxsplit=1)
+        if len(fields) == 2 and fields[0].isdigit() and fields[1] == str(executable_path):
+            pids.add(int(fields[0]))
+    return pids
 
 
 def stop_application(executable_path: Path, *, timeout: float = 5) -> None:
@@ -467,63 +456,25 @@ def run_macos_application(application_path: Path, *, paths: JobPaths) -> None:
         signal.signal(signal.SIGINT, previous_interrupt)
 
 
-@singledispatch
-def run_application(application: ApplicationDefinition, *, paths: JobPaths) -> None:
-    raise TypeError(f"Unsupported application definition: {type(application).__name__}")
-
-
-@run_application.register
-def _(application: MacOSApplication, *, paths: JobPaths) -> None:
-    run_macos_application(application.path, paths=paths)
-
-
-@run_application.register
-def _(application: LinuxApplication, *, paths: JobPaths) -> None:
-    raise RuntimeError("Linux application services are not implemented")
-
-
-@singledispatch
-def run_service(service: Service, *, paths: JobPaths) -> None:
-    raise TypeError(f"Unsupported service definition: {type(service).__name__}")
-
-
-@run_service.register
-def _(service: CommandService, *, paths: JobPaths) -> None:
-    command = list(service.command)
-    tool_path = get_tool_executable_path(command[0])
-    if tool_path.exists():
-        command[0] = str(tool_path)
-    os.execvp(command[0], command)
-
-
-@run_service.register
-def _(service: ApplicationService, *, paths: JobPaths) -> None:
-    run_application(service.application, paths=paths)
-
-
-@singledispatch
-def run_definition(
-    job: JobDefinition | ServiceDefinition,
-    *,
-    paths: JobPaths,
-) -> None:
-    raise TypeError(f"Unsupported job definition: {type(job).__name__}")
-
-
-@run_definition.register
-def _(job: JobDefinition, *, paths: JobPaths) -> None:
-    command = list(job.dispatch_command)
-    tool_path = get_tool_executable_path(command[0])
-    if tool_path.exists():
-        command[0] = str(tool_path)
-    subprocess.run(command, check=True)
-
-
-@run_definition.register
-def _(job: ServiceDefinition, *, paths: JobPaths) -> None:
-    run_service(job.service, paths=paths)
-
-
 def run_job(job_id: str) -> None:
     job = get_launchd_job_definition(job_id)
-    run_definition(job, paths=get_job_paths(job))
+    paths = get_job_paths(job)
+    match job:
+        case ServiceDefinition(service=CommandService(command=configured_command)):
+            command = list(configured_command)
+            tool_path = get_tool_executable_path(command[0])
+            if tool_path.exists():
+                command[0] = str(tool_path)
+            os.execvp(command[0], command)
+        case ServiceDefinition(
+            service=ApplicationService(application=MacOSApplication(path=application_path))
+        ):
+            run_macos_application(application_path, paths=paths)
+        case ServiceDefinition(service=ApplicationService(application=LinuxApplication())):
+            raise RuntimeError("Linux application services are not implemented")
+        case JobDefinition(dispatch_command=configured_command):
+            command = list(configured_command)
+            tool_path = get_tool_executable_path(command[0])
+            if tool_path.exists():
+                command[0] = str(tool_path)
+            subprocess.run(command, check=True)

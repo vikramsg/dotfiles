@@ -1,6 +1,7 @@
 import os
 import plistlib
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -159,15 +160,17 @@ def test_macos_application_launches_with_lch_logs(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS process tools")
-def test_application_termination_stops_script_backed_process(tmp_path):
+def test_application_termination_stops_exact_native_executable(tmp_path):
     import lch.launchd as launchd_module
 
     executable = tmp_path / "Example Script"
-    executable.write_text("#!/bin/sh\ntrap 'exit 0' TERM\nwhile true; do sleep 1; done\n")
+    shutil.copyfile("/bin/sleep", executable)
     executable.chmod(0o755)
-    process = subprocess.Popen([str(executable)])
+    subprocess.run(["/usr/bin/codesign", "--force", "--sign", "-", str(executable)], check=True)
+    process = subprocess.Popen([str(executable), "10"])
     try:
         time.sleep(0.1)
+        assert process.poll() is None
         launchd_module.stop_application(executable, timeout=2)
         assert process.poll() is not None
     finally:
@@ -176,18 +179,38 @@ def test_application_termination_stops_script_backed_process(tmp_path):
             process.wait()
 
 
-def test_linux_application_dispatch_reports_not_implemented(tmp_path):
-    from lch.config import LinuxApplication
-    from lch.launchd import JobPaths, run_application
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS process tools")
+def test_application_termination_ignores_path_split_across_arguments(tmp_path):
+    import lch.launchd as launchd_module
 
-    paths = JobPaths(
-        plist_path=tmp_path / "agent.plist",
-        stdout_log_path=tmp_path / "stdout.log",
-        stderr_log_path=tmp_path / "stderr.log",
+    executable = tmp_path / "Example App"
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(10)", str(executable)]
     )
+    try:
+        time.sleep(0.1)
+        launchd_module.stop_application(executable, timeout=0.2)
+        assert process.poll() is None
+    finally:
+        process.terminate()
+        process.wait()
+
+
+def test_linux_application_dispatch_reports_not_implemented(tmp_path, monkeypatch):
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        """
+namespace = "com.example"
+
+[services.example.application]
+type = "linux"
+path = "/example.desktop"
+""".strip()
+        + "\n"
+    )
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
+    from lch.launchd import run_job
 
     with pytest.raises(RuntimeError, match="Linux application services are not implemented"):
-        run_application(
-            LinuxApplication(type="linux", path=Path("/example.desktop")),
-            paths=paths,
-        )
+        run_job("example")
