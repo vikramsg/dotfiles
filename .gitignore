@@ -29,3 +29,6 @@ bin/ocint/config/daemon.env
 
 # nvim lock
 lazy-lock.json
+
+# Local Swift workflow utility build products.
+mac/workflow/.build
