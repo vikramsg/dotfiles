@@ -26,3 +26,6 @@ bin/ocint/config/daemon.env
 
 # Agents
 .agents/plans
+
+# nvim lock
+lazy-lock.json
