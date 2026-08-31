@@ -10,23 +10,36 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 ### Neovim
 
-- `Ctrl + h` - To move between split 
-- `Ctrl + l` - To move between split 
+- `Space + wh`: Move focus to the window on the left.
+- `Space + wl`: Move focus to the window on the right.
+- `Ctrl + h/j/k/l`: Move between splits when the terminal multiplexer does not intercept these keys.
 
-### Neotree 
+### Snacks Explorer
 
-- `Space + e`: Toggle File tree view 
-- `Space + E`: Show current file in File tree view. 
-- `a` in Neotree view to add a file.
-- `d` in Neotree view to delete a file.
-- `A` in Neotree view to create a dir.
+- `Space + e`: Toggle the file tree.
+- `Space + E`: Reveal the current file in the file tree.
+- `Enter` or `l`: Open the selected file and focus its editor window.
+- `Y`: Copy the selected filename.
+- `e`: Toggle the explorer width.
+- `.`: Toggle hidden and ignored files.
 
-### Telescope 
+### Snacks Picker
 
 - `Space + Space`: Open search to find files. 
 - `Space + /`: Search for word in current buffer.
 - `Space + sg`: Grep for word in project.
 - `Space + sf`: Find files in project.
+
+### Git diffs
+
+- `Space + gd`: Open a full CodeDiff review in inline view.
+- `Enter` in the CodeDiff explorer: Open the selected file and focus its diff.
+- `B` in CodeDiff: Toggle between uncommitted changes since `HEAD` and all changes since branching from `main`.
+- `g?`: Show all CodeDiff shortcuts on screen.
+- `q`: Close CodeDiff and return to the previous tab.
+- `t`: Toggle between inline and side-by-side layouts.
+- `[` / `]`: Move to the previous/next changed hunk.
+- `[f` / `]f`: Move to the previous/next changed file.
 
 ### Lazygit
 

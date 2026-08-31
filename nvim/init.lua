@@ -10,7 +10,8 @@
 --   <leader><Left> : Previous buffer
 --   <leader><Right>: Next buffer
 --   <leader><Tab>  : Toggle alternate buffer
---   <C-h,j,k,l>    : Navigate between splits
+--   <leader>wh/wl  : Move focus to the left/right window
+--   <C-h,j,k,l>    : Navigate between splits when not intercepted by the terminal multiplexer
 --   <C-t>          : Toggle Terminal
 --   <leader>d      : Delete without yanking
 --   <leader>a      : Toggle Autocomplete (nvim-cmp)
@@ -20,10 +21,12 @@
 --
 -- Git & Files:
 --   <leader>gb : Show Git blame for current line
+--   <leader>gd : Open full Git diff review
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
+--   In CodeDiff: Enter open diff, Esc explorer, B toggle HEAD/main, [/] hunks, g? help, q close
 --
--- Search (Telescope):
+-- Search (Snacks Picker):
 --   <leader>sf : Search Files
 --   <leader>sF : Search ALL Files (including git-ignored)
 --   <leader>sg : Search by Grep (Live)
@@ -33,10 +36,10 @@
 --   <leader>sw : Search current Word
 --   <leader>sd : Search Diagnostics
 --   <leader>sh : Search Help tags
---   <C-d>      : Delete open buffers inside Telescope <Leader><Leader>
+--   <C-d>      : Delete open buffers inside Snacks Picker <Leader><Leader>
 --
 -- File Explorers:
---   <leader>e  : Toggle Neo-tree
+--   <leader>e  : Toggle Snacks Explorer
 --   In Snacks Explorer:
 --     Y        : Copy filename to clipboard
 --     e        : Toggle explorer fit width
@@ -147,6 +150,8 @@ end
 vim.keymap.set("n", "<C-h>", "<C-w><C-h>", { desc = "Move focus to the left window" })
 vim.keymap.set("n", "<C-k>", "<C-w><C-j>", { desc = "Move focus to the upper window" })
 vim.keymap.set("n", "<C-j>", "<C-w><C-k>", { desc = "Move focus to the lower window" })
+vim.keymap.set("n", "<leader>wh", "<C-w><C-h>", { desc = "Move focus to the left window" })
+vim.keymap.set("n", "<leader>wl", "<C-w><C-l>", { desc = "Move focus to the right window" })
 -- Does not seem to work
 vim.keymap.set("n", "<C-b><Left>", "<C-w><C-h>", { desc = "Move focus to the left window" })
 vim.keymap.set("n", "<C-l>", "<C-w><C-l>", { desc = "Move focus to the right window" })
@@ -432,6 +437,38 @@ local function refresh_snacks_explorer_git_status_after_index_write()
 	end
 end
 
+local codediff_next_compare_mode
+
+local function open_codediff_comparison(git_root, mode)
+	codediff_next_compare_mode = mode
+	local command = "CodeDiff --repo " .. vim.fn.fnameescape(git_root)
+	if mode == "main" then
+		command = command .. " main..."
+	end
+	vim.cmd(command)
+end
+
+local function toggle_codediff_comparison()
+	local lifecycle = require("codediff.ui.lifecycle")
+	local tabpage = vim.api.nvim_get_current_tabpage()
+	local session = lifecycle.get_session(tabpage)
+	if not session then
+		vim.notify("No active CodeDiff view", vim.log.levels.ERROR)
+		return
+	end
+
+	local mode = vim.t[tabpage].dotfiles_codediff_compare_mode
+	local next_mode = mode == "main" and "HEAD" or "main"
+	local git_root = session.git_root
+	if not lifecycle.close(tabpage) then
+		return
+	end
+
+	vim.schedule(function()
+		open_codediff_comparison(git_root, next_mode)
+	end)
+end
+
 require("lazy").setup({
 	{
 		"folke/snacks.nvim",
@@ -443,8 +480,7 @@ require("lazy").setup({
 			-- registered there before the explorer is opened.
 			require("snacks.picker.actions").toggle_explorer_width = toggle_snacks_explorer_width
 			require("snacks.picker.actions").toggle_explorer_hidden = toggle_snacks_explorer_hidden
-			require("snacks.picker.actions").toggle_files_hidden_and_ignored =
-				toggle_snacks_files_hidden_and_ignored
+			require("snacks.picker.actions").toggle_files_hidden_and_ignored = toggle_snacks_files_hidden_and_ignored
 			require("snacks").setup(opts)
 
 			local group = vim.api.nvim_create_augroup("dotfiles-snacks-explorer-git-refresh", { clear = true })
@@ -460,7 +496,7 @@ require("lazy").setup({
 
 			vim.api.nvim_create_autocmd("User", {
 				group = group,
-				pattern = { "NeogitStatusRefresh", "NeogitStatus" },
+				pattern = { "CodeDiffClose", "NeogitStatusRefresh", "NeogitStatus" },
 				callback = function()
 					vim.defer_fn(refresh_snacks_explorer_git_status_after_index_write, 200)
 				end,
@@ -710,14 +746,56 @@ require("lazy").setup({
 				mode = { "n", "t" },
 				desc = "Toggle Terminal",
 			},
-			{
-				"<leader>gd",
-				function()
-					Snacks.picker.git_diff()
-				end,
-				desc = "Git Diff (Hunks)",
+		},
+	},
+	{
+		"esmuellert/codediff.nvim",
+		version = "v2.67.10",
+		cmd = "CodeDiff",
+		keys = {
+			{ "<leader>gd", "<cmd>CodeDiff<CR>", desc = "Git Diff Review" },
+		},
+		opts = {
+			diff = {
+				layout = "inline",
+			},
+			explorer = {
+				focus_on_select = true,
+			},
+			keymaps = {
+				view = {
+					next_hunk = "]",
+					prev_hunk = "[",
+				},
 			},
 		},
+		config = function(_, opts)
+			require("codediff").setup(opts)
+			vim.api.nvim_create_autocmd("User", {
+				group = vim.api.nvim_create_augroup("dotfiles-codediff-help", { clear = true }),
+				pattern = "CodeDiffOpen",
+				callback = function(args)
+					local tabpage = args.data.tabpage
+					local session = require("codediff.ui.lifecycle").get_session(tabpage)
+					local mode = codediff_next_compare_mode or (session.original_revision and "custom" or "HEAD")
+					codediff_next_compare_mode = nil
+					vim.t[tabpage].dotfiles_codediff_compare_mode = mode
+
+					require("codediff.ui.lifecycle").set_tab_keymap(
+						tabpage,
+						"n",
+						"B",
+						toggle_codediff_comparison,
+						{ desc = "Toggle CodeDiff HEAD/Main Comparison" }
+					)
+					vim.notify(
+						"B: compare HEAD/main | [/] hunks | g?: help | q: close | <leader>wh/wl: panes",
+						vim.log.levels.INFO,
+						{ title = "CodeDiff", timeout = 10000 }
+					)
+				end,
+			})
+		end,
 	},
 	{
 		"folke/noice.nvim",
@@ -1310,14 +1388,14 @@ require("lazy").setup({
 						},
 					},
 				},
-				-- Display custom hints in Neo-tree's statusline
+				-- Display persistent shortcut hints in explorer statuslines.
 				-- This explicitly shows the [e] hint without needing to open the help menu
 				extensions = {
 					{
 						sections = {
 							lualine_a = {
 								function()
-									return "Neo-tree"
+									return "Explorer"
 								end,
 							},
 							lualine_b = {
@@ -1327,6 +1405,22 @@ require("lazy").setup({
 							},
 						},
 						filetypes = { "snacks_explorer" },
+					},
+					{
+						sections = {
+							lualine_a = {
+								function()
+									return "CodeDiff"
+								end,
+							},
+							lualine_b = {
+								function()
+									local mode = vim.t.dotfiles_codediff_compare_mode or "HEAD"
+									return "B " .. mode .. " | [/] hunks | g? help | q close"
+								end,
+							},
+						},
+						filetypes = { "codediff-explorer" },
 					},
 				},
 			})
