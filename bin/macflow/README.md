@@ -144,6 +144,9 @@ API, or new HTTP endpoint is involved.
 
 ## HTTP API
 
+See [`docs/api.md`](docs/api.md) for the short API index, the HTTP actions
+reference, and the WebKit `window.macflow` contract.
+
 The app exposes generic macOS automation primitives at the configured loopback
 address. Application-specific names exist only in `config.json`, never in the
 HTTP routes.

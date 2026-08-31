@@ -217,6 +217,8 @@ refresh, open, reveal, and drag checks against an actual remote VM.
 - Added the user-owned screenshot shelf document under
   `macflow/ui/screenshot-shelf/` rather than bundling it in Macflow.app.
 - Added no JavaScriptCore runtime, local web server, or HTTP route.
+- Added concise API references under `bin/macflow/docs/` for the existing HTTP
+  actions and the new `window.macflow` UI bridge.
 
 ### Responsibility Boundary
 
