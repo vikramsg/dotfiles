@@ -202,7 +202,9 @@ the captured image should also use the normal bottom-right preview.
 
 ## Tests
 
+Macflow tests use Swift Testing and require Swift 6 or newer.
+
 ```bash
 just --justfile bin/macflow/justfile test
+just --justfile bin/macflow/justfile build
 ```
-

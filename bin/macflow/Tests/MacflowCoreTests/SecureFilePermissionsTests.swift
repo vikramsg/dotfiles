@@ -1,9 +1,9 @@
 import Foundation
-import XCTest
+import Testing
 @testable import MacflowCore
 
-final class SecureFilePermissionsIntegrationTests: XCTestCase {
-    func testExistingFileIsRestrictedToOwnerReadWrite() throws {
+@Suite struct SecureFilePermissionsIntegrationTests {
+    @Test func testExistingFileIsRestrictedToOwnerReadWrite() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -15,6 +15,6 @@ final class SecureFilePermissionsIntegrationTests: XCTestCase {
         try SecureFilePermissions.ensureOwnerReadWrite(token)
 
         let attributes = try FileManager.default.attributesOfItem(atPath: token.path)
-        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
     }
 }

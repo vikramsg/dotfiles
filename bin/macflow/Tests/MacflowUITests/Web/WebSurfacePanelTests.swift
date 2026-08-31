@@ -1,9 +1,12 @@
 import AppKit
-import XCTest
+import Testing
 @testable import MacflowUI
 
-final class WebSurfacePanelTests: XCTestCase {
-    func testUserDocumentReceivesConfigurationThemeAndBridgeReplies() throws {
+@Suite(.serialized)
+@MainActor
+struct WebSurfacePanelTests {
+    @Test
+    func userDocumentReceivesConfigurationThemeAndBridgeReplies() async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -25,7 +28,9 @@ final class WebSurfacePanelTests: XCTestCase {
         </script></body></html>
         """.write(to: document, atomically: true, encoding: .utf8)
 
-        let pageReady = expectation(description: "page state ready")
+        var requestedDirectory: String?
+        var unexpectedActions: [String] = []
+        var didDismiss = false
         let panel = try WebSurfacePanel(
             contentRect: NSRect(x: 0, y: 0, width: 640, height: 320),
             documentURL: document,
@@ -35,13 +40,13 @@ final class WebSurfacePanelTests: XCTestCase {
             requestHandler: { _, request in
                 switch request.action {
                 case "files.list":
-                    XCTAssertEqual(request.payload["directory"] as? String, "/example")
+                    requestedDirectory = request.payload["directory"] as? String
                     return [["name": "image.png", "thumbnail": "macflow-file://asset/example"]]
                 case "surface.dismiss":
-                    pageReady.fulfill()
+                    didDismiss = true
                     return true
                 default:
-                    XCTFail("Unexpected bridge action: \(request.action)")
+                    unexpectedActions.append(request.action)
                     return nil
                 }
             },
@@ -49,23 +54,24 @@ final class WebSurfacePanelTests: XCTestCase {
         )
         defer { panel.close() }
 
-        wait(for: [pageReady], timeout: 5)
-        let evaluated = expectation(description: "page state")
-        panel.webView.evaluateJavaScript("document.body.dataset.result") { value, error in
-            XCTAssertNil(error)
-            let result = value as? String
-            XCTAssertTrue(result?.contains("from-config") == true)
-            XCTAssertTrue(result?.contains("\"name\":\"image.png\"") == true)
-            XCTAssertTrue(result?.contains("122, 162, 247") == true)
-            evaluated.fulfill()
-        }
-        wait(for: [evaluated], timeout: 5)
-        XCTAssertEqual(panel.loadedDocumentURL?.standardizedFileURL, document.standardizedFileURL)
+        let dismissed = await waitUntil(timeout: 5) { didDismiss }
+        try #require(dismissed)
+        #expect(requestedDirectory == "/example")
+        #expect(unexpectedActions.isEmpty)
+
+        let evaluatedValue = try await panel.webView.evaluateJavaScript("document.body.dataset.result")
+        let result = try #require(evaluatedValue as? String)
+        #expect(result.contains("from-config"))
+        #expect(result.contains("\"name\":\"image.png\""))
+        #expect(result.contains("122, 162, 247"))
+        #expect(panel.loadedDocumentURL?.standardizedFileURL == document.standardizedFileURL)
     }
 
-    func testClosedPanelIsReleased() throws {
+    @Test
+    func closedPanelIsReleased() throws {
         _ = NSApplication.shared
         let document = try makeDocument("<!doctype html><html><body></body></html>")
+        defer { try? FileManager.default.removeItem(at: document.deletingLastPathComponent()) }
         weak var releasedPanel: WebSurfacePanel?
 
         try autoreleasepool {
@@ -83,9 +89,7 @@ final class WebSurfacePanelTests: XCTestCase {
             panel = nil
         }
 
-        let deadline = Date().addingTimeInterval(2)
-        while releasedPanel != nil && RunLoop.current.run(mode: .default, before: deadline) && Date() < deadline {}
-        XCTAssertNil(releasedPanel)
+        try #require(waitOnRunLoop(timeout: 2) { releasedPanel == nil })
     }
 
     private func makeDocument(_ contents: String) throws -> URL {
@@ -94,7 +98,22 @@ final class WebSurfacePanelTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let document = directory.appendingPathComponent("index.html")
         try contents.write(to: document, atomically: true, encoding: .utf8)
-        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         return document
+    }
+
+    private func waitUntil(timeout: TimeInterval, condition: @escaping @MainActor () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return condition()
+    }
+
+    private func waitOnRunLoop(timeout: TimeInterval, condition: @escaping () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            RunLoop.main.run(until: min(deadline, Date().addingTimeInterval(0.01)))
+        }
+        return condition()
     }
 }

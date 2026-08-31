@@ -1,15 +1,19 @@
-import XCTest
+import Testing
 @testable import MacflowUI
 
-final class FileShelfStateTests: XCTestCase {
-    func testSelectionStartsAtFirstSourceAndChangesOnlyToKnownSource() throws {
-        var state = try XCTUnwrap(FileShelfState(sourceIDs: ["local", "remote"]))
-        XCTAssertEqual(state.selectedSourceID, "local")
+@Suite
+struct FileShelfStateTests {
+    @Test
+    func selectionStartsAtFirstSourceAndChangesOnlyToKnownSource() throws {
+        var state = try #require(FileShelfState(sourceIDs: ["local", "remote"]))
+        #expect(state.selectedSourceID == "local")
 
-        XCTAssertTrue(state.select("remote"))
-        XCTAssertEqual(state.selectedSourceID, "remote")
+        let selectedRemote = state.select("remote")
+        #expect(selectedRemote)
+        #expect(state.selectedSourceID == "remote")
 
-        XCTAssertFalse(state.select("missing"))
-        XCTAssertEqual(state.selectedSourceID, "remote")
+        let selectedMissing = state.select("missing")
+        #expect(!selectedMissing)
+        #expect(state.selectedSourceID == "remote")
     }
 }

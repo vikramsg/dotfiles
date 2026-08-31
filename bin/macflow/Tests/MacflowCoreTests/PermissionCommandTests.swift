@@ -1,91 +1,102 @@
-import XCTest
+import Testing
 @testable import MacflowCore
 
-final class PermissionCommandTests: XCTestCase {
-    func testStatusCommandBuildsReadOnlyRequest() throws {
-        let command = try XCTUnwrap(PermissionCommand.parse(arguments: ["permissions"]))
-        XCTAssertEqual(command, .status)
-        XCTAssertEqual(
-            command.httpRequest,
-            PermissionHTTPRequest(method: "GET", path: "/v1/permissions", permission: nil)
+@Suite struct PermissionCommandTests {
+    @Test func testStatusCommandBuildsReadOnlyRequest() throws {
+        let command = try #require(try PermissionCommand.parse(arguments: ["permissions"]))
+        #expect(command == .status)
+        #expect(
+            command.httpRequest
+                == PermissionHTTPRequest(method: "GET", path: "/v1/permissions", permission: nil)
         )
-        XCTAssertNil(command.httpRequest.body)
+        #expect(command.httpRequest.body == nil)
     }
 
-    func testAccessibilityCommandBuildsGenericRequest() throws {
-        let command = try XCTUnwrap(
-            PermissionCommand.parse(arguments: ["request-permission", "accessibility"])
+    @Test func testAccessibilityCommandBuildsGenericRequest() throws {
+        let command = try #require(
+            try PermissionCommand.parse(arguments: ["request-permission", "accessibility"])
         )
-        XCTAssertEqual(command, .request(.accessibility))
-        XCTAssertEqual(command.httpRequest.method, "POST")
-        XCTAssertEqual(command.httpRequest.path, "/v1/permissions/request")
-        XCTAssertEqual(command.httpRequest.body?["permission"] as? String, "accessibility")
+        #expect(command == .request(.accessibility))
+        #expect(command.httpRequest.method == "POST")
+        #expect(command.httpRequest.path == "/v1/permissions/request")
+        #expect(command.httpRequest.body?["permission"] as? String == "accessibility")
     }
 
-    func testScreenRecordingCommandConvertsCLINameToAPIName() throws {
-        let command = try XCTUnwrap(
-            PermissionCommand.parse(arguments: ["request-permission", "screen-recording"])
+    @Test func testScreenRecordingCommandConvertsCLINameToAPIName() throws {
+        let command = try #require(
+            try PermissionCommand.parse(arguments: ["request-permission", "screen-recording"])
         )
-        XCTAssertEqual(command, .request(.screenRecording))
-        XCTAssertEqual(command.httpRequest.body?["permission"] as? String, "screen_recording")
+        #expect(command == .request(.screenRecording))
+        #expect(command.httpRequest.body?["permission"] as? String == "screen_recording")
     }
 
-    func testRequestCommandRejectsMissingUnknownAndExtraArguments() {
-        XCTAssertThrowsError(try PermissionCommand.parse(arguments: ["request-permission"])) { error in
-            XCTAssertEqual(error as? PermissionCommandError, .missingPermission)
+    @Test func testRequestCommandRejectsMissingUnknownAndExtraArguments() {
+        do {
+            _ = try PermissionCommand.parse(arguments: ["request-permission"])
+            Issue.record("Expected missing permission to fail")
+        } catch {
+            #expect(error as? PermissionCommandError == .missingPermission)
         }
-        XCTAssertThrowsError(try PermissionCommand.parse(arguments: ["request-permission", "camera"])) { error in
-            XCTAssertEqual(error as? PermissionCommandError, .unsupportedPermission("camera"))
+        do {
+            _ = try PermissionCommand.parse(arguments: ["request-permission", "camera"])
+            Issue.record("Expected unsupported permission to fail")
+        } catch {
+            #expect(error as? PermissionCommandError == .unsupportedPermission("camera"))
         }
-        XCTAssertThrowsError(
-            try PermissionCommand.parse(arguments: ["request-permission", "accessibility", "extra"])
-        ) { error in
-            XCTAssertEqual(error as? PermissionCommandError, .invalidArguments)
+        do {
+            _ = try PermissionCommand.parse(arguments: ["request-permission", "accessibility", "extra"])
+            Issue.record("Expected extra arguments to fail")
+        } catch {
+            #expect(error as? PermissionCommandError == .invalidArguments)
         }
     }
 
-    func testRemovedCommandsAreNotRecognizedAsPermissionCommands() throws {
-        XCTAssertNil(try PermissionCommand.parse(arguments: ["request-accessibility"]))
-        XCTAssertNil(try PermissionCommand.parse(arguments: ["request-screen-recording"]))
+    @Test func testRemovedCommandsAreNotRecognizedAsPermissionCommands() throws {
+        #expect(try PermissionCommand.parse(arguments: ["request-accessibility"]) == nil)
+        #expect(try PermissionCommand.parse(arguments: ["request-screen-recording"]) == nil)
     }
 
-    func testHandlerDispatchesAccessibilityExactlyOnce() throws {
+    @Test func testHandlerDispatchesAccessibilityExactlyOnce() throws {
         var requested: [PermissionKind] = []
         let result = try PermissionRequestHandler.handle(body: ["permission": "accessibility"]) {
             requested.append($0)
             return true
         }
-        XCTAssertEqual(requested, [.accessibility])
-        XCTAssertEqual(result, PermissionRequestResult(permission: .accessibility, granted: true))
-        XCTAssertEqual(result.json["permission"] as? String, "accessibility")
-        XCTAssertEqual(result.json["granted"] as? Bool, true)
+        #expect(requested == [.accessibility])
+        #expect(result == PermissionRequestResult(permission: .accessibility, granted: true))
+        #expect(result.json["permission"] as? String == "accessibility")
+        #expect(result.json["granted"] as? Bool == true)
     }
 
-    func testHandlerDispatchesScreenRecordingExactlyOnce() throws {
+    @Test func testHandlerDispatchesScreenRecordingExactlyOnce() throws {
         var requested: [PermissionKind] = []
         let result = try PermissionRequestHandler.handle(body: ["permission": "screen_recording"]) {
             requested.append($0)
             return false
         }
-        XCTAssertEqual(requested, [.screenRecording])
-        XCTAssertEqual(result, PermissionRequestResult(permission: .screenRecording, granted: false))
+        #expect(requested == [.screenRecording])
+        #expect(result == PermissionRequestResult(permission: .screenRecording, granted: false))
     }
 
-    func testHandlerRejectsMissingAndUnknownPermissionsWithoutDispatching() {
+    @Test func testHandlerRejectsMissingAndUnknownPermissionsWithoutDispatching() {
         var requestCount = 0
         let requester: (PermissionKind) -> Bool = { _ in
             requestCount += 1
             return true
         }
 
-        XCTAssertThrowsError(try PermissionRequestHandler.handle(body: [:], request: requester)) { error in
-            XCTAssertEqual(error as? PermissionCommandError, .missingPermission)
+        do {
+            _ = try PermissionRequestHandler.handle(body: [:], request: requester)
+            Issue.record("Expected missing permission to fail")
+        } catch {
+            #expect(error as? PermissionCommandError == .missingPermission)
         }
-        XCTAssertThrowsError(
-            try PermissionRequestHandler.handle(body: ["permission": "camera"], request: requester)
-        ) { error in
-            XCTAssertEqual(error as? PermissionCommandError, .unsupportedPermission("camera"))
+        do {
+            _ = try PermissionRequestHandler.handle(body: ["permission": "camera"], request: requester)
+            Issue.record("Expected unsupported permission to fail")
+        } catch {
+            #expect(error as? PermissionCommandError == .unsupportedPermission("camera"))
         }
-        XCTAssertEqual(requestCount, 0)
+        #expect(requestCount == 0)
     }
 }
