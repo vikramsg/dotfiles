@@ -31,7 +31,8 @@ Config belongs in `macflow/` which is for the local machine's configuration.
 - Adding new code should be done only if existing code cannot suffice.
 - This binary is for an audience of 1. Do not add enterprise style code, fallback, over-defensive code.
 - Always aim to make the codebase better with each PR.
-- Only start implementation after the user has agreed to your proposal. When the user is using words like "Tell me", "What" etc, it means they are asking for a discussion, not an implementation.
+- Only start implementation after the user has agreed to your proposal. 
+    - When the user is using words like "Tell me", "What", "How" etc, it means they are asking for a discussion, not an implementation.
 
 ## PR description
 
