@@ -12,31 +12,71 @@ Content-Type: application/json
 The token is stored at `~/Library/Application Support/Macflow/api-token`.
 Failures return `{"error":"message"}`.
 
-## Actions
+## Service
 
-| Method | Path | Input |
-| --- | --- | --- |
-| `GET` | `/health` | None |
-| `GET` | `/permissions` | None |
-| `POST` | `/permissions/request` | `{"permission":"accessibility\|screen_recording"}` |
-| `GET` | `/applications` | None |
-| `POST` | `/applications/launch` | `{"bundle_id":"..."}` |
-| `GET` | `/windows?bundle_id=...` | Bundle ID query parameter |
-| `GET` | `/windows/<id>` | None |
-| `PUT` | `/windows/<id>` | `{"frame":{"x":0,"y":0,"width":800,"height":600}}` |
-| `POST` | `/windows/<id>/focus` | None |
-| `POST` | `/windows/<id>/unminimize` | None |
-| `GET` | `/screens` | None |
-| `POST` | `/overlays/image` | `{"path":"...","timeout_seconds":8}` |
-| `GET` | `/overlays` | None |
-| `DELETE` | `/overlays` | None |
-| `POST` | `/file-shelves` | `{"directory":"..."}` plus optional shelf sizing and behavior fields |
-| `GET` | `/file-shelves` | None |
-| `DELETE` | `/file-shelves/<id>` | None |
-| `POST` | `/input/keystroke` | `{"key":"h","modifiers":["cmd","shift"]}` |
-| `POST` | `/input/click` | `{"button":"left","x":100,"y":100}` |
-| `POST` | `/input/drag` | `{"from":{"x":0,"y":0},"to":{"x":100,"y":100},"duration":0.5}` |
-| `POST` | `/screenshots` | Optional `display_id`, `path`, and `show_preview` |
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `GET` | `/health` | Report whether Macflow is running. | None |
+
+## Permissions
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `GET` | `/permissions` | Report current macOS permission states. | None |
+| `POST` | `/permissions/request` | Ask macOS for the selected permission. | `{"permission":"accessibility\|screen_recording"}` |
+
+## Applications
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `GET` | `/applications` | List running applications. | None |
+| `POST` | `/applications/launch` | Launch or activate an application. | `{"bundle_id":"..."}` |
+
+## Windows
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `GET` | `/windows?bundle_id=...` | List windows for an application. | Bundle ID query parameter |
+| `GET` | `/windows/<id>` | Read one window. | None |
+| `PUT` | `/windows/<id>` | Move and resize a window. | `{"frame":{"x":0,"y":0,"width":800,"height":600}}` |
+| `POST` | `/windows/<id>/focus` | Focus and raise a window. | None |
+| `POST` | `/windows/<id>/unminimize` | Restore a minimized window. | None |
+
+## Screens
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `GET` | `/screens` | List displays and their usable frames. | None |
+
+## Overlays
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `POST` | `/overlays/image` | Show an image overlay. | `{"path":"...","timeout_seconds":8}` |
+| `GET` | `/overlays` | Report the current overlay. | None |
+| `DELETE` | `/overlays` | Hide the current overlay. | None |
+
+## File Shelves
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `POST` | `/file-shelves` | Show a shelf for a directory. | `{"directory":"..."}` plus optional sizing and behavior fields |
+| `GET` | `/file-shelves` | Report the current native shelf. | None |
+| `DELETE` | `/file-shelves/<id>` | Close the identified shelf. | None |
+
+## Input
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `POST` | `/input/keystroke` | Send a keyboard shortcut. | `{"key":"h","modifiers":["cmd","shift"]}` |
+| `POST` | `/input/click` | Click a screen coordinate. | `{"button":"left","x":100,"y":100}` |
+| `POST` | `/input/drag` | Drag between screen coordinates. | `{"from":{"x":0,"y":0},"to":{"x":100,"y":100},"duration":0.5}` |
+
+## Screenshots
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `POST` | `/screenshots` | Capture a display to a PNG file. | Optional `display_id`, `path`, and `show_preview` |
 
 Responses are JSON descriptions of the affected resource or completed action.
 Validation failures use `400`, missing resources use `404`, and actions that
