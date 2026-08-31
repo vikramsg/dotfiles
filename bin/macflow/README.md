@@ -200,8 +200,11 @@ the captured image should also use the normal bottom-right preview.
 ## Tests
 
 ```bash
-swift test --package-path bin/macflow
+just --justfile bin/macflow/justfile test
 ```
+
+This runs the Swift behavior tests and the configuration workflow checks for
+directory validation and XDG-aware linking.
 
 Implementation decisions and verification results are recorded in
 `bin/macflow/IMPLEMENTATION_NOTES.md`.

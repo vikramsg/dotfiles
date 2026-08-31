@@ -13,7 +13,7 @@ public enum WebSurfaceRequestError: LocalizedError {
 }
 
 public final class WebSurfacePanel: FloatingSurfacePanel, NSDraggingSource, WKNavigationDelegate {
-    public typealias RequestHandler = (WebSurfaceRequest) throws -> Any?
+    public typealias RequestHandler = (WebSurfacePanel, WebSurfaceRequest) throws -> Any?
 
     public let webView: WKWebView
     public private(set) var loadedDocumentURL: URL?
@@ -22,9 +22,7 @@ public final class WebSurfacePanel: FloatingSurfacePanel, NSDraggingSource, WKNa
     private let fileSchemeHandler: WebSurfaceFileSchemeHandler
     private let documentDirectory: URL
     private let onCompletedDrag: () -> Void
-    private var pendingDragURL: URL?
-    private var deferredDragEvent: NSEvent?
-    private var mouseIsDown = false
+    private var dragGesture = FileDragGesture<NSEvent>()
     private var dragEventMonitor: Any?
 
     public init(
@@ -53,6 +51,7 @@ public final class WebSurfacePanel: FloatingSurfacePanel, NSDraggingSource, WKNa
         webView = WKWebView(frame: NSRect(origin: .zero, size: contentRect.size), configuration: webConfiguration)
 
         super.init(contentRect: contentRect, theme: theme, activates: activates)
+        bridge.panel = self
         webView.navigationDelegate = self
         webView.underPageBackgroundColor = .clear
         webView.autoresizingMask = [.width, .height]
@@ -65,12 +64,8 @@ public final class WebSurfacePanel: FloatingSurfacePanel, NSDraggingSource, WKNa
     }
 
     public func prepareFileDrag(_ url: URL) {
-        guard mouseIsDown else { return }
-        pendingDragURL = url
-        if let event = deferredDragEvent {
-            pendingDragURL = nil
-            deferredDragEvent = nil
-            beginFileDrag(url: url, event: event)
+        if let drag = dragGesture.prepare(url) {
+            beginFileDrag(url: drag.0, event: drag.1)
         }
     }
 
@@ -133,24 +128,17 @@ public final class WebSurfacePanel: FloatingSurfacePanel, NSDraggingSource, WKNa
             [weak self] event in
             guard let self, event.window === self else { return event }
             if event.type == .leftMouseDown {
-                self.mouseIsDown = true
-                self.pendingDragURL = nil
-                self.deferredDragEvent = nil
+                self.dragGesture.mouseDown()
                 return event
             }
             if event.type == .leftMouseUp {
-                self.mouseIsDown = false
-                self.pendingDragURL = nil
-                self.deferredDragEvent = nil
+                self.dragGesture.mouseUp()
                 return event
             }
-            guard let url = self.pendingDragURL else {
-                self.deferredDragEvent = event
+            guard let drag = self.dragGesture.mouseDragged(event) else {
                 return event
             }
-            self.pendingDragURL = nil
-            self.deferredDragEvent = nil
-            self.beginFileDrag(url: url, event: event)
+            self.beginFileDrag(url: drag.0, event: drag.1)
             return nil
         }
     }
@@ -276,6 +264,7 @@ private final class WebSurfaceFileSchemeHandler: NSObject, WKURLSchemeHandler {
 
 private final class WebSurfaceMessageBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let handler: WebSurfacePanel.RequestHandler
+    weak var panel: WebSurfacePanel?
 
     init(handler: @escaping WebSurfacePanel.RequestHandler) {
         self.handler = handler
@@ -286,14 +275,15 @@ private final class WebSurfaceMessageBridge: NSObject, WKScriptMessageHandlerWit
         didReceive message: WKScriptMessage,
         replyHandler: @escaping (Any?, String?) -> Void
     ) {
-        guard let body = message.body as? [String: Any],
+        guard let panel,
+              let body = message.body as? [String: Any],
               let action = body["action"] as? String
         else {
             replyHandler(nil, WebSurfaceRequestError.malformedRequest.localizedDescription)
             return
         }
         do {
-            let result = try handler(WebSurfaceRequest(
+            let result = try handler(panel, WebSurfaceRequest(
                 action: action,
                 payload: body["payload"] as? [String: Any] ?? [:]
             ))

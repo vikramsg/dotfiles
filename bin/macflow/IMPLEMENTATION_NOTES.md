@@ -289,7 +289,7 @@ drop uses the configured close delay and focus restoration behavior.
 
 ### Automated Verification
 
-The complete suite has 70 passing tests. Added coverage verifies:
+The complete Swift suite has 74 passing tests. Added coverage verifies:
 
 - Surface configuration and opaque nested values decode correctly.
 - `show_surface` actions resolve configured surfaces and reject unknown ones.
@@ -298,8 +298,18 @@ The complete suite has 70 passing tests. Added coverage verifies:
 - A real local WebKit test document receives configuration and theme values.
 - The test document calls the Promise bridge and receives a nested file-list
   response.
+- Quick drag preparation produces the requested file drag, preparation after
+  mouse-up cannot arm a later drag, and a subsequent press cannot drag the
+  previously prepared file.
+- A closed WebKit panel is released after its owning reference is removed.
 - Existing native shelf, theme, automation, HTTP, screenshot, and permission
   tests continue to pass.
+
+The package test recipe also executes configuration workflow tests against
+temporary files. They prove matching capture/native/WebKit local directories
+succeed, each local mismatch fails with the relevant diagnostic, remote paths
+remain unconstrained, and an alternate `XDG_CONFIG_HOME` receives both managed
+links without writing under the test user's default `.config` directory.
 
 `node --check macflow/ui/screenshot-shelf/app.js`, `jq empty
 macflow/config.json`, `just validate-screenshot-directories`, the release build,
@@ -373,6 +383,13 @@ the normal-duration manual workflow. They were addressed before publication:
 - Each file-list refresh replaces the private scheme allowlist while retaining
   stable identifiers for files still present, preventing stale asset mappings
   from accumulating through a long visible session.
+- The bridge owns its panel weakly and supplies that panel to capability
+  handlers, removing the panel-WebView-bridge-handler retain cycle. A lifecycle
+  behavior test verifies release after close.
+- The root screenshot-directory guard now includes the WebKit shelf's local
+  source while continuing to permit distinct remote paths.
+- Macflow configuration linking now honors `XDG_CONFIG_HOME`, matching the
+  runtime loader and documentation.
 
 ## Review Focus
 
@@ -392,4 +409,6 @@ the normal-duration manual workflow. They were addressed before publication:
   should become a generic native watch subscription.
 - Confirm the shared `SurfaceSession` did not alter native shelf placement,
   Escape handling, or focus restoration.
+- Review the behavior-focused drag, panel-release, directory-validation, and
+  XDG-linking tests rather than relying on source-shape assertions.
 - Treat real remote-VM behavior as unimplemented and unverified.

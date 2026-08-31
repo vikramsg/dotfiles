@@ -8,6 +8,7 @@ default:
 
 test:
     swift test --package-path "{{package_root}}"
+    bash "{{package_root}}/Tests/ConfigurationWorkflowTests.sh" "{{package_root}}/../.."
 
 build:
     swift build --package-path "{{package_root}}" --configuration release

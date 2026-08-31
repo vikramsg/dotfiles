@@ -55,7 +55,6 @@ final class WebSurfaceController {
 
         activeConfiguration = configuration
         do {
-            var createdPanel: WebSurfacePanel?
             let shown = try session.show(
                 width: configuration.width,
                 height: configuration.height,
@@ -69,12 +68,11 @@ final class WebSurfaceController {
                     surfaceConfiguration: configuration.configuration.mapValues(\.foundationObject),
                     theme: self?.theme ?? BuiltInThemeCatalog.system,
                     activates: configuration.activates,
-                    requestHandler: { [weak self] request in
-                        try self?.handle(request, panel: createdPanel)
+                    requestHandler: { [weak self] panel, request in
+                        try self?.handle(request, panel: panel)
                     },
                     onCompletedDrag: { [weak self] in self?.completedDrag() }
                 )
-                createdPanel = panel
                 return panel
             }
             panel = shown as? WebSurfacePanel

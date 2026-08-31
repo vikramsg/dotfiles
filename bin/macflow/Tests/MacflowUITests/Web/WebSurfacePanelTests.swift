@@ -32,7 +32,7 @@ final class WebSurfacePanelTests: XCTestCase {
             surfaceConfiguration: ["value": "from-config"],
             theme: BuiltInThemeCatalog.tokyoNight,
             activates: false,
-            requestHandler: { request in
+            requestHandler: { _, request in
                 switch request.action {
                 case "files.list":
                     XCTAssertEqual(request.payload["directory"] as? String, "/example")
@@ -61,5 +61,40 @@ final class WebSurfacePanelTests: XCTestCase {
         }
         wait(for: [evaluated], timeout: 5)
         XCTAssertEqual(panel.loadedDocumentURL?.standardizedFileURL, document.standardizedFileURL)
+    }
+
+    func testClosedPanelIsReleased() throws {
+        _ = NSApplication.shared
+        let document = try makeDocument("<!doctype html><html><body></body></html>")
+        weak var releasedPanel: WebSurfacePanel?
+
+        try autoreleasepool {
+            var panel: WebSurfacePanel? = try WebSurfacePanel(
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 160),
+                documentURL: document,
+                surfaceConfiguration: [:],
+                theme: BuiltInThemeCatalog.system,
+                activates: false,
+                requestHandler: { _, _ in nil },
+                onCompletedDrag: {}
+            )
+            releasedPanel = panel
+            panel?.close()
+            panel = nil
+        }
+
+        let deadline = Date().addingTimeInterval(2)
+        while releasedPanel != nil && RunLoop.current.run(mode: .default, before: deadline) && Date() < deadline {}
+        XCTAssertNil(releasedPanel)
+    }
+
+    private func makeDocument(_ contents: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let document = directory.appendingPathComponent("index.html")
+        try contents.write(to: document, atomically: true, encoding: .utf8)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return document
     }
 }

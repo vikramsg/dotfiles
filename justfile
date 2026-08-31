@@ -233,8 +233,9 @@ zwm:
 validate-screenshot-directories:
     #!/usr/bin/env bash
     set -euo pipefail
-    SCREENSHOT_DIR=$(jq -er '.screenshot_dir' "{{justfile_directory()}}/screenshot/config.json")
-    MACFLOW_CONFIG="{{justfile_directory()}}/macflow/config.json"
+    SCREENSHOT_CONFIG="${SCREENSHOT_CONFIG:-{{justfile_directory()}}/screenshot/config.json}"
+    MACFLOW_CONFIG="${MACFLOW_CONFIG:-{{justfile_directory()}}/macflow/config.json}"
+    SCREENSHOT_DIR=$(jq -er '.screenshot_dir' "$SCREENSHOT_CONFIG")
     MACFLOW_CAPTURE_DIR=$(jq -er '.screenshots.directory' "$MACFLOW_CONFIG")
     if [[ "$MACFLOW_CAPTURE_DIR" != "$SCREENSHOT_DIR" ]]; then
         printf 'ERROR: Macflow capture directory (%s) does not match screenshot directory (%s).\n' "$MACFLOW_CAPTURE_DIR" "$SCREENSHOT_DIR" >&2
@@ -243,6 +244,11 @@ validate-screenshot-directories:
     MACFLOW_LOCAL_DIR=$(jq -er '.shelves.screenshots.sources[] | select(.id == "local") | .directory' "$MACFLOW_CONFIG")
     if [[ "$MACFLOW_LOCAL_DIR" != "$SCREENSHOT_DIR" ]]; then
         printf 'ERROR: Macflow local shelf directory (%s) does not match screenshot directory (%s).\n' "$MACFLOW_LOCAL_DIR" "$SCREENSHOT_DIR" >&2
+        exit 1
+    fi
+    MACFLOW_WEB_LOCAL_DIR=$(jq -er '.surfaces["screenshots-web"].configuration.sources[] | select(.id == "local") | .directory' "$MACFLOW_CONFIG")
+    if [[ "$MACFLOW_WEB_LOCAL_DIR" != "$SCREENSHOT_DIR" ]]; then
+        printf 'ERROR: Macflow WebKit local shelf directory (%s) does not match screenshot directory (%s).\n' "$MACFLOW_WEB_LOCAL_DIR" "$SCREENSHOT_DIR" >&2
         exit 1
     fi
 
@@ -335,17 +341,25 @@ hunk:
     fi
     @echo "Hunk config symlinked to ~/.config/hunk"
 
+# Link Macflow configuration without building or restarting the service.
+[private]
+link-macflow-config:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+    CONFIG_DIR="$CONFIG_HOME/macflow"
+    UI_SOURCE="{{justfile_directory()}}/macflow/ui"
+    UI_TARGET="$CONFIG_DIR/ui"
+    mkdir -p "$CONFIG_DIR"
+    ln -sfn "{{justfile_directory()}}/macflow/config.json" "$CONFIG_DIR/config.json"
+    if [ -e "$UI_TARGET" ] && [ ! -L "$UI_TARGET" ]; then
+        echo "ERROR: $UI_TARGET exists and is not a symlink."
+        exit 1
+    fi
+    ln -sfn "$UI_SOURCE" "$UI_TARGET"
+
 # Link macflow configuration and delegate installation to its package.
-macflow: validate-screenshot-directories
-    mkdir -p "$HOME/.config/macflow"
-    ln -sfn "{{justfile_directory()}}/macflow/config.json" "$HOME/.config/macflow/config.json"
-    @UI_SOURCE="{{justfile_directory()}}/macflow/ui"; \
-        UI_TARGET="$HOME/.config/macflow/ui"; \
-        if [ -e "$UI_TARGET" ] && [ ! -L "$UI_TARGET" ]; then \
-            echo "ERROR: $UI_TARGET exists and is not a symlink."; \
-            exit 1; \
-        fi; \
-        ln -sfn "$UI_SOURCE" "$UI_TARGET"
+macflow: validate-screenshot-directories link-macflow-config
     just --justfile "{{justfile_directory()}}/bin/macflow/justfile" install
 
 # Set up zsh and prompt configuration symlinks
