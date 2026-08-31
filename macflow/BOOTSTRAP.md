@@ -11,13 +11,19 @@ application's bundle identifier and designated signing requirement.
 
 ## Prerequisites
 
-Macflow requires macOS 14 or later, Xcode Command Line Tools, Homebrew, `just`,
-`uv`, and the applications referenced by `macflow/config.json`.
+Macflow requires macOS 14 or later, a Swift 6 or newer toolchain, Homebrew,
+`just`, `uv`, and the applications referenced by `macflow/config.json`.
 
 Install Xcode Command Line Tools if they are not already present:
 
 ```bash
 xcode-select --install
+```
+
+Verify the active Swift toolchain:
+
+```bash
+swift --version
 ```
 
 Install Homebrew by following <https://brew.sh>, then install `just` and `uv`:

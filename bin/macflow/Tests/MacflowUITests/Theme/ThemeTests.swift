@@ -1,22 +1,29 @@
 import AppKit
-import XCTest
+import Testing
 @testable import MacflowUI
 
-final class ThemeTests: XCTestCase {
-    func testTokyoNightResolvesAsBuiltInDarkTheme() throws {
+@Suite(.serialized)
+@MainActor
+struct ThemeTests {
+    @Test
+    func tokyoNightResolvesAsBuiltInDarkTheme() throws {
         let theme = try BuiltInThemeCatalog.resolve("tokyo-night")
 
-        XCTAssertEqual(theme.id, "tokyo-night")
-        XCTAssertEqual(theme.appearance?.name, .darkAqua)
-        XCTAssertEqual(rgb(theme.background), 0x1A1B26)
-        XCTAssertEqual(rgb(theme.accent), 0x7AA2F7)
-        XCTAssertEqual(theme.tabs.contentSpacing, 8)
-        XCTAssertEqual(theme.tabs.horizontalPadding, 16)
+        #expect(theme.id == "tokyo-night")
+        #expect(theme.appearance?.name == .darkAqua)
+        #expect(rgb(theme.background) == 0x1A1B26)
+        #expect(rgb(theme.accent) == 0x7AA2F7)
+        #expect(theme.tabs.contentSpacing == 8)
+        #expect(theme.tabs.horizontalPadding == 16)
     }
 
-    func testUnknownThemeIsRejected() {
-        XCTAssertThrowsError(try BuiltInThemeCatalog.resolve("missing")) { error in
-            XCTAssertEqual(error as? ThemeResolutionError, .unknownTheme("missing"))
+    @Test
+    func unknownThemeIsRejected() {
+        do {
+            _ = try BuiltInThemeCatalog.resolve("missing")
+            Issue.record("Resolving an unknown theme should throw")
+        } catch {
+            #expect(error as? ThemeResolutionError == .unknownTheme("missing"))
         }
     }
 
@@ -27,12 +34,13 @@ final class ThemeTests: XCTestCase {
             | UInt32(round(value.blueComponent * 255))
     }
 
-    func testTokyoNightExportsSemanticWebValues() throws {
+    @Test
+    func tokyoNightExportsSemanticWebValues() throws {
         let values = try BuiltInThemeCatalog.resolve("tokyo-night").webValues
 
-        XCTAssertEqual(values["corner-radius"] as? String, "14.0px")
-        XCTAssertEqual(values["accent"] as? String, "rgba(122, 162, 247, 1.000)")
-        XCTAssertNotNil(values["primary-text"])
-        XCTAssertNotNil(values["raised-surface"])
+        #expect(values["corner-radius"] as? String == "14.0px")
+        #expect(values["accent"] as? String == "rgba(122, 162, 247, 1.000)")
+        #expect(values["primary-text"] != nil)
+        #expect(values["raised-surface"] != nil)
     }
 }

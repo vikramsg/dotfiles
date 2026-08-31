@@ -1,25 +1,20 @@
 import Foundation
-import XCTest
+import Testing
 @testable import MacflowCore
 
-final class CaptureTests: XCTestCase {
-    func testDisplaySelectionUsesMainDisplayByDefaultAndHonorsValidRequest() throws {
-        XCTAssertEqual(
-            try CapturePlanning.selectDisplay(requestedID: nil, availableIDs: [10, 20], mainID: 20),
-            20
-        )
-        XCTAssertEqual(
-            try CapturePlanning.selectDisplay(requestedID: 10, availableIDs: [10, 20], mainID: 20),
-            10
-        )
-        XCTAssertThrowsError(
-            try CapturePlanning.selectDisplay(requestedID: 30, availableIDs: [10, 20], mainID: 20)
-        ) { error in
-            XCTAssertEqual(error as? CapturePlanningError, .displayNotFound(30))
+@Suite struct CaptureTests {
+    @Test func testDisplaySelectionUsesMainDisplayByDefaultAndHonorsValidRequest() throws {
+        #expect(try CapturePlanning.selectDisplay(requestedID: nil, availableIDs: [10, 20], mainID: 20) == 20)
+        #expect(try CapturePlanning.selectDisplay(requestedID: 10, availableIDs: [10, 20], mainID: 20) == 10)
+        do {
+            _ = try CapturePlanning.selectDisplay(requestedID: 30, availableIDs: [10, 20], mainID: 20)
+            Issue.record("Expected display selection to fail")
+        } catch {
+            #expect(error as? CapturePlanningError == .displayNotFound(30))
         }
     }
 
-    func testDestinationAddsSuffixWhenTimestampedPathExists() {
+    @Test func testDestinationAddsSuffixWhenTimestampedPathExists() {
         let directory = URL(fileURLWithPath: "/screenshots", isDirectory: true)
         let date = Date(timeIntervalSince1970: 0)
         let timeZone = TimeZone(secondsFromGMT: 0)!
@@ -29,7 +24,7 @@ final class CaptureTests: XCTestCase {
             timeZone: timeZone,
             fileExists: { _ in false }
         )
-        XCTAssertEqual(first.path, "/screenshots/Screenshot 1970-01-01 at 00.00.00.png")
+        #expect(first.path == "/screenshots/Screenshot 1970-01-01 at 00.00.00.png")
 
         let second = CapturePlanning.destination(
             directory: directory,
@@ -37,10 +32,10 @@ final class CaptureTests: XCTestCase {
             timeZone: timeZone,
             fileExists: { $0 == first.path }
         )
-        XCTAssertEqual(second.path, "/screenshots/Screenshot 1970-01-01 at 00.00.00-2.png")
+        #expect(second.path == "/screenshots/Screenshot 1970-01-01 at 00.00.00-2.png")
     }
 
-    func testAllocatorReservesUniqueConcurrentPaths() {
+    @Test func testAllocatorReservesUniqueConcurrentPaths() {
         let allocator = CapturePathAllocator()
         let directory = URL(fileURLWithPath: "/screenshots", isDirectory: true)
         let date = Date(timeIntervalSince1970: 0)
@@ -60,6 +55,6 @@ final class CaptureTests: XCTestCase {
             lock.unlock()
         }
 
-        XCTAssertEqual(Set(paths).count, 10)
+        #expect(Set(paths).count == 10)
     }
 }

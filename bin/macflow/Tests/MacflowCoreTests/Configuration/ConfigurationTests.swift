@@ -1,8 +1,8 @@
 import Foundation
-import XCTest
+import Testing
 @testable import MacflowCore
 
-final class ConfigurationTests: XCTestCase {
+@Suite struct ConfigurationTests {
     private var validConfigurationJSON: String {
         """
         {
@@ -62,31 +62,28 @@ final class ConfigurationTests: XCTestCase {
         """
     }
 
-    func testXDGPaths() {
+    @Test func testXDGPaths() {
         let environment = ["HOME": "/Users/test", "XDG_CONFIG_HOME": "/custom/config"]
-        XCTAssertEqual(
-            ConfigurationLoader.workflowURL(environment: environment).path,
-            "/custom/config/macflow/config.json"
-        )
+        #expect(ConfigurationLoader.workflowURL(environment: environment).path == "/custom/config/macflow/config.json")
     }
 
-    func testConfigurationDecodesExpectedValues() throws {
+    @Test func testConfigurationDecodesExpectedValues() throws {
         let configuration = try decode(validConfigurationJSON)
-        XCTAssertEqual(configuration.applications["first"]?.bundleID, "example.first")
-        XCTAssertEqual(configuration.server.host, "127.0.0.1")
-        XCTAssertEqual(configuration.appearance.theme, "tokyo-night")
-        XCTAssertEqual(configuration.shelves["images"]?.sources.first?.directory, "/Users/Shared/Screenshots")
-        XCTAssertEqual(configuration.screenshots.directory, "/Users/Shared/Screenshots")
-        XCTAssertEqual(configuration.hotkeys.first?.action.layout, "full")
-        XCTAssertEqual(configuration.hotkeys.first?.scope, .global)
+        #expect(configuration.applications["first"]?.bundleID == "example.first")
+        #expect(configuration.server.host == "127.0.0.1")
+        #expect(configuration.appearance.theme == "tokyo-night")
+        #expect(configuration.shelves["images"]?.sources.first?.directory == "/Users/Shared/Screenshots")
+        #expect(configuration.screenshots.directory == "/Users/Shared/Screenshots")
+        #expect(configuration.hotkeys.first?.action.layout == "full")
+        #expect(configuration.hotkeys.first?.scope == .global)
     }
 
-    func testValidConfigurationPassesValidation() throws {
-        XCTAssertNoThrow(try decode(validConfigurationJSON).validate())
+    @Test func testValidConfigurationPassesValidation() throws {
+        try decode(validConfigurationJSON).validate()
     }
 
-    func testSurfaceConfigurationIsOpaqueAndShowActionResolvesIt() throws {
-        var object = try XCTUnwrap(
+    @Test func testSurfaceConfigurationIsOpaqueAndShowActionResolvesIt() throws {
+        var object = try #require(
             JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
         )
         object["surfaces"] = [
@@ -114,15 +111,15 @@ final class ConfigurationTests: XCTestCase {
             from: JSONSerialization.data(withJSONObject: object)
         )
 
-        XCTAssertNoThrow(try configuration.validate())
-        XCTAssertEqual(configuration.surfaces["example"]?.document, "ui/example/index.html")
-        XCTAssertEqual(configuration.surfaces["example"]?.configuration["domain_value"], .string("unchanged"))
-        XCTAssertEqual(configuration.hotkeys.first?.action.surface, "example")
+        try configuration.validate()
+        #expect(configuration.surfaces["example"]?.document == "ui/example/index.html")
+        #expect(configuration.surfaces["example"]?.configuration["domain_value"] == .string("unchanged"))
+        #expect(configuration.hotkeys.first?.action.surface == "example")
     }
 
-    func testConfigurationRejectsUnsafeSurfaceDocument() throws {
+    @Test func testConfigurationRejectsUnsafeSurfaceDocument() throws {
         for document in ["/tmp/index.html", "../index.html"] {
-            var object = try XCTUnwrap(
+            var object = try #require(
                 JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
             )
             object["surfaces"] = [
@@ -142,14 +139,17 @@ final class ConfigurationTests: XCTestCase {
                 WorkflowConfiguration.self,
                 from: JSONSerialization.data(withJSONObject: object)
             )
-            XCTAssertThrowsError(try configuration.validate()) { error in
-                XCTAssertEqual(error as? WorkflowValidationError, .invalidSurface("unsafe"))
+            do {
+                try configuration.validate()
+                Issue.record("Expected unsafe surface document to fail validation")
+            } catch {
+                #expect(error as? WorkflowValidationError == .invalidSurface("unsafe"))
             }
         }
     }
 
-    func testConfigurationRejectsUnknownSurfaceAction() throws {
-        var object = try XCTUnwrap(
+    @Test func testConfigurationRejectsUnknownSurfaceAction() throws {
+        var object = try #require(
             JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
         )
         object["hotkeys"] = [[
@@ -163,128 +163,159 @@ final class ConfigurationTests: XCTestCase {
             from: JSONSerialization.data(withJSONObject: object)
         )
 
-        XCTAssertThrowsError(try configuration.validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .invalidAction(0))
+        do {
+            try configuration.validate()
+            Issue.record("Expected unknown surface action to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .invalidAction(0))
         }
     }
 
-    func testShelfDefaultsToFiveItemsWhenLimitIsOmitted() throws {
+    @Test func testShelfDefaultsToFiveItemsWhenLimitIsOmitted() throws {
         let configuration = try decode(validConfigurationJSON)
-        XCTAssertEqual(configuration.shelves["images"]?.maxItems, 5)
+        #expect(configuration.shelves["images"]?.maxItems == 5)
     }
 
-    func testShelfUsesConfiguredItemLimit() throws {
+    @Test func testShelfUsesConfiguredItemLimit() throws {
         let text = validConfigurationJSON.replacingOccurrences(
             of: "\"extensions\": [\"png\"]",
             with: "\"extensions\": [\"png\"], \"max_items\": 3"
         )
         let configuration = try decode(text)
-        XCTAssertEqual(configuration.shelves["images"]?.maxItems, 3)
+        #expect(configuration.shelves["images"]?.maxItems == 3)
     }
 
-    func testConfigurationRejectsNonpositiveShelfItemLimit() throws {
+    @Test func testConfigurationRejectsNonpositiveShelfItemLimit() throws {
         for limit in [0, -1] {
             let text = validConfigurationJSON.replacingOccurrences(
                 of: "\"extensions\": [\"png\"]",
                 with: "\"extensions\": [\"png\"], \"max_items\": \(limit)"
             )
-            XCTAssertThrowsError(try decode(text).validate()) { error in
-                XCTAssertEqual(error as? WorkflowValidationError, .invalidShelf("images"))
+            do {
+                try decode(text).validate()
+                Issue.record("Expected nonpositive shelf item limit to fail validation")
+            } catch {
+                #expect(error as? WorkflowValidationError == .invalidShelf("images"))
             }
         }
     }
 
-    func testConfigurationDefaultsToSystemThemeWhenAppearanceIsOmitted() throws {
+    @Test func testConfigurationDefaultsToSystemThemeWhenAppearanceIsOmitted() throws {
         let text = validConfigurationJSON.replacingOccurrences(
             of: "\"appearance\": {\"theme\": \"tokyo-night\"},",
             with: ""
         )
-        XCTAssertEqual(try decode(text).appearance.theme, "system")
+        #expect(try decode(text).appearance.theme == "system")
     }
 
-    func testConfigurationRejectsEmptyThemeName() throws {
+    @Test func testConfigurationRejectsEmptyThemeName() throws {
         let text = validConfigurationJSON.replacingOccurrences(of: "\"tokyo-night\"", with: "\"\"")
-        XCTAssertThrowsError(try decode(text).validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .invalidTheme)
+        do {
+            try decode(text).validate()
+            Issue.record("Expected empty theme name to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .invalidTheme)
         }
     }
 
-    func testConfigurationRejectsDuplicateShelfSourceIdentifiers() throws {
-        var object = try XCTUnwrap(
+    @Test func testConfigurationRejectsDuplicateShelfSourceIdentifiers() throws {
+        var object = try #require(
             JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
         )
-        var shelves = try XCTUnwrap(object["shelves"] as? [String: Any])
-        var images = try XCTUnwrap(shelves["images"] as? [String: Any])
-        var sources = try XCTUnwrap(images["sources"] as? [[String: Any]])
+        var shelves = try #require(object["shelves"] as? [String: Any])
+        var images = try #require(shelves["images"] as? [String: Any])
+        var sources = try #require(images["sources"] as? [[String: Any]])
         sources.append(sources[0])
         images["sources"] = sources
         shelves["images"] = images
         object["shelves"] = shelves
         let data = try JSONSerialization.data(withJSONObject: object)
 
-        XCTAssertThrowsError(try JSONDecoder().decode(WorkflowConfiguration.self, from: data).validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .invalidShelf("images"))
+        do {
+            try JSONDecoder().decode(WorkflowConfiguration.self, from: data).validate()
+            Issue.record("Expected duplicate shelf source identifiers to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .invalidShelf("images"))
         }
     }
 
-    func testConfigurationRejectsUnknownLayoutAction() throws {
+    @Test func testConfigurationRejectsUnknownLayoutAction() throws {
         let text = validConfigurationJSON.replacingOccurrences(
             of: "\"layout\": \"full\"",
             with: "\"layout\": \"missing\""
         )
-        XCTAssertThrowsError(try decode(text).validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .invalidAction(0))
+        do {
+            try decode(text).validate()
+            Issue.record("Expected unknown layout action to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .invalidAction(0))
         }
     }
 
-    func testConfigurationRejectsFocusOutsideLayoutParticipants() throws {
+    @Test func testConfigurationRejectsFocusOutsideLayoutParticipants() throws {
         let text = validConfigurationJSON
             .replacingOccurrences(
                 of: "\"applications\": {\"first\": {\"bundle_id\": \"example.first\"}}",
                 with: "\"applications\": {\"first\": {\"bundle_id\": \"example.first\"}, \"other\": {\"bundle_id\": \"example.other\"}}"
             )
             .replacingOccurrences(of: "\"focus\": \"first\"", with: "\"focus\": \"other\"")
-        XCTAssertThrowsError(try decode(text).validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .invalidLayout("full"))
+        do {
+            try decode(text).validate()
+            Issue.record("Expected out-of-layout focus to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .invalidLayout("full"))
         }
     }
 
-    func testConfigurationRejectsNonLoopbackServer() throws {
+    @Test func testConfigurationRejectsNonLoopbackServer() throws {
         let text = validConfigurationJSON.replacingOccurrences(of: "\"127.0.0.1\"", with: "\"0.0.0.0\"")
-        XCTAssertThrowsError(try decode(text).validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .invalidServerHost("0.0.0.0"))
+        do {
+            try decode(text).validate()
+            Issue.record("Expected non-loopback server to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .invalidServerHost("0.0.0.0"))
         }
     }
 
-    func testConfigurationRejectsUnsupportedKey() throws {
+    @Test func testConfigurationRejectsUnsupportedKey() throws {
         let text = validConfigurationJSON.replacingOccurrences(of: "\"key\": \"g\"", with: "\"key\": \"invalid\"")
-        XCTAssertThrowsError(try decode(text).validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .invalidAction(0))
+        do {
+            try decode(text).validate()
+            Issue.record("Expected unsupported key to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .invalidAction(0))
         }
     }
 
-    func testConfigurationRejectsUnsupportedModifier() throws {
+    @Test func testConfigurationRejectsUnsupportedModifier() throws {
         let text = validConfigurationJSON.replacingOccurrences(
             of: "\"modifiers\": [\"cmd\", \"shift\"]",
             with: "\"modifiers\": [\"hyper\"]"
         )
-        XCTAssertThrowsError(try decode(text).validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .invalidAction(0))
+        do {
+            try decode(text).validate()
+            Issue.record("Expected unsupported modifier to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .invalidAction(0))
         }
     }
 
-    func testConfigurationRequiresSupportedHotKeyScope() {
+    @Test func testConfigurationRequiresSupportedHotKeyScope() {
         let missing = validConfigurationJSON.replacingOccurrences(of: "\"scope\": \"global\",", with: "")
-        XCTAssertThrowsError(try decode(missing))
+        #expect(throws: Error.self) {
+            try decode(missing)
+        }
 
         let unsupported = validConfigurationJSON.replacingOccurrences(
             of: "\"scope\": \"global\"",
             with: "\"scope\": \"application\""
         )
-        XCTAssertThrowsError(try decode(unsupported))
+        #expect(throws: Error.self) {
+            try decode(unsupported)
+        }
     }
 
-    func testConfigurationRejectsDuplicateGlobalShortcut() throws {
+    @Test func testConfigurationRejectsDuplicateGlobalShortcut() throws {
         let duplicate = validConfigurationJSON.replacingOccurrences(
             of: """
             {
@@ -309,8 +340,11 @@ final class ConfigurationTests: XCTestCase {
                 }
             """
         )
-        XCTAssertThrowsError(try decode(duplicate).validate()) { error in
-            XCTAssertEqual(error as? WorkflowValidationError, .duplicateHotKey(1))
+        do {
+            try decode(duplicate).validate()
+            Issue.record("Expected duplicate global shortcut to fail validation")
+        } catch {
+            #expect(error as? WorkflowValidationError == .duplicateHotKey(1))
         }
     }
 

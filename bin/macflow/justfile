@@ -7,7 +7,7 @@ default:
     @just --justfile "{{justfile()}}" --list
 
 test:
-    swift test --package-path "{{package_root}}"
+    swift test --package-path "{{package_root}}" --disable-xctest --enable-swift-testing --no-parallel
 
 build:
     swift build --package-path "{{package_root}}" --configuration release

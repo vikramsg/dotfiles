@@ -1,10 +1,13 @@
 import AppKit
 import MacflowCore
-import XCTest
+import Testing
 @testable import MacflowUI
 
-final class FileShelfPanelTests: XCTestCase {
-    func testShelfShowsConfiguredTabsAndSelectsTheRequestedSource() throws {
+@Suite(.serialized)
+@MainActor
+struct FileShelfPanelTests {
+    @Test
+    func shelfShowsConfiguredTabsAndSelectsTheRequestedSource() throws {
         var selectedSource: String?
         let panel = FileShelfPanel(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 180),
@@ -13,17 +16,19 @@ final class FileShelfPanelTests: XCTestCase {
             onSelectSource: { selectedSource = $0 },
             onCompletedDrag: {}
         )
+        defer { panel.close() }
 
-        XCTAssertEqual(panel.selectedSourceID, "local")
-        let buttons = descendants(of: try XCTUnwrap(panel.contentView)).compactMap { $0 as? ShelfTabButton }
-        XCTAssertEqual(Set(buttons.map(\.sourceLabel)), ["Local VM", "Remote VM"])
+        #expect(panel.selectedSourceID == "local")
+        let buttons = descendants(of: try #require(panel.contentView)).compactMap { $0 as? ShelfTabButton }
+        #expect(Set(buttons.map(\.sourceLabel)) == ["Local VM", "Remote VM"])
 
-        try XCTUnwrap(buttons.first { $0.sourceLabel == "Remote VM" }).performClick(nil)
-        XCTAssertEqual(panel.selectedSourceID, "remote")
-        XCTAssertEqual(selectedSource, "remote")
+        try #require(buttons.first { $0.sourceLabel == "Remote VM" }).performClick(nil)
+        #expect(panel.selectedSourceID == "remote")
+        #expect(selectedSource == "remote")
     }
 
-    func testEmptySelectedSourcePresentsAnEmptyState() throws {
+    @Test
+    func emptySelectedSourcePresentsAnEmptyState() throws {
         let panel = FileShelfPanel(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 180),
             configuration: shelfConfiguration,
@@ -31,14 +36,16 @@ final class FileShelfPanelTests: XCTestCase {
             onSelectSource: { _ in },
             onCompletedDrag: {}
         )
+        defer { panel.close() }
 
         panel.display(items: [], for: "local")
 
-        let labels = descendants(of: try XCTUnwrap(panel.contentView)).compactMap { $0 as? NSTextField }
-        XCTAssertTrue(labels.contains { $0.stringValue == "No files available" })
+        let labels = descendants(of: try #require(panel.contentView)).compactMap { $0 as? NSTextField }
+        #expect(labels.contains { $0.stringValue == "No files available" })
     }
 
-    func testTokyoNightColorsTheShelfRoot() throws {
+    @Test
+    func tokyoNightColorsTheShelfRoot() throws {
         let theme = try BuiltInThemeCatalog.resolve("tokyo-night")
         let panel = FileShelfPanel(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 180),
@@ -47,12 +54,14 @@ final class FileShelfPanelTests: XCTestCase {
             onSelectSource: { _ in },
             onCompletedDrag: {}
         )
+        defer { panel.close() }
 
-        XCTAssertEqual(panel.appearance?.name, .darkAqua)
-        XCTAssertEqual(panel.contentView?.layer?.backgroundColor, theme.background.withAlphaComponent(0.98).cgColor)
+        #expect(panel.appearance?.name == .darkAqua)
+        #expect(panel.contentView?.layer?.backgroundColor == theme.background.withAlphaComponent(0.98).cgColor)
     }
 
-    func testUnavailableSelectedSourcePresentsItsFailure() throws {
+    @Test
+    func unavailableSelectedSourcePresentsItsFailure() throws {
         let panel = FileShelfPanel(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 180),
             configuration: shelfConfiguration,
@@ -60,14 +69,16 @@ final class FileShelfPanelTests: XCTestCase {
             onSelectSource: { _ in },
             onCompletedDrag: {}
         )
+        defer { panel.close() }
 
         panel.display(message: "Directory unavailable", for: "local")
 
-        let labels = descendants(of: try XCTUnwrap(panel.contentView)).compactMap { $0 as? NSTextField }
-        XCTAssertTrue(labels.contains { $0.stringValue == "Directory unavailable" })
+        let labels = descendants(of: try #require(panel.contentView)).compactMap { $0 as? NSTextField }
+        #expect(labels.contains { $0.stringValue == "Directory unavailable" })
     }
 
-    func testTabCentersContentAndUsesTokyoNightMetrics() throws {
+    @Test
+    func tabCentersContentAndUsesTokyoNightMetrics() throws {
         let theme = try BuiltInThemeCatalog.resolve("tokyo-night")
         let button = ShelfTabButton(
             sourceID: "local",
@@ -78,39 +89,30 @@ final class FileShelfPanelTests: XCTestCase {
         button.frame = NSRect(x: 0, y: 0, width: button.preferredWidth, height: theme.tabs.height)
         button.layoutSubtreeIfNeeded()
 
-        XCTAssertEqual(button.iconView.frame.width, theme.tabs.iconSize, accuracy: 0.01)
-        XCTAssertEqual(button.titleLabel.frame.minX - button.iconView.frame.maxX, theme.tabs.contentSpacing, accuracy: 0.01)
-        XCTAssertEqual(button.contentFrame.midX, button.bounds.midX, accuracy: 0.01)
-        XCTAssertGreaterThanOrEqual(button.contentFrame.minX, theme.tabs.horizontalPadding)
-        XCTAssertGreaterThanOrEqual(button.bounds.maxX - button.contentFrame.maxX, theme.tabs.horizontalPadding)
-        XCTAssertEqual(button.titleLabel.frame.width, button.naturalLabelWidth, accuracy: 0.01)
-        XCTAssertEqual(
-            button.titleLabel.cell?.expansionFrame(withFrame: button.titleLabel.bounds, in: button.titleLabel),
-            .zero
-        )
+        #expect(abs(button.iconView.frame.width - theme.tabs.iconSize) <= 0.01)
+        #expect(abs(button.titleLabel.frame.minX - button.iconView.frame.maxX - theme.tabs.contentSpacing) <= 0.01)
+        #expect(abs(button.contentFrame.midX - button.bounds.midX) <= 0.01)
+        #expect(button.contentFrame.minX >= theme.tabs.horizontalPadding)
+        #expect(button.bounds.maxX - button.contentFrame.maxX >= theme.tabs.horizontalPadding)
+        #expect(abs(button.titleLabel.frame.width - button.naturalLabelWidth) <= 0.01)
+        #expect(button.titleLabel.cell?.expansionFrame(withFrame: button.titleLabel.bounds, in: button.titleLabel) == .zero)
     }
 
-    func testTabGeometryChangesWithThemeMetricsInsteadOfEmbeddedSpacing() throws {
+    @Test
+    func tabGeometryChangesWithThemeMetricsInsteadOfEmbeddedSpacing() throws {
         let system = try BuiltInThemeCatalog.resolve("system")
         let tokyoNight = try BuiltInThemeCatalog.resolve("tokyo-night")
         let systemButton = laidOutButton(style: system.tabs)
         let tokyoNightButton = laidOutButton(style: tokyoNight.tabs)
 
-        XCTAssertEqual(
-            systemButton.titleLabel.frame.minX - systemButton.iconView.frame.maxX,
-            system.tabs.contentSpacing,
-            accuracy: 0.01
-        )
-        XCTAssertEqual(
-            tokyoNightButton.titleLabel.frame.minX - tokyoNightButton.iconView.frame.maxX,
-            tokyoNight.tabs.contentSpacing,
-            accuracy: 0.01
-        )
-        XCTAssertNotEqual(system.tabs.contentSpacing, tokyoNight.tabs.contentSpacing)
-        XCTAssertNotEqual(systemButton.iconView.frame.width, tokyoNightButton.iconView.frame.width)
+        #expect(abs(systemButton.titleLabel.frame.minX - systemButton.iconView.frame.maxX - system.tabs.contentSpacing) <= 0.01)
+        #expect(abs(tokyoNightButton.titleLabel.frame.minX - tokyoNightButton.iconView.frame.maxX - tokyoNight.tabs.contentSpacing) <= 0.01)
+        #expect(system.tabs.contentSpacing != tokyoNight.tabs.contentSpacing)
+        #expect(systemButton.iconView.frame.width != tokyoNightButton.iconView.frame.width)
     }
 
-    func testSelectingTabDoesNotShiftItsContent() throws {
+    @Test
+    func selectingTabDoesNotShiftItsContent() throws {
         let theme = try BuiltInThemeCatalog.resolve("tokyo-night")
         let button = laidOutButton(style: theme.tabs)
         button.apply(selected: false, foreground: theme.secondaryText, accent: theme.secondaryText)
@@ -120,7 +122,7 @@ final class FileShelfPanelTests: XCTestCase {
         button.apply(selected: true, foreground: theme.primaryText, accent: theme.accent)
         button.layoutSubtreeIfNeeded()
 
-        XCTAssertEqual(button.contentFrame, unselectedFrame)
+        #expect(button.contentFrame == unselectedFrame)
     }
 
     private var shelfConfiguration: WorkflowConfiguration.Shelf {
