@@ -1,5 +1,6 @@
 import AppKit
 import MacflowCore
+import MacflowUI
 
 final class AutomationRuntime {
     private let configuration: WorkflowConfiguration
@@ -10,23 +11,25 @@ final class AutomationRuntime {
     private let automaticPreview: AutomaticPreviewController
     private let layout: LayoutController
     private let shelf: FileShelfController
+    private let webSurface: WebSurfaceController
     private let capture: ScreenshotCaptureService
     private let server: HTTPServer
 
     init() throws {
-        let configuration = try ConfigurationLoader.loadWorkflow()
+        let configurationURL = ConfigurationLoader.workflowURL()
+        let configuration = try ConfigurationLoader.loadWorkflow(from: configurationURL)
         try configuration.validate()
-        let screenshotConfiguration = try ConfigurationLoader.loadScreenshot(for: configuration)
         let screenshotDirectory = URL(
-            fileURLWithPath: NSString(string: screenshotConfiguration.screenshotDirectory).expandingTildeInPath,
+            fileURLWithPath: NSString(string: configuration.screenshots.directory).expandingTildeInPath,
             isDirectory: true
         )
+        let theme = try BuiltInThemeCatalog.resolve(configuration.appearance.theme)
         let token = try RuntimeFiles.prepare(port: configuration.server.port)
         let applications = ApplicationService()
         let windows = WindowService(applications: applications)
         let screens = ScreenService()
         let hotKeys = try HotKeyService()
-        let overlay = ImageOverlayController(configuration: configuration.screenshots.preview)
+        let overlay = ImageOverlayController(configuration: configuration.screenshots.preview, theme: theme)
         let automaticPreview = AutomaticPreviewController(
             directory: screenshotDirectory,
             configuration: configuration.screenshots,
@@ -39,7 +42,14 @@ final class AutomationRuntime {
             windows: windows,
             screens: screens
         )
-        let shelf = FileShelfController(windows: windows, screens: screens, hotKeys: hotKeys)
+        let shelf = FileShelfController(windows: windows, screens: screens, hotKeys: hotKeys, theme: theme)
+        let webSurface = WebSurfaceController(
+            configurationURL: configurationURL,
+            windows: windows,
+            screens: screens,
+            hotKeys: hotKeys,
+            theme: theme
+        )
         let capture = ScreenshotCaptureService(defaultDirectory: screenshotDirectory)
         let server = HTTPServer(
             configuration: configuration.server,
@@ -61,6 +71,7 @@ final class AutomationRuntime {
         self.automaticPreview = automaticPreview
         self.layout = layout
         self.shelf = shelf
+        self.webSurface = webSurface
         self.capture = capture
         self.server = server
     }
@@ -100,26 +111,29 @@ final class AutomationRuntime {
         case .showFileShelf:
             guard let name = action.shelf else { return report("show_file_shelf requires shelf") }
             showShelf(named: name)
+        case .showSurface:
+            guard let name = action.surface else { return report("show_surface requires surface") }
+            showSurface(named: name)
         }
     }
 
     private func showShelf(named name: String) {
-        do {
-            guard let configuration = configuration.shelves[name] else {
-                return report("Unknown shelf: \(name)")
-            }
-            let path = try ConfigurationLoader.stringValue(
-                configFile: configuration.directoryFrom,
-                key: configuration.directoryKey
-            )
-            if !shelf.show(
-                directory: URL(fileURLWithPath: NSString(string: path).expandingTildeInPath, isDirectory: true),
-                configuration: configuration
-            ) {
-                report("No supported files available for shelf: \(name)")
-            }
-        } catch {
-            report(error.localizedDescription)
+        guard let configuration = configuration.shelves[name] else {
+            return report("Unknown shelf: \(name)")
+        }
+        webSurface.hide(restoreFocus: true)
+        if !shelf.show(configuration: configuration) {
+            report("Could not show shelf: \(name)")
+        }
+    }
+
+    private func showSurface(named name: String) {
+        guard let configuration = configuration.surfaces[name] else {
+            return report("Unknown surface: \(name)")
+        }
+        shelf.hide(restoreFocus: true)
+        if !webSurface.show(configuration: configuration) {
+            report("Could not show surface: \(name)")
         }
     }
 

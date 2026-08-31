@@ -228,8 +228,26 @@ zwm:
     just --justfile "{{justfile_directory()}}/bin/zwm/justfile" install
 
 
+# Verify independently owned screenshot paths before installing either tool.
+[private]
+validate-screenshot-directories:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SCREENSHOT_DIR=$(jq -er '.screenshot_dir' "{{justfile_directory()}}/screenshot/config.json")
+    MACFLOW_CONFIG="{{justfile_directory()}}/macflow/config.json"
+    MACFLOW_CAPTURE_DIR=$(jq -er '.screenshots.directory' "$MACFLOW_CONFIG")
+    if [[ "$MACFLOW_CAPTURE_DIR" != "$SCREENSHOT_DIR" ]]; then
+        printf 'ERROR: Macflow capture directory (%s) does not match screenshot directory (%s).\n' "$MACFLOW_CAPTURE_DIR" "$SCREENSHOT_DIR" >&2
+        exit 1
+    fi
+    MACFLOW_LOCAL_DIR=$(jq -er '.shelves.screenshots.sources[] | select(.id == "local") | .directory' "$MACFLOW_CONFIG")
+    if [[ "$MACFLOW_LOCAL_DIR" != "$SCREENSHOT_DIR" ]]; then
+        printf 'ERROR: Macflow local shelf directory (%s) does not match screenshot directory (%s).\n' "$MACFLOW_LOCAL_DIR" "$SCREENSHOT_DIR" >&2
+        exit 1
+    fi
+
 # Set up screenshot config symlink, install tool, and apply macOS location
-screenshot:
+screenshot: validate-screenshot-directories
     @echo "Setting up screenshot config symlink and tool..."
     mkdir -p ~/.config/screenshot
     ln -sfn {{justfile_directory()}}/screenshot/config.json ~/.config/screenshot/config.json
@@ -318,9 +336,16 @@ hunk:
     @echo "Hunk config symlinked to ~/.config/hunk"
 
 # Link macflow configuration and delegate installation to its package.
-macflow:
+macflow: validate-screenshot-directories
     mkdir -p "$HOME/.config/macflow"
     ln -sfn "{{justfile_directory()}}/macflow/config.json" "$HOME/.config/macflow/config.json"
+    @UI_SOURCE="{{justfile_directory()}}/macflow/ui"; \
+        UI_TARGET="$HOME/.config/macflow/ui"; \
+        if [ -e "$UI_TARGET" ] && [ ! -L "$UI_TARGET" ]; then \
+            echo "ERROR: $UI_TARGET exists and is not a symlink."; \
+            exit 1; \
+        fi; \
+        ln -sfn "$UI_SOURCE" "$UI_TARGET"
     just --justfile "{{justfile_directory()}}/bin/macflow/justfile" install
 
 # Set up zsh and prompt configuration symlinks

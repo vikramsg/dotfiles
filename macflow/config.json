@@ -3,6 +3,9 @@
     "host": "127.0.0.1",
     "port": 17421
   },
+  "appearance": {
+    "theme": "tokyo-night"
+  },
   "applications": {
     "ghostty": {
       "bundle_id": "com.mitchellh.ghostty"
@@ -41,8 +44,20 @@
   },
   "shelves": {
     "screenshots": {
-      "directory_from": "screenshot/config.json",
-      "directory_key": "screenshot_dir",
+      "sources": [
+        {
+          "id": "local",
+          "label": "Local VM",
+          "icon": "desktopcomputer",
+          "directory": "/Users/Shared/Screenshots"
+        },
+        {
+          "id": "remote",
+          "label": "Remote VM",
+          "icon": "network",
+          "directory": "/Users/Shared/Screenshots"
+        }
+      ],
       "extensions": ["png", "jpg", "jpeg", "webp"],
       "max_items": 5,
       "width": 1156,
@@ -53,6 +68,39 @@
       "close_after_drag": true,
       "close_delay": 0.2,
       "restore_focus": true
+    }
+  },
+  "surfaces": {
+    "screenshots-web": {
+      "document": "ui/screenshot-shelf/index.html",
+      "width": 1156,
+      "height": 180,
+      "margin": 12,
+      "activates": false,
+      "close_after_drag": true,
+      "close_delay": 0.2,
+      "restore_focus": true,
+      "configuration": {
+        "sources": [
+          {
+            "id": "local",
+            "label": "Local VM",
+            "icon": "desktop",
+            "directory": "/Users/Shared/Screenshots"
+          },
+          {
+            "id": "remote",
+            "label": "Remote VM",
+            "icon": "network",
+            "directory": "/Users/Shared/Screenshots"
+          }
+        ],
+        "extensions": ["png", "jpg", "jpeg", "webp"],
+        "max_items": 5,
+        "thumbnail_width": 220,
+        "spacing": 8,
+        "margin": 12
+      }
     }
   },
   "hotkeys": [
@@ -85,10 +133,16 @@
       "key": "h",
       "scope": "global",
       "action": { "type": "show_file_shelf", "shelf": "screenshots" }
+    },
+    {
+      "modifiers": ["cmd", "shift"],
+      "key": "j",
+      "scope": "global",
+      "action": { "type": "show_surface", "surface": "screenshots-web" }
     }
   ],
   "screenshots": {
-    "config_file": "screenshot/config.json",
+    "directory": "/Users/Shared/Screenshots",
     "extensions": ["png", "jpg", "jpeg", "webp"],
     "debounce_seconds": 0.2,
     "capture_settle_seconds": 0.15,

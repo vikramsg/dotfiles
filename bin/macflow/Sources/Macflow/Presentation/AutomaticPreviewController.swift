@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import MacflowCore
+import MacflowUI
 
 final class AutomaticPreviewController {
     private let overlay: ImageOverlayController

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src macflow-file:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Screenshot Shelf</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main id="shelf" aria-label="Screenshot shelf">
+      <nav id="sources" aria-label="Screenshot sources"></nav>
+      <section id="files" aria-live="polite"></section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

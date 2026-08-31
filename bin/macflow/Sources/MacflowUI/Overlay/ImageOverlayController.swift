@@ -1,7 +1,7 @@
 import AppKit
 import MacflowCore
 
-final class OverlayImageView: NSImageView {
+private final class OverlayImageView: NSImageView {
     var fileURL: URL?
     var dismiss: (() -> Void)?
 
@@ -20,27 +20,29 @@ final class OverlayImageView: NSImageView {
     }
 }
 
-final class ImageOverlayPanel: NSPanel {
+private final class ImageOverlayPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
 
-final class ImageOverlayController {
+public final class ImageOverlayController {
     private var panel: ImageOverlayPanel?
     private var dismissal: DispatchWorkItem?
     private var configuration: WorkflowConfiguration.Screenshots.Preview
-    private(set) var currentPath: String?
+    private let theme: MacflowTheme
+    public private(set) var currentPath: String?
 
-    init(configuration: WorkflowConfiguration.Screenshots.Preview) {
+    public init(configuration: WorkflowConfiguration.Screenshots.Preview, theme: MacflowTheme) {
         self.configuration = configuration
+        self.theme = theme
     }
 
-    func update(configuration: WorkflowConfiguration.Screenshots.Preview) {
+    public func update(configuration: WorkflowConfiguration.Screenshots.Preview) {
         self.configuration = configuration
     }
 
     @discardableResult
-    func show(path: String, timeout: Double? = nil) -> Bool {
+    public func show(path: String, timeout: Double? = nil) -> Bool {
         let url = URL(fileURLWithPath: path)
         guard FileManager.default.isReadableFile(atPath: url.path), let image = NSImage(contentsOf: url) else {
             return false
@@ -70,6 +72,7 @@ final class ImageOverlayController {
             backing: .buffered,
             defer: false
         )
+        panel.appearance = theme.appearance
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -84,7 +87,7 @@ final class ImageOverlayController {
         imageView.layer?.cornerRadius = configuration.cornerRadius
         imageView.layer?.masksToBounds = true
         imageView.layer?.borderWidth = 1
-        imageView.layer?.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
+        imageView.layer?.borderColor = theme.border.cgColor
         imageView.fileURL = url
         imageView.dismiss = { [weak self] in self?.hide() }
         panel.contentView = imageView
@@ -98,7 +101,7 @@ final class ImageOverlayController {
         return true
     }
 
-    func hide() {
+    public func hide() {
         dismissal?.cancel()
         dismissal = nil
         panel?.orderOut(nil)
@@ -107,11 +110,11 @@ final class ImageOverlayController {
         currentPath = nil
     }
 
-    var json: [String: Any] {
+    public var json: [String: Any] {
         ["visible": panel?.isVisible == true, "path": currentPath ?? NSNull()]
     }
 
-    var windowID: CGWindowID? {
+    public var windowID: CGWindowID? {
         panel.map { CGWindowID($0.windowNumber) }
     }
 }

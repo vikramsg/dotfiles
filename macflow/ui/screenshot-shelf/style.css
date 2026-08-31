@@ -1,0 +1,147 @@
+:root {
+  color-scheme: dark;
+  --macflow-background: #1a1b26;
+  --macflow-surface: #24283b;
+  --macflow-raised-surface: #292e42;
+  --macflow-selected-surface: #33467c;
+  --macflow-border: #3b4261;
+  --macflow-focused-border: #7aa2f7;
+  --macflow-primary-text: #c0caf5;
+  --macflow-secondary-text: #a9b1d6;
+  --macflow-muted-text: #565f89;
+  --macflow-accent: #7aa2f7;
+  --macflow-corner-radius: 14px;
+  --macflow-control-corner-radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--macflow-primary-text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#shelf {
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--macflow-border);
+  border-radius: var(--macflow-corner-radius);
+  background: color-mix(in srgb, var(--macflow-background) 98%, transparent);
+}
+
+#sources {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--macflow-surface);
+}
+
+.source {
+  display: inline-flex;
+  min-width: 140px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--macflow-control-corner-radius);
+  background: transparent;
+  color: var(--macflow-secondary-text);
+  font: 500 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  cursor: default;
+}
+
+.source svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.source[aria-selected="true"] {
+  border-color: var(--macflow-focused-border);
+  background: var(--macflow-selected-surface);
+  color: var(--macflow-primary-text);
+  font-weight: 600;
+}
+
+.source[aria-selected="true"] svg {
+  color: var(--macflow-accent);
+}
+
+#files {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  gap: var(--shelf-spacing, 8px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--shelf-margin, 12px);
+  scrollbar-width: thin;
+}
+
+.thumbnail {
+  position: relative;
+  width: var(--thumbnail-width, 220px);
+  min-width: var(--thumbnail-width, 220px);
+  height: 100%;
+  overflow: hidden;
+  padding: 7px;
+  border: 1px solid var(--macflow-border);
+  border-radius: var(--macflow-control-corner-radius);
+  background: var(--macflow-raised-surface);
+  color: var(--macflow-secondary-text);
+  cursor: grab;
+}
+
+.thumbnail:active {
+  cursor: grabbing;
+}
+
+.thumbnail img {
+  display: block;
+  width: 100%;
+  height: calc(100% - 23px);
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.thumbnail span {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message {
+  display: grid;
+  width: 100%;
+  place-items: center;
+  color: var(--macflow-muted-text);
+  font-size: 13px;
+  font-weight: 500;
+}

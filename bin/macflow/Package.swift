@@ -6,14 +6,20 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "MacflowCore", targets: ["MacflowCore"]),
+        .library(name: "MacflowUI", targets: ["MacflowUI"]),
         .executable(name: "macflow", targets: ["Macflow"]),
     ],
     targets: [
         .target(name: "MacflowCore"),
-        .executableTarget(name: "Macflow", dependencies: ["MacflowCore"]),
+        .target(name: "MacflowUI", dependencies: ["MacflowCore"]),
+        .executableTarget(name: "Macflow", dependencies: ["MacflowCore", "MacflowUI"]),
         .testTarget(
             name: "MacflowCoreTests",
             dependencies: ["MacflowCore"]
+        ),
+        .testTarget(
+            name: "MacflowUITests",
+            dependencies: ["MacflowCore", "MacflowUI"]
         ),
     ]
 )

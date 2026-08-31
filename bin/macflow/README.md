@@ -47,14 +47,23 @@ The repository file `macflow/config.json` is linked to:
 ${XDG_CONFIG_HOME:-~/.config}/macflow/config.json
 ```
 
+User-owned WebKit documents under `macflow/ui/` are linked to:
+
+```text
+${XDG_CONFIG_HOME:-~/.config}/macflow/ui/
+```
+
 Screenshot storage remains independently configured by:
 
 ```text
 ${XDG_CONFIG_HOME:-~/.config}/screenshot/config.json
 ```
 
-The workflow app reads `screenshot_dir` from that existing file. It never
-copies screenshots into its app bundle or application-support directory.
+Macflow and the screenshot tool each own an explicit screenshot directory.
+The root `justfile` validates that the independently configured paths agree
+before installing either tool. Macflow never reads the screenshot tool's
+configuration at runtime or copies screenshots into its app bundle or
+application-support directory.
 
 ## Shortcuts
 
@@ -64,6 +73,7 @@ cmd + shift + 2  Maximize Zed
 cmd + shift + 3  Ghostty left, Zed right
 cmd + shift + 4  Zed left, Ghostty right
 cmd + shift + h  Show the draggable screenshot shelf
+cmd + shift + j  Show the WebKit screenshot shelf prototype
 cmd + shift + 5  Open the native macOS screenshot controls
 ```
 
@@ -90,16 +100,47 @@ screen containing the mouse pointer.
 
 ## Screenshot Shelf
 
-`cmd + shift + h` opens a top-center horizontal shelf populated directly from
-the configured screenshot directory, newest first, up to the shelf's configured
-`max_items` limit. The limit defaults to five when omitted. Dragging a thumbnail
-starts a native file drag containing the original file URL, so compatible
-applications receive the existing file rather than a copy maintained by
-Macflow.
+`cmd + shift + h` opens a top-center horizontal shelf with one tab per configured
+source. Each tab is populated directly from its explicit directory, newest
+first, up to the shelf's configured `max_items` limit. The limit defaults to
+five when omitted. Macflow watches source directories while the shelf is open
+and refreshes the selected tab when files change. Dragging a thumbnail starts a
+native file drag containing the original file URL, so compatible applications
+receive the existing file rather than a copy maintained by Macflow.
 
 Escape closes the shelf. A completed drag closes it after the configured delay.
 Both paths restore the application and window that were focused before the
 shelf opened.
+
+`appearance.theme` selects a built-in theme for Macflow-owned UI. The bundled
+themes are `system` and `tokyo-night`; user configuration selects a theme by
+name and does not redefine its tokens.
+
+## Web Surfaces
+
+A configured surface references a local HTML document relative to the Macflow
+configuration directory. Macflow owns its `NSPanel`, placement, focus
+restoration, Escape handling, theme injection, and native file drag session.
+The referenced HTML, CSS, and JavaScript own structure and interaction.
+
+The surface's `configuration` object is opaque to Macflow and is exposed as
+`window.macflow.configuration`. Built-in semantic theme values are available as
+CSS custom properties prefixed with `--macflow-`.
+
+The narrow page bridge exposes generic operations:
+
+```text
+macflow.files.list(...)
+macflow.files.open(path)
+macflow.files.reveal(path)
+macflow.files.prepareDrag(path)
+macflow.surface.dismiss()
+```
+
+Images returned by `files.list` use a private `macflow-file:` WebKit scheme.
+Only paths registered by the native file listing are served through that
+scheme. No local web server, JavaScriptCore runtime, screenshot-specific Swift
+API, or new HTTP endpoint is involved.
 
 ## HTTP API
 
