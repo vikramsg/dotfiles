@@ -1103,7 +1103,7 @@ require("lazy").setup({
 			local ensure_installed = vim.tbl_keys(servers or {})
 			vim.list_extend(ensure_installed, {
 				"stylua", -- Used to format Lua code
-				"prettierd", -- Faster formatter for JS/TS/JSON
+				"oxfmt", -- Formatter for JS/TS/JSON
 			})
 			require("mason-tool-installer").setup({ ensure_installed = ensure_installed })
 
@@ -1153,9 +1153,9 @@ require("lazy").setup({
 				}
 			end,
 			formatters_by_ft = {
-				json = { "prettierd" },
-				jsonc = { "prettierd" },
-				json5 = { "prettierd" },
+				json = { "oxfmt" },
+				jsonc = { "oxfmt" },
+				json5 = { "oxfmt" },
 				lua = { "stylua" },
 				-- Conform can also run multiple formatters sequentially
 				python = { -- To fix auto-fixable lint errors.
@@ -1167,10 +1167,10 @@ require("lazy").setup({
 				},
 				--
 				-- You can use 'stop_after_first' to run the first available formatter from the list
-				javascript = { "prettierd" },
-				typescript = { "prettierd" },
-				javascriptreact = { "prettierd" },
-				typescriptreact = { "prettierd" },
+				javascript = { "oxfmt" },
+				typescript = { "oxfmt" },
+				javascriptreact = { "oxfmt" },
+				typescriptreact = { "oxfmt" },
 			},
 		},
 	},
