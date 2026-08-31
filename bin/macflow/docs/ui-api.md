@@ -3,11 +3,30 @@
 Macflow injects `window.macflow` into each configured local WebKit surface.
 
 ```text
-app.js
-  -> window.macflow
-  -> WebKit message bridge
-  -> native implementation
+[Config]
+show_surface("screenshots-web")
+
+  -> [Macflow / Swift]
+     Creates WKWebView
+     Registers the native "macflow" message handler
+     Supplies JavaScript defining window.macflow
+
+  -> [WebKit]
+     Executes that JavaScript
+     Loads index.html and app.js
+
+  -> [app.js]
+     Calls window.macflow.files.list(...)
+
+  -> [WebKit]
+     Sends "files.list" to the registered Swift handler
+
+  -> [Macflow / Swift]
+     Lists files and resolves the JavaScript Promise
 ```
+
+Creating `window.macflow` only exposes functions; native work begins when
+`app.js` calls one.
 
 ## Contract
 
@@ -56,20 +75,3 @@ Calls reject their promise when validation or the native operation fails.
 | `files.reveal(path)` | `WebSurfaceController` asks Finder to reveal the file |
 | `files.prepareDrag(path)` | `WebSurfacePanel` starts an AppKit file drag |
 | `surface.dismiss()` | `WebSurfaceController` closes the shared surface session |
-
-## Boundaries
-
-```text
-MacflowCore
-└── File discovery and sorting
-
-MacflowUI
-├── WKWebView and API injection
-├── Theme injection
-└── Native drag mechanics
-
-Macflow executable
-├── Request validation and dispatch
-├── File open and reveal
-└── Surface lifecycle
-```
