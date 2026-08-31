@@ -1,6 +1,8 @@
 os:
   open: '[ "$(uname)" = "Darwin" ] && open {{filename}} || xdg-open {{filename}}'
   openLink: '[ "$(uname)" = "Darwin" ] && open {{link}} || xdg-open {{link}}'
+  copyToClipboardCmd: >-
+    printf '\033]52;c;%s\a' "$(printf %s {{text}} | base64 | tr -d '\n')" > /dev/tty
   # We do not use the built-in editPreset: 'nvim-remote' here because it forcefully exits the lazygit 
   # process by sending "q" which triggers the lazygit.nvim on_exit callback, stealing focus back to 
   # the old buffer. Instead, we use a custom edit command that leaves the lazygit terminal process 
