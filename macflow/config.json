@@ -3,6 +3,9 @@
     "host": "127.0.0.1",
     "port": 17421
   },
+  "appearance": {
+    "theme": "tokyo-night"
+  },
   "applications": {
     "ghostty": {
       "bundle_id": "com.mitchellh.ghostty"
@@ -41,8 +44,20 @@
   },
   "shelves": {
     "screenshots": {
-      "directory_from": "screenshot/config.json",
-      "directory_key": "screenshot_dir",
+      "sources": [
+        {
+          "id": "local",
+          "label": "Local VM",
+          "icon": "desktopcomputer",
+          "directory": "/Users/Shared/Screenshots"
+        },
+        {
+          "id": "remote",
+          "label": "Remote VM",
+          "icon": "network",
+          "directory": "/Users/Shared/Screenshots"
+        }
+      ],
       "extensions": ["png", "jpg", "jpeg", "webp"],
       "max_items": 5,
       "width": 1156,
@@ -88,7 +103,7 @@
     }
   ],
   "screenshots": {
-    "config_file": "screenshot/config.json",
+    "directory": "/Users/Shared/Screenshots",
     "extensions": ["png", "jpg", "jpeg", "webp"],
     "debounce_seconds": 0.2,
     "capture_settle_seconds": 0.15,

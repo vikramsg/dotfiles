@@ -1,6 +1,14 @@
 import Foundation
 
 public struct WorkflowConfiguration: Codable, Equatable {
+    public struct Appearance: Codable, Equatable {
+        public let theme: String
+
+        public init(theme: String = "system") {
+            self.theme = theme
+        }
+    }
+
     public struct Server: Codable, Equatable {
         public let host: String
         public let port: UInt16
@@ -47,8 +55,21 @@ public struct WorkflowConfiguration: Codable, Equatable {
     public struct Shelf: Codable, Equatable {
         public static let defaultMaxItems = 5
 
-        public let directoryFrom: String
-        public let directoryKey: String
+        public struct Source: Codable, Equatable {
+            public let id: String
+            public let label: String
+            public let icon: String
+            public let directory: String
+
+            public init(id: String, label: String, icon: String, directory: String) {
+                self.id = id
+                self.label = label
+                self.icon = icon
+                self.directory = directory
+            }
+        }
+
+        public let sources: [Source]
         public let extensions: [String]
         public let width: Double
         public let height: Double
@@ -61,9 +82,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
         public let maxItems: Int
 
         enum CodingKeys: String, CodingKey {
-            case extensions, width, height, spacing, margin
-            case directoryFrom = "directory_from"
-            case directoryKey = "directory_key"
+            case sources, extensions, width, height, spacing, margin
             case thumbnailWidth = "thumbnail_width"
             case closeAfterDrag = "close_after_drag"
             case closeDelay = "close_delay"
@@ -72,8 +91,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
         }
 
         public init(
-            directoryFrom: String,
-            directoryKey: String,
+            sources: [Source],
             extensions: [String],
             width: Double,
             height: Double,
@@ -85,8 +103,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
             restoreFocus: Bool,
             maxItems: Int = defaultMaxItems
         ) {
-            self.directoryFrom = directoryFrom
-            self.directoryKey = directoryKey
+            self.sources = sources
             self.extensions = extensions
             self.width = width
             self.height = height
@@ -101,8 +118,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            directoryFrom = try container.decode(String.self, forKey: .directoryFrom)
-            directoryKey = try container.decode(String.self, forKey: .directoryKey)
+            sources = try container.decode([Source].self, forKey: .sources)
             extensions = try container.decode([String].self, forKey: .extensions)
             width = try container.decode(Double.self, forKey: .width)
             height = try container.decode(Double.self, forKey: .height)
@@ -145,14 +161,14 @@ public struct WorkflowConfiguration: Codable, Equatable {
             }
         }
 
-        public let configFile: String
+        public let directory: String
         public let extensions: [String]
         public let debounceSeconds: Double
         public let captureSettleSeconds: Double
         public let preview: Preview
 
         enum CodingKeys: String, CodingKey {
-            case configFile = "config_file"
+            case directory
             case extensions
             case debounceSeconds = "debounce_seconds"
             case captureSettleSeconds = "capture_settle_seconds"
@@ -161,15 +177,45 @@ public struct WorkflowConfiguration: Codable, Equatable {
     }
 
     public let server: Server
+    public let appearance: Appearance
     public let applications: [String: Application]
     public let layouts: [String: Layout]
     public let shelves: [String: Shelf]
     public let hotkeys: [HotKey]
     public let screenshots: Screenshots
 
+    enum CodingKeys: String, CodingKey {
+        case server, appearance, applications, layouts, shelves, hotkeys, screenshots
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        server = try container.decode(Server.self, forKey: .server)
+        appearance = try container.decodeIfPresent(Appearance.self, forKey: .appearance) ?? Appearance()
+        applications = try container.decode([String: Application].self, forKey: .applications)
+        layouts = try container.decode([String: Layout].self, forKey: .layouts)
+        shelves = try container.decode([String: Shelf].self, forKey: .shelves)
+        hotkeys = try container.decode([HotKey].self, forKey: .hotkeys)
+        screenshots = try container.decode(Screenshots.self, forKey: .screenshots)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(server, forKey: .server)
+        try container.encode(appearance, forKey: .appearance)
+        try container.encode(applications, forKey: .applications)
+        try container.encode(layouts, forKey: .layouts)
+        try container.encode(shelves, forKey: .shelves)
+        try container.encode(hotkeys, forKey: .hotkeys)
+        try container.encode(screenshots, forKey: .screenshots)
+    }
+
     public func validate() throws {
         guard ["127.0.0.1", "::1", "localhost"].contains(server.host.lowercased()) else {
             throw WorkflowValidationError.invalidServerHost(server.host)
+        }
+        guard !appearance.theme.isEmpty else {
+            throw WorkflowValidationError.invalidTheme
         }
         for (name, layout) in layouts {
             let applicationsExist = !layout.applications.isEmpty
@@ -213,31 +259,26 @@ public struct WorkflowConfiguration: Codable, Equatable {
             }
         }
 
-        for (name, shelf) in shelves where shelf.extensions.isEmpty
-            || shelf.width <= 0
-            || shelf.height <= 0
-            || shelf.thumbnailWidth <= 0
-            || shelf.closeDelay < 0
-            || shelf.maxItems <= 0 {
-            throw WorkflowValidationError.invalidShelf(name)
+        for (name, shelf) in shelves {
+            let identifiers = shelf.sources.map(\.id)
+            let sourcesAreValid = !shelf.sources.isEmpty
+                && Set(identifiers).count == identifiers.count
+                && shelf.sources.allSatisfy {
+                    !$0.id.isEmpty && !$0.label.isEmpty && !$0.icon.isEmpty && !$0.directory.isEmpty
+                }
+            guard sourcesAreValid,
+                  !shelf.extensions.isEmpty,
+                  shelf.width > 0,
+                  shelf.height > 0,
+                  shelf.thumbnailWidth > 0,
+                  shelf.closeDelay >= 0,
+                  shelf.maxItems > 0
+            else {
+                throw WorkflowValidationError.invalidShelf(name)
+            }
         }
-    }
-}
-
-public struct ScreenshotConfiguration: Codable, Equatable {
-    public let screenshotDirectory: String
-
-    enum CodingKeys: String, CodingKey {
-        case screenshotDirectory = "screenshot_dir"
-    }
-}
-
-public enum ConfigurationError: LocalizedError {
-    case missingString(String, URL)
-
-    public var errorDescription: String? {
-        switch self {
-        case let .missingString(key, url): return "Missing string key \(key) in \(url.path)"
+        guard !screenshots.directory.isEmpty else {
+            throw WorkflowValidationError.invalidScreenshotDirectory
         }
     }
 }
@@ -259,38 +300,6 @@ public enum ConfigurationLoader {
 
     public static func loadWorkflow(from url: URL? = nil) throws -> WorkflowConfiguration {
         try decode(WorkflowConfiguration.self, from: url ?? workflowURL())
-    }
-
-    public static func referencedURL(
-        _ path: String,
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> URL {
-        path.hasPrefix("/")
-            ? URL(fileURLWithPath: path)
-            : xdgConfigHome(environment: environment).appendingPathComponent(path)
-    }
-
-    public static func stringValue(
-        configFile: String,
-        key: String,
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) throws -> String {
-        let url = referencedURL(configFile, environment: environment)
-        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
-        guard let value = object?[key] as? String else {
-            throw ConfigurationError.missingString(key, url)
-        }
-        return value
-    }
-
-    public static func loadScreenshot(
-        for configuration: WorkflowConfiguration,
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) throws -> ScreenshotConfiguration {
-        try decode(
-            ScreenshotConfiguration.self,
-            from: referencedURL(configuration.screenshots.configFile, environment: environment)
-        )
     }
 
     private static func decode<T: Decodable>(_ type: T.Type, from url: URL) throws -> T {

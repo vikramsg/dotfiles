@@ -1,5 +1,6 @@
 import Foundation
 import MacflowCore
+import MacflowUI
 import Network
 
 struct HTTPResponse {
@@ -190,8 +191,12 @@ final class HTTPServer {
                     return
                 }
                 let options = WorkflowConfiguration.Shelf(
-                    directoryFrom: "",
-                    directoryKey: "",
+                    sources: [WorkflowConfiguration.Shelf.Source(
+                        id: "files",
+                        label: "Files",
+                        icon: "folder",
+                        directory: directory
+                    )],
                     extensions: body["extensions"] as? [String] ?? ["png", "jpg", "jpeg", "webp"],
                     width: body["width"] as? Double ?? 1200,
                     height: body["height"] as? Double ?? 420,
@@ -202,7 +207,7 @@ final class HTTPServer {
                     closeDelay: body["close_delay"] as? Double ?? 0.2,
                     restoreFocus: body["restore_focus"] as? Bool ?? true
                 )
-                completion(shelf.show(directory: URL(fileURLWithPath: directory), configuration: options)
+                completion(shelf.show(configuration: options, allowsEmpty: false)
                     ? .ok(shelf.json)
                     : .error(422, "No supported files available"))
             case ("POST", "/v1/input/keystroke"):

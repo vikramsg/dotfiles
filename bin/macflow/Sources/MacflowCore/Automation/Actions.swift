@@ -17,6 +17,8 @@ public enum WorkflowValidationError: LocalizedError, Equatable {
     case invalidAction(Int)
     case duplicateHotKey(Int)
     case invalidShelf(String)
+    case invalidTheme
+    case invalidScreenshotDirectory
 
     public var errorDescription: String? {
         switch self {
@@ -25,6 +27,8 @@ public enum WorkflowValidationError: LocalizedError, Equatable {
         case let .invalidAction(index): return "Invalid hotkey action at index \(index)"
         case let .duplicateHotKey(index): return "Duplicate hotkey at index \(index)"
         case let .invalidShelf(name): return "Invalid shelf configuration: \(name)"
+        case .invalidTheme: return "Theme name must not be empty"
+        case .invalidScreenshotDirectory: return "Screenshot directory must not be empty"
         }
     }
 }

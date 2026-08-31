@@ -7,6 +7,7 @@ final class ConfigurationTests: XCTestCase {
         """
         {
           "server": {"host": "127.0.0.1", "port": 17421},
+          "appearance": {"theme": "tokyo-night"},
           "applications": {"first": {"bundle_id": "example.first"}},
           "layouts": {
             "full": {
@@ -17,8 +18,14 @@ final class ConfigurationTests: XCTestCase {
           },
           "shelves": {
             "images": {
-              "directory_from": "images/config.json",
-              "directory_key": "directory",
+              "sources": [
+                {
+                  "id": "local",
+                  "label": "Local",
+                  "icon": "folder",
+                  "directory": "/Users/Shared/Screenshots"
+                }
+              ],
               "extensions": ["png"],
               "width": 800,
               "height": 300,
@@ -39,7 +46,7 @@ final class ConfigurationTests: XCTestCase {
             }
           ],
           "screenshots": {
-            "config_file": "images/config.json",
+            "directory": "/Users/Shared/Screenshots",
             "extensions": ["png"],
             "debounce_seconds": 0.2,
             "capture_settle_seconds": 0.15,
@@ -67,6 +74,9 @@ final class ConfigurationTests: XCTestCase {
         let configuration = try decode(validConfigurationJSON)
         XCTAssertEqual(configuration.applications["first"]?.bundleID, "example.first")
         XCTAssertEqual(configuration.server.host, "127.0.0.1")
+        XCTAssertEqual(configuration.appearance.theme, "tokyo-night")
+        XCTAssertEqual(configuration.shelves["images"]?.sources.first?.directory, "/Users/Shared/Screenshots")
+        XCTAssertEqual(configuration.screenshots.directory, "/Users/Shared/Screenshots")
         XCTAssertEqual(configuration.hotkeys.first?.action.layout, "full")
         XCTAssertEqual(configuration.hotkeys.first?.scope, .global)
     }
@@ -98,6 +108,39 @@ final class ConfigurationTests: XCTestCase {
             XCTAssertThrowsError(try decode(text).validate()) { error in
                 XCTAssertEqual(error as? WorkflowValidationError, .invalidShelf("images"))
             }
+        }
+    }
+
+    func testConfigurationDefaultsToSystemThemeWhenAppearanceIsOmitted() throws {
+        let text = validConfigurationJSON.replacingOccurrences(
+            of: "\"appearance\": {\"theme\": \"tokyo-night\"},",
+            with: ""
+        )
+        XCTAssertEqual(try decode(text).appearance.theme, "system")
+    }
+
+    func testConfigurationRejectsEmptyThemeName() throws {
+        let text = validConfigurationJSON.replacingOccurrences(of: "\"tokyo-night\"", with: "\"\"")
+        XCTAssertThrowsError(try decode(text).validate()) { error in
+            XCTAssertEqual(error as? WorkflowValidationError, .invalidTheme)
+        }
+    }
+
+    func testConfigurationRejectsDuplicateShelfSourceIdentifiers() throws {
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
+        )
+        var shelves = try XCTUnwrap(object["shelves"] as? [String: Any])
+        var images = try XCTUnwrap(shelves["images"] as? [String: Any])
+        var sources = try XCTUnwrap(images["sources"] as? [[String: Any]])
+        sources.append(sources[0])
+        images["sources"] = sources
+        shelves["images"] = images
+        object["shelves"] = shelves
+        let data = try JSONSerialization.data(withJSONObject: object)
+
+        XCTAssertThrowsError(try JSONDecoder().decode(WorkflowConfiguration.self, from: data).validate()) { error in
+            XCTAssertEqual(error as? WorkflowValidationError, .invalidShelf("images"))
         }
     }
 
