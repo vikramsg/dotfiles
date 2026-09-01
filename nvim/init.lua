@@ -504,6 +504,16 @@ local function toggle_codediff_comparison()
 	end)
 end
 
+-- Upstream `gf` is not completely broken. It successfully:
+-- - Resolves the working-tree file.
+-- - Returns to the previous tab.
+-- - Opens the file.
+-- - Attempts to preserve the cursor.
+-- What it does not do is choose the correct split. Upstream uses:
+-- `local target_win = vim.api.nvim_get_current_win()`
+-- After switching to the previous tab, that means whichever split was last
+-- focused there. It can be a scratch split or Snacks Explorer, so upstream
+-- opens the file there instead of selecting the existing editor split.
 local function edit_codediff_file()
 	local lifecycle = require("codediff.ui.lifecycle")
 	local tabpage = vim.api.nvim_get_current_tabpage()

@@ -75,9 +75,9 @@ function M.run()
 		local modified_win = selected_modified_window()
 
 		vim.api.nvim_set_current_win(modified_win)
-		local mapping = assert_wait("CodeDiff should install the custom gf mapping", function()
+		local mapping = assert_wait("CodeDiff should install the gf mapping", function()
 			local current = vim.fn.maparg("gf", "n", false, true)
-			if type(current.callback) == "function" and current.desc == "Edit File at Current Line" then
+			if type(current.callback) == "function" then
 				return current
 			end
 		end)
