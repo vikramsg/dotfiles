@@ -3,7 +3,8 @@ import MacflowCore
 import MacflowUI
 
 final class AutomationRuntime {
-    private let configuration: WorkflowConfiguration
+    private let configurationURL: URL
+    private let startupConfiguration: WorkflowConfiguration
     private let windows: WindowService
     private let screens: ScreenService
     private let hotKeys: HotKeyService
@@ -63,7 +64,8 @@ final class AutomationRuntime {
             shelf: shelf,
             captureSettleSeconds: configuration.screenshots.captureSettleSeconds
         )
-        self.configuration = configuration
+        self.configurationURL = configurationURL
+        self.startupConfiguration = configuration
         self.windows = windows
         self.screens = screens
         self.hotKeys = hotKeys
@@ -77,7 +79,7 @@ final class AutomationRuntime {
     }
 
     func start() throws {
-        for binding in configuration.hotkeys {
+        for binding in startupConfiguration.hotkeys {
             do {
                 try hotKeys.register(
                     modifiers: binding.modifiers,
@@ -92,15 +94,18 @@ final class AutomationRuntime {
         }
         try automaticPreview.start()
         try server.start()
-        NSLog("Macflow started on \(configuration.server.host):\(configuration.server.port)")
+        NSLog("Macflow started on \(startupConfiguration.server.host):\(startupConfiguration.server.port)")
     }
 
     func showFirstShelf() {
-        guard let name = configuration.shelves.keys.sorted().first else {
+        guard let configuration = loadCurrentConfigurationOrReport() else { return }
+        guard let name = configuration.shelves.keys.sorted().first,
+              let shelfConfiguration = configuration.shelves[name]
+        else {
             NSSound.beep()
             return
         }
-        showShelf(named: name)
+        presentShelf(named: name, configuration: shelfConfiguration)
     }
 
     private func execute(_ action: WorkflowConfiguration.Action) {
@@ -118,9 +123,14 @@ final class AutomationRuntime {
     }
 
     private func showShelf(named name: String) {
-        guard let configuration = configuration.shelves[name] else {
+        guard let workflow = loadCurrentConfigurationOrReport() else { return }
+        guard let configuration = workflow.shelves[name] else {
             return report("Unknown shelf: \(name)")
         }
+        presentShelf(named: name, configuration: configuration)
+    }
+
+    private func presentShelf(named name: String, configuration: WorkflowConfiguration.Shelf) {
         webSurface.hide(restoreFocus: true)
         if !shelf.show(configuration: configuration) {
             report("Could not show shelf: \(name)")
@@ -128,12 +138,24 @@ final class AutomationRuntime {
     }
 
     private func showSurface(named name: String) {
-        guard let configuration = configuration.surfaces[name] else {
+        guard let workflow = loadCurrentConfigurationOrReport() else { return }
+        guard let configuration = workflow.surfaces[name] else {
             return report("Unknown surface: \(name)")
         }
         shelf.hide(restoreFocus: true)
         if !webSurface.show(configuration: configuration) {
             report("Could not show surface: \(name)")
+        }
+    }
+
+    private func loadCurrentConfigurationOrReport() -> WorkflowConfiguration? {
+        do {
+            let configuration = try ConfigurationLoader.loadWorkflow(from: configurationURL)
+            try configuration.validate()
+            return configuration
+        } catch {
+            report("Could not load configuration: \(error.localizedDescription)")
+            return nil
         }
     }
 

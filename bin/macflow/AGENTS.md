@@ -25,6 +25,14 @@ Config belongs in `macflow/` which is for the local machine's configuration.
 - Tests should not be change detection tests. They should test behaviour.
 - Documentation should be short but extremely clear, preferably with examples.
 
+## Error handling
+
+- Let errors propagate from low-level helpers with `throws`.
+- Catch errors at the nearest boundary that can meaningfully recover, report the failure, or terminate the current action, such as application startup, a CLI command, or a user-action callback.
+- Do not add repeated `do/catch` wrappers that perform the same reporting. Centralize that conversion in one clearly named helper.
+- Return an optional or boolean after reporting only when the caller's sole response is to abort the current action. Keep errors typed and throwable when callers may handle them differently.
+- Prefer linear control flow with `guard` after errors have been handled at the boundary.
+
 ## Tidy, First
 
 - When proposing changes, first figure out if it can be implemented using existing code by refactoring.

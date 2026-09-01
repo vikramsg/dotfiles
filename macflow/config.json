@@ -60,8 +60,8 @@
       ],
       "extensions": ["png", "jpg", "jpeg", "webp"],
       "max_items": 5,
-      "width": 1156,
-      "height": 180,
+      "width": 1255,
+      "height": 250,
       "thumbnail_width": 220,
       "spacing": 8,
       "margin": 12,
@@ -73,8 +73,8 @@
   "surfaces": {
     "screenshots-web": {
       "document": "ui/screenshot-shelf/index.html",
-      "width": 1156,
-      "height": 180,
+      "width": 1255,
+      "height": 250,
       "margin": 12,
       "activates": false,
       "close_after_drag": true,

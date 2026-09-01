@@ -6,11 +6,28 @@ package_root := justfile_directory()
 default:
     @just --justfile "{{justfile()}}" --list
 
+clean:
+    swift package --package-path "{{package_root}}" clean
+
 test:
-    swift test --package-path "{{package_root}}" --disable-xctest --enable-swift-testing --no-parallel
+    #!/usr/bin/env bash
+    set -uo pipefail
+    swift test --package-path "{{package_root}}" --disable-xctest --enable-swift-testing --no-parallel && exit 0
+    status=$?
+    printf '\nmacflow tests failed. If build artifacts may be stale, try:\n'
+    printf '  just --justfile "%s" clean\n' "{{justfile()}}"
+    printf 'Then rerun the original command.\n'
+    exit "$status"
 
 build:
-    swift build --package-path "{{package_root}}" --configuration release
+    #!/usr/bin/env bash
+    set -uo pipefail
+    swift build --package-path "{{package_root}}" --configuration release && exit 0
+    status=$?
+    printf '\nmacflow build failed. If build artifacts may be stale, try:\n'
+    printf '  just --justfile "%s" clean\n' "{{justfile()}}"
+    printf 'Then rerun the original command.\n'
+    exit "$status"
 
 install: test build
     @if [ "$(uname)" != "Darwin" ]; then \
