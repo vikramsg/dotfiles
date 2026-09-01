@@ -32,8 +32,9 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 ### Git diffs
 
-- `Space + gd`: Open a full CodeDiff review in inline view.
+- `Space + gd`: Open uncommitted changes in inline view, or automatically compare against `main` when the working tree is clean.
 - `Enter` in the CodeDiff explorer: Open the selected file and focus its diff.
+- `gf` in a CodeDiff pane: Open the real file in the previous tab for editing at the current line.
 - `B` in CodeDiff: Toggle between uncommitted changes since `HEAD` and all changes since branching from `main`.
 - `g?`: Show all CodeDiff shortcuts on screen.
 - `q`: Close CodeDiff and return to the previous tab.

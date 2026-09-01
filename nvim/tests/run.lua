@@ -1,9 +1,15 @@
 local M = {}
 
 local specs = {
+	-- Verifies CodeDiff gf reuses the existing file split and preserves its cursor.
+	"tests.codediff_gf_spec",
+	-- Verifies the ty LSP configuration and startup command for Python files.
 	"tests.lsp_ty_spec",
+	-- Verifies Snacks Explorer reveals hidden and ignored files with the required options.
 	"tests.snacks_explorer_reveal_spec",
+	-- Verifies the nvim-treesitter main API, parsers, queries, and file loading.
 	"tests.treesitter_main_spec",
+	-- Verifies TypeScript and TSX indentation across comments and nested blocks.
 	"tests.typescript_indent_spec",
 }
 
