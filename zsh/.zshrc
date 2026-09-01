@@ -29,6 +29,11 @@ if [[ ${HERDR_START_TUICR:-} == 1 ]]; then
     exec zsh "$(dirname "$config_file")/tuicr.zsh"
 fi
 
+if [[ ${HERDR_ENV:-} == 1 ]]; then
+    config_file=$(readlink "$HOME/.config/herdr/config.toml")
+    source "$(dirname "$config_file")/branch-metadata.zsh"
+fi
+
 ##################################################################################
 # The settings above are ones we need for fast setup
 # For example when opening a tab in herdr for Yazi we need some minimal setup

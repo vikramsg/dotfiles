@@ -33,6 +33,9 @@ name = "tokyo-night"
 
 [theme.custom]
 accent = "#89b4fa"
+sidebar_bg = "#16161e"
+active_row_bg = "#24283b"
+selection_bg = "#33467c"
 
 [terminal]
 default_shell = "/bin/zsh"
@@ -188,6 +191,9 @@ description = "open Snacks file picker"
 
 [ui]
 tab_bar_position = "top"
+sidebar_width = 30
+sidebar_min_width = 24
+sidebar_max_width = 40
 tab_bar_right = [
   { type = "zoom" },
   { type = "command", command = 'branch=$(git branch --show-current 2>/dev/null); test -n "$branch" && printf " %s\n" "$branch"', interval_seconds = 5, timeout_seconds = 2 },
@@ -201,6 +207,12 @@ mouse_capture = true
 copy_on_select = true
 confirm_close = true
 prompt_new_tab_name = false
+
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", { token = "workspace", fg = "#7aa2f7", bold = true }],
+  [{ token = "$branch_label", fg = "#9ece6a", dim = true }],
+]
 
 [ui.sound]
 enabled = false
