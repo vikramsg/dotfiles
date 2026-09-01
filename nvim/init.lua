@@ -144,18 +144,11 @@ for i = 1, 9 do
 	end, { desc = "Jump to visual buffer " .. i })
 end
 
--- Keybinds to make split navigation easier.
---  Use CTRL+<hjkl> to switch between windows
---
-----  See `:help wincmd` for a list of all window commands
-vim.keymap.set("n", "<C-h>", "<C-w><C-h>", { desc = "Move focus to the left window" })
-vim.keymap.set("n", "<C-k>", "<C-w><C-j>", { desc = "Move focus to the upper window" })
-vim.keymap.set("n", "<C-j>", "<C-w><C-k>", { desc = "Move focus to the lower window" })
+-- Split-navigation fallbacks not owned by vim-herdr-navigation below.
 vim.keymap.set("n", "<leader>wh", "<C-w><C-h>", { desc = "Move focus to the left window" })
 vim.keymap.set("n", "<leader>wl", "<C-w><C-l>", { desc = "Move focus to the right window" })
 -- Does not seem to work
 vim.keymap.set("n", "<C-b><Left>", "<C-w><C-h>", { desc = "Move focus to the left window" })
-vim.keymap.set("n", "<C-l>", "<C-w><C-l>", { desc = "Move focus to the right window" })
 -- Does not seem to work
 vim.keymap.set("n", "<C-b><Right>", "<C-w><C-l>", { desc = "Move focus to the right window" })
 
@@ -1504,9 +1497,22 @@ require("lazy").setup({
 		end,
 	},
 
-	-- Tmux + vim navigation
+	-- Seamless Vim split, tmux pane, and Herdr pane navigation.
 	{
 		"christoomey/vim-tmux-navigator",
+		lazy = false,
+		dependencies = {
+			{
+				"paulbkim-dev/vim-herdr-navigation",
+				commit = "79679dacc791f70fc34de8b29a3cf9706c0f5b2f",
+				config = function(plugin)
+					dofile(plugin.dir .. "/editor/nvim.lua")
+				end,
+			},
+		},
+		init = function()
+			vim.g.tmux_navigator_no_mappings = 1
+		end,
 	},
 
 	-- Statusline with git branch

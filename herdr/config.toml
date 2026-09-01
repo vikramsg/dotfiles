@@ -63,16 +63,41 @@ new_workspace = "prefix+shift+c"
 cycle_pane_previous = []
 cycle_pane_next = []
 
-# Prefix h/j/k/l are reserved for the tmux-compatible resize commands below.
-focus_pane_left = "ctrl+h"
-focus_pane_down = "ctrl+j"
-focus_pane_up = "ctrl+k"
-focus_pane_right = "ctrl+l"
+# vim-herdr-navigation owns Ctrl+h/j/k/l through the plugin actions below.
+# Prefix h/j/k/l remain reserved for the tmux-compatible resize commands.
+focus_pane_left = ""
+focus_pane_down = ""
+focus_pane_up = ""
+focus_pane_right = ""
 
 swap_pane_left = "prefix+shift+h"
 swap_pane_down = "prefix+shift+j"
 swap_pane_up = "prefix+shift+k"
 swap_pane_right = "prefix+shift+l"
+
+[[keys.command]]
+key = "ctrl+h"
+type = "plugin_action"
+command = "vim-herdr-navigation.left"
+description = "navigate left (vim/herdr)"
+
+[[keys.command]]
+key = "ctrl+j"
+type = "plugin_action"
+command = "vim-herdr-navigation.down"
+description = "navigate down (vim/herdr)"
+
+[[keys.command]]
+key = "ctrl+k"
+type = "plugin_action"
+command = "vim-herdr-navigation.up"
+description = "navigate up (vim/herdr)"
+
+[[keys.command]]
+key = "ctrl+l"
+type = "plugin_action"
+command = "vim-herdr-navigation.right"
+description = "navigate right (vim/herdr)"
 
 [[keys.command]]
 key = "prefix+h"
@@ -163,6 +188,12 @@ description = "open Snacks file picker"
 
 [ui]
 tab_bar_position = "top"
+tab_bar_right = [
+  { type = "zoom" },
+  { type = "command", command = 'branch=$(git branch --show-current 2>/dev/null); test -n "$branch" && printf " %s\n" "$branch"', interval_seconds = 5, timeout_seconds = 2 },
+  { type = "command", command = 'host=$(hostname -s); printf "󰒋 %s\n" "${host#dev-vm-}"', interval_seconds = 3600, timeout_seconds = 2 },
+]
+tab_bar_right_separator = "   "
 pane_borders = true
 pane_gaps = false
 pane_scrollbars = false
@@ -170,6 +201,9 @@ mouse_capture = true
 copy_on_select = true
 confirm_close = true
 prompt_new_tab_name = false
+
+[ui.sound]
+enabled = false
 
 [experimental]
 kitty_graphics = true

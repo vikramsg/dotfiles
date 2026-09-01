@@ -12,7 +12,9 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 - `Space + wh`: Move focus to the window on the left.
 - `Space + wl`: Move focus to the window on the right.
-- `Ctrl + h/j/k/l`: Move between splits when the terminal multiplexer does not intercept these keys.
+- `Ctrl + h/j/k/l`: Move between Neovim splits, crossing into an adjacent Herdr
+  pane at a split edge. Inside tmux, the existing `vim-tmux-navigator` behavior
+  is preserved; outside either multiplexer, the keys move only between splits.
 
 ### Snacks Explorer
 
