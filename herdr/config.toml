@@ -33,7 +33,7 @@ name = "tokyo-night"
 
 [theme.custom]
 accent = "#89b4fa"
-sidebar_bg = "#16161e"
+sidebar_bg = "#20232b"
 active_row_bg = "#24283b"
 selection_bg = "#33467c"
 
