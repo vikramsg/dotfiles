@@ -19,6 +19,7 @@ session data remain in the normal `~/.config/herdr` directory and outside this
 repository. The separate plugin command installs the audited
 `vim-herdr-navigation` revision into Herdr's managed plugin directory. Start
 Neovim once after linking `nvim/` so Lazy installs the matching editor adapter.
+Interactive Zsh panes publish a compact ` branch` label for the Spaces sidebar.
 
 ## Keys
 
