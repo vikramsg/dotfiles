@@ -17,6 +17,7 @@
 --   <leader>a      : Toggle Autocomplete (nvim-cmp)
 --   <leader>f      : Format current buffer (Conform)
 --   <leader>cp     : Copy absolute path of current file to clipboard
+--   gt     		: Navigate through tabs
 --
 --
 -- Git & Files:
@@ -870,8 +871,28 @@ require("lazy").setup({
 		},
 		config = function(_, opts)
 			require("codediff").setup(opts)
+			local group = vim.api.nvim_create_augroup("dotfiles-codediff-help", { clear = true })
+
+			local function set_custom_keymaps(tabpage)
+				local lifecycle = require("codediff.ui.lifecycle")
+				lifecycle.set_tab_keymap(
+					tabpage,
+					"n",
+					"B",
+					toggle_codediff_comparison,
+					{ desc = "Toggle CodeDiff HEAD/Main Comparison" }
+				)
+				lifecycle.set_tab_keymap(
+					tabpage,
+					"n",
+					"gf",
+					edit_codediff_file,
+					{ desc = "Edit File at Current Line" }
+				)
+			end
+
 			vim.api.nvim_create_autocmd("User", {
-				group = vim.api.nvim_create_augroup("dotfiles-codediff-help", { clear = true }),
+				group = group,
 				pattern = "CodeDiffOpen",
 				callback = function(args)
 					local tabpage = args.data.tabpage
@@ -880,25 +901,36 @@ require("lazy").setup({
 					codediff_next_compare_mode = nil
 					vim.t[tabpage].dotfiles_codediff_compare_mode = mode
 
-					require("codediff.ui.lifecycle").set_tab_keymap(
-						tabpage,
-						"n",
-						"B",
-						toggle_codediff_comparison,
-						{ desc = "Toggle CodeDiff HEAD/Main Comparison" }
-					)
-					require("codediff.ui.lifecycle").set_tab_keymap(
-						tabpage,
-						"n",
-						"gf",
-						edit_codediff_file,
-						{ desc = "Edit File at Current Line" }
-					)
+					set_custom_keymaps(tabpage)
 					vim.notify(
 						"B: HEAD/main | [/] hunks | gf: edit | g?: help | q: close",
 						vim.log.levels.INFO,
 						{ title = "CodeDiff", timeout = 10000 }
 					)
+				end,
+			})
+
+			vim.api.nvim_create_autocmd("User", {
+				group = group,
+				pattern = "CodeDiffFileSelect",
+				callback = function(args)
+					local tabpage = args.data.tabpage
+					local expected_path = vim.fs.normalize(args.data.path)
+					local attempts = 0
+					local function bind_when_selected()
+						attempts = attempts + 1
+						local lifecycle = require("codediff.ui.lifecycle")
+						local original, modified = lifecycle.get_paths(tabpage)
+						local current_path = (modified and modified.relative) or (original and original.relative)
+						if current_path and vim.fs.normalize(current_path) == expected_path then
+							set_custom_keymaps(tabpage)
+							return
+						end
+						if attempts < 100 and vim.api.nvim_tabpage_is_valid(tabpage) then
+							vim.defer_fn(bind_when_selected, 50)
+						end
+					end
+					vim.schedule(bind_when_selected)
 				end,
 			})
 		end,
