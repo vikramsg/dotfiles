@@ -10,6 +10,17 @@ What you should do after checks and tests are all complete, you should push and 
 
 You will not give implementation details but the simplest summary of what actually you did
 
+### Reminder
+
+Do not include stuff like this in the PR description. These are implementation notes not PR description.
+
+```
+## Verification
+
+- Backend formatting, lint, and static analysis passed.
+- <N> backend tests passed with <M> coverage.
+```
+
 ## Implementation Notes
 
 You will maintain implementation notes in a markdown file and at the end add a section for what I should look for in a review.
