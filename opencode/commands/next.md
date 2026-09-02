@@ -25,6 +25,11 @@ Do not include stuff like this in the PR description. These are implementation n
 
 You will maintain implementation notes in a markdown file and at the end add a section for what I should look for in a review.
 
+## Testing hygiene
+
+- You will only write behavioural tests, not change detections tests
+- You will not automate tests that you have to verify manually
+
 ## Review
 
 After all checks and tests pass launch a background reviewer agent. Make sure it's in the background. 
@@ -35,4 +40,5 @@ But do not let the reviewer be authoritative. Its an advisory agent. The reviewe
 1. Your ToDo list
 2. PR description
 3. What review points will be allowed to make you change your implementation 
+4. What tests will you write, how will you maintain testing hygiene and how will you verify e2e.
 
