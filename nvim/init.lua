@@ -21,7 +21,8 @@
 --
 --
 -- Git & Files:
---   <leader>gb : Show Git blame for current line
+--   <leader>gb : Show Git blame / line history (with clean diff preview)
+--   <leader>gf : Show Git file history (all commits affecting current file)
 --   <leader>gd : Open full Git diff review
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
@@ -607,6 +608,11 @@ require("lazy").setup({
 		opts = {
 			picker = {
 				enabled = true,
+				previewers = {
+					git = {
+						args = { "-c", "format.pretty=Commit: %h (%cr) by %an%n%n    %s%n" },
+					},
+				},
 				sources = {
 					files = {
 						title = "Files | Ctrl+/: toggle all",
@@ -689,9 +695,16 @@ require("lazy").setup({
 			{
 				"<leader>gb",
 				function()
-					Snacks.git.blame_line()
+					Snacks.picker.git_log_line()
 				end,
-				desc = "Git Blame Line",
+				desc = "Git Blame / Log (Current Line)",
+			},
+			{
+				"<leader>gf",
+				function()
+					Snacks.picker.git_log_file()
+				end,
+				desc = "Git Log (Current File)",
 			},
 			{
 				"<leader>sh",
