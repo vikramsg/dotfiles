@@ -865,7 +865,7 @@ require("lazy").setup({
 	},
 	{
 		"esmuellert/codediff.nvim",
-		version = "v2.67.10",
+		version = "*",
 		cmd = "CodeDiff",
 		keys = {
 			{ "<leader>gd", open_codediff_review, desc = "Git Diff Review" },
@@ -898,13 +898,7 @@ require("lazy").setup({
 					toggle_codediff_comparison,
 					{ desc = "Toggle CodeDiff HEAD/Main Comparison" }
 				)
-				lifecycle.set_tab_keymap(
-					tabpage,
-					"n",
-					"gf",
-					edit_codediff_file,
-					{ desc = "Edit File at Current Line" }
-				)
+				lifecycle.set_tab_keymap(tabpage, "n", "gf", edit_codediff_file, { desc = "Edit File at Current Line" })
 			end
 
 			vim.api.nvim_create_autocmd("User", {
