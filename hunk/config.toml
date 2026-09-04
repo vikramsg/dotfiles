@@ -1,7 +1,7 @@
 theme = "tokyo-night"
-mode = "auto"
+mode = "stack"
 vcs = "git"
-watch = false
+watch = true
 exclude_untracked = false
 line_numbers = true
 tab_width = 4
@@ -11,3 +11,12 @@ sidebar = "auto"
 agent_notes = true
 prompt_save_view_preferences = false
 transparent_background = false
+
+[keybindings]
+"hunk.view.openThemeSelector" = "T"
+"review-workflow.toggle-layout" = "t"
+"review-workflow.toggle-target" = "B"
+"review-workflow.choose-target" = "ctrl+b"
+
+[extension.review-workflow]
+review_path = ".agents/reviews/hunk-review.json"

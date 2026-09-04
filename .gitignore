@@ -14,6 +14,7 @@ __pycache__
 # Agent artifacts
 .agents/tasks
 .agents/data
+.agents/reviews
 
 # Local Harlequin database client config may contain secrets.
 harlequin/config.toml

@@ -35,6 +35,54 @@ ss() {
     esac
 }
 
+hunk() {
+    emulate -L zsh
+    setopt pipefail
+
+    if (( $# > 0 )); then
+        command hunk "$@"
+        return
+    fi
+
+    local repo_root
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+        print -u2 "hunk: current directory is not inside a Git repository"
+        return 1
+    }
+
+    cd "$repo_root" || return
+
+    local status_output
+    status_output=$(git status --porcelain --untracked-files=normal) || {
+        print -u2 "hunk: unable to read the working tree status"
+        return 1
+    }
+
+    if [[ -n "$status_output" ]]; then
+        HUNK_REVIEW_TARGET=working command hunk diff --mode stack
+        return
+    fi
+
+    if ! git rev-parse --verify --quiet 'main^{commit}' >/dev/null; then
+        print -u2 "hunk: working tree is clean and branch 'main' does not exist"
+        return 1
+    fi
+
+    git diff --quiet main...HEAD --
+    local comparison_status=$?
+    if (( comparison_status == 0 )); then
+        print "hunk: no changes since HEAD or since branching from main"
+        return
+    fi
+
+    if (( comparison_status != 1 )); then
+        print -u2 "hunk: unable to compare the current branch with main"
+        return "$comparison_status"
+    fi
+
+    HUNK_REVIEW_TARGET=main command hunk diff main... --mode stack
+}
+
 vm-tab() {
     emulate -L zsh
     setopt pipefail
