@@ -1,9 +1,0 @@
-set positional-arguments := true
-
-install:
-    mkdir -p "$HOME/.local/bin"
-    ln -sfn {{justfile_directory()}}/hunk-review "$HOME/.local/bin/hunk-review"
-
-test:
-    python3 -m unittest discover -s {{justfile_directory()}}/tests -p 'test_*.py'
-    bun test {{justfile_directory()}}/../../hunk/tests/review-workflow.test.ts
