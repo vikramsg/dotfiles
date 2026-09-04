@@ -13,6 +13,17 @@ It is inspired by Hammerspoon and aims to provide API's for easy automation of M
 - Keep behavior and configuration owned by the appropriate component.
 - Add reusable capabilities when multiple workflows need them.
 
+### CLI design
+
+The `macflow` CLI is strictly an HTTP client for the running Macflow
+application.
+
+- CLI commands may parse arguments, locate connection configuration and
+  credentials, issue HTTP requests, render responses, and set exit codes.
+- CLI commands must not directly read or modify macOS runtime state.
+- All macOS state and actions must be owned by the running signed application
+  and exposed through a versioned `/v1/...` HTTP endpoint.
+
 ## Config
 
 Note: Config does not belong inside `bin/macflow`. That is for the state agnostic tool.

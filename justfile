@@ -102,6 +102,7 @@ herdr:
             ln -s "$CONFIG_FILE" "$TARGET"; \
         fi; \
         echo "Herdr config symlink created at $TARGET -> $CONFIG_FILE"
+    herdr plugin install paulbkim-dev/vim-herdr-navigation --ref 79679dacc791f70fc34de8b29a3cf9706c0f5b2f -y
 
 # Set up tuicr config symlink
 tuicr:

@@ -10,16 +10,15 @@ existing tmux key habits and configuration.
 just brew
 just tuicr
 just herdr
-herdr plugin install paulbkim-dev/vim-herdr-navigation --ref 79679dacc791f70fc34de8b29a3cf9706c0f5b2f -y
 herdr
 ```
 
-`just herdr` links only `config.toml`. Herdr's logs, sockets, and persistent
-session data remain in the normal `~/.config/herdr` directory and outside this
-repository. The separate plugin command installs the audited
-`vim-herdr-navigation` revision into Herdr's managed plugin directory. Start
-Neovim once after linking `nvim/` so Lazy installs the matching editor adapter.
-Interactive Zsh panes publish a compact ` branch` label for the Spaces sidebar.
+`just herdr` links `config.toml` and installs the audited
+`vim-herdr-navigation` revision into Herdr's managed plugin directory. Herdr's
+logs, sockets, and persistent session data remain in the normal
+`~/.config/herdr` directory and outside this repository. Start Neovim once
+after linking `nvim/` so Lazy installs the matching editor adapter. Interactive
+Zsh panes publish a compact ` branch` label for the Spaces sidebar.
 
 ## Keys
 
