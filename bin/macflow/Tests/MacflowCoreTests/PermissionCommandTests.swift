@@ -14,7 +14,7 @@ import Testing
 
     @Test func testAccessibilityCommandBuildsGenericRequest() throws {
         let command = try #require(
-            try PermissionCommand.parse(arguments: ["request-permission", "accessibility"])
+            try PermissionCommand.parse(arguments: ["permissions", "request", "accessibility"])
         )
         #expect(command == .request(.accessibility))
         #expect(command.httpRequest.method == "POST")
@@ -24,7 +24,7 @@ import Testing
 
     @Test func testScreenRecordingCommandConvertsCLINameToAPIName() throws {
         let command = try #require(
-            try PermissionCommand.parse(arguments: ["request-permission", "screen-recording"])
+            try PermissionCommand.parse(arguments: ["permissions", "request", "screen-recording"])
         )
         #expect(command == .request(.screenRecording))
         #expect(command.httpRequest.body?["permission"] as? String == "screen_recording")
@@ -32,28 +32,23 @@ import Testing
 
     @Test func testRequestCommandRejectsMissingUnknownAndExtraArguments() {
         do {
-            _ = try PermissionCommand.parse(arguments: ["request-permission"])
+            _ = try PermissionCommand.parse(arguments: ["permissions", "request"])
             Issue.record("Expected missing permission to fail")
         } catch {
             #expect(error as? PermissionCommandError == .missingPermission)
         }
         do {
-            _ = try PermissionCommand.parse(arguments: ["request-permission", "camera"])
+            _ = try PermissionCommand.parse(arguments: ["permissions", "request", "camera"])
             Issue.record("Expected unsupported permission to fail")
         } catch {
             #expect(error as? PermissionCommandError == .unsupportedPermission("camera"))
         }
         do {
-            _ = try PermissionCommand.parse(arguments: ["request-permission", "accessibility", "extra"])
+            _ = try PermissionCommand.parse(arguments: ["permissions", "request", "accessibility", "extra"])
             Issue.record("Expected extra arguments to fail")
         } catch {
             #expect(error as? PermissionCommandError == .invalidArguments)
         }
-    }
-
-    @Test func testRemovedCommandsAreNotRecognizedAsPermissionCommands() throws {
-        #expect(try PermissionCommand.parse(arguments: ["request-accessibility"]) == nil)
-        #expect(try PermissionCommand.parse(arguments: ["request-screen-recording"]) == nil)
     }
 
     @Test func testHandlerDispatchesAccessibilityExactlyOnce() throws {

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import MacflowCore
 
@@ -11,7 +12,8 @@ func usage() -> Never {
     Usage:
       macflow health
       macflow permissions
-      macflow request-permission <accessibility|screen-recording>
+      macflow permissions request <accessibility|screen-recording>
+      macflow doctor
       macflow applications
       macflow windows <bundle-id>
       macflow screens
@@ -88,8 +90,30 @@ func encoded(_ value: String) -> String {
     value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
 }
 
+func doctorUsesColor() -> Bool {
+    DoctorRenderer.shouldUseColor(
+        isTerminal: isatty(STDOUT_FILENO) == 1,
+        environment: ProcessInfo.processInfo.environment
+    )
+}
+
+func runDoctor() {
+    let color = doctorUsesColor()
+    let report = DoctorCommand.run { diagnosticRequest in
+        try request(method: diagnosticRequest.method, path: diagnosticRequest.path)
+    }
+    print(DoctorRenderer.render(report, color: color))
+    if !report.passed { exit(1) }
+}
+
 func runCLI(arguments: [String]) {
 do {
+    if arguments.first == "doctor" {
+        guard arguments.count == 1 else { usage() }
+        runDoctor()
+        return
+    }
+
     let data: Data
     if let permissionCommand = try PermissionCommand.parse(arguments: arguments) {
         let permissionRequest = permissionCommand.httpRequest

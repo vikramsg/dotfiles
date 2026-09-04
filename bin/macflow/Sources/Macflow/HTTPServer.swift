@@ -38,6 +38,7 @@ final class HTTPServer {
     private let capture: ScreenshotCaptureService
     private let watcher: AutomaticPreviewController
     private let shelf: FileShelfController
+    private let hotKeys: HotKeyService
     private let captureSettleSeconds: Double
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "dev.vikramsingh.mac-workflow.http")
@@ -52,6 +53,7 @@ final class HTTPServer {
         capture: ScreenshotCaptureService,
         watcher: AutomaticPreviewController,
         shelf: FileShelfController,
+        hotKeys: HotKeyService,
         captureSettleSeconds: Double
     ) {
         self.configuration = configuration
@@ -63,6 +65,7 @@ final class HTTPServer {
         self.capture = capture
         self.watcher = watcher
         self.shelf = shelf
+        self.hotKeys = hotKeys
         self.captureSettleSeconds = captureSettleSeconds
     }
 
@@ -130,7 +133,7 @@ final class HTTPServer {
             switch (request.method, request.path) {
             case ("GET", "/v1/permissions"):
                 try RuntimeFiles.writePermissions()
-                completion(.ok(PermissionService.dictionary))
+                completion(.ok(PermissionService.status.json))
             case ("POST", "/v1/permissions/request"):
                 guard let body = try? jsonBody(request) else {
                     completion(.error(400, "JSON object required"))
@@ -145,6 +148,8 @@ final class HTTPServer {
                 } catch let error as PermissionCommandError {
                     completion(.error(400, error.localizedDescription))
                 }
+            case ("GET", "/v1/hotkeys"):
+                completion(.ok(hotKeys.status.json))
             case ("GET", "/v1/applications"):
                 completion(.ok(["applications": applications.all()]))
             case ("GET", "/v1/windows"):

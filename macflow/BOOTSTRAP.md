@@ -92,7 +92,7 @@ complete.
 Request Accessibility access from the installed application:
 
 ```bash
-macflow request-permission accessibility
+macflow permissions request accessibility
 ```
 
 Open **System Settings > Privacy & Security > Accessibility**, then enable
@@ -111,7 +111,7 @@ for window layouts, focus management, hotkeys, and synthetic input.
 Request Screen Recording access from the installed application:
 
 ```bash
-macflow request-permission screen-recording
+macflow permissions request screen-recording
 ```
 
 Open **System Settings > Privacy & Security > Screen & System Audio
@@ -138,6 +138,7 @@ Run every verification command:
 ```bash
 macflow health
 macflow permissions
+macflow doctor
 lch status lch-macflow
 macflow screenshot --preview
 ```
@@ -147,6 +148,7 @@ Setup is complete only when:
 - `macflow health` returns a successful response.
 - `macflow permissions` reports both Accessibility and Screen Recording as
   granted.
+- `macflow doctor` reports that every runtime check passes.
 - `lch status lch-macflow` reports `loaded`.
 - `macflow screenshot --preview` writes a PNG and displays its transient
   preview.

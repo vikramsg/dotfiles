@@ -1,4 +1,5 @@
 import ApplicationServices
+import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 import MacflowCore
@@ -19,6 +20,10 @@ enum PermissionService {
         return CGPreflightScreenCaptureAccess()
     }
 
+    static func secureInput() -> Bool {
+        IsSecureEventInputEnabled()
+    }
+
     static func request(_ permission: PermissionKind) -> Bool {
         switch permission {
         case .accessibility: return accessibility(prompt: true)
@@ -26,10 +31,7 @@ enum PermissionService {
         }
     }
 
-    static var dictionary: [String: Bool] {
-        [
-            "accessibility": accessibility(),
-            "screen_recording": screenRecording(),
-        ]
+    static var status: PermissionStatus {
+        PermissionStatus(accessibility: accessibility(), screenRecording: screenRecording())
     }
 }

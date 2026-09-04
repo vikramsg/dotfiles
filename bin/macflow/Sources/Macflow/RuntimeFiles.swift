@@ -26,7 +26,7 @@ enum RuntimeFiles {
     }
 
     static func writePermissions() throws {
-        let values = PermissionService.dictionary
+        let values = PermissionService.status.json
         let text = ["accessibility", "screen_recording"]
             .map { "\($0)=\(values[$0] == true ? "granted" : "not granted")" }
             .joined(separator: "\n") + "\n"

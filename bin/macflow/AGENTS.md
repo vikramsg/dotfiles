@@ -21,8 +21,17 @@ application.
 - CLI commands may parse arguments, locate connection configuration and
   credentials, issue HTTP requests, render responses, and set exit codes.
 - CLI commands must not directly read or modify macOS runtime state.
+- This prohibition includes read-only diagnostics, permission checks, and
+  fallback behavior through AppKit, ApplicationServices, Carbon, CoreGraphics,
+  ScreenCaptureKit, or other macOS system APIs.
 - All macOS state and actions must be owned by the running signed application
   and exposed through a versioned `/v1/...` HTTP endpoint.
+- If a CLI command needs runtime state that is not available through the HTTP
+  API, add or extend an endpoint before implementing the command. Do not add a
+  direct local fallback.
+- Keep `GET /v1/health` limited to service liveness.
+- Tests for CLI commands should verify the HTTP requests they issue and the
+  behavior rendered from HTTP responses.
 
 ## Config
 

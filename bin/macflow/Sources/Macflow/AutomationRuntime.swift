@@ -62,6 +62,7 @@ final class AutomationRuntime {
             capture: capture,
             watcher: automaticPreview,
             shelf: shelf,
+            hotKeys: hotKeys,
             captureSettleSeconds: configuration.screenshots.captureSettleSeconds
         )
         self.configurationURL = configurationURL

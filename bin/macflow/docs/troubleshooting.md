@@ -11,15 +11,20 @@ observing keyboard events. It can remain enabled after a password field closes,
 an application moves to the background, or the Mac wakes. Password managers,
 browsers with login forms, and terminal applications are common sources.
 
-Check whether Secure Input is enabled:
+Run Macflow's diagnostics first:
 
 ```bash
-ioreg -l -d 1 -w 0 | grep kCGSSessionSecureInputPID
+macflow doctor
 ```
 
-No output means Secure Input is disabled. Output containing a PID means it is
-enabled. The reported process is not always the application responsible;
-`loginwindow` is commonly reported when another application owns the request.
+The command checks the running service, macOS permissions, global shortcut
+listener, and Secure Input. When Secure Input is blocking shortcuts it reports:
+
+```text
+✗ secure input enabled
+  help: Global shortcuts are blocked by macOS.
+        Close password prompts and restart likely password-manager/browser apps.
+```
 
 To clear it:
 
@@ -34,11 +39,8 @@ To clear it:
 Do not terminate `loginwindow`; doing so forcibly ends the login session.
 
 After Secure Input clears, Macflow shortcuts should resume without rebuilding
-or reinstalling Macflow. If they do not, confirm Accessibility permission is
-still granted:
+or reinstalling Macflow. Run the doctor again to confirm every check passes:
 
 ```bash
-macflow permissions
+macflow doctor
 ```
-
-The response should contain `"accessibility" : true`.

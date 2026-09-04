@@ -34,10 +34,15 @@ images written by another capture tool does not require it. Check or request
 permissions with:
 
 ```bash
+macflow doctor
 macflow permissions
-macflow request-permission accessibility
-macflow request-permission screen-recording
+macflow permissions request accessibility
+macflow permissions request screen-recording
 ```
+
+`macflow doctor` combines the permission and hotkey status APIs into a concise,
+terminal-aware health report. Permission prompts remain available under the
+`permissions request` subcommand.
 
 ## Configuration
 
@@ -155,6 +160,7 @@ HTTP routes.
 GET    /v1/health
 GET    /v1/permissions
 POST   /v1/permissions/request
+GET    /v1/hotkeys
 GET    /v1/applications
 POST   /v1/applications/launch
 GET    /v1/windows?bundle_id=<bundle-id>
