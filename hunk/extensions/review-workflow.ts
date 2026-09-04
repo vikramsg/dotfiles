@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import type { ExtensionReviewSnapshot, HunkExtensionAPI } from "hunkdiff/extension";
+import type { HunkExtensionAPI } from "hunkdiff/extension";
 
 type ReviewTarget = "working" | "main" | "other";
 type ReviewLayout = "auto" | "split" | "stack";
@@ -29,7 +29,18 @@ export interface WorkflowDependencies {
   runCommand(command: string, args: string[]): Promise<CommandResult>;
   repoRoot(cwd: string): string | null;
   isIgnored(repoRoot: string, path: string): boolean;
-  writeSnapshot(path: string, snapshot: ExtensionReviewSnapshot): void;
+  writeSnapshot(path: string, snapshot: unknown): void;
+}
+
+interface ReviewExportContext {
+  cwd: string;
+  notify(message: string, type?: "info" | "warning" | "error"): void;
+}
+
+interface SessionReviewExport {
+  review: {
+    reviewNotes?: readonly unknown[];
+  };
 }
 
 const DEFAULT_REVIEW_PATH = ".agents/reviews/hunk-review.json";
@@ -125,7 +136,7 @@ export function resolveReviewPath(repoRoot: string, configuredPath: unknown): st
   return canonicalOutput;
 }
 
-export function writeReviewSnapshot(path: string, snapshot: ExtensionReviewSnapshot): void {
+export function writeReviewSnapshot(path: string, snapshot: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
   let descriptor: number | undefined;
@@ -164,7 +175,27 @@ export function createReviewWorkflowExtension(
     let currentTarget: ReviewTarget =
       dependencies.env.HUNK_REVIEW_TARGET === "main" ? "main" : "working";
     let currentLayout: ReviewLayout = "stack";
+    let exportQueue = Promise.resolve();
     const configuredReviewPath = hunk.config.review_path;
+
+    async function sessionSelector(repoRoot: string): Promise<string[]> {
+      const hunkBin = getHunkBin(dependencies.env);
+      const sessions = await dependencies.runCommand(hunkBin, ["session", "list", "--json"]);
+      if (!sessions.error) {
+        try {
+          const parsed = JSON.parse(sessions.stdout) as {
+            sessions?: Array<{ sessionId?: unknown; pid?: unknown }>;
+          };
+          const ownSession = parsed.sessions?.find(
+            (session) => session.pid === dependencies.pid && typeof session.sessionId === "string",
+          );
+          if (ownSession) return [ownSession.sessionId as string];
+        } catch {
+          // Fall back to the repository selector for older or malformed list output.
+        }
+      }
+      return ["--repo", repoRoot];
+    }
 
     async function reload(
       ctx: {
@@ -179,21 +210,7 @@ export function createReviewWorkflowExtension(
         return false;
       }
       const hunkBin = getHunkBin(dependencies.env);
-      let selector = ["--repo", repoRoot];
-      const sessions = await dependencies.runCommand(hunkBin, ["session", "list", "--json"]);
-      if (!sessions.error) {
-        try {
-          const parsed = JSON.parse(sessions.stdout) as {
-            sessions?: Array<{ sessionId?: unknown; pid?: unknown }>;
-          };
-          const ownSession = parsed.sessions?.find(
-            (session) => session.pid === dependencies.pid && typeof session.sessionId === "string",
-          );
-          if (ownSession) selector = [ownSession.sessionId as string];
-        } catch {
-          // Fall back to the repository selector for older or malformed list output.
-        }
-      }
+      const selector = await sessionSelector(repoRoot);
 
       const result = await dependencies.runCommand(hunkBin, [
         "session",
@@ -285,12 +302,7 @@ export function createReviewWorkflowExtension(
       },
     );
 
-    hunk.registerCommand({ id: "save-review", title: "Save review comments", key: "S" }, (ctx) => {
-      const snapshot = ctx.review.snapshot();
-      if (!snapshot) {
-        ctx.notify("The current review is unavailable", "warning");
-        return;
-      }
+    async function exportReview(ctx: ReviewExportContext) {
       const repoRoot = dependencies.repoRoot(ctx.cwd);
       if (!repoRoot) {
         ctx.notify("Saving review comments requires a Git repository", "error");
@@ -308,9 +320,27 @@ export function createReviewWorkflowExtension(
           );
           return;
         }
-        dependencies.writeSnapshot(outputPath, snapshot);
+
+        const hunkBin = getHunkBin(dependencies.env);
+        const selector = await sessionSelector(canonicalRoot);
+        const result = await dependencies.runCommand(hunkBin, [
+          "session",
+          "review",
+          ...selector,
+          "--include-notes",
+          "--json",
+        ]);
+        if (result.error) {
+          throw new Error(commandFailure(result));
+        }
+        const exported = JSON.parse(result.stdout) as SessionReviewExport;
+        if (!exported.review || !Array.isArray(exported.review.reviewNotes)) {
+          throw new Error("Hunk returned an invalid live review export");
+        }
+        dependencies.writeSnapshot(outputPath, exported);
+        const noteCount = exported.review.reviewNotes.length;
         ctx.notify(
-          `Saved ${snapshot.notes.length} review ${snapshot.notes.length === 1 ? "comment" : "comments"} to ${relativePath}`,
+          `Saved ${noteCount} review ${noteCount === 1 ? "comment" : "comments"} to ${relativePath}`,
         );
       } catch (error) {
         ctx.notify(
@@ -318,6 +348,11 @@ export function createReviewWorkflowExtension(
           "error",
         );
       }
+    }
+
+    hunk.on("note_changed", async (_event, ctx) => {
+      exportQueue = exportQueue.then(() => exportReview(ctx));
+      await exportQueue;
     });
 
     hunk.on("layout_changed", ({ layout }) => {

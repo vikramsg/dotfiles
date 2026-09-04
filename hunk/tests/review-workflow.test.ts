@@ -55,7 +55,8 @@ function snapshot(notes: ExtensionReviewSnapshot["notes"] = []): ExtensionReview
 function testHarness(
   options: {
     configuredPath?: unknown;
-    snapshot?: ExtensionReviewSnapshot | null;
+    reviewExport?: unknown;
+    reviewError?: Error;
     ignored?: boolean;
     initialTarget?: string;
   } = {},
@@ -64,7 +65,7 @@ function testHarness(
   const events = new Map<string, (payload: any, ctx: any) => unknown>();
   const notifications: Array<{ message: string; type?: string }> = [];
   const reloads: string[][] = [];
-  const writes: Array<{ path: string; snapshot: ExtensionReviewSnapshot }> = [];
+  const writes: Array<{ path: string; snapshot: unknown }> = [];
   const executed: string[] = [];
   const repo = temporaryDirectory();
   const dependencies: WorkflowDependencies = {
@@ -86,6 +87,15 @@ function testHarness(
           stderr: "",
         };
       }
+      if (args[1] === "review") {
+        return options.reviewError
+          ? { error: options.reviewError, stdout: "", stderr: options.reviewError.message }
+          : {
+              error: null,
+              stdout: JSON.stringify(options.reviewExport ?? { review: { reviewNotes: [] } }),
+              stderr: "",
+            };
+      }
       return { error: null, stdout: "", stderr: "" };
     },
     writeSnapshot: (path, value) => writes.push({ path, snapshot: value }),
@@ -103,10 +113,6 @@ function testHarness(
   const context = {
     cwd: repo,
     notify: (message: string, type?: string) => notifications.push({ message, type }),
-    review: {
-      snapshot: () =>
-        Object.prototype.hasOwnProperty.call(options, "snapshot") ? options.snapshot : snapshot(),
-    },
     commands: {
       execute: (command: string) => {
         executed.push(command);
@@ -122,7 +128,7 @@ function testHarness(
 }
 
 describe("review export", () => {
-  test("saves the complete current snapshot and leaves the review running", () => {
+  test("automatically saves the live review when a note is saved", async () => {
     const review = snapshot([
       {
         id: "agent:1",
@@ -143,31 +149,49 @@ describe("review export", () => {
         resolution: "active",
       },
     ]);
+    const exported = {
+      review: {
+        files: [{ path: "README.md" }],
+        reviewNotes: [
+          { noteId: "agent:1", source: "agent", filePath: "README.md", body: "Agent comment" },
+          { noteId: "user:1", source: "user", filePath: "README.md", body: "Human comment" },
+        ],
+      },
+    };
     const harness = testHarness({
       configuredPath: ".agents/reviews/current.json",
-      snapshot: review,
+      reviewExport: exported,
     });
 
-    harness.commands.get("save-review")!(harness.context);
+    await harness.events.get("note_changed")!(
+      { kind: "created", note: review.notes[1] },
+      harness.context,
+    );
 
     expect(harness.writes).toEqual([
       {
         path: join(realpathSync(harness.repo), ".agents/reviews/current.json"),
-        snapshot: review,
+        snapshot: exported,
       },
     ]);
-    expect(harness.reloads).toEqual([]);
+    expect(harness.reloads).toEqual([
+      ["session", "list", "--json"],
+      ["session", "review", "current-session", "--include-notes", "--json"],
+    ]);
     expect(harness.executed).toEqual([]);
     expect(harness.notifications.at(-1)?.message).toContain("Saved 2 review comments");
   });
 
-  test("refuses an export that would become part of the Git review", () => {
+  test("refuses an export that would become part of the Git review", async () => {
     const harness = testHarness({
       configuredPath: ".agents/reviews/current.json",
       ignored: false,
     });
 
-    harness.commands.get("save-review")!(harness.context);
+    await harness.events.get("note_changed")!(
+      { kind: "created", note: snapshot().notes[0] },
+      harness.context,
+    );
 
     expect(harness.writes).toEqual([]);
     expect(harness.notifications.at(-1)).toEqual({
@@ -177,15 +201,18 @@ describe("review export", () => {
     });
   });
 
-  test("warns when no current review can be captured", () => {
-    const harness = testHarness({ snapshot: null });
+  test("reports a live review export failure", async () => {
+    const harness = testHarness({ reviewError: new Error("session unavailable") });
 
-    harness.commands.get("save-review")!(harness.context);
+    await harness.events.get("note_changed")!(
+      { kind: "created", note: snapshot().notes[0] },
+      harness.context,
+    );
 
     expect(harness.writes).toEqual([]);
     expect(harness.notifications.at(-1)).toEqual({
-      message: "The current review is unavailable",
-      type: "warning",
+      message: "Failed to save review comments: session unavailable",
+      type: "error",
     });
   });
 });

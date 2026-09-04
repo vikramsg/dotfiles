@@ -17,7 +17,6 @@ transparent_background = false
 "review-workflow.toggle-layout" = "t"
 "review-workflow.toggle-target" = "B"
 "review-workflow.choose-target" = "ctrl+b"
-"review-workflow.save-review" = "S"
 
 [extension.review-workflow]
 review_path = ".agents/reviews/hunk-review.json"
