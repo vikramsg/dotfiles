@@ -1,0 +1,53 @@
+# Hunk startup performance experiments
+
+This is the experimental log for reducing the delay between invoking the Herdr
+Hunk popup and seeing the review. Each hypothesis is tested in its own commit.
+Rejected experiments remain documented here even when their code change is not
+retained.
+
+## Success criteria
+
+- Process-level launcher overhead: p95 at most 50 ms above native Hunk.
+- Herdr popup to first Hunk frame: p95 at most 500 ms.
+- If native Hunk itself exceeds 500 ms, stop when launcher overhead is at most
+  50 ms and the remaining time is demonstrated to be native Hunk startup.
+- Preserve zero-argument target selection, native argument delegation, review
+  export, and clear error/no-change messages.
+
+Process benchmarks use `hunk/benchmark-startup.py`, two warmups, and 20 measured
+runs. Interactive TUI measurements use Herdr and record the command start and
+first visible Hunk header.
+
+## Baseline — 2026-09-04
+
+Initial five-run shell measurements on macOS:
+
+| Case | Warm result |
+| --- | ---: |
+| `/bin/zsh -fc true` | 0 ms |
+| `/bin/zsh -ic true` | 240–250 ms |
+| native `hunk --version` | 330–370 ms |
+| `/bin/zsh -ic 'hunk --version'` | 580–620 ms |
+
+The first interactive Hunk measurement was 920 ms, indicating an additional
+cold-start penalty. The warm measurements attribute about 250 ms to interactive
+Zsh initialization. `exec` is not itself the expensive operation.
+
+Reproducible 20-run baseline (`python3 hunk/benchmark-startup.py`):
+
+| Case | Median | p95 |
+| --- | ---: | ---: |
+| minimal no-rc Zsh | 8.2 ms | 13.5 ms |
+| interactive Zsh | 310.2 ms | 329.5 ms |
+| native `hunk --version` | 346.7 ms | 386.4 ms |
+| interactive Zsh and Hunk | 610.1 ms | 685.9 ms |
+| no-rc Zsh, `.zsh_script`, and Hunk | 405.3 ms | 419.1 ms |
+
+## Experiment log
+
+### H1 — Skip interactive Zsh initialization
+
+**Hypothesis:** Herdr can source only the managed shell functions in a no-rc Zsh
+and preserve behavior while removing approximately 250 ms of startup latency.
+
+**Status:** Pending.
