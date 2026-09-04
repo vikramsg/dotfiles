@@ -218,3 +218,36 @@ This is less than 2% of the native Hunk TUI median and cannot explain the delay.
 
 **Status:** Rejected. Herdr CLI observation is not the bottleneck; continue
 testing Hunk's native startup options.
+
+### H8 — Enable Hunk's fast highlighting path
+
+**Hypothesis:** Hunk's `--fast` worker-backed highlighting reduces first-frame
+time, especially for larger code reviews.
+
+**Small one-file diff (10 interleaved runs each, one warmup):**
+
+| Highlighting | Median | p95 |
+| --- | ---: | ---: |
+| normal | 1733.7 ms | 2002.7 ms |
+| `--fast` | 1783.2 ms | 1884.9 ms |
+
+The small-diff median regressed by 49.5 ms while p95 improved by 117.8 ms, so
+that case alone did not justify the flag.
+
+**Large TypeScript diff — 20 files × 500 changed lines (six interleaved runs
+each, one warmup):**
+
+| Highlighting | Median | p95 |
+| --- | ---: | ---: |
+| normal | 2661.5 ms | 2802.2 ms |
+| `--fast` | 2400.6 ms | 2595.3 ms |
+
+The representative large review improved median by 260.9 ms and p95 by 206.9
+ms. The zero-argument workflow now passes `--fast`; explicit Hunk arguments
+remain native and unchanged.
+
+**Verification:** The installed native launcher opened a dirty review with
+`--fast`; stack/split toggle, working/main target toggle, human comment save,
+automatic JSON export, and quit all passed.
+
+**Status:** Retained.

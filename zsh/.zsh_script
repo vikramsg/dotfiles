@@ -61,7 +61,7 @@ hunk() {
     }
 
     if [[ -n "$status_output" ]]; then
-        HUNK_REVIEW_TARGET=working command "$hunk_bin" diff --mode stack
+        HUNK_REVIEW_TARGET=working command "$hunk_bin" diff --mode stack --fast
         return
     fi
 
@@ -82,7 +82,7 @@ hunk() {
         return "$comparison_status"
     fi
 
-    HUNK_REVIEW_TARGET=main command "$hunk_bin" diff main... --mode stack
+    HUNK_REVIEW_TARGET=main command "$hunk_bin" diff main... --mode stack --fast
 }
 
 vm-tab() {
