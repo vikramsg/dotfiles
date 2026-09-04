@@ -32,11 +32,9 @@ It runs lock, package test, check, and smoke verification and restores all three
 It never commits, tags, pushes, or installs. A valid prepared rerun is idempotent.
 
 Review the files, commit and push the release branch through the normal development process, and
-open a PR targeting `main` and titled exactly `ocint: Release vX.Y.Z`. Required CI must include the normal **Validate PR
-title** check and **Release validation**. The latter is not applicable and succeeds for ordinary
-PRs, including shared-lock changes and same-version package configuration changes. A release branch,
-release-like title, changelog change, or package-version change activates release policy and requires
-all three files plus the exact release branch and title.
+open a PR targeting `main` and titled exactly `ocint: Release vX.Y.Z`. The normal **Validate PR
+title** check remains required. Release preparation performs the release-specific validation before
+the PR is opened.
 
 Squash-merge the approved release PR. The resulting main subject may include GitHub's ` (#123)`
 suffix. The main-push workflow validates the squash commit against its first parent and creates and

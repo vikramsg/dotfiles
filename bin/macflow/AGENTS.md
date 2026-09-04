@@ -18,6 +18,8 @@ It is inspired by Hammerspoon and aims to provide API's for easy automation of M
 The `macflow` CLI is strictly an HTTP client for the running Macflow
 application.
 
+- Define the command hierarchy, arguments, options, validation, and help with
+  Swift Argument Parser. Do not parse `CommandLine.arguments` manually.
 - CLI commands may parse arguments, locate connection configuration and
   credentials, issue HTTP requests, render responses, and set exit codes.
 - CLI commands must not directly read or modify macOS runtime state.
@@ -32,6 +34,17 @@ application.
 - Keep `GET /v1/health` limited to service liveness.
 - Tests for CLI commands should verify the HTTP requests they issue and the
   behavior rendered from HTTP responses.
+
+Ideal CLI design
+
+```text
+Swift Argument Parser
+  -> typed command
+  -> MacflowHTTPClient
+  -> versioned HTTP endpoint
+  -> Macflow.app
+  -> macOS API
+```
 
 ## Config
 

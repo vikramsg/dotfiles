@@ -1,0 +1,48 @@
+import Testing
+@testable import MacflowCore
+
+@Suite struct PermissionRequestTests {
+    @Test func testHandlerDispatchesAccessibilityExactlyOnce() throws {
+        var requested: [PermissionKind] = []
+        let result = try PermissionRequestHandler.handle(body: ["permission": "accessibility"]) {
+            requested.append($0)
+            return true
+        }
+        #expect(requested == [.accessibility])
+        #expect(result == PermissionRequestResult(permission: .accessibility, granted: true))
+        #expect(result.json["permission"] as? String == "accessibility")
+        #expect(result.json["granted"] as? Bool == true)
+    }
+
+    @Test func testHandlerDispatchesScreenRecordingExactlyOnce() throws {
+        var requested: [PermissionKind] = []
+        let result = try PermissionRequestHandler.handle(body: ["permission": "screen_recording"]) {
+            requested.append($0)
+            return false
+        }
+        #expect(requested == [.screenRecording])
+        #expect(result == PermissionRequestResult(permission: .screenRecording, granted: false))
+    }
+
+    @Test func testHandlerRejectsMissingAndUnknownPermissionsWithoutDispatching() {
+        var requestCount = 0
+        let requester: (PermissionKind) -> Bool = { _ in
+            requestCount += 1
+            return true
+        }
+
+        do {
+            _ = try PermissionRequestHandler.handle(body: [:], request: requester)
+            Issue.record("Expected missing permission to fail")
+        } catch {
+            #expect(error as? PermissionCommandError == .missingPermission)
+        }
+        do {
+            _ = try PermissionRequestHandler.handle(body: ["permission": "camera"], request: requester)
+            Issue.record("Expected unsupported permission to fail")
+        } catch {
+            #expect(error as? PermissionCommandError == .unsupportedPermission("camera"))
+        }
+        #expect(requestCount == 0)
+    }
+}
