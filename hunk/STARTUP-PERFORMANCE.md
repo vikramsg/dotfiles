@@ -290,3 +290,41 @@ normal samples early in the run and was not accompanied by a central-tendency
 improvement. Hiding agent notes would also remove required review context.
 
 **Status:** Rejected. Preserve the existing review surfaces.
+
+## Final result and stopping decision
+
+**Old versus final installed command (10 interleaved real-pane runs each):**
+
+| Herdr command | Median | p95 |
+| --- | ---: | ---: |
+| merged `exec zsh -ic hunk` | 2383.3 ms | 2407.0 ms |
+| no-rc Zsh + packaged native Hunk + `--fast` | 1986.5 ms | 1994.6 ms |
+
+The final workflow improves median by 396.8 ms (16.6%) and p95 by 412.4 ms
+(17.1%). The process benchmark places the complete lightweight launcher at
+330.7 ms p95 versus 314.4 ms for packaged native Hunk, leaving 16.3 ms of
+launcher overhead. That is below the 50 ms budget.
+
+Native Hunk's first frame remains well above 500 ms: direct native `--fast`
+measured 1780.0 ms median in the final 15-run comparison. The loop therefore
+stops under the documented native-floor rule: shell/launcher overhead is below
+50 ms, and further material improvement requires upstream Hunk startup work.
+The clearest upstream opportunity is deferring watch initialization, which was
+worth about 207 ms median locally but cannot currently be retained without
+removing automatic refresh.
+
+Final installed verification passed for:
+
+- dirty working-tree review;
+- clean `main...HEAD` feature review;
+- no-change and outside-repository messages;
+- `--version` and `session list --json` native delegation;
+- stack/split, working/main, and target-picker controls;
+- automatic watch refresh;
+- comment save and automatic ignored JSON export;
+- continued TUI operation and clean quit.
+
+The macOS installation and native package were exercised directly. The install
+recipe includes Linux x64 and arm64 package mappings, but Linux runtime
+verification was unavailable because the configured `vm` SSH host did not
+resolve from this environment.

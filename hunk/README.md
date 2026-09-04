@@ -10,7 +10,9 @@ just zsh
 just hunk
 ```
 
-These recipes link the `hunk` shell function, configuration, and extensions.
+These recipes link the `hunk` shell function, configuration, extensions, and a
+platform-specific `~/.local/bin/hunk-native` entry used by the Herdr popup. The
+normal `hunk` executable remains unchanged.
 
 ## Review selection
 
