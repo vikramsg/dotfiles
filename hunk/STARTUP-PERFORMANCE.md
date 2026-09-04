@@ -251,3 +251,24 @@ remain native and unchanged.
 automatic JSON export, and quit all passed.
 
 **Status:** Retained.
+
+### H9 — Disable automatic watch mode
+
+**Hypothesis:** Capturing the initial watch signature and starting filesystem/VCS
+observation delays first render.
+
+**Interleaved Herdr pane benchmark (10 runs each, one warmup):**
+
+| Native Hunk configuration | Median | p95 |
+| --- | ---: | ---: |
+| `watch = true` | 1829.7 ms | 2200.2 ms |
+| `watch = false` | 1622.8 ms | 1791.4 ms |
+
+Disabling watch improved median by 206.9 ms and p95 by 408.8 ms. However, it
+removes automatic refresh when files change, a behavior already covered by the
+review workflow's end-to-end acceptance checks. Hunk 0.21 does not expose an
+extension command for enabling watch after first paint, so the cost cannot be
+deferred without an upstream Hunk change.
+
+**Status:** Rejected. Preserve automatic refresh rather than trade correctness
+for this startup improvement.
