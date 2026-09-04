@@ -340,6 +340,23 @@ hunk:
     @if [ -d {{justfile_directory()}}/hunk/extensions ]; then \
         ln -sfn {{justfile_directory()}}/hunk/extensions ~/.config/hunk/extensions; \
     fi
+    @PLATFORM="$(uname -s):$(uname -m)"; \
+        case "$PLATFORM" in \
+            Darwin:arm64) PACKAGE=hunkdiff-darwin-arm64 ;; \
+            Darwin:x86_64) PACKAGE=hunkdiff-darwin-x64 ;; \
+            Linux:aarch64|Linux:arm64) PACKAGE=hunkdiff-linux-arm64 ;; \
+            Linux:x86_64) PACKAGE=hunkdiff-linux-x64 ;; \
+            *) echo "ERROR: Unsupported Hunk platform: $PLATFORM"; exit 1 ;; \
+        esac; \
+        NPM_ROOT=$(NPM_CONFIG_PREFIX="$HOME/.local" npm root -g); \
+        NATIVE_HUNK="$NPM_ROOT/hunkdiff/node_modules/$PACKAGE/bin/hunk"; \
+        if [ ! -x "$NATIVE_HUNK" ]; then \
+            echo "ERROR: Hunk native executable not found at $NATIVE_HUNK"; \
+            exit 1; \
+        fi; \
+        mkdir -p "$HOME/.local/bin"; \
+        ln -sfn "$NATIVE_HUNK" "$HOME/.local/bin/hunk-native"; \
+        echo "Hunk native executable linked at ~/.local/bin/hunk-native -> $NATIVE_HUNK"
     @echo "Hunk config symlinked to ~/.config/hunk"
 
 # Link Macflow configuration without building or restarting the service.

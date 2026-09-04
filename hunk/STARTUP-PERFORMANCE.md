@@ -132,3 +132,39 @@ remained too noisy to attribute to this path change.
 
 **Status:** Retained. Continue by measuring the npm wrapper against its packaged
 native executable and by building a repeatable first-frame measurement.
+
+### H4 — Bypass the npm wrapper for the Herdr TUI
+
+**Hypothesis:** The JavaScript npm launcher contributes material startup time
+before it starts Hunk's packaged native executable.
+
+**Interleaved isolation benchmark (50 runs each, three warmups):**
+
+| Executable | Median | p95 |
+| --- | ---: | ---: |
+| npm `hunk` wrapper | 374.1 ms | 464.2 ms |
+| packaged native Hunk | 281.1 ms | 314.4 ms |
+
+The native executable improved median by 93.0 ms and p95 by 149.8 ms. `just
+hunk` now resolves the platform package at install time and maintains
+`~/.local/bin/hunk-native`; Herdr uses that symlink. The normal `hunk` command
+and its special wrapper commands remain unchanged.
+
+**Integrated process benchmark (20 runs, two warmups):**
+
+| Lightweight launcher target | Median | p95 |
+| --- | ---: | ---: |
+| npm wrapper | 358.8 ms | 495.1 ms |
+| packaged native Hunk | 304.8 ms | 330.7 ms |
+
+This run improved median by 54.0 ms and p95 by 164.4 ms. The complete native
+launcher is now only 16.3 ms above the isolated packaged-native p95 from the
+interleaved benchmark, meeting the 50 ms process-overhead target.
+
+The installed native path passed config and shell validation, dirty-tree target
+selection, real TUI rendering, comment editing, and automatic review export. A
+single Herdr pane-to-frame sample took 2353.5 ms, confirming that process launch
+is no longer the dominant end-to-end cost.
+
+**Status:** Retained. Continue by isolating native TUI startup with and without
+extensions, Git target selection, and Herdr pane creation.

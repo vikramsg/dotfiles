@@ -78,6 +78,18 @@ def main() -> int:
                 ["/bin/zsh", "-dfc", f'source "{script}"; hunk --version'],
             )
         )
+        native_hunk = home / ".local/bin/hunk-native"
+        if native_hunk.is_file():
+            commands.append(
+                (
+                    "packaged-native-version",
+                    [
+                        "/bin/zsh",
+                        "-dfc",
+                        f'source "{script}"; HUNK_COMMAND_PATH="{native_hunk}" hunk --version',
+                    ],
+                )
+            )
         commands.append(
             (
                 "absolute-hunk-version",
