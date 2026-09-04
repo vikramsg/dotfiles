@@ -35,6 +35,17 @@ application.
 - Tests for CLI commands should verify the HTTP requests they issue and the
   behavior rendered from HTTP responses.
 
+Ideal CLI design
+
+```text
+Swift Argument Parser
+  -> typed command
+  -> MacflowHTTPClient
+  -> versioned HTTP endpoint
+  -> Macflow.app
+  -> macOS API
+```
+
 ## Config
 
 Note: Config does not belong inside `bin/macflow`. That is for the state agnostic tool.
