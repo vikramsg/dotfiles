@@ -166,7 +166,7 @@ height = "90%"
 [[keys.command]]
 key = "prefix+shift+d"
 type = "popup"
-command = "hunk diff"
+command = "hunk-review"
 description = "open Hunk diff review"
 width = "90%"
 height = "90%"

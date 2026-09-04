@@ -43,6 +43,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+Shift+C` | Create a workspace |
 | `prefix+h/l/k/j` | Resize left / right / down / up |
 | `prefix+Shift+H/J/K/L` | Swap left / down / up / right |
+| `prefix+Shift+D` | Open the current repository in Hunk |
 | `prefix+Shift+G` | Review the current PR in a new tab |
 
 `vim-herdr-navigation` gives Neovim the chord first and crosses into a Herdr pane

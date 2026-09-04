@@ -333,7 +333,7 @@ lazygit:
     fi
 
 # Set up Hunk config and extensions symlink
-hunk:
+hunk: hunk-review-install
     @echo "Setting up Hunk config and extension symlinks..."
     mkdir -p ~/.config/hunk
     ln -sfn {{justfile_directory()}}/hunk/config.toml ~/.config/hunk/config.toml
@@ -341,6 +341,10 @@ hunk:
         ln -sfn {{justfile_directory()}}/hunk/extensions ~/.config/hunk/extensions; \
     fi
     @echo "Hunk config symlinked to ~/.config/hunk"
+
+[private]
+hunk-review-install:
+    just --justfile {{justfile_directory()}}/bin/hunk-review/justfile install
 
 # Link Macflow configuration without building or restarting the service.
 [private]
