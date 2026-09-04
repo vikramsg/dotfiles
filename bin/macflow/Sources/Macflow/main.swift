@@ -1,4 +1,5 @@
 import AppKit
+import MacflowCLI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var runtime: AutomationRuntime?

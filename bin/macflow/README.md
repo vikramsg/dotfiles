@@ -44,6 +44,16 @@ macflow permissions request screen-recording
 terminal-aware health report. Permission prompts remain available under the
 `permissions request` subcommand.
 
+Run `macflow --help` to list every command. Each command and nested subcommand
+supports `-h` and `--help`, including:
+
+```bash
+macflow doctor --help
+macflow permissions --help
+macflow permissions request --help
+macflow screenshot --help
+```
+
 ## Configuration
 
 The repository file `macflow/config.json` is linked to:
