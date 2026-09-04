@@ -74,3 +74,22 @@ has not yet been demonstrated.
 
 **Status:** Retained. The process-overhead target is met; continue the loop to
 isolate native TUI, extension, Git, and Herdr costs.
+
+### H2 — Source only a dedicated Hunk function file
+
+**Hypothesis:** Parsing unrelated functions in `.zsh_script` materially delays
+the lightweight launcher, so extracting `hunk()` would improve startup.
+
+**Isolation benchmark (20 runs, two warmups):**
+
+| No-rc Zsh command | Median | p95 |
+| --- | ---: | ---: |
+| `hunk --version` without sourcing `.zsh_script` | 401.8 ms | 411.8 ms |
+| source `.zsh_script`, then `hunk --version` | 404.3 ms | 428.6 ms |
+
+The full script added 2.5 ms at the median and 16.8 ms at p95. That is not the
+dominant remaining delay and is below the launcher-overhead budget. Extracting
+the function would add another installed file and synchronization point for a
+small, noisy gain.
+
+**Status:** Rejected. Keep the shared function in `.zsh_script`.
