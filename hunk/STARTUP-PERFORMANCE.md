@@ -206,3 +206,15 @@ process isolation measured `git rev-parse --show-toplevel` at 21.4 ms median /
 
 **Status:** Rejected. Preserve the simpler, already-tested Git behavior rather
 than replacing it with less readable early-exit probes.
+
+### H7 — Herdr command observation dominates the measurement
+
+**Hypothesis:** The approximately two-second first-frame result is mostly an
+artifact of invoking `herdr pane run` followed by `herdr pane wait-output`.
+
+Ten fresh panes printed a unique marker instead of starting Hunk. The run-to-
+visible-marker measurement was 22.8 ms median, 28.6 ms p95, and 20.4 ms minimum.
+This is less than 2% of the native Hunk TUI median and cannot explain the delay.
+
+**Status:** Rejected. Herdr CLI observation is not the bottleneck; continue
+testing Hunk's native startup options.
