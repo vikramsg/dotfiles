@@ -272,3 +272,21 @@ deferred without an upstream Hunk change.
 
 **Status:** Rejected. Preserve automatic refresh rather than trade correctness
 for this startup improvement.
+
+### H10 — Suppress optional review surfaces
+
+**Hypothesis:** Forcing the sidebar and agent-note surfaces off reduces initial
+layout/render work.
+
+**Interleaved Herdr pane benchmark (10 runs each, one warmup):**
+
+| Native Hunk UI | Median | p95 |
+| --- | ---: | ---: |
+| configured surfaces | 1781.0 ms | 2297.1 ms |
+| `--no-sidebar --no-agent-notes` | 1785.4 ms | 1883.3 ms |
+
+The median regressed by 4.4 ms. The lower p95 was caused by a cluster of slower
+normal samples early in the run and was not accompanied by a central-tendency
+improvement. Hiding agent notes would also remove required review context.
+
+**Status:** Rejected. Preserve the existing review surfaces.
