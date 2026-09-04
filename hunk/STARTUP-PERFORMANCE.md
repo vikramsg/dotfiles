@@ -168,3 +168,21 @@ is no longer the dominant end-to-end cost.
 
 **Status:** Retained. Continue by isolating native TUI startup with and without
 extensions, Git target selection, and Herdr pane creation.
+
+### H5 — Disable user extensions during startup
+
+**Hypothesis:** Loading the review workflow extension delays Hunk's first frame.
+
+**Interleaved Herdr pane benchmark (10 runs each, one warmup):**
+
+| Native Hunk TUI | Median | p95 | Minimum |
+| --- | ---: | ---: | ---: |
+| normal extensions | 2042.7 ms | 3030.1 ms | 1770.7 ms |
+| `--no-extensions` | 2166.9 ms | 4911.9 ms | 1982.9 ms |
+
+Each sample starts timing immediately before `herdr pane run` and stops when a
+fresh pane exposes the Hunk working-tree header. The tails are noisy, but
+disabling extensions did not improve the median or minimum. The extension is
+therefore not on the initial-render critical path in a meaningful way.
+
+**Status:** Rejected. Keep the review workflow extension enabled.
