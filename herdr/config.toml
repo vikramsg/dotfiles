@@ -166,7 +166,7 @@ height = "90%"
 [[keys.command]]
 key = "prefix+shift+d"
 type = "popup"
-command = "exec zsh -ic hunk"
+command = "exec /bin/zsh -dfc 'source \"$HOME/.zsh_script\"; hunk'"
 description = "open Hunk diff review"
 width = "90%"
 height = "90%"

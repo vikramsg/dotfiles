@@ -50,4 +50,27 @@ Reproducible 20-run baseline (`python3 hunk/benchmark-startup.py`):
 **Hypothesis:** Herdr can source only the managed shell functions in a no-rc Zsh
 and preserve behavior while removing approximately 250 ms of startup latency.
 
-**Status:** Pending.
+**Change:** Replace `zsh -ic hunk` with a no-rc Zsh that sources the managed
+`.zsh_script` directly and invokes the same `hunk()` function.
+
+**Process benchmark:**
+
+| Launcher | Median | p95 |
+| --- | ---: | ---: |
+| current interactive launcher | 610.1 ms | 685.9 ms |
+| no-rc launcher | 405.3 ms | 419.1 ms |
+| native Hunk | 346.7 ms | 386.4 ms |
+
+The candidate removes 266.8 ms (38.9%) at p95 and leaves 32.7 ms of launcher
+overhead over native Hunk, meeting the 50 ms process-level target.
+
+**End-to-end verification:** Passed for dirty working-tree selection, clean
+feature-branch selection, no-change output, outside-repository errors, native
+argument delegation, comment save, automatic JSON export, and keeping Hunk open.
+One instrumented Herdr pane launch reached the first visible dirty-review frame
+in 1917.4 ms. This timing includes two Herdr CLI invocations and is not directly
+comparable to the process benchmark, but it proves the 500 ms end-to-end target
+has not yet been demonstrated.
+
+**Status:** Retained. The process-overhead target is met; continue the loop to
+isolate native TUI, extension, Git, and Herdr costs.
