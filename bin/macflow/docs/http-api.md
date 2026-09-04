@@ -6,8 +6,9 @@ All routes except `GET /health` require:
 
 ```http
 Authorization: Bearer <api-token>
-Content-Type: application/json
 ```
+
+Requests with a JSON body also require `Content-Type: application/json`.
 
 The token is stored at `~/Library/Application Support/Macflow/api-token`.
 Failures return `{"error":"message"}`.
@@ -24,6 +25,21 @@ Failures return `{"error":"message"}`.
 | --- | --- | --- | --- |
 | `GET` | `/permissions` | Report current macOS permission states. | None |
 | `POST` | `/permissions/request` | Ask macOS for the selected permission. | `{"permission":"accessibility\|screen_recording"}` |
+
+## Hotkeys
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `GET` | `/hotkeys` | Report whether the global event tap is enabled and whether Secure Input is blocking keyboard events. | None |
+
+Example response:
+
+```json
+{
+  "event_tap_enabled": true,
+  "secure_input_enabled": false
+}
+```
 
 ## Applications
 

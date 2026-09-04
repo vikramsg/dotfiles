@@ -70,6 +70,13 @@ final class HotKeyService {
         router.unregister(bindingID: id)
     }
 
+    var status: HotKeyStatus {
+        HotKeyStatus(
+            eventTapEnabled: eventTap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false,
+            secureInputEnabled: PermissionService.secureInput()
+        )
+    }
+
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             router.resetPressState()

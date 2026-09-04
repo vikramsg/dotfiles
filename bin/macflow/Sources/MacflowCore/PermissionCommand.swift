@@ -45,7 +45,7 @@ public enum PermissionCommandError: LocalizedError, Equatable {
         case .invalidArguments:
             return "Invalid permission command arguments"
         case .missingPermission:
-            return "request-permission requires accessibility or screen-recording"
+            return "permissions request requires accessibility or screen-recording"
         case let .unsupportedPermission(permission):
             return "Unsupported permission: \(permission)"
         }
@@ -67,17 +67,14 @@ public enum PermissionCommand: Equatable {
     case request(PermissionKind)
 
     public static func parse(arguments: [String]) throws -> PermissionCommand? {
-        switch arguments.first {
-        case "permissions":
-            guard arguments.count == 1 else { throw PermissionCommandError.invalidArguments }
+        guard arguments.first == "permissions" else { return nil }
+        if arguments.count == 1 {
             return .status
-        case "request-permission":
-            guard arguments.count > 1 else { throw PermissionCommandError.missingPermission }
-            guard arguments.count == 2 else { throw PermissionCommandError.invalidArguments }
-            return .request(try PermissionKind(cliArgument: arguments[1]))
-        default:
-            return nil
         }
+        guard arguments[1] == "request" else { throw PermissionCommandError.invalidArguments }
+        guard arguments.count > 2 else { throw PermissionCommandError.missingPermission }
+        guard arguments.count == 3 else { throw PermissionCommandError.invalidArguments }
+        return .request(try PermissionKind(cliArgument: arguments[2]))
     }
 
     public var httpRequest: PermissionHTTPRequest {
