@@ -48,9 +48,6 @@ brew "leaf-markdown-viewer"
 
 brew "zoxide"
 
-# Terminal database client.
-brew "harlequin"
-
 # Linter for github actions
 brew "actionlint"
 
@@ -68,8 +65,6 @@ brew "go"
 # Duckdb for analytics
 brew "duckdb"
 
-# Raster analytics
-brew "gdal"
 
 # For runnin Terraform format
 brew "terraform"

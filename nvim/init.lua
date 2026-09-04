@@ -876,6 +876,7 @@ require("lazy").setup({
 			},
 			explorer = {
 				focus_on_select = true,
+				view_mode = "tree",
 			},
 			keymaps = {
 				view = {
