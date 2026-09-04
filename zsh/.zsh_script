@@ -39,8 +39,10 @@ hunk() {
     emulate -L zsh
     setopt pipefail
 
+    local hunk_bin="${HUNK_COMMAND_PATH:-hunk}"
+
     if (( $# > 0 )); then
-        command hunk "$@"
+        command "$hunk_bin" "$@"
         return
     fi
 
@@ -59,7 +61,7 @@ hunk() {
     }
 
     if [[ -n "$status_output" ]]; then
-        HUNK_REVIEW_TARGET=working command hunk diff --mode stack
+        HUNK_REVIEW_TARGET=working command "$hunk_bin" diff --mode stack
         return
     fi
 
@@ -80,7 +82,7 @@ hunk() {
         return "$comparison_status"
     fi
 
-    HUNK_REVIEW_TARGET=main command hunk diff main... --mode stack
+    HUNK_REVIEW_TARGET=main command "$hunk_bin" diff main... --mode stack
 }
 
 vm-tab() {

@@ -93,3 +93,42 @@ the function would add another installed file and synchronization point for a
 small, noisy gain.
 
 **Status:** Rejected. Keep the shared function in `.zsh_script`.
+
+### H3 — Avoid PATH search for the managed Hunk binary
+
+**Hypothesis:** Resolving `hunk` through the inherited PATH is a meaningful part
+of lightweight shell overhead. Herdr can provide the managed
+`$HOME/.local/bin/hunk` path without changing interactive delegation.
+
+**Isolation benchmark (20 runs, two warmups):**
+
+| Command | Median | p95 |
+| --- | ---: | ---: |
+| no-rc Zsh resolves `hunk` through PATH | 362.2 ms | 416.7 ms |
+| no-rc Zsh invokes absolute Hunk path | 343.5 ms | 368.3 ms |
+| direct absolute Hunk path | 351.1 ms | 389.6 ms |
+
+The absolute path reduced p95 by 48.4 ms in the shell comparison. The managed
+npm installation is explicitly configured at `$HOME/.local/bin` on both macOS
+and Linux. `HUNK_COMMAND_PATH` affects only the Herdr invocation; normal
+interactive `hunk` calls continue to resolve the native command through PATH.
+
+The first implementation tried Hunk's existing `HUNK_BIN_PATH` variable. The
+npm wrapper interprets that as an override for its packaged native binary, so
+pointing it back at the npm wrapper caused recursion. The experiment therefore
+uses the dotfiles-only `HUNK_COMMAND_PATH` name.
+
+**Integrated process benchmark (20 runs, two warmups):**
+
+| Lightweight launcher | Median | p95 |
+| --- | ---: | ---: |
+| PATH-resolved Hunk | 389.0 ms | 509.5 ms |
+| absolute managed Hunk | 384.2 ms | 416.3 ms |
+
+The median difference was small under this run's system load, while p95 improved
+by 93.2 ms. Syntax, config validation, native argument delegation, and a real
+dirty-review TUI launch passed. The Herdr pane-to-frame sample was 2727.4 ms and
+remained too noisy to attribute to this path change.
+
+**Status:** Retained. Continue by measuring the npm wrapper against its packaged
+native executable and by building a repeatable first-frame measurement.

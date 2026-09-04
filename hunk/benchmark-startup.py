@@ -78,6 +78,16 @@ def main() -> int:
                 ["/bin/zsh", "-dfc", f'source "{script}"; hunk --version'],
             )
         )
+        commands.append(
+            (
+                "absolute-hunk-version",
+                [
+                    "/bin/zsh",
+                    "-dfc",
+                    f'source "{script}"; HUNK_COMMAND_PATH="{hunk}" hunk --version',
+                ],
+            )
+        )
 
     results = [measure(name, command, args.warmups, args.runs) for name, command in commands]
     if args.json:
