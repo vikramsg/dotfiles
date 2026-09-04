@@ -186,3 +186,23 @@ disabling extensions did not improve the median or minimum. The extension is
 therefore not on the initial-render critical path in a meaningful way.
 
 **Status:** Rejected. Keep the review workflow extension enabled.
+
+### H6 — Rewrite Git target selection
+
+**Hypothesis:** The zero-argument wrapper's Git probes materially delay the
+working-tree first frame.
+
+**Interleaved Herdr pane benchmark (10 runs each, one warmup):**
+
+| Native TUI path | Median | p95 | Minimum |
+| --- | ---: | ---: | ---: |
+| direct `hunk-native diff` | 2187.5 ms | 2390.1 ms | 1675.7 ms |
+| complete zero-argument target selector | 2185.2 ms | 2409.2 ms | 1980.7 ms |
+
+The medians differ by 2.3 ms in favor of the complete selector and p95 differs
+by 19.1 ms in favor of direct launch, both below run-to-run noise. Fifty-run
+process isolation measured `git rev-parse --show-toplevel` at 21.4 ms median /
+26.5 ms p95 and dirty `git status` at 24.2 ms / 29.2 ms in the test repository.
+
+**Status:** Rejected. Preserve the simpler, already-tested Git behavior rather
+than replacing it with less readable early-exit probes.
