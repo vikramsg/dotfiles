@@ -192,6 +192,10 @@ ocint:
 gh-stats:
     uv tool install "{{justfile_directory()}}/bin/gh_stats" --force --no-cache
 
+# Install standalone OpenCode API cost reporting
+ocost:
+    just --justfile "{{justfile_directory()}}/bin/ocost/justfile" install
+
 # Set up Ghostty symlink
 ghostty:
     @echo "Setting up Ghostty symlink..."
@@ -492,7 +496,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats bin zsh lazygit hunk television harlequin-if-configured
+all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit hunk television harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

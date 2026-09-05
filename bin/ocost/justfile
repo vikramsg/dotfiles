@@ -1,0 +1,18 @@
+root := "../.."
+
+default:
+    @just --list
+
+build:
+    uv build --package ocost --out-dir "{{justfile_directory()}}/dist"
+
+install:
+    uv tool install "{{justfile_directory()}}" --force --no-cache
+
+test:
+    uv run --directory "{{root}}" --package ocost --frozen pytest -c bin/ocost/pyproject.toml bin/ocost/tests
+
+check:
+    uv run --directory "{{root}}" --package ocost --frozen ruff check bin/ocost
+    uv run --directory "{{root}}" --package ocost --frozen ruff format --check bin/ocost
+    uv run --directory "{{root}}" --package ocost --frozen ty check --project bin/ocost
