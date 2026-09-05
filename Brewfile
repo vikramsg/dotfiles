@@ -65,6 +65,5 @@ brew "go"
 # Duckdb for analytics
 brew "duckdb"
 
-
 # For runnin Terraform format
 brew "terraform"
