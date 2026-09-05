@@ -23,12 +23,12 @@
 -- Git & Files:
 --   <leader>gb : Show Git blame / line history (with clean diff preview)
 --   <leader>gf : Show Git file history (all commits affecting current file)
---   <leader>gd : Open full Git diff review
 --   <leader>gh : Open Differ review
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
---   In CodeDiff: Enter open diff, gf edit, B toggle HEAD/main, [/] hunks, g? help, q close
---   In Differ: Same review keys; t toggles stacked/split layout, T toggles between compact view and expanded view
+--   In Differ: Enter open diff, gf edit, B toggle HEAD/main, [/] hunks, g? help, q close
+--   t toggles stacked/split layout; T toggles compact/full context
+--   Differ only: <leader>pl list PRs, <leader>pr start/resume, <leader>ps submit PR review
 --
 -- Search (Snacks Picker):
 --   <leader>sf : Search Files
@@ -464,7 +464,7 @@ require("lazy").setup({
 
 			vim.api.nvim_create_autocmd("User", {
 				group = group,
-				pattern = { "CodeDiffClose", "NeogitStatusRefresh", "NeogitStatus" },
+				pattern = { "NeogitStatusRefresh", "NeogitStatus" },
 				callback = function()
 					vim.defer_fn(refresh_snacks_explorer_git_status_after_index_write, 200)
 				end,
@@ -729,39 +729,6 @@ require("lazy").setup({
 		},
 	},
 	{
-		"esmuellert/codediff.nvim",
-		version = "*",
-		cmd = "CodeDiff",
-		keys = {
-			{
-				"<leader>gd",
-				function()
-					require("config.git_review").open_codediff()
-				end,
-				desc = "Git Diff Review",
-			},
-		},
-		opts = {
-			diff = {
-				layout = "inline",
-			},
-			explorer = {
-				focus_on_select = true,
-				view_mode = "tree",
-			},
-			keymaps = {
-				view = {
-					open_in_prev_tab = false,
-					next_hunk = "]",
-					prev_hunk = "[",
-				},
-			},
-		},
-		config = function(_, opts)
-			require("config.git_review").setup_codediff(opts)
-		end,
-	},
-	{
 		"undont/differ.nvim",
 		build = "make go-build",
 		cmd = "Differ",
@@ -785,6 +752,7 @@ require("lazy").setup({
 				close = "q",
 				toggle_layout = "t",
 				discard = "X",
+				review_submit = "<leader>ps",
 				goto_file = false,
 				scroll_down = false,
 				scroll_up = false,
@@ -1415,22 +1383,6 @@ require("lazy").setup({
 							},
 						},
 						filetypes = { "snacks_explorer" },
-					},
-					{
-						sections = {
-							lualine_a = {
-								function()
-									return "CodeDiff"
-								end,
-							},
-							lualine_b = {
-								function()
-									local mode = vim.t.dotfiles_codediff_compare_mode or "HEAD"
-									return "B " .. mode .. " | [/] | gf edit | g? | q"
-								end,
-							},
-						},
-						filetypes = { "codediff-explorer" },
 					},
 				},
 			})

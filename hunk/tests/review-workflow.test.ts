@@ -261,7 +261,7 @@ describe("review path", () => {
   });
 });
 
-describe("CodeDiff-style controls", () => {
+describe("Review controls", () => {
   test("B toggles from working tree to main and back", async () => {
     const harness = testHarness({ initialTarget: "working" });
 

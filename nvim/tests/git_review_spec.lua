@@ -57,9 +57,16 @@ local function focus_text(text, filetype)
 end
 
 local function ready_maps()
-	wait_for("custom review keys should be available", function()
+	local ready = vim.wait(5000, function()
 		return vim.fn.maparg("B", "n") ~= "" and vim.fn.maparg("gf", "n") ~= ""
-	end)
+	end, 20)
+	assert(ready, "custom review keys should be available: " .. vim.inspect({
+		filetype = vim.bo.filetype,
+		buffer = vim.api.nvim_buf_get_name(0),
+		B = vim.fn.maparg("B", "n", false, true),
+		gf = vim.fn.maparg("gf", "n", false, true),
+		maps = vim.api.nvim_buf_get_keymap(0, "n"),
+	}))
 end
 
 local function with_fixture(test)
@@ -125,9 +132,6 @@ local function with_fixture(test)
 	end
 	for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
 		if not old_tabs[tab] then
-			if package.loaded["codediff.ui.lifecycle"] then
-				pcall(require("codediff.ui.lifecycle").close, tab)
-			end
 			if vim.api.nvim_tabpage_is_valid(tab) then
 				vim.api.nvim_set_current_tabpage(tab)
 				vim.cmd("tabclose!")
@@ -455,13 +459,11 @@ local function staged_and_deleted()
 end
 
 function M.run()
-	selection(" gd", "codediff-explorer")
 	selection(" gh", "differpanel")
 	differ_editing()
 	differ_context()
 	differ_discard()
 	staged_and_deleted()
-	empty_and_errors(" gd")
 	empty_and_errors(" gh")
 	print("Git review: comparison selection, switching, editing, navigation, help, and empty/error cases passed")
 end

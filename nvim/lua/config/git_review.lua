@@ -1,20 +1,9 @@
 local M = {}
 
-local codediff_next_compare_mode
-
-local function open_codediff_comparison(git_root, mode)
-	codediff_next_compare_mode = mode
-	local command = "CodeDiff --repo " .. vim.fn.fnameescape(git_root)
-	if mode == "main" then
-		command = command .. " main..."
-	end
-	vim.cmd(command)
-end
-
-local function open_review(name, open_comparison)
+local function review_comparison()
 	local git_root = Snacks.git.get_root()
 	if not git_root then
-		vim.notify(name .. " requires a Git repository", vim.log.levels.ERROR)
+		vim.notify("Differ requires a Git repository", vim.log.levels.ERROR)
 		return
 	end
 
@@ -28,8 +17,7 @@ local function open_review(name, open_comparison)
 	end
 
 	if status.stdout ~= "" then
-		open_comparison(git_root, "HEAD")
-		return
+		return git_root, "HEAD"
 	end
 
 	local against_main = vim.system({ "git", "diff", "--quiet", "main...HEAD", "--" }, {
@@ -37,37 +25,12 @@ local function open_review(name, open_comparison)
 		text = true,
 	}):wait()
 	if against_main.code == 1 then
-		open_comparison(git_root, "main")
+		return git_root, "main"
 	elseif against_main.code == 0 then
 		vim.notify("No changes since HEAD or since branching from main", vim.log.levels.INFO)
 	else
 		vim.notify(against_main.stderr or "Unable to compare against main", vim.log.levels.ERROR)
 	end
-end
-
-function M.open_codediff()
-	open_review("CodeDiff", open_codediff_comparison)
-end
-
-local function toggle_codediff_comparison()
-	local lifecycle = require("codediff.ui.lifecycle")
-	local tabpage = vim.api.nvim_get_current_tabpage()
-	local session = lifecycle.get_session(tabpage)
-	if not session then
-		vim.notify("No active CodeDiff view", vim.log.levels.ERROR)
-		return
-	end
-
-	local mode = vim.t[tabpage].dotfiles_codediff_compare_mode
-	local next_mode = mode == "main" and "HEAD" or "main"
-	local git_root = session.git_root
-	if not lifecycle.close(tabpage) then
-		return
-	end
-
-	vim.schedule(function()
-		open_codediff_comparison(git_root, next_mode)
-	end)
 end
 
 -- Reuse an editor split rather than replacing whichever scratch/explorer split
@@ -124,74 +87,6 @@ local function edit_review_file(tabpage, target_file, cursor)
 	local line = math.min(cursor[1], vim.api.nvim_buf_line_count(0))
 	local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1] or ""
 	vim.api.nvim_win_set_cursor(0, { line, math.min(cursor[2], #text) })
-end
-
-local function edit_codediff_file()
-	local lifecycle = require("codediff.ui.lifecycle")
-	local tabpage = vim.api.nvim_get_current_tabpage()
-	if not lifecycle.get_session(tabpage) then
-		return
-	end
-	local _, modified = lifecycle.get_paths(tabpage)
-	edit_review_file(tabpage, modified and modified.absolute, vim.api.nvim_win_get_cursor(0))
-end
-
-function M.setup_codediff(opts)
-	require("codediff").setup(opts)
-	local group = vim.api.nvim_create_augroup("dotfiles-codediff-help", { clear = true })
-
-	local function set_custom_keymaps(tabpage)
-		local lifecycle = require("codediff.ui.lifecycle")
-		lifecycle.set_tab_keymap(
-			tabpage,
-			"n",
-			"B",
-			toggle_codediff_comparison,
-			{ desc = "Toggle CodeDiff HEAD/Main Comparison" }
-		)
-		lifecycle.set_tab_keymap(tabpage, "n", "gf", edit_codediff_file, { desc = "Edit File at Current Line" })
-	end
-
-	vim.api.nvim_create_autocmd("User", {
-		group = group,
-		pattern = "CodeDiffOpen",
-		callback = function(args)
-			local tabpage = args.data.tabpage
-			local session = require("codediff.ui.lifecycle").get_session(tabpage)
-			local mode = codediff_next_compare_mode or (session.original_revision and "custom" or "HEAD")
-			codediff_next_compare_mode = nil
-			vim.t[tabpage].dotfiles_codediff_compare_mode = mode
-			set_custom_keymaps(tabpage)
-			vim.notify("B: HEAD/main | [/] hunks | gf: edit | g?: help | q: close", vim.log.levels.INFO, {
-				title = "CodeDiff",
-				timeout = 10000,
-			})
-		end,
-	})
-
-	vim.api.nvim_create_autocmd("User", {
-		group = group,
-		pattern = "CodeDiffFileSelect",
-		callback = function(args)
-			local tabpage = args.data.tabpage
-			local expected_path = vim.fs.normalize(args.data.path)
-			local attempts = 0
-			local function bind_when_selected()
-				attempts = attempts + 1
-				local lifecycle = require("codediff.ui.lifecycle")
-				local original, modified = lifecycle.get_paths(tabpage)
-				local current_path = (modified and modified.relative) or (original and original.relative)
-				if current_path and vim.fs.normalize(current_path) == expected_path then
-					set_custom_keymaps(tabpage)
-					return
-				end
-				if attempts < 100 and vim.api.nvim_tabpage_is_valid(tabpage) then
-					vim.defer_fn(bind_when_selected, 50)
-				end
-			end
-			vim.schedule(bind_when_selected)
-		end,
-	})
 end
 
 -- Keep all unchanged lines in the buffer, using Differ's native context folds.
@@ -258,7 +153,10 @@ local function open_differ_comparison(git_root, mode, compact)
 end
 
 function M.open_differ()
-	open_review("Differ", open_differ_comparison)
+	local root, mode = review_comparison()
+	if root then
+		open_differ_comparison(root, mode)
+	end
 end
 
 local function toggle_differ_comparison()
@@ -297,26 +195,93 @@ local function edit_differ_file()
 	edit_review_file(vim.api.nvim_get_current_tabpage(), path, { line, col })
 end
 
+-- PR sessions are global in Differ; never mistake a PR in another tab for the
+-- local diff under the cursor. Check buffer ownership, not mere session presence.
+local function current_pr()
+	local session = require("differ.pr").current_session()
+	local buf = vim.api.nvim_get_current_buf()
+	if session then
+		if session.panel and session.panel.bufnr == buf then
+			return session
+		end
+		for _, col in ipairs((session.view and session.view.columns) or {}) do
+			if col.bufnr == buf then
+				return session
+			end
+		end
+	end
+end
+
+local function list_prs()
+	local session = current_pr()
+	-- Land in the diff, where these buffer-local review controls are available.
+	require("differ.pr").open({ land = "files", coords = session and session.coords })
+end
+
+local function start_pr_review()
+	if current_pr() then
+		return require("differ.pr").review()
+	end
+	local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+	vim.ui.input({ prompt = "PR number: " }, function(input)
+		if not input or vim.trim(input) == "" then
+			return
+		end
+		input = vim.trim(input)
+		local number = tonumber(input)
+		if not input:match("^%d+$") or not number or number < 1 or number > 2147483647 then
+			vim.notify("Enter a positive PR number", vim.log.levels.WARN)
+			return
+		end
+		-- A delayed prompt must not operate on a different editor/repository.
+		if vim.api.nvim_get_current_win() ~= win or vim.api.nvim_win_get_buf(win) ~= buf then
+			return
+		end
+		require("differ.pr").open({ number = number, land = "files", review = true })
+	end)
+end
+
 local function show_differ_help()
+	local pr = current_pr()
 	local lines = {
-		"Differ review",
+		pr and "Differ PR review" or "Differ local review",
 		"",
-		"B       Toggle HEAD/main comparison",
+		"Space pl  List / open PRs",
+		"Space pr  Start / resume review (asks for PR if needed)",
+	}
+	if pr then
+		vim.list_extend(lines, {
+			"Space ps  Submit review: Comment / Approve / Request Changes",
+			"ga        Comment on line / visual selection (diff only)",
+			"gp        Reply to thread (diff only)",
+			"i         Type in composer if it opens in normal mode",
+			"Esc then Enter  Save comment in the composer",
+			"Start a review first: saved comments become GitHub drafts.",
+			"Without a pending review, comments may post immediately.",
+			"Submit opens a summary editor; Esc then Enter submits it.",
+		})
+	else
+		vim.list_extend(lines, {
+			"B       Toggle HEAD/main comparison",
+			"X       Discard hunk; in tree: WHOLE FILE (confirmation)",
+			"        Uncommitted view only; changes actual files",
+			"s / u   Stage / unstage hunk or file",
+			"df      Edit beside an uncommitted diff",
+		})
+	end
+	vim.list_extend(lines, {
+		"",
 		"gf      Edit source in the previous tab (keep review open)",
 		"[ / ]   Previous / next hunk",
 		"[f / ]f Previous / next file",
 		"Enter   Open selected file from the tree",
 		"t       Toggle stacked / split layout",
 		"T       Toggle compact / full context (default: compact)",
-		"X       Discard hunk; in tree: WHOLE FILE (confirmation)",
-		"        Uncommitted view only; changes actual files",
 		"q       Close review and return to the editor",
 		"",
 		"R       Refresh file tree",
 		"dd      Toggle file tree",
-		"s / u   Stage / unstage hunk or file",
-		"df      Edit beside an uncommitted diff",
-	}
+	})
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.bo[buf].bufhidden = "wipe"
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -363,6 +328,9 @@ function M.setup_differ(opts)
 				vim.keymap.set("n", "gf", edit_differ_file, { buffer = buf, desc = "Edit File at Current Line" })
 				vim.keymap.set("n", "g?", show_differ_help, { buffer = buf, desc = "Differ Review Help" })
 				vim.keymap.set("n", "T", toggle_differ_context, { buffer = buf, desc = "Toggle Compact/Full Context" })
+				vim.keymap.set("n", "<leader>pl", list_prs, { buffer = buf, desc = "List/Open PRs" })
+				vim.keymap.set("n", "<leader>pr", start_pr_review, { buffer = buf, desc = "Start/Resume PR Review" })
+				-- Submit, ga/gp, and composer controls stay native to Differ's PR UI.
 				if vim.bo[buf].filetype == "differdiff" and not watched_diffs[buf] then
 					watched_diffs[buf] = vim.api.nvim_buf_attach(buf, false, {
 						on_lines = function()
