@@ -17,24 +17,34 @@ Does daemon.toml exist?
 Note: `daemon.toml` is usually at `XDG_HOME/.config/ocint/daemon.toml`.
 
 Run `setup` once, from the target repository root, to create initial
-configuration and install the systemd units:
+configuration, provision both OpenCode policies, and install all four systemd
+units. The coordinator generates its context at startup from the final validated
+repository projection:
 
 ```bash
+export OCINT_NGROK_URL=https://YOUR_STATIC_NGROK_DOMAIN
 ocint daemon lch setup
 ocint daemon doctor
 ```
+
+The first timer or coordinator startup owns serialized migration. A pre-start
+doctor may show the prior revision; normal setup and acceptance do not migrate
+manually.
 
 Run `apply` after editing `daemon.toml` or when the systemd units must be
 regenerated:
 
 ```bash
 ocint daemon lch apply
+ocint daemon doctor
 ocint daemon lch lifecycle
 ```
 
 A package reinstall does not modify `daemon.toml` and does not require either
-command when the installed executable path is unchanged. Routine timer and job
-operation also requires neither command.
+command when the installed executable path is unchanged. Initial `setup`
+enables the GitHub timer but leaves coordinator and ngrok disabled. Subsequent
+`setup` and `apply` preserve and report their actual enablement; explicitly
+disable both units before a live-test window rather than relying on apply.
 
 ## Request Work
 
@@ -55,10 +65,28 @@ systemd timer -> labelled issue -> OpenCode worktree
                                pull request -> issue reply
 ```
 
-For conversational Slack work, send a root or reply in a configured public
-channel. The separate coordinator receives the signed Events API callback,
-durably records it, and replies in the same thread. It does not create pull
-requests. Private-channel callbacks are ignored in Phase 1.
+Slack has a different Phase 1 workflow. Post a normal root message in a
+configured public channel as an authorized human. The signed Events API
+callback is committed before acknowledgment; the always-on coordinator answers
+in the same root thread. Authorized replies continue the same OpenCode session.
+
+```text
+Slack root -> signed event -> durable conversation -> coordinator OpenCode
+                                                          |
+                                                          v
+                                                  Slack thread reply
+```
+
+The coordinator can answer questions, use web research, and identify a likely
+repository from its safe catalogue. It cannot inspect or modify that repository
+or start the GitHub job workflow. When repository work is needed, it names the
+likely repository and objective and says execution is not available yet.
+
+Retryable OpenCode recovery is ordered but bounded. The configured retry count
+is the number of retries after the initial attempt; after that budget is
+exhausted, the coordinator delivers its safe failure response and allows the
+next message in the thread to run. Slack delivery keeps retrying independently
+until the already persisted response is delivered.
 
 ## Inspect Or Attach
 
@@ -73,9 +101,23 @@ job to have a running OpenCode session.
 
 ## Request A Follow-Up
 
-Add an authorized GitHub comment to continue pull-request work. An authorized
-Slack thread reply independently reuses that coordinator thread's OpenCode
-session.
+Add an authorized GitHub comment to reuse the job session, worktree, branch,
+and open pull request. Add an authorized Slack thread reply to reuse only that
+coordinator conversation and coordinator OpenCode session; it does not reuse or
+create repository execution state.
+
+## Roll Out The Coordinator
+
+After setup/apply and a healthy doctor report, explicitly keep the production
+coordinator units disabled while running the explicit live E2E described in
+[operations](operations.md). Once its probe-scoped database and Slack evidence
+passes, start the coordinator before its tunnel:
+
+```bash
+systemctl --user enable --now ocint-coordinator.service
+systemctl --user enable --now ocint-coordinator-ngrok.service
+ocint daemon lch lifecycle
+```
 
 For command details and failures, read [operations](operations.md). For setup,
 read [configuration](configuration.md).

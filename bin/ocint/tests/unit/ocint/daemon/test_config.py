@@ -64,6 +64,50 @@ def test_slack_manifest_uses_public_message_events_and_minimal_scopes() -> None:
     assert "interactivity" not in manifest
 
 
+def test_slack_e2e_actor_manifest_can_post_as_the_installing_user() -> None:
+    # GIVEN
+    manifest = (Path(__file__).parents[4] / "config" / "slack-e2e-actor-manifest.yaml").read_text()
+
+    # WHEN
+    scopes = {
+        line.removeprefix("      - ").strip()
+        for line in manifest.split("settings:", maxsplit=1)[0].splitlines()
+        if line.startswith("      - ")
+    }
+
+    # THEN
+    assert "name: ocint E2E actor" in manifest
+    assert "description:" in manifest
+    assert scopes == {"chat:write"}
+    assert "    user:\n      - chat:write" in manifest
+    assert "    bot:\n      - chat:write" in manifest
+    assert "socket_mode_enabled: false" in manifest
+    assert "event_subscriptions" not in manifest
+    assert "request_url" not in manifest
+    assert "interactivity" not in manifest
+
+
+def test_live_e2e_actor_credential_is_separate_from_daemon_credentials() -> None:
+    # GIVEN
+    config = Path(__file__).parents[4] / "config"
+    daemon_example = (config / "daemon.env.example").read_text()
+    live_example = (config / "live-e2e.env.example").read_text()
+
+    # WHEN
+    daemon_assignments = {
+        line.partition("=")[0] for line in daemon_example.splitlines() if line and not line.startswith("#")
+    }
+    live_assignments = {
+        line.partition("=")[0] for line in live_example.splitlines() if line and not line.startswith("#")
+    }
+
+    # THEN
+    assert live_assignments == {"OCINT_E2E_SLACK_ACTOR_USER_TOKEN"}
+    assert "OCINT_E2E_SLACK_ACTOR_USER_TOKEN" not in daemon_assignments
+    assert "OCINT_DAEMON_SLACK_BOT_TOKEN" in daemon_assignments
+    assert "OCINT_DAEMON_SLACK_BOT_TOKEN" not in live_assignments
+
+
 def test_config_resolves_repository_and_rejects_duplicate_names(
     tmp_path: Path, coordinator_config: CoordinatorConfig
 ) -> None:
@@ -109,6 +153,15 @@ def test_config_resolves_repository_and_rejects_duplicate_names(
     assert isinstance(config.repository("repo").checks[0], tuple)
     with pytest.raises(ValidationError, match="unique"):
         DaemonConfig.model_validate({**raw, "repositories": [*raw["repositories"], *raw["repositories"]]})
+    with pytest.raises(ValidationError, match="coordinator"):
+        DaemonConfig.model_validate({key: value for key, value in raw.items() if key != "coordinator"})
+    with pytest.raises(ValidationError, match="description"):
+        DaemonConfig.model_validate(
+            {
+                **raw,
+                "repositories": [{key: value for key, value in raw["repositories"][0].items() if key != "description"}],
+            }
+        )
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         DaemonConfig.model_validate({**raw, "slack": {"workspace_id": "obsolete"}})
 
@@ -158,6 +211,7 @@ def test_settings_are_constructible_without_credentials_and_load_coordinator_ali
     # GIVEN
     home = tmp_path / "home"
     monkeypatch.setenv("OCINT_DAEMON_SLACK_SIGNING_SECRET", "signing-secret")
+    monkeypatch.setenv("OCINT_NGROK_URL", "https://static.example.test")
 
     # WHEN
     settings = DaemonSettings(xdg_config_home=home / "config")
@@ -165,7 +219,9 @@ def test_settings_are_constructible_without_credentials_and_load_coordinator_ali
     # THEN
     assert settings.config_path(home) == home / "config" / "ocint" / "daemon.toml"
     assert settings.slack_signing_secret.get_secret_value() == "signing-secret"
+    assert settings.ngrok_url.get_secret_value() == "https://static.example.test"
     assert "signing-secret" not in repr(settings)
+    assert "static.example.test" not in repr(settings)
 
 
 def test_daemon_config_rejects_shared_or_non_loopback_runtime_boundaries(

@@ -460,7 +460,7 @@ def test_lch_setup_and_apply_are_discoverable() -> None:
     assert "provision" not in result.output
 
 
-def test_setup_reuses_existing_configuration_and_reports_applied_artifacts(
+def test_setup_and_apply_provision_missing_coordinator_artifacts_without_rewriting_daemon_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, coordinator_toml: str
 ) -> None:
     # GIVEN
@@ -471,8 +471,21 @@ def test_setup_reuses_existing_configuration_and_reports_applied_artifacts(
     managed = config_home / "ocint"
     managed.mkdir(parents=True)
     environment_file = managed / "daemon.env"
-    environment_file.write_text("OCINT_DAEMON_API_TOKEN=api\nOCINT_DAEMON_GITHUB_TOKEN=github\n")
+    environment_file.write_text(
+        "OCINT_DAEMON_API_TOKEN=api\nOCINT_DAEMON_GITHUB_TOKEN=github\nOCINT_NGROK_URL=https://static.example.test\n"
+    )
     environment_file.chmod(0o600)
+    source_config = config_home / "opencode" / "opencode.json"
+    source_config.parent.mkdir()
+    source_config.write_text(
+        '{"model":"example-provider/example-model","provider":{"example-provider":'
+        '{"models":{"example-model":{"id":"example-model","name":"Example"}}}}}'
+    )
+    source_config.chmod(0o600)
+    auth = data_home / "opencode" / "auth.json"
+    auth.parent.mkdir(parents=True)
+    auth.write_text("preserved-auth")
+    auth.chmod(0o600)
     config = managed / "daemon.toml"
     config.write_text(
         f'''database_path = "{state_home / "ocint" / "daemon.sqlite"}"
@@ -502,6 +515,7 @@ agent_actor = "maintainer"
 {coordinator_toml}
 '''
     )
+    config.chmod(0o600)
     original = config.read_bytes()
     binary_directory = tmp_path / "bin"
     binary_directory.mkdir()
@@ -519,8 +533,19 @@ agent_actor = "maintainer"
     loginctl.write_text("#!/bin/sh\nprintf 'yes\\n'\n")
     loginctl.chmod(0o755)
     systemctl = binary_directory / "systemctl"
-    systemctl.write_text("#!/bin/sh\nexit 0\n")
+    systemctl.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in\n'
+        "  *ocint-coordinator.service*--property=UnitFileState*) "
+        "printf 'UnitFileState=%s\\n' \"${FAKE_COORDINATOR_STATE:-disabled}\" ;;\n"
+        "  *ocint-coordinator-ngrok.service*--property=UnitFileState*) "
+        "printf 'UnitFileState=%s\\n' \"${FAKE_NGROK_STATE:-disabled}\" ;;\n"
+        "esac\n"
+    )
     systemctl.chmod(0o755)
+    ngrok = binary_directory / "ngrok"
+    ngrok.write_text("#!/bin/sh\nprintf 'ngrok version 3.31.0\\n'\n")
+    ngrok.chmod(0o755)
     monkeypatch.setenv("PATH", str(binary_directory))
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USER", "tester")
@@ -538,9 +563,34 @@ agent_actor = "maintainer"
     assert f"Environment: reused; path={environment_file}; modified=no" in result.output
     assert "Systemd service: regenerated;" in result.output
     assert f"executable={executable.resolve()}" in result.output
+    assert "coordinator_state=disabled" in result.output
+    assert "ngrok_state=disabled" in result.output
     assert "Systemd timer: enabled;" in result.output
     assert "inactive_interval_seconds=600" in result.output
     assert "OpenCode configuration: reused;" in result.output
+    coordinator_config = tmp_path / "coordinator-opencode.json"
+    assert coordinator_config.is_file()
+    assert coordinator_config.stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "coordinator-opencode-data" / "opencode" / "auth.json").resolve() == auth.resolve()
+    assert "EnvironmentFile=" not in (config_home / "systemd" / "user" / "ocint-coordinator-ngrok.service").read_text()
+
+    preserved_state = tmp_path / "coordinator-opencode-data" / "opencode" / "state.json"
+    preserved_state.write_text("preserved")
+    coordinator_config.unlink()
+    monkeypatch.setenv("FAKE_COORDINATOR_STATE", "enabled")
+    monkeypatch.setenv("FAKE_NGROK_STATE", "enabled")
+
+    # WHEN
+    applied = CliRunner().invoke(main, ["daemon", "lch", "apply"])
+
+    # THEN
+    assert applied.exit_code == 0, applied.output
+    assert "coordinator_state=enabled" in applied.output
+    assert "ngrok_state=enabled" in applied.output
+    assert coordinator_config.is_file()
+    assert preserved_state.read_text() == "preserved"
+    assert auth.read_text() == "preserved-auth"
+    assert config.read_bytes() == original
 
 
 def test_setup_rejects_incompatible_path_binary_before_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
