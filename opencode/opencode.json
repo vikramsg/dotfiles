@@ -71,24 +71,6 @@
                         "reasoningSummary": "auto",
                         "serviceTier": "priority"
                     },
-                    "variants": [
-                        {
-                            "id": "low",
-                            "settings": { "reasoningEffort": "low" }
-                        },
-                        {
-                            "id": "medium",
-                            "settings": { "reasoningEffort": "medium" }
-                        },
-                        {
-                            "id": "high",
-                            "settings": { "reasoningEffort": "high" }
-                        },
-                        {
-                            "id": "xhigh",
-                            "settings": { "reasoningEffort": "xhigh" }
-                        }
-                    ],
                     "capabilities": {
                         "tools": true,
                         "input": ["text", "image", "pdf"],
@@ -102,24 +84,6 @@
                         "reasoningEffort": "high",
                         "reasoningSummary": "auto"
                     },
-                    "variants": [
-                        {
-                            "id": "low",
-                            "settings": { "reasoningEffort": "low" }
-                        },
-                        {
-                            "id": "medium",
-                            "settings": { "reasoningEffort": "medium" }
-                        },
-                        {
-                            "id": "high",
-                            "settings": { "reasoningEffort": "high" }
-                        },
-                        {
-                            "id": "xhigh",
-                            "settings": { "reasoningEffort": "xhigh" }
-                        }
-                    ],
                     "capabilities": {
                         "tools": true,
                         "input": ["text", "image", "pdf"],
@@ -133,24 +97,6 @@
                         "reasoningEffort": "medium",
                         "reasoningSummary": "auto"
                     },
-                    "variants": [
-                        {
-                            "id": "low",
-                            "settings": { "reasoningEffort": "low" }
-                        },
-                        {
-                            "id": "medium",
-                            "settings": { "reasoningEffort": "medium" }
-                        },
-                        {
-                            "id": "high",
-                            "settings": { "reasoningEffort": "high" }
-                        },
-                        {
-                            "id": "xhigh",
-                            "settings": { "reasoningEffort": "xhigh" }
-                        }
-                    ],
                     "capabilities": {
                         "tools": true,
                         "input": ["text", "image", "pdf"],
@@ -164,24 +110,6 @@
                         "reasoningEffort": "high",
                         "reasoningSummary": "auto"
                     },
-                    "variants": [
-                        {
-                            "id": "low",
-                            "settings": { "reasoningEffort": "low" }
-                        },
-                        {
-                            "id": "medium",
-                            "settings": { "reasoningEffort": "medium" }
-                        },
-                        {
-                            "id": "high",
-                            "settings": { "reasoningEffort": "high" }
-                        },
-                        {
-                            "id": "xhigh",
-                            "settings": { "reasoningEffort": "xhigh" }
-                        }
-                    ],
                     "capabilities": {
                         "tools": true,
                         "input": ["text", "image", "pdf"],
