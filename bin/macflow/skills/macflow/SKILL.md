@@ -71,16 +71,4 @@ wants a visible surface. `screenshot capture --preview` is an explicit opt-in.
 
 ## Configuration and installation
 
-Configuration is `${XDG_CONFIG_HOME:-~/.config}/macflow/config.json`; local WebKit
-documents live in its `ui/` directory. In the dotfiles repository, user-editable
-files belong under `macflow/`, implementation under `bin/macflow/`.
-
-Preserve existing configuration and symlinks. `just macflow` relinks configuration
-to the checkout running it, builds/installs the app, and installs this skill on
-macOS. Do not run it casually from a worktree. A binary-only update must preserve
-the installed app's bundle identity and designated signing requirement:
-`dev.vikramsingh.dotfiles.mac-workflow`.
-
-For development in the repository, read `bin/macflow/AGENTS.md` first. Test and
-build with its package-local justfile. Keep automated tests behavioral; verify
-focus, rendering, and real drag delivery manually. Never delete database files.
+Configuration is `${XDG_CONFIG_HOME:-~/.config}/macflow/config.json`. 
