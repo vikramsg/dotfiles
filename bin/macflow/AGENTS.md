@@ -46,6 +46,11 @@ Swift Argument Parser
   -> macOS API
 ```
 
+### Ground rules
+
+1. Always make sure `macflow` can be configured using `XDG_HOME/.config/macflow/config.toml`
+2. Always make sure all actions taken by `macflow` can be introspected using `macflow` commands.
+
 ## Config
 
 Note: Config does not belong inside `bin/macflow`. That is for the state agnostic tool.
