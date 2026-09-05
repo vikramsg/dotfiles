@@ -8,11 +8,16 @@ final class HotKeyService {
     private var callbacks: [UInt32: () -> Void] = [:]
     private var router = GlobalHotKeyRouter()
     private var nextID: UInt32 = 1
+    private let createEventTap: (UnsafeMutableRawPointer) -> CFMachPort?
 
-    init() throws {
+    init(createEventTap: @escaping (UnsafeMutableRawPointer) -> CFMachPort? = HotKeyService.makeEventTap) {
+        self.createEventTap = createEventTap
+    }
+
+    private static func makeEventTap(context: UnsafeMutableRawPointer) -> CFMachPort? {
         let mask = (CGEventMask(1) << CGEventType.keyDown.rawValue)
             | (CGEventMask(1) << CGEventType.keyUp.rawValue)
-        guard let eventTap = CGEvent.tapCreate(
+        return CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
@@ -22,8 +27,13 @@ final class HotKeyService {
                 let service = Unmanaged<HotKeyService>.fromOpaque(context).takeUnretainedValue()
                 return service.handle(type: type, event: event)
             },
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else {
+            userInfo: context
+        )
+    }
+
+    func start() throws {
+        guard eventTap == nil else { return }
+        guard let eventTap = createEventTap(Unmanaged.passUnretained(self).toOpaque()) else {
             throw NSError(
                 domain: "Macflow.HotKey",
                 code: 1,
@@ -109,8 +119,13 @@ final class HotKeyService {
         return modifiers
     }
 
-    deinit {
+    func stop() {
         if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
         if let eventTap { CFMachPortInvalidate(eventTap) }
+        runLoopSource = nil
+        eventTap = nil
+        router.resetPressState()
     }
+
+    deinit { stop() }
 }

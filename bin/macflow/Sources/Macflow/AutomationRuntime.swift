@@ -2,6 +2,7 @@ import AppKit
 import MacflowCore
 import MacflowUI
 
+@MainActor
 final class AutomationRuntime {
     private let configurationURL: URL
     private let startupConfiguration: WorkflowConfiguration
@@ -16,8 +17,12 @@ final class AutomationRuntime {
     private let capture: ScreenshotCaptureService
     private let server: HTTPServer
 
-    init() throws {
-        let configurationURL = ConfigurationLoader.workflowURL()
+    init(
+        configurationURL: URL = ConfigurationLoader.workflowURL(),
+        token: String? = nil,
+        hotKeys: HotKeyService = HotKeyService(),
+        permissions: PermissionAccess = .live
+    ) throws {
         let configuration = try ConfigurationLoader.loadWorkflow(from: configurationURL)
         try configuration.validate()
         let screenshotDirectory = URL(
@@ -25,11 +30,10 @@ final class AutomationRuntime {
             isDirectory: true
         )
         let theme = try BuiltInThemeCatalog.resolve(configuration.appearance.theme)
-        let token = try RuntimeFiles.prepare(port: configuration.server.port)
+        let token = try token ?? RuntimeFiles.prepare(port: configuration.server.port)
         let applications = ApplicationService()
         let windows = WindowService(applications: applications)
         let screens = ScreenService()
-        let hotKeys = try HotKeyService()
         let overlay = ImageOverlayController(configuration: configuration.screenshots.preview, theme: theme)
         let automaticPreview = AutomaticPreviewController(
             directory: screenshotDirectory,
@@ -59,11 +63,13 @@ final class AutomationRuntime {
             windows: windows,
             screens: screens,
             preview: overlay,
-            capture: capture,
-            watcher: automaticPreview,
+            screenshots: ScreenshotController(
+                capture: capture, preview: overlay, watcher: automaticPreview,
+                settleSeconds: configuration.screenshots.captureSettleSeconds
+            ),
             shelf: shelf,
-            hotKeys: hotKeys,
-            captureSettleSeconds: configuration.screenshots.captureSettleSeconds
+            hotKeyStatus: { hotKeys.status },
+            permissions: permissions
         )
         self.configurationURL = configurationURL
         self.startupConfiguration = configuration
@@ -80,6 +86,11 @@ final class AutomationRuntime {
     }
 
     func start() throws {
+        do {
+            try hotKeys.start()
+        } catch {
+            NSLog("Global shortcuts unavailable: \(error.localizedDescription)")
+        }
         for binding in startupConfiguration.hotkeys {
             do {
                 try hotKeys.register(
@@ -98,6 +109,14 @@ final class AutomationRuntime {
         NSLog("Macflow started on \(startupConfiguration.server.host):\(startupConfiguration.server.port)")
     }
 
+    var httpPort: UInt16? { server.port }
+
+    func stop() {
+        server.stop()
+        automaticPreview.stop()
+        hotKeys.stop()
+    }
+
     func showFirstShelf() {
         guard let configuration = loadCurrentConfigurationOrReport() else { return }
         guard let name = configuration.shelves.keys.sorted().first,
@@ -113,7 +132,13 @@ final class AutomationRuntime {
         switch action.type {
         case .applyLayout:
             guard let identifier = action.layout else { return report("apply_layout requires layout") }
-            layout.apply(layout: identifier) { [weak self] result in self?.report(result) }
+            Task {
+                do {
+                    try await layout.apply(layout: identifier)
+                } catch {
+                    report(error.localizedDescription)
+                }
+            }
         case .showFileShelf:
             guard let name = action.shelf else { return report("show_file_shelf requires shelf") }
             showShelf(named: name)
@@ -158,10 +183,6 @@ final class AutomationRuntime {
             report("Could not load configuration: \(error.localizedDescription)")
             return nil
         }
-    }
-
-    private func report(_ result: Result<Void, Error>) {
-        if case let .failure(error) = result { report(error.localizedDescription) }
     }
 
     private func report(_ message: String) {

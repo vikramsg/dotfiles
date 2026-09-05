@@ -1,6 +1,7 @@
 import AppKit
 import MacflowCLI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var runtime: AutomationRuntime?
     private var statusItem: NSStatusItem?
@@ -14,6 +15,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             presentFatal(error)
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        runtime?.stop()
     }
 
     private func installStatusItem() {
@@ -51,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+@MainActor
 func runApplication() {
     let app = NSApplication.shared
     let delegate = AppDelegate()
@@ -61,7 +67,7 @@ func runApplication() {
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 if Bundle.main.bundleURL.pathExtension == "app" {
-    runApplication()
+    MainActor.assumeIsolated { runApplication() }
 } else {
     runCLI(arguments: arguments)
 }

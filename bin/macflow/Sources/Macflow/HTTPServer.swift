@@ -34,12 +34,11 @@ final class HTTPServer {
     private let applications: ApplicationService
     private let windows: WindowService
     private let screens: ScreenService
-    private let preview: ImageOverlayController
-    private let capture: ScreenshotCaptureService
-    private let watcher: AutomaticPreviewController
+    private let preview: any ScreenshotPreviewing
+    private let screenshots: ScreenshotController
     private let shelf: FileShelfController
-    private let hotKeys: HotKeyService
-    private let captureSettleSeconds: Double
+    private let hotKeyStatus: () -> HotKeyStatus
+    private let permissions: PermissionAccess
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "dev.vikramsingh.mac-workflow.http")
 
@@ -49,12 +48,11 @@ final class HTTPServer {
         applications: ApplicationService,
         windows: WindowService,
         screens: ScreenService,
-        preview: ImageOverlayController,
-        capture: ScreenshotCaptureService,
-        watcher: AutomaticPreviewController,
+        preview: any ScreenshotPreviewing,
+        screenshots: ScreenshotController,
         shelf: FileShelfController,
-        hotKeys: HotKeyService,
-        captureSettleSeconds: Double
+        hotKeyStatus: @escaping () -> HotKeyStatus,
+        permissions: PermissionAccess = .live
     ) {
         self.configuration = configuration
         self.token = token
@@ -62,11 +60,10 @@ final class HTTPServer {
         self.windows = windows
         self.screens = screens
         self.preview = preview
-        self.capture = capture
-        self.watcher = watcher
+        self.screenshots = screenshots
         self.shelf = shelf
-        self.hotKeys = hotKeys
-        self.captureSettleSeconds = captureSettleSeconds
+        self.hotKeyStatus = hotKeyStatus
+        self.permissions = permissions
     }
 
     func start() throws {
@@ -90,6 +87,8 @@ final class HTTPServer {
         listener?.cancel()
         listener = nil
     }
+
+    var port: UInt16? { listener?.port?.rawValue }
 
     private func accept(_ connection: NWConnection) {
         connection.start(queue: queue)
@@ -132,8 +131,7 @@ final class HTTPServer {
         do {
             switch (request.method, request.path) {
             case ("GET", "/v1/permissions"):
-                try RuntimeFiles.writePermissions()
-                completion(.ok(PermissionService.status.json))
+                completion(.ok(try permissions.status().json))
             case ("POST", "/v1/permissions/request"):
                 guard let body = try? jsonBody(request) else {
                     completion(.error(400, "JSON object required"))
@@ -142,14 +140,14 @@ final class HTTPServer {
                 do {
                     let result = try PermissionRequestHandler.handle(
                         body: body,
-                        request: PermissionService.request
+                        request: permissions.request
                     )
                     completion(.ok(result.json))
                 } catch let error as PermissionCommandError {
                     completion(.error(400, error.localizedDescription))
                 }
             case ("GET", "/v1/hotkeys"):
-                completion(.ok(hotKeys.status.json))
+                completion(.ok(hotKeyStatus().json))
             case ("GET", "/v1/applications"):
                 completion(.ok(["applications": applications.all()]))
             case ("GET", "/v1/windows"):
@@ -260,31 +258,10 @@ final class HTTPServer {
                 let displayID = (body["display_id"] as? NSNumber).map { UInt32($0.uint32Value) }
                 let path = body["path"] as? String
                 let showPreview = body["show_preview"] as? Bool ?? false
-                let excludedWindowID = watcher.suspend()
-                var suppressedPath: String?
-                DispatchQueue.main.asyncAfter(deadline: .now() + captureSettleSeconds) {
-                    self.capture.capture(
-                    displayID: displayID,
-                    path: path,
-                    excludingWindowIDs: Set([excludedWindowID].compactMap { $0 }),
-                    destinationResolved: { [weak self] destination in
-                        suppressedPath = destination.path
-                        self?.watcher.suppressNext(path: destination.path)
-                        }
-                    ) { result in
-                        DispatchQueue.main.async {
-                            self.watcher.resume()
-                            switch result {
-                            case let .success(value):
-                                if showPreview, let path = value["path"] as? String {
-                                    _ = self.preview.show(path: path)
-                                }
-                                completion(.ok(value))
-                            case let .failure(error):
-                                if let suppressedPath { self.watcher.cancelSuppression(path: suppressedPath) }
-                                completion(.error(422, error.localizedDescription))
-                            }
-                        }
+                screenshots.takeScreenshot(displayID: displayID, path: path, showPreview: showPreview) { result in
+                    switch result {
+                    case let .success(value): completion(.ok(value))
+                    case let .failure(error): completion(.error(422, error.localizedDescription))
                     }
                 }
             default:
