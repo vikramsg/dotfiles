@@ -42,6 +42,13 @@ This links configuration, builds and signs `~/Applications/Macflow.app`, install
 links the [Macflow skill](skills/macflow/SKILL.md) to `~/.config/opencode/skills/macflow`.
 It does not install the skill on other platforms.
 
+The package owns skill linking; the root recipe supplies the destination. To
+link only the skill, without changing Macflow configuration or restarting it:
+
+```bash
+just --justfile bin/macflow/justfile link-skill "$HOME/.config/opencode/skills/macflow"
+```
+
 **Do not run the root installer from a temporary worktree if another checkout
 owns your live config.** To build without relinking or restarting anything:
 

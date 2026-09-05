@@ -8,8 +8,9 @@
   convenience. Native/WebKit renderer unification is not part of this change.
 - Move existing README material into focused action/UI guides and link existing
   configuration and API references rather than duplicating them.
-- Keep the skill in `bin/macflow/skills/macflow/`, linked by the root installer
-  to `~/.config/opencode/skills/macflow` only on macOS.
+- Keep the skill and linking implementation in `bin/macflow/`. The root installer
+  supplies `~/.config/opencode/skills/macflow` to the package's `link-skill`
+  recipe; linking runs only on macOS.
 
 ## Compatibility
 
@@ -79,6 +80,19 @@ No desktop screenshots are committed or uploaded.
 - Review confirmed the HTTP contracts, migration coverage, installer health
   checks, diagnostic suggestions, and macOS-only skill guard. No speculative
   architecture changes were proposed or needed.
+
+## Installation ownership correction
+
+- User feedback: the root justfile should supply the skill destination, not own
+  the linking implementation. Moved the existing logic into the package-local
+  `link-skill target` recipe; root `macflow` now delegates with the default path.
+- Tidy First: move and parameterize the existing recipe rather than introduce a
+  new installer abstraction. Retain the macOS guard and existing-directory safety.
+- Verification passed in an isolated HOME: a custom destination containing
+  spaces, quotes, and a dollar sign; repeat linking; simulated Linux no-op;
+  protection of existing directories/files; and root delegation of the default
+  destination and installation to the package. No live configuration or service
+  was touched. Recipe discovery and `git diff --check` also pass.
 
 ## What to review
 
