@@ -430,8 +430,8 @@ def discover(
         raise click.ClickException("opencode executable is not installed on PATH")
     opencode_executable = Path(opencode_name).resolve()
     version = runner.run_isolated((str(opencode_executable), "--version"), git_environment).stdout.strip()
-    if version != "1.17.20":
-        raise click.ClickException(f"opencode 1.17.20 is required; found {version or 'no version'}")
+    if version != "1.18.15":
+        raise click.ClickException(f"opencode 1.18.15 is required; found {version or 'no version'}")
     policy, payload = load_policy()
     effective_payload = restricted_opencode_config(
         policy,

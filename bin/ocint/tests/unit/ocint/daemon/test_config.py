@@ -146,7 +146,7 @@ def test_settings_are_constructible_without_credentials(tmp_path: Path) -> None:
 
 def test_opencode_expected_version_rejects_every_other_literal(tmp_path: Path) -> None:
     # GIVEN / WHEN / THEN
-    with pytest.raises(ValidationError, match=r"1\.17\.20"):
+    with pytest.raises(ValidationError, match=r"1\.18\.15"):
         OpenCodeConfig.model_validate(
             {
                 "expected_version": "2.0.0",

@@ -230,9 +230,9 @@ def _opencode_diagnostics(
         Diagnostic(
             name="opencode.executable_version",
             required=True,
-            ok=version == "1.17.20" and config.opencode.expected_version == "1.17.20",
+            ok=version == "1.18.15" and config.opencode.expected_version == "1.18.15",
             value=f"{config.opencode.executable} ({version or 'unavailable'})",
-            detail=version_observation.error or "required and configured version must both be 1.17.20",
+            detail=version_observation.error or "required and configured version must both be 1.18.15",
         )
     )
     source = context.data_home / "opencode" / "auth.json"

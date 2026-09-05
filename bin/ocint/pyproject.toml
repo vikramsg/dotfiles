@@ -37,7 +37,7 @@ build-backend = "hatchling.build"
 packages = ["ocint"]
 
 [tool.hatch.build.targets.sdist]
-include = ["ocint", "config/opencode.daemon.json", "README.md", "pyproject.toml"]
+include = ["ocint", "config/opencode.daemon.json", "config/opencode.coordinator.json", "README.md", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]

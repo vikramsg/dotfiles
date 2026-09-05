@@ -100,6 +100,71 @@ depends_on = [
 ]
 
 [[modules]]
+path = "ocint.daemon.coordinator.config"
+depends_on = []
+
+[[modules]]
+path = "ocint.daemon.coordinator.models"
+depends_on = []
+
+[[modules]]
+path = "ocint.daemon.coordinator.contracts"
+depends_on = [
+  "ocint.daemon.coordinator.models",
+]
+
+[[modules]]
+path = "ocint.daemon.coordinator.service"
+depends_on = [
+  "ocint.daemon.coordinator.models",
+]
+
+[[modules]]
+path = "ocint.daemon.coordinator.repository"
+depends_on = [
+  "ocint.daemon.coordinator.models",
+  "ocint.daemon.db",
+]
+
+[[modules]]
+path = "ocint.daemon.coordinator.workspace"
+depends_on = [
+  "ocint.daemon.coordinator.config",
+]
+
+[[modules]]
+path = "ocint.daemon.coordinator.opencode"
+depends_on = [
+  "ocint.daemon.coordinator.contracts",
+  "ocint.daemon.coordinator.models",
+  "ocint.daemon.models",
+  "ocint.daemon.opencode",
+]
+
+[[modules]]
+path = "ocint.daemon.coordinator.run"
+depends_on = [
+  "ocint.daemon.coordinator.contracts",
+  "ocint.daemon.coordinator.models",
+  "ocint.daemon.logging",
+]
+
+[[modules]]
+path = "ocint.daemon.coordinator"
+depends_on = [
+  "ocint.daemon.coordinator.config",
+  "ocint.daemon.coordinator.contracts",
+  "ocint.daemon.coordinator.models",
+  "ocint.daemon.coordinator.opencode",
+  "ocint.daemon.coordinator.repository",
+  "ocint.daemon.coordinator.run",
+  "ocint.daemon.coordinator.service",
+  "ocint.daemon.coordinator.workspace",
+  "ocint.daemon.db",
+  "ocint.daemon.opencode",
+]
+
+[[modules]]
 path = "ocint.daemon.config"
 depends_on = [
   "ocint.daemon.github",

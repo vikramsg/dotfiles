@@ -1,0 +1,47 @@
+{
+  "version": "1.18.16",
+  "request": {
+    "method": "POST",
+    "path": "/session/<sanitized-session>/prompt_async",
+    "body": {
+      "messageID": "msg_ocint_contract_probe_20260807",
+      "parts": [
+        {
+          "type": "text",
+          "text": "<sanitized contract probe>"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 202,
+    "messages": [
+      {
+        "info": {
+          "id": "msg_ocint_contract_probe_20260807",
+          "role": "user"
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "<sanitized contract probe>"
+          }
+        ]
+      },
+      {
+        "info": {
+          "id": "msg_fdbfdf15a001fnalS8nmUl06D0",
+          "role": "assistant",
+          "parentID": "msg_ocint_contract_probe_20260807",
+          "finish": "stop"
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "CONTRACT-PROBE-OK"
+          }
+        ]
+      }
+    ]
+  }
+}

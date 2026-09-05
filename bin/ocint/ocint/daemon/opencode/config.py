@@ -10,7 +10,7 @@ class OpenCodeConfig(BaseModel):
     server_url: HttpUrl = HttpUrl("http://127.0.0.1:4097")
     username: str = "opencode"
     request_timeout_seconds: int = Field(default=30, ge=1)
-    expected_version: Literal["1.17.20"] = "1.17.20"
+    expected_version: Literal["1.18.16"] = "1.18.16"
     executable: Path = Path("/usr/bin/opencode")
     config_file: Path
     xdg_config_home: Path
