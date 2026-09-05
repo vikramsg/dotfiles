@@ -81,6 +81,7 @@ The installation should create:
 ~/Applications/Macflow.app
 ~/.local/bin/macflow
 ${XDG_CONFIG_HOME:-~/.config}/macflow/config.json
+~/.config/opencode/skills/macflow
 ```
 
 If `~/.local/bin` is not already on `PATH`, use
@@ -92,7 +93,7 @@ complete.
 Request Accessibility access from the installed application:
 
 ```bash
-macflow permissions request accessibility
+macflow system permissions request accessibility
 ```
 
 Open **System Settings > Privacy & Security > Accessibility**, then enable
@@ -111,14 +112,14 @@ for window layouts, focus management, hotkeys, and synthetic input.
 Request Screen Recording access from the installed application:
 
 ```bash
-macflow permissions request screen-recording
+macflow system permissions request screen-recording
 ```
 
 Open **System Settings > Privacy & Security > Screen & System Audio
 Recording**, then enable **Macflow**. On macOS versions that label this section
 **Screen Recording**, use that equivalent section.
 
-Screen Recording is required for `macflow screenshot` and the screenshot HTTP
+Screen Recording is required for `macflow screenshot capture` and the screenshot HTTP
 endpoint. Watching images created by another screenshot tool does not require
 this permission.
 
@@ -136,21 +137,21 @@ lch install lch-macflow
 Run every verification command:
 
 ```bash
-macflow health
-macflow permissions
-macflow doctor
+macflow system health
+macflow system permissions
+macflow system doctor
 lch status lch-macflow
-macflow screenshot --preview
+macflow screenshot capture --preview
 ```
 
 Setup is complete only when:
 
-- `macflow health` returns a successful response.
-- `macflow permissions` reports both Accessibility and Screen Recording as
+- `macflow system health` returns a successful response.
+- `macflow system permissions` reports both Accessibility and Screen Recording as
   granted.
-- `macflow doctor` reports that every runtime check passes.
+- `macflow system doctor` reports that every runtime check passes.
 - `lch status lch-macflow` reports `loaded`.
-- `macflow screenshot --preview` writes a PNG and displays its transient
+- `macflow screenshot capture --preview` writes a PNG and displays its transient
   preview.
 
 If a permission is still missing, confirm that the enabled entry points to
@@ -187,5 +188,6 @@ Bundle identifier:      dev.vikramsingh.dotfiles.mac-workflow
 Designated requirement: identifier "dev.vikramsingh.dotfiles.mac-workflow"
 ```
 
-Use `just macflow` for subsequent rebuilds and installations. It applies the
-stable designated requirement expected to preserve the one-time TCC approvals.
+Use `just macflow` from your configuration-owning checkout for subsequent full
+installations. For worktree builds that must preserve existing configuration
+links, follow the [binary-only update guidance](../bin/macflow/README.md#install-versus-update).

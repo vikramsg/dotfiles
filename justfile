@@ -361,6 +361,7 @@ link-macflow-config:
 
 # Link macflow configuration and delegate installation to its package.
 macflow: validate-screenshot-directories link-macflow-config
+    just --justfile "{{justfile_directory()}}/bin/macflow/justfile" link-skill "$HOME/.config/opencode/skills/macflow"
     just --justfile "{{justfile_directory()}}/bin/macflow/justfile" install
 
 # Set up zsh and prompt configuration symlinks

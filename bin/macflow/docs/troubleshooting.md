@@ -14,7 +14,7 @@ browsers with login forms, and terminal applications are common sources.
 Run Macflow's diagnostics first:
 
 ```bash
-macflow doctor
+macflow system doctor
 ```
 
 The command checks the running service, macOS permissions, global shortcut
@@ -42,5 +42,5 @@ After Secure Input clears, Macflow shortcuts should resume without rebuilding
 or reinstalling Macflow. Run the doctor again to confirm every check passes:
 
 ```bash
-macflow doctor
+macflow system doctor
 ```

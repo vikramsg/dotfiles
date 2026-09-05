@@ -66,6 +66,14 @@ interface Macflow {
 Calls reject their promise when validation or the native operation fails.
 `prepareDrag` must be called from the item's pointer-down handler.
 
+The surface's configured `configuration` object is passed through unchanged.
+Built-in theme values are also available as CSS custom properties prefixed
+with `--macflow-`.
+
+Image URLs returned by `files.list` use the private `macflow-file:` scheme.
+Only paths registered by native file listing are served through that scheme;
+the page does not need a local web server or a new HTTP endpoint.
+
 ## Implementation
 
 | API call | Native implementation |
