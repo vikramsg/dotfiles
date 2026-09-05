@@ -1,10 +1,10 @@
 local M = {}
 
 local specs = {
-	-- Verifies CodeDiff gf reuses the existing file split and preserves its cursor.
-	"tests.codediff_gf_spec",
-	-- Verifies both review launchers and Differ's source navigation with real Git/plugin views.
+	-- Verifies Differ's comparison selection and source navigation with real Git/plugin views.
 	"tests.git_review_spec",
+	-- Real PR UI with an intercepted sidecar boundary; never writes to GitHub.
+	"tests.pr_review_spec",
 	-- Verifies the ty LSP configuration and startup command for Python files.
 	"tests.lsp_ty_spec",
 	-- Verifies Snacks Explorer reveals hidden and ignored files with the required options.

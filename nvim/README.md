@@ -34,26 +34,30 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 ### Git diffs
 
-- `Space + gd`: Open uncommitted changes in inline view, or automatically compare against `main` when the working tree is clean.
-- `Enter` in the CodeDiff explorer: Open the selected file and focus its diff.
-- `gf` in a CodeDiff pane: Open the real file in the previous tab for editing at the current line.
-- `B` in CodeDiff: Toggle between uncommitted changes since `HEAD` and all changes since branching from `main`.
-- `g?`: Show all CodeDiff shortcuts on screen.
-- `q`: Close CodeDiff and return to the previous tab.
-- `t`: Toggle between inline and side-by-side layouts.
+- `Space + gh`: Open Differ with uncommitted changes, or automatically compare against `main` when the working tree is clean.
+- `Enter` in the file tree: Open the selected file and focus its diff.
+- `gf`: Open the real file in an existing editor split in the previous tab at the mapped source line, keeping the review open.
+- `B` in local reviews: Toggle uncommitted changes since `HEAD` and all changes since branching from `main`.
+- `g?`: Show context-aware local/PR review shortcuts.
+- `q`: Close Differ and return to the editor.
 - `[` / `]`: Move to the previous/next changed hunk.
 - `[f` / `]f`: Move to the previous/next changed file.
 
-#### Differ
-
-- `Space + gh`: Open Differ with the same automatic uncommitted/`main` comparison selection.
-- `B`, `gf`, `[`, `]`, `[f`, `]f`, `Enter`, `g?`, and `q`: Same review actions as CodeDiff.
 - `t`: Toggle stacked and side-by-side layouts. Stacked is an inline diff of one file, not a multi-file view.
 - `T`: Toggle compact/full context from the diff or tree. Reviews start compact, with three lines of context around changes; the choice persists across files, layouts, refreshes, and `B` comparisons.
 - `X`: Discard the current hunk after confirmation. **In the tree this discards the whole file's changes.** Available in the uncommitted view; this modifies actual files, not just the display.
-- `gf` keeps the review open and reuses the editor split in the previous tab.
+Requires Neovim 0.12+. GitHub review requires Go and make to build the sidecar (handled by Lazy's build hook), plus GitHub authentication. Local diffs do not need the sidecar.
 
-Requires Neovim 0.12+. Local review does not need Differ's optional Go/GitHub sidecar.
+#### GitHub reviews (Differ buffers only)
+
+- `Space pl`: List/open PRs, landing in the selected PR's diff.
+- `Space pr`: Start/resume the current PR's review; from a local diff, ask for a PR number.
+- `Space ps`: Submit the pending review through the verdict picker and summary editor. Only bound in PR diff/tree buffers.
+- `ga` in a PR diff: Comment on the current line or visual selection.
+- `gp` in a PR diff: Reply to a thread.
+- In the comment editor, `Esc` then `Enter` saves; `q` in normal mode cancels. Visual `ga` currently opens in normal mode: press `i` to type first.
+
+Start a review with `Space pr` before commenting to save GitHub drafts. Without a pending review, comments may post immediately. `Space ps` publishes the review after choosing a verdict and submitting its summary with `Esc` then `Enter`. These shortcuts are not installed in ordinary editor buffers.
 
 ### Lazygit
 

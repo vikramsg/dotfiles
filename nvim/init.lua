@@ -23,10 +23,12 @@
 -- Git & Files:
 --   <leader>gb : Show Git blame / line history (with clean diff preview)
 --   <leader>gf : Show Git file history (all commits affecting current file)
---   <leader>gd : Open full Git diff review
+--   <leader>gh : Open Differ review
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
---   In CodeDiff: Enter open diff, gf edit, B toggle HEAD/main, [/] hunks, g? help, q close
+--   In Differ: Enter open diff, gf edit, B toggle HEAD/main, [/] hunks, g? help, q close
+--   t toggles stacked/split layout; T toggles compact/full context
+--   Differ only: <leader>pl list PRs, <leader>pr start/resume, <leader>ps submit PR review
 --
 -- Search (Snacks Picker):
 --   <leader>sf : Search Files
@@ -65,6 +67,9 @@
 
 -- hacky way to ignore the vim global warnings issue
 local vim = vim
+
+-- Also resolve our modules when this config is launched with `nvim -u /path/init.lua`.
+local config_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
 vim.o.number = true
 vim.o.relativenumber = false
@@ -432,146 +437,6 @@ local function refresh_snacks_explorer_git_status_after_index_write()
 	end
 end
 
-local codediff_next_compare_mode
-
-local function open_codediff_comparison(git_root, mode)
-	codediff_next_compare_mode = mode
-	local command = "CodeDiff --repo " .. vim.fn.fnameescape(git_root)
-	if mode == "main" then
-		command = command .. " main..."
-	end
-	vim.cmd(command)
-end
-
-local function open_codediff_review()
-	local git_root = Snacks.git.get_root()
-	if not git_root then
-		vim.notify("CodeDiff requires a Git repository", vim.log.levels.ERROR)
-		return
-	end
-
-	local status = vim.system({ "git", "status", "--porcelain", "--untracked-files=normal" }, {
-		cwd = git_root,
-		text = true,
-	}):wait()
-	if status.code ~= 0 then
-		vim.notify(status.stderr or "Unable to read Git status", vim.log.levels.ERROR)
-		return
-	end
-
-	if status.stdout ~= "" then
-		open_codediff_comparison(git_root, "HEAD")
-		return
-	end
-
-	local against_main = vim.system({ "git", "diff", "--quiet", "main...HEAD", "--" }, {
-		cwd = git_root,
-		text = true,
-	}):wait()
-	if against_main.code == 1 then
-		open_codediff_comparison(git_root, "main")
-	elseif against_main.code == 0 then
-		vim.notify("No changes since HEAD or since branching from main", vim.log.levels.INFO)
-	else
-		vim.notify(against_main.stderr or "Unable to compare against main", vim.log.levels.ERROR)
-	end
-end
-
-local function toggle_codediff_comparison()
-	local lifecycle = require("codediff.ui.lifecycle")
-	local tabpage = vim.api.nvim_get_current_tabpage()
-	local session = lifecycle.get_session(tabpage)
-	if not session then
-		vim.notify("No active CodeDiff view", vim.log.levels.ERROR)
-		return
-	end
-
-	local mode = vim.t[tabpage].dotfiles_codediff_compare_mode
-	local next_mode = mode == "main" and "HEAD" or "main"
-	local git_root = session.git_root
-	if not lifecycle.close(tabpage) then
-		return
-	end
-
-	vim.schedule(function()
-		open_codediff_comparison(git_root, next_mode)
-	end)
-end
-
--- Upstream `gf` is not completely broken. It successfully:
--- - Resolves the working-tree file.
--- - Returns to the previous tab.
--- - Opens the file.
--- - Attempts to preserve the cursor.
--- What it does not do is choose the correct split. Upstream uses:
--- `local target_win = vim.api.nvim_get_current_win()`
--- After switching to the previous tab, that means whichever split was last
--- focused there. It can be a scratch split or Snacks Explorer, so upstream
--- opens the file there instead of selecting the existing editor split.
-local function edit_codediff_file()
-	local lifecycle = require("codediff.ui.lifecycle")
-	local tabpage = vim.api.nvim_get_current_tabpage()
-	local session = lifecycle.get_session(tabpage)
-	if not session then
-		return
-	end
-
-	local _, modified = lifecycle.get_paths(tabpage)
-	local target_file = modified and modified.absolute
-	if not target_file or vim.fn.filereadable(target_file) ~= 1 then
-		vim.notify("No editable working file for this diff", vim.log.levels.WARN)
-		return
-	end
-
-	local cursor = vim.api.nvim_win_get_cursor(0)
-	local tabs = vim.api.nvim_list_tabpages()
-	local current_index
-	for index, tab in ipairs(tabs) do
-		if tab == tabpage then
-			current_index = index
-			break
-		end
-	end
-
-	local target_tab
-	if not current_index or current_index == 1 then
-		vim.cmd("tabnew")
-		target_tab = vim.api.nvim_get_current_tabpage()
-		vim.cmd("tabmove 0")
-	else
-		target_tab = tabs[current_index - 1]
-		vim.api.nvim_set_current_tabpage(target_tab)
-	end
-
-	local target_win
-	local fallback_win
-	for _, win in ipairs(vim.api.nvim_tabpage_list_wins(target_tab)) do
-		local config = vim.api.nvim_win_get_config(win)
-		if config.relative == "" then
-			fallback_win = fallback_win or win
-			local bufnr = vim.api.nvim_win_get_buf(win)
-			local name = vim.api.nvim_buf_get_name(bufnr)
-			if vim.bo[bufnr].buftype == "" and name ~= "" then
-				target_win = win
-				if vim.fs.normalize(name) == vim.fs.normalize(target_file) then
-					break
-				end
-			end
-		end
-	end
-	target_win = target_win or fallback_win
-	if not target_win or not vim.api.nvim_win_is_valid(target_win) then
-		vim.notify("No editor window available", vim.log.levels.ERROR)
-		return
-	end
-
-	vim.api.nvim_set_current_win(target_win)
-	vim.cmd("edit " .. vim.fn.fnameescape(target_file))
-	local line = math.min(cursor[1], vim.api.nvim_buf_line_count(0))
-	local text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1] or ""
-	vim.api.nvim_win_set_cursor(0, { line, math.min(cursor[2], #text) })
-end
-
 require("lazy").setup({
 	{
 		"folke/snacks.nvim",
@@ -599,7 +464,7 @@ require("lazy").setup({
 
 			vim.api.nvim_create_autocmd("User", {
 				group = group,
-				pattern = { "CodeDiffClose", "NeogitStatusRefresh", "NeogitStatus" },
+				pattern = { "NeogitStatusRefresh", "NeogitStatus" },
 				callback = function()
 					vim.defer_fn(refresh_snacks_explorer_git_status_after_index_write, 200)
 				end,
@@ -864,86 +729,37 @@ require("lazy").setup({
 		},
 	},
 	{
-		"esmuellert/codediff.nvim",
-		version = "*",
-		cmd = "CodeDiff",
+		"undont/differ.nvim",
+		build = "make go-build",
+		cmd = "Differ",
 		keys = {
-			{ "<leader>gd", open_codediff_review, desc = "Git Diff Review" },
+			{
+				"<leader>gh",
+				function()
+					require("config.git_review").open_differ()
+				end,
+				desc = "Git Differ Review",
+			},
 		},
 		opts = {
-			diff = {
-				layout = "inline",
-			},
-			explorer = {
-				focus_on_select = true,
-				view_mode = "tree",
-			},
+			base = "main",
+			layout = "stacked",
+			context = 3,
+			panel = { position = "left", listing = "tree" },
 			keymaps = {
-				view = {
-					open_in_prev_tab = false,
-					next_hunk = "]",
-					prev_hunk = "[",
-				},
+				next_hunk = "]",
+				prev_hunk = "[",
+				close = "q",
+				toggle_layout = "t",
+				discard = "X",
+				review_submit = "<leader>ps",
+				goto_file = false,
+				scroll_down = false,
+				scroll_up = false,
 			},
 		},
 		config = function(_, opts)
-			require("codediff").setup(opts)
-			local group = vim.api.nvim_create_augroup("dotfiles-codediff-help", { clear = true })
-
-			local function set_custom_keymaps(tabpage)
-				local lifecycle = require("codediff.ui.lifecycle")
-				lifecycle.set_tab_keymap(
-					tabpage,
-					"n",
-					"B",
-					toggle_codediff_comparison,
-					{ desc = "Toggle CodeDiff HEAD/Main Comparison" }
-				)
-				lifecycle.set_tab_keymap(tabpage, "n", "gf", edit_codediff_file, { desc = "Edit File at Current Line" })
-			end
-
-			vim.api.nvim_create_autocmd("User", {
-				group = group,
-				pattern = "CodeDiffOpen",
-				callback = function(args)
-					local tabpage = args.data.tabpage
-					local session = require("codediff.ui.lifecycle").get_session(tabpage)
-					local mode = codediff_next_compare_mode or (session.original_revision and "custom" or "HEAD")
-					codediff_next_compare_mode = nil
-					vim.t[tabpage].dotfiles_codediff_compare_mode = mode
-
-					set_custom_keymaps(tabpage)
-					vim.notify(
-						"B: HEAD/main | [/] hunks | gf: edit | g?: help | q: close",
-						vim.log.levels.INFO,
-						{ title = "CodeDiff", timeout = 10000 }
-					)
-				end,
-			})
-
-			vim.api.nvim_create_autocmd("User", {
-				group = group,
-				pattern = "CodeDiffFileSelect",
-				callback = function(args)
-					local tabpage = args.data.tabpage
-					local expected_path = vim.fs.normalize(args.data.path)
-					local attempts = 0
-					local function bind_when_selected()
-						attempts = attempts + 1
-						local lifecycle = require("codediff.ui.lifecycle")
-						local original, modified = lifecycle.get_paths(tabpage)
-						local current_path = (modified and modified.relative) or (original and original.relative)
-						if current_path and vim.fs.normalize(current_path) == expected_path then
-							set_custom_keymaps(tabpage)
-							return
-						end
-						if attempts < 100 and vim.api.nvim_tabpage_is_valid(tabpage) then
-							vim.defer_fn(bind_when_selected, 50)
-						end
-					end
-					vim.schedule(bind_when_selected)
-				end,
-			})
+			require("config.git_review").setup_differ(opts)
 		end,
 	},
 	{
@@ -1568,22 +1384,6 @@ require("lazy").setup({
 						},
 						filetypes = { "snacks_explorer" },
 					},
-					{
-						sections = {
-							lualine_a = {
-								function()
-									return "CodeDiff"
-								end,
-							},
-							lualine_b = {
-								function()
-									local mode = vim.t.dotfiles_codediff_compare_mode or "HEAD"
-									return "B " .. mode .. " | [/] | gf edit | g? | q"
-								end,
-							},
-						},
-						filetypes = { "codediff-explorer" },
-					},
 				},
 			})
 		end,
@@ -1598,7 +1398,9 @@ require("lazy").setup({
 
 	-- "gc" to comment visual regions/lines
 	{ "numToStr/Comment.nvim", opts = {} },
-})
+	-- Add this config directory to the runtime path so `require("config.*")` works
+	-- when Neovim is launched directly with `nvim -u /path/to/init.lua`.
+}, { performance = { rtp = { paths = { config_dir } } } })
 
 require("noice").setup({
 	presets = {
