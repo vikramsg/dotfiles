@@ -1,5 +1,4 @@
 import os
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -78,13 +77,6 @@ def opencode_data_dir(env: Mapping[str, str] | None = None, *, cwd: Path | None 
     if xdg_data_home := effective_env.get("XDG_DATA_HOME"):
         return (
             _absolute(xdg_data_home, base=cwd, env=effective_env, cwd=cwd, allow_process_home=use_process_env)
-            / "opencode"
-        )
-    if sys.platform == "darwin":
-        return (
-            _home(effective_env, cwd=cwd, allow_process_home=use_process_env)
-            / "Library"
-            / "Application Support"
             / "opencode"
         )
     return _home(effective_env, cwd=cwd, allow_process_home=use_process_env) / ".local" / "share" / "opencode"
