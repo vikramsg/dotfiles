@@ -44,6 +44,17 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 - `[` / `]`: Move to the previous/next changed hunk.
 - `[f` / `]f`: Move to the previous/next changed file.
 
+#### Differ
+
+- `Space + gh`: Open Differ with the same automatic uncommitted/`main` comparison selection.
+- `B`, `gf`, `[`, `]`, `[f`, `]f`, `Enter`, `g?`, and `q`: Same review actions as CodeDiff.
+- `t`: Toggle stacked and side-by-side layouts. Stacked is an inline diff of one file, not a multi-file view.
+- `T`: Toggle compact/full context from the diff or tree. Reviews start compact, with three lines of context around changes; the choice persists across files, layouts, refreshes, and `B` comparisons.
+- `X`: Discard the current hunk after confirmation. **In the tree this discards the whole file's changes.** Available in the uncommitted view; this modifies actual files, not just the display.
+- `gf` keeps the review open and reuses the editor split in the previous tab.
+
+Requires Neovim 0.12+. Local review does not need Differ's optional Go/GitHub sidecar.
+
 ### Lazygit
 
 - `Space + lg`: To open lazygit view
