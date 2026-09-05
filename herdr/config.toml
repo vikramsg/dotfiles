@@ -21,7 +21,7 @@
 # prefix+v: pick and watch a Markdown file
 # prefix+w: Open workspace picker
 # prefix+Shift+T: open terminal popup
-# prefix+Shift+D: open Hunk diff review popup
+# prefix+Shift+D: open Hunk diff review in a new tab
 # prefix+Shift+G: open PR review tab
 # prefix+f: open Snacks file picker
 # prefix+Shift+O: append OpenCode and Vim project tabs
@@ -165,11 +165,15 @@ height = "90%"
 
 [[keys.command]]
 key = "prefix+shift+d"
-type = "popup"
-command = "exec zsh -ic hunk"
-description = "open Hunk diff review"
-width = "90%"
-height = "90%"
+type = "shell"
+# Restore the originating tab before the Hunk pane exits, rather than letting
+# Herdr select the adjacent tab. A closed origin must not prevent Hunk exiting.
+command = '''
+response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Hunk --env HERDR_HUNK_RETURN_TAB_ID="$HERDR_ACTIVE_TAB_ID" --env HERDR_BIN_PATH="$HERDR_BIN_PATH" --focus) &&
+pane_id=$(printf "%s\n" "$response" | jq -er ".result.root_pane.pane_id") &&
+"$HERDR_BIN_PATH" pane run "$pane_id" "exec zsh -ic 'hunk; result=\$?; \"\$HERDR_BIN_PATH\" tab focus \"\$HERDR_HUNK_RETURN_TAB_ID\" >/dev/null 2>&1; exit \"\$result\"'"
+'''
+description = "open Hunk diff review in a new tab"
 
 [[keys.command]]
 key = "prefix+shift+g"

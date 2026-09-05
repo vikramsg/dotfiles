@@ -1,7 +1,8 @@
 # Hunk
 
-Hunk opens in a Herdr popup with a review flow modeled after the Neovim
-CodeDiff setup.
+Hunk opens in a new Herdr tab with `prefix+Shift+D`, with a review flow modeled
+after the Neovim CodeDiff setup. Quitting Hunk with `q` closes that tab and
+returns to the tab it was opened from, if it is still open.
 
 ## Setup
 

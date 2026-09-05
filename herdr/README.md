@@ -43,8 +43,12 @@ The prefix is `Ctrl+Space`.
 | `prefix+Shift+C` | Create a workspace |
 | `prefix+h/l/k/j` | Resize left / right / down / up |
 | `prefix+Shift+H/J/K/L` | Swap left / down / up / right |
-| `prefix+Shift+D` | Open the current repository in Hunk |
+| `prefix+Shift+D` | Open the current repository in a new Hunk tab |
 | `prefix+Shift+G` | Review the current PR in a new tab |
+
+Quitting Hunk with `q` closes its tab and returns to the tab it was opened from,
+rather than leaving a shell prompt. If the original tab was closed in the
+meantime, Herdr uses its normal tab-close behavior.
 
 `vim-herdr-navigation` gives Neovim the chord first and crosses into a Herdr pane
 only at a split edge. Its Neovim adapter falls back to `vim-tmux-navigator`
