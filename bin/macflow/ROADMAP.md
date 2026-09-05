@@ -11,6 +11,7 @@
 ## Apps
 
 1. Port forwarding should be automatic or atleast easy UI for it
+2. Brew UI
 
 ## Ground rules
 
