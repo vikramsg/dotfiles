@@ -359,8 +359,25 @@ link-macflow-config:
     fi
     ln -sfn "$UI_SOURCE" "$UI_TARGET"
 
-# Link macflow configuration and delegate installation to its package.
-macflow: validate-screenshot-directories link-macflow-config
+# Install the Macflow agent skill only on macOS.
+[private]
+link-macflow-skill:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(uname)" != "Darwin" ]; then
+        echo "Skipping Macflow skill: requires macOS."
+        exit 0
+    fi
+    TARGET="$HOME/.config/opencode/skills/macflow"
+    if [ -e "$TARGET" ] && [ ! -L "$TARGET" ]; then
+        echo "ERROR: $TARGET exists and is not a symlink."
+        exit 1
+    fi
+    mkdir -p "$HOME/.config/opencode/skills"
+    ln -sfn "{{justfile_directory()}}/bin/macflow/skills/macflow" "$TARGET"
+
+# Link macflow configuration and skill, then delegate installation to its package.
+macflow: validate-screenshot-directories link-macflow-config link-macflow-skill
     just --justfile "{{justfile_directory()}}/bin/macflow/justfile" install
 
 # Set up zsh and prompt configuration symlinks

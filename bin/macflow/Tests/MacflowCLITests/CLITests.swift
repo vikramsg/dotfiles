@@ -12,13 +12,13 @@ import Testing
         let screenshot = MacflowCommand.helpMessage(for: MacflowCommand.Screenshot.self)
 
         #expect(root.contains("USAGE: macflow <subcommand>"))
-        #expect(root.contains("doctor"))
-        #expect(root.contains("permissions"))
-        #expect(doctor.contains("USAGE: macflow doctor"))
+        #expect(root.contains("ui"))
+        #expect(root.contains("system"))
+        #expect(doctor.contains("USAGE: macflow system doctor"))
         #expect(doctor.contains("global shortcut health"))
-        #expect(permissions.contains("USAGE: macflow permissions [<subcommand>]"))
+        #expect(permissions.contains("USAGE: macflow system permissions [<subcommand>]"))
         #expect(permissions.contains("request"))
-        #expect(request.contains("USAGE: macflow permissions request <permission>"))
+        #expect(request.contains("USAGE: macflow system permissions request <permission>"))
         #expect(request.contains("Permission to request:"))
         #expect(request.contains("screen-recording"))
         #expect(request.contains("-h, --help"))
@@ -29,77 +29,77 @@ import Testing
 
     @Test func missingPermissionProducesContextualHelp() {
         do {
-            _ = try MacflowCommand.parseAsRoot(["permissions", "request"])
+            _ = try MacflowCommand.parseAsRoot(["system", "permissions", "request"])
             Issue.record("Expected a missing permission error")
         } catch {
             let message = MacflowCommand.fullMessage(for: error)
             #expect(message.contains("Missing expected argument '<permission>'"))
-            #expect(message.contains("Usage: macflow permissions request <permission>"))
-            #expect(message.contains("macflow permissions request --help"))
+            #expect(message.contains("Usage: macflow system permissions request <permission>"))
+            #expect(message.contains("macflow system permissions request --help"))
         }
     }
 
     @Test func typedArgumentsRejectUnsupportedValues() {
-        let permissionError = parsingError(["permissions", "request", "camera"])
+        let permissionError = parsingError(["system", "permissions", "request", "camera"])
         #expect(permissionError.contains("The value 'camera' is invalid for '<permission>'"))
         #expect(permissionError.contains("accessibility"))
         #expect(permissionError.contains("screen-recording"))
 
-        let buttonError = parsingError(["click", "middle", "20", "30"])
+        let buttonError = parsingError(["input", "click", "middle", "20", "30"])
         #expect(buttonError.contains("The value 'middle' is invalid for '<button>'"))
 
-        let coordinateError = parsingError(["frame", "window", "left", "2", "800", "600"])
+        let coordinateError = parsingError(["window", "frame", "window", "left", "2", "800", "600"])
         #expect(coordinateError.contains("The value 'left' is invalid for '<x>'"))
     }
 
     @Test func readCommandsBuildExpectedRequests() throws {
-        try expectRequest(["health"], method: "GET", path: "/v1/health", authenticated: false)
-        try expectRequest(["permissions"], method: "GET", path: "/v1/permissions")
-        try expectRequest(["applications"], method: "GET", path: "/v1/applications")
+        try expectRequest(["system", "health"], method: "GET", path: "/v1/health", authenticated: false)
+        try expectRequest(["system", "permissions"], method: "GET", path: "/v1/permissions")
+        try expectRequest(["app", "list"], method: "GET", path: "/v1/applications")
         try expectRequest(
-            ["windows", "com.example.Editor"],
+            ["window", "list", "com.example.Editor"],
             method: "GET",
             path: "/v1/windows?bundle_id=com.example.Editor"
         )
-        try expectRequest(["screens"], method: "GET", path: "/v1/screens")
-        try expectRequest(["overlays"], method: "GET", path: "/v1/overlays")
-        try expectRequest(["shelves"], method: "GET", path: "/v1/file-shelves")
+        try expectRequest(["screen", "list"], method: "GET", path: "/v1/screens")
+        try expectRequest(["ui", "overlay", "list"], method: "GET", path: "/v1/overlays")
+        try expectRequest(["ui", "shelf", "list"], method: "GET", path: "/v1/file-shelves")
     }
 
     @Test func actionCommandsBuildExpectedRequests() throws {
         try expectRequest(
-            ["permissions", "request", "accessibility"],
+            ["system", "permissions", "request", "accessibility"],
             method: "POST",
             path: "/v1/permissions/request",
             body: ["permission": "accessibility"]
         )
         try expectRequest(
-            ["permissions", "request", "screen-recording"],
+            ["system", "permissions", "request", "screen-recording"],
             method: "POST",
             path: "/v1/permissions/request",
             body: ["permission": "screen_recording"]
         )
         try expectRequest(
-            ["launch", "com.example.Editor"],
+            ["app", "launch", "com.example.Editor"],
             method: "POST",
             path: "/v1/applications/launch",
             body: ["bundle_id": "com.example.Editor"]
         )
-        try expectRequest(["focus", "window 1"], method: "POST", path: "/v1/windows/window%201/focus")
+        try expectRequest(["window", "focus", "window 1"], method: "POST", path: "/v1/windows/window%201/focus")
         try expectRequest(
-            ["unminimize", "window 1"],
+            ["window", "unminimize", "window 1"],
             method: "POST",
             path: "/v1/windows/window%201/unminimize"
         )
-        try expectRequest(["hide-overlays"], method: "DELETE", path: "/v1/overlays")
+        try expectRequest(["ui", "overlay", "hide"], method: "DELETE", path: "/v1/overlays")
         try expectRequest(
-            ["shelf", "/tmp/screenshots"],
+            ["ui", "shelf", "show", "/tmp/screenshots"],
             method: "POST",
             path: "/v1/file-shelves",
             body: ["directory": "/tmp/screenshots"]
         )
         try expectRequest(
-            ["close-shelf", "shelf 1"],
+            ["ui", "shelf", "close", "shelf 1"],
             method: "DELETE",
             path: "/v1/file-shelves/shelf%201"
         )
@@ -107,31 +107,31 @@ import Testing
 
     @Test func inputCommandsPreserveTypedArgumentsAndDefaults() throws {
         try expectRequest(
-            ["frame", "window", "1", "2", "800", "600"],
+            ["window", "frame", "window", "1", "2", "800", "600"],
             method: "PUT",
             path: "/v1/windows/window",
             body: ["frame": ["x": 1.0, "y": 2.0, "width": 800.0, "height": 600.0]]
         )
         try expectRequest(
-            ["overlay", "/tmp/image.png", "4.5"],
+            ["ui", "overlay", "show", "/tmp/image.png", "4.5"],
             method: "POST",
             path: "/v1/overlays/image",
             body: ["path": "/tmp/image.png", "timeout_seconds": 4.5]
         )
         try expectRequest(
-            ["keystroke", "h", "cmd", "shift"],
+            ["input", "keystroke", "h", "cmd", "shift"],
             method: "POST",
             path: "/v1/input/keystroke",
             body: ["key": "h", "modifiers": ["cmd", "shift"]]
         )
         try expectRequest(
-            ["click", "right", "20", "30"],
+            ["input", "click", "right", "20", "30"],
             method: "POST",
             path: "/v1/input/click",
             body: ["button": "right", "x": 20.0, "y": 30.0]
         )
         try expectRequest(
-            ["drag", "1", "2", "3", "4"],
+            ["input", "drag", "1", "2", "3", "4"],
             method: "POST",
             path: "/v1/input/drag",
             body: [
@@ -141,11 +141,44 @@ import Testing
             ]
         )
         try expectRequest(
-            ["screenshot", "--display", "42", "--path", "/tmp/capture.png", "--preview"],
+            ["screenshot", "capture", "--display", "42", "--path", "/tmp/capture.png", "--preview"],
             method: "POST",
             path: "/v1/screenshots",
             body: ["display_id": UInt32(42), "path": "/tmp/capture.png", "show_preview": true]
         )
+    }
+
+    @Test func captureDoesNotRequestUIUnlessAsked() throws {
+        try expectRequest(["screenshot", "capture"], method: "POST", path: "/v1/screenshots", body: [:])
+        try expectRequest(
+            ["screenshot", "capture", "--preview"], method: "POST", path: "/v1/screenshots",
+            body: ["show_preview": true]
+        )
+    }
+
+    @Test(arguments: [
+        ["app"], ["window"], ["screen"], ["input"], ["screenshot"],
+        ["ui"], ["ui", "overlay"], ["ui", "shelf"], ["system"],
+    ])
+    func groupsOfferHelpWithoutPerformingAnAction(arguments: [String]) throws {
+        var command = try MacflowCommand.parseAsRoot(arguments)
+        do {
+            try command.run()
+            Issue.record("Expected group help")
+        } catch {
+            #expect(MacflowCommand.exitCode(for: error).rawValue == 0)
+            let help = MacflowCommand.fullMessage(for: error)
+            #expect(help.contains("macflow " + arguments.joined(separator: " ")))
+            #expect(help.contains("SUBCOMMANDS:"))
+        }
+    }
+
+    @Test(arguments: ["overlay", "shelf", "screenshot"])
+    func invalidActionArgumentsPointToTheNestedHelp(group: String) {
+        let arguments = group == "screenshot" ? [group, "capture", "--display", "unknown"] : ["ui", group, "show"]
+        let message = parsingError(arguments)
+        let command = group == "screenshot" ? "screenshot capture" : "ui \(group) show"
+        #expect(message.contains("macflow \(command) --help"))
     }
 
     private func expectRequest(
@@ -164,7 +197,6 @@ import Testing
         #expect(request.authenticated == authenticated)
         #expect(NSDictionary(dictionary: request.body ?? [:]).isEqual(to: body ?? [:]))
     }
-
 
     private func parsingError(_ arguments: [String]) -> String {
         do {

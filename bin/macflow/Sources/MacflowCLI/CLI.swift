@@ -112,28 +112,77 @@ struct MacflowCommand: ParsableCommand {
         commandName: "macflow",
         abstract: "Control the Macflow automation application.",
         subcommands: [
-            Health.self,
-            Doctor.self,
-            Permissions.self,
-            Applications.self,
-            Windows.self,
-            Screens.self,
-            Launch.self,
-            Frame.self,
-            Focus.self,
-            Unminimize.self,
-            Overlay.self,
-            Overlays.self,
-            HideOverlays.self,
-            Keystroke.self,
-            Click.self,
-            Drag.self,
-            Shelves.self,
-            Shelf.self,
-            CloseShelf.self,
-            Screenshot.self,
+            App.self, Window.self, Screen.self, Input.self,
+            ScreenshotCommands.self, UI.self, System.self,
         ]
     )
+
+    struct App: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "List, launch, and activate applications.",
+            subcommands: [Applications.self, Launch.self]
+        )
+    }
+
+    struct Window: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Inspect, position, and focus application windows.",
+            subcommands: [Windows.self, Frame.self, Focus.self, Unminimize.self]
+        )
+    }
+
+    struct Screen: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Inspect displays and usable screen geometry.",
+            subcommands: [Screens.self]
+        )
+    }
+
+    struct Input: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Send keyboard and mouse input.",
+            subcommands: [Keystroke.self, Click.self, Drag.self]
+        )
+    }
+
+    struct ScreenshotCommands: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "screenshot",
+            abstract: "Capture displays to PNG files.",
+            subcommands: [Screenshot.self]
+        )
+    }
+
+    struct UI: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "ui",
+            abstract: "Show and dismiss Macflow-owned UI.",
+            subcommands: [OverlayCommands.self, ShelfCommands.self]
+        )
+    }
+
+    struct OverlayCommands: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "overlay",
+            abstract: "Show, inspect, and hide image overlays.",
+            subcommands: [Overlay.self, Overlays.self, HideOverlays.self]
+        )
+    }
+
+    struct ShelfCommands: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "shelf",
+            abstract: "Show, inspect, and close file shelves.",
+            subcommands: [Shelf.self, Shelves.self, CloseShelf.self]
+        )
+    }
+
+    struct System: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Check service health, permissions, and shortcuts.",
+            subcommands: [Health.self, Doctor.self, Permissions.self]
+        )
+    }
 
     struct Health: HTTPCommand {
         static let configuration = CommandConfiguration(abstract: "Check whether Macflow is running.")
@@ -165,7 +214,7 @@ struct MacflowCommand: ParsableCommand {
     struct Permissions: HTTPCommand {
         static let configuration = CommandConfiguration(
             abstract: "Show or request macOS permissions.",
-            usage: "macflow permissions [<subcommand>]",
+            usage: "macflow system permissions [<subcommand>]",
             subcommands: [Request.self]
         )
 
@@ -192,7 +241,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct Applications: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "List running applications.")
+        static let configuration = CommandConfiguration(commandName: "list", abstract: "List running applications.")
 
         func requestPlan() throws -> HTTPRequestPlan {
             HTTPRequestPlan(method: "GET", path: "/v1/applications")
@@ -200,7 +249,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct Windows: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "List windows for an application.")
+        static let configuration = CommandConfiguration(commandName: "list", abstract: "List windows for an application.")
 
         @Argument(help: "Application bundle identifier.")
         var bundleID: String
@@ -211,7 +260,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct Screens: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "List displays.")
+        static let configuration = CommandConfiguration(commandName: "list", abstract: "List displays.")
 
         func requestPlan() throws -> HTTPRequestPlan {
             HTTPRequestPlan(method: "GET", path: "/v1/screens")
@@ -272,7 +321,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct Overlay: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "Show an image overlay.")
+        static let configuration = CommandConfiguration(commandName: "show", abstract: "Show an image overlay.")
 
         @Argument(help: "Image path.") var imagePath: String
         @Argument(help: "Optional display duration in seconds.") var timeoutSeconds: Double?
@@ -285,7 +334,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct Overlays: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "List image overlays.")
+        static let configuration = CommandConfiguration(commandName: "list", abstract: "List image overlays.")
 
         func requestPlan() throws -> HTTPRequestPlan {
             HTTPRequestPlan(method: "GET", path: "/v1/overlays")
@@ -293,7 +342,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct HideOverlays: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "Hide all image overlays.")
+        static let configuration = CommandConfiguration(commandName: "hide", abstract: "Hide all image overlays.")
 
         func requestPlan() throws -> HTTPRequestPlan {
             HTTPRequestPlan(method: "DELETE", path: "/v1/overlays")
@@ -354,7 +403,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct Shelves: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "List native file shelves.")
+        static let configuration = CommandConfiguration(commandName: "list", abstract: "List native file shelves.")
 
         func requestPlan() throws -> HTTPRequestPlan {
             HTTPRequestPlan(method: "GET", path: "/v1/file-shelves")
@@ -362,7 +411,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct Shelf: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "Show a file shelf for a directory.")
+        static let configuration = CommandConfiguration(commandName: "show", abstract: "Show a file shelf for a directory.")
 
         @Argument(help: "Directory containing files for the shelf.") var directory: String
 
@@ -372,7 +421,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct CloseShelf: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "Close a file shelf.")
+        static let configuration = CommandConfiguration(commandName: "close", abstract: "Close a file shelf.")
 
         @Argument(help: "File shelf identifier.") var id: String
 
@@ -382,7 +431,7 @@ struct MacflowCommand: ParsableCommand {
     }
 
     struct Screenshot: HTTPCommand {
-        static let configuration = CommandConfiguration(abstract: "Capture a display to a PNG file.")
+        static let configuration = CommandConfiguration(commandName: "capture", abstract: "Capture a display to a PNG file.")
 
         @Option(name: .customLong("display"), help: "Display identifier.")
         var displayID: UInt32?

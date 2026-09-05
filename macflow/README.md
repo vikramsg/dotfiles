@@ -13,7 +13,30 @@ live: ${XDG_CONFIG_HOME:-~/.config}/macflow/ui/
 ```
 
 Run `just macflow` to link the configuration and delegate build and installation
-to `bin/macflow/justfile`.
+to `bin/macflow/justfile`. Run it from the checkout that should own your live
+configuration, not a temporary worktree. On macOS it also links the Macflow skill
+to `~/.config/opencode/skills/macflow`.
+
+For first-time setup, follow [BOOTSTRAP.md](BOOTSTRAP.md). For command usage, see
+the [action](../bin/macflow/docs/actions.md) and [UI](../bin/macflow/docs/ui.md) guides.
+
+## What to configure
+
+| Section | Responsibility |
+| --- | --- |
+| `server` | Local HTTP host and port used by the app and CLI |
+| `applications` | Application aliases and their bundle IDs |
+| `layouts` | Maximize/column participants, ratios, target screen, gap, and focus |
+| `hotkeys` | Global shortcuts that invoke configured layouts or show UI |
+| `screenshots` | Capture directory, supported images, debounce, and preview behavior |
+| `shelves` | Native shelf sources, size, limits, and dismissal/focus behavior |
+| `surfaces` | Local WebKit documents, panel behavior, and page configuration |
+| `appearance` | Built-in theme selection |
+
+The format is JSON; see [config.json](config.json) for the complete working
+example. Layout and hotkey changes require restarting the app. Shelf/surface
+configuration is reloaded when shown through configured actions; do not assume
+every setting is live-reloaded.
 
 ## Web surfaces
 
@@ -56,3 +79,18 @@ restarting Macflow restores normal handling.
 `cmd + shift + h` opens the native shelf. `cmd + shift + j` opens the WebKit
 shelf so both implementations can be compared without replacing the existing
 workflow.
+
+## Configured layouts
+
+The checked-in shortcuts are:
+
+| Shortcut | Action |
+| --- | --- |
+| Cmd+Shift+1 | Maximize Ghostty |
+| Cmd+Shift+2 | Maximize Zed |
+| Cmd+Shift+3 | Ghostty left, Zed right; focus Ghostty |
+| Cmd+Shift+4 | Zed left, Ghostty right; focus Zed |
+
+These reserve macOS's usual Cmd+Shift+3/4 screenshot chords. Cmd+Shift+5 still
+opens the native screenshot controls. Your bindings may differ; consult the
+active JSON before sending a shortcut.

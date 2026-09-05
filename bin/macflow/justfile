@@ -66,7 +66,7 @@ install: test build
         rm -f "$HOME/Library/LaunchAgents/dev.vikramsingh.dotfiles.mac-workflow.plist"; \
         "$LCH" install lch-macflow; \
         for attempt in 1 2 3 4 5 6 7 8 9 10; do \
-            "$HOME/.local/bin/macflow" health >/dev/null 2>&1 && break; \
+            "$HOME/.local/bin/macflow" system health >/dev/null 2>&1 && break; \
             sleep 0.2; \
         done; \
-        "$HOME/.local/bin/macflow" health
+        "$HOME/.local/bin/macflow" system health

@@ -69,21 +69,21 @@ public struct DoctorReport: Equatable {
             DoctorCheck(
                 passed: permissions.accessibility,
                 message: permissions.accessibility ? "accessibility granted" : "accessibility not granted",
-                help: permissions.accessibility ? [] : ["Run `macflow permissions request accessibility`."]
+                help: permissions.accessibility ? [] : ["Run `macflow system permissions request accessibility`."]
             ),
             DoctorCheck(
                 passed: permissions.screenRecording,
                 message: permissions.screenRecording
                     ? "screen recording granted" : "screen recording not granted",
                 help: permissions.screenRecording
-                    ? [] : ["Run `macflow permissions request screen-recording`."]
+                    ? [] : ["Run `macflow system permissions request screen-recording`."]
             ),
             DoctorCheck(
                 passed: hotKeys.eventTapEnabled,
                 message: hotKeys.eventTapEnabled
                     ? "global shortcut listener enabled"
                     : "global shortcut listener disabled",
-                help: hotKeys.eventTapEnabled ? [] : ["Restart Macflow and run `macflow doctor` again."]
+                help: hotKeys.eventTapEnabled ? [] : ["Restart Macflow and run `macflow system doctor` again."]
             ),
             DoctorCheck(
                 passed: !hotKeys.secureInputEnabled,
@@ -176,12 +176,12 @@ public enum DoctorCommand {
             DoctorCheck(
                 passed: status.accessibility,
                 message: status.accessibility ? "accessibility granted" : "accessibility not granted",
-                help: status.accessibility ? [] : ["Run `macflow permissions request accessibility`."]
+                help: status.accessibility ? [] : ["Run `macflow system permissions request accessibility`."]
             ),
             DoctorCheck(
                 passed: status.screenRecording,
                 message: status.screenRecording ? "screen recording granted" : "screen recording not granted",
-                help: status.screenRecording ? [] : ["Run `macflow permissions request screen-recording`."]
+                help: status.screenRecording ? [] : ["Run `macflow system permissions request screen-recording`."]
             ),
         ]
     }
