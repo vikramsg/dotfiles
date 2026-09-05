@@ -97,7 +97,10 @@ def slack_token_command(context: DaemonContext) -> None:
     if not token.startswith("xoxb-"):
         raise click.ClickException("Slack bot token must start with xoxb-")
     try:
-        configured = context.config().slack if context.config_path.exists() else None
+        daemon_config = context.config() if context.config_path.exists() else None
+        configured = (
+            daemon_config.coordinator.slack if daemon_config is not None and daemon_config.coordinator else None
+        )
         auth = asyncio.run(
             validate_configured_slack_token(configured, token)
             if configured is not None

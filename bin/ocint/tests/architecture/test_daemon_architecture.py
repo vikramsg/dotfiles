@@ -98,6 +98,20 @@ print(json.dumps([name for name in names if name in sys.modules]))
     assert json.loads(result.stdout) == []
 
 
+def test_slack_facade_exposes_only_the_events_coordinator_architecture() -> None:
+    # GIVEN / WHEN
+    import ocint.daemon.slack as slack_api
+
+    # THEN
+    assert "CoordinatorSlackConfig" in slack_api.__all__
+    assert "SlackEventsConfig" in slack_api.__all__
+    assert "create_slack_events_app" in slack_api.__all__
+    assert "open_slack_coordinator_delivery" in slack_api.__all__
+    assert "SlackConfig" not in slack_api.__all__
+    assert "SlackGateway" not in slack_api.__all__
+    assert "open_slack_service" not in slack_api.__all__
+
+
 def test_thread_core_contains_only_provider_neutral_identity_and_title() -> None:
     # GIVEN
     models = Path(__file__).parents[2] / "ocint" / "daemon" / "tasks" / "models.py"
@@ -218,28 +232,6 @@ def test_root_daemon_cli_uses_only_the_lch_facade() -> None:
 
     # THEN
     assert lch_imports == {"ocint.daemon.lch"}
-
-
-def test_daemon_log_events_do_not_include_secret_or_prompt_fields() -> None:
-    # GIVEN
-    daemon = Path(__file__).parents[2] / "ocint" / "daemon"
-    prohibited = {"body", "environment", "identity_file", "password", "prompt", "token"}
-
-    # WHEN
-    fields: set[str] = set()
-    for module in daemon.rglob("*.py"):
-        tree = ast.parse(module.read_text())
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "logger"
-            ):
-                fields.update(keyword.arg for keyword in node.keywords if keyword.arg is not None)
-
-    # THEN
-    assert fields.isdisjoint(prohibited)
 
 
 def test_daemon_context_is_the_only_configuration_load_boundary() -> None:

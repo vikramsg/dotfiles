@@ -1,8 +1,13 @@
 import asyncio
+import signal
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import pytest
-from ocint.daemon.run import wait_for_idle
+import uvicorn
+from fastapi import FastAPI
+from ocint.daemon.run import SignalFreeUvicornServer, serve_signal_free_ingress, wait_for_idle
 
 
 @dataclass
@@ -65,3 +70,42 @@ async def test_idle_shutdown_waits_for_unresolved_tasks() -> None:
     tasks.unresolved = False
     await asyncio.wait_for(waiting, 1.2)
     assert shutdown.is_set()
+
+
+def test_signal_free_ingress_server_does_not_capture_process_signals() -> None:
+    # GIVEN
+    server = SignalFreeUvicornServer(uvicorn.Config(FastAPI()))
+    handled = (signal.SIGTERM, signal.SIGINT)
+    previous = tuple(signal.getsignal(process_signal) for process_signal in handled)
+
+    # WHEN
+    with server.capture_signals():
+        captured = tuple(signal.getsignal(process_signal) for process_signal in handled)
+
+    # THEN
+    assert captured == previous
+
+
+@pytest.mark.asyncio
+async def test_signal_free_ingress_stops_from_injected_shutdown_event() -> None:
+    # GIVEN
+    started = asyncio.Event()
+    lifecycle: list[str] = []
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        lifecycle.append("started")
+        started.set()
+        yield
+        lifecycle.append("stopped")
+
+    shutdown = asyncio.Event()
+    serving = asyncio.create_task(serve_signal_free_ingress(FastAPI(lifespan=lifespan), "127.0.0.1", 0, shutdown))
+    await asyncio.wait_for(started.wait(), 1)
+
+    # WHEN
+    shutdown.set()
+    await asyncio.wait_for(serving, 1)
+
+    # THEN
+    assert lifecycle == ["started", "stopped"]

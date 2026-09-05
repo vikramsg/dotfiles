@@ -4,11 +4,16 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from ocint.daemon.coordinator.config import CoordinatorWorkspaceConfig, RepositoryCatalogueEntry
+from ocint.daemon.coordinator.config import (
+    CoordinatorWorkspaceConfig,
+    RepositoryCatalogueEntry,
+)
 from ocint.daemon.coordinator.contracts import (
     CoordinatorDelivery,
+    CoordinatorIngress,
     CoordinatorOperations,
     CoordinatorPersistence,
+    CoordinatorProcess,
     CoordinatorWorker,
     OpenCodeCoordinator,
     RetryableCoordinatorDeliveryError,
@@ -48,11 +53,11 @@ def create_coordinator_operations(
 
 
 @contextmanager
-def open_coordinator_persistence(database_path: Path) -> Iterator[CoordinatorPersistence]:
+def open_coordinator_persistence(database_path: Path, busy_timeout_ms: int = 5_000) -> Iterator[CoordinatorPersistence]:
     from ocint.daemon.coordinator.repository import CoordinatorRepository
     from ocint.daemon.db import create_daemon_engine
 
-    engine = create_daemon_engine(database_path)
+    engine = create_daemon_engine(database_path, busy_timeout_ms=busy_timeout_ms)
     try:
         yield CoordinatorRepository(engine)
     finally:
@@ -97,6 +102,33 @@ def generate_coordinator_workspace(config: CoordinatorWorkspaceConfig) -> None:
     CoordinatorWorkspace(config).generate()
 
 
+async def run_coordinator_application(
+    worker: CoordinatorWorker,
+    opencode: CoordinatorProcess,
+    ingress: CoordinatorIngress,
+    ingress_host: str,
+    ingress_port: int,
+    runtime_lock: Path,
+    shutdown_timeout_seconds: float,
+) -> None:
+    from ocint.daemon.coordinator.run import (
+        CoordinatorApplicationRequest,
+        run_coordinator_application,
+    )
+
+    await run_coordinator_application(
+        CoordinatorApplicationRequest(
+            runtime=worker,
+            opencode=opencode,
+            ingress=ingress,
+            ingress_host=ingress_host,
+            ingress_port=ingress_port,
+            runtime_lock=runtime_lock,
+            shutdown_timeout_seconds=shutdown_timeout_seconds,
+        )
+    )
+
+
 __all__ = [
     "ActorKind",
     "AuthorizationPolicy",
@@ -104,8 +136,10 @@ __all__ = [
     "ConversationIdentity",
     "ConversationMessage",
     "CoordinatorDelivery",
+    "CoordinatorIngress",
     "CoordinatorOperations",
     "CoordinatorPersistence",
+    "CoordinatorProcess",
     "CoordinatorWorker",
     "CoordinatorWorkspaceConfig",
     "DeliveryLookup",
@@ -126,4 +160,5 @@ __all__ = [
     "create_opencode_coordinator",
     "generate_coordinator_workspace",
     "open_coordinator_persistence",
+    "run_coordinator_application",
 ]
