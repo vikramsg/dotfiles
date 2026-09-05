@@ -1,0 +1,33 @@
+[project]
+name = "ocost"
+version = "0.1.0"
+description = "Readable OpenCode V2 usage over the local HTTP API"
+requires-python = ">=3.14"
+dependencies = ["click>=8.2", "httpx2>=2.12", "pydantic>=2.12", "rich>=14"]
+
+[project.scripts]
+ocost = "ocost.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest", "ruff", "ty"]
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ty.src]
+include = ["ocost"]
+
+[tool.ty.rules]
+all = "error"
