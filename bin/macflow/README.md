@@ -26,8 +26,7 @@ never falls back to controlling macOS itself.
 
 Actions on macOS do not require Macflow UI. Capture is an action;
 `--preview` additionally presents the result. See [action workflows](docs/actions.md)
-and [UI workflows](docs/ui.md). Existing scripts using flat command names need
-the [command migration](docs/cli-migration.md); HTTP routes are unchanged.
+and [UI workflows](docs/ui.md).
 
 ## Install versus update
 
