@@ -4,6 +4,19 @@ import CoreGraphics
 import Foundation
 import MacflowCore
 
+struct PermissionAccess {
+    let status: () throws -> PermissionStatus
+    let request: (PermissionKind) -> Bool
+
+    static let live = PermissionAccess(
+        status: {
+            try RuntimeFiles.writePermissions()
+            return PermissionService.status
+        },
+        request: PermissionService.request
+    )
+}
+
 enum PermissionService {
     static func accessibility(prompt: Bool = false) -> Bool {
         guard prompt else { return AXIsProcessTrusted() }

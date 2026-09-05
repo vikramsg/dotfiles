@@ -28,6 +28,10 @@ let package = Package(
             dependencies: ["MacflowCLI"]
         ),
         .testTarget(
+            name: "MacflowRuntimeTests",
+            dependencies: ["Macflow"]
+        ),
+        .testTarget(
             name: "MacflowCoreTests",
             dependencies: ["MacflowCore"]
         ),

@@ -1,19 +1,41 @@
 import AppKit
 import MacflowCore
 
+protocol LayoutApplications {
+    func running(bundleID: String) -> NSRunningApplication?
+    func launch(bundleID: String, completion: @escaping (Result<NSRunningApplication, Error>) -> Void)
+}
+
+protocol LayoutWindows {
+    func targetWindow(bundleID: String) -> WindowRecord?
+    func createWindow(bundleID: String)
+    func setFrame(_ frame: CGRect, for window: WindowRecord) throws
+    func raise(_ window: WindowRecord) throws
+    func focus(_ window: WindowRecord) throws
+}
+
+protocol LayoutScreens {
+    func containing(_ frame: CGRect) -> ScreenRecord?
+}
+
+extension ApplicationService: LayoutApplications {}
+extension WindowService: LayoutWindows {}
+extension ScreenService: LayoutScreens {}
+
+@MainActor
 final class LayoutController {
-    private let windows: WindowService
-    private let screens: ScreenService
-    private let applicationService: ApplicationService
+    private let windows: any LayoutWindows
+    private let screens: any LayoutScreens
+    private let applicationService: any LayoutApplications
     private let applications: [String: WorkflowConfiguration.Application]
     private let layouts: [String: WorkflowConfiguration.Layout]
 
     init(
         applications: [String: WorkflowConfiguration.Application],
         layouts: [String: WorkflowConfiguration.Layout],
-        applicationService: ApplicationService,
-        windows: WindowService,
-        screens: ScreenService
+        applicationService: any LayoutApplications,
+        windows: any LayoutWindows,
+        screens: any LayoutScreens
     ) {
         self.applications = applications
         self.layouts = layouts
@@ -22,109 +44,64 @@ final class LayoutController {
         self.screens = screens
     }
 
-    func apply(layout identifier: String, completion: @escaping (Result<Void, Error>) -> Void) {
+    func apply(layout identifier: String) async throws {
         guard let layout = layouts[identifier] else {
-            completion(.failure(NSError(
+            throw NSError(
                 domain: "MacWorkflow.Layout",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Unknown layout: \(identifier)"]
-            )))
-            return
+            )
         }
-        resolveWindows(for: layout.applications, index: 0, resolved: [:]) { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case let .failure(error): completion(.failure(error))
-            case let .success(resolved):
-                do {
-                    try self.arrange(layout: layout, windows: resolved, completion: completion)
-                } catch {
-                    completion(.failure(error))
-                }
-            }
-        }
+        let resolved = try await resolveWindows(for: layout.applications)
+        try await arrange(layout: layout, windows: resolved)
     }
 
-    private func resolveWindows(
-        for aliases: [String],
-        index: Int,
-        resolved: [String: WindowRecord],
-        completion: @escaping (Result<[String: WindowRecord], Error>) -> Void
-    ) {
-        guard index < aliases.count else {
-            completion(.success(resolved))
-            return
-        }
-        let alias = aliases[index]
-        guard let app = applications[alias] else {
-            completion(.failure(NSError(
-                domain: "MacWorkflow.Layout",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Unknown application: \(alias)"]
-            )))
-            return
-        }
-        ensureWindow(bundleID: app.bundleID) { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case let .failure(error): completion(.failure(error))
-            case let .success(window):
-                var next = resolved
-                next[alias] = window
-                self.resolveWindows(for: aliases, index: index + 1, resolved: next, completion: completion)
+    private func resolveWindows(for aliases: [String]) async throws -> [String: WindowRecord] {
+        var resolved: [String: WindowRecord] = [:]
+        for alias in aliases {
+            guard let app = applications[alias] else {
+                throw NSError(
+                    domain: "MacWorkflow.Layout", code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Unknown application: \(alias)"]
+                )
             }
+            resolved[alias] = try await ensureWindow(bundleID: app.bundleID)
         }
+        return resolved
     }
 
-    private func ensureWindow(bundleID: String, completion: @escaping (Result<WindowRecord, Error>) -> Void) {
+    private func ensureWindow(bundleID: String) async throws -> WindowRecord {
         if let window = windows.targetWindow(bundleID: bundleID) {
-            completion(.success(window))
-            return
+            return window
         }
         let wasRunning = applicationService.running(bundleID: bundleID) != nil
-        applicationService.launch(bundleID: bundleID) { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case let .failure(error): completion(.failure(error))
-            case .success:
-                if wasRunning {
-                    self.windows.createWindow(bundleID: bundleID)
-                    self.pollForWindow(bundleID: bundleID, attempts: 40, completion: completion)
-                } else {
-                    self.pollForWindow(bundleID: bundleID, attempts: 10) { firstResult in
-                        if case .success = firstResult {
-                            completion(firstResult)
-                        } else {
-                            self.windows.createWindow(bundleID: bundleID)
-                            self.pollForWindow(bundleID: bundleID, attempts: 40, completion: completion)
-                        }
-                    }
-                }
+        let _: NSRunningApplication = try await withCheckedThrowingContinuation { continuation in
+            applicationService.launch(bundleID: bundleID) { continuation.resume(with: $0) }
+        }
+        if !wasRunning {
+            do {
+                return try await pollForWindow(bundleID: bundleID, attempts: 10)
+            } catch AutomationError.windowNotFound {
+                // Some applications launch without creating a window.
             }
         }
+        windows.createWindow(bundleID: bundleID)
+        return try await pollForWindow(bundleID: bundleID, attempts: 40)
     }
 
-    private func pollForWindow(
-        bundleID: String,
-        attempts: Int,
-        completion: @escaping (Result<WindowRecord, Error>) -> Void
-    ) {
-        if let window = windows.targetWindow(bundleID: bundleID) {
-            completion(.success(window))
-        } else if attempts == 0 {
-            completion(.failure(AutomationError.windowNotFound(bundleID)))
-        } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.pollForWindow(bundleID: bundleID, attempts: attempts - 1, completion: completion)
-            }
+    private func pollForWindow(bundleID: String, attempts: Int) async throws -> WindowRecord {
+        for attempt in 0...attempts {
+            try Task.checkCancellation()
+            if let window = windows.targetWindow(bundleID: bundleID) { return window }
+            if attempt < attempts { try await Task.sleep(for: .milliseconds(100)) }
         }
+        throw AutomationError.windowNotFound(bundleID)
     }
 
     private func arrange(
         layout: WorkflowConfiguration.Layout,
-        windows resolved: [String: WindowRecord],
-        completion: @escaping (Result<Void, Error>) -> Void
-    ) throws {
+        windows resolved: [String: WindowRecord]
+    ) async throws {
         guard let firstAlias = layout.applications.first, let firstWindow = resolved[firstAlias] else {
             throw AutomationError.windowNotFound("layout")
         }
@@ -135,22 +112,15 @@ final class LayoutController {
         }
 
         let plan = try LayoutPlanner.plan(layout: layout, screen: screen.visibleFrame.workflowFrame)
-        execute(plan.operations, index: 0, windows: resolved, completion: completion)
+        try await execute(plan.operations, windows: resolved)
     }
 
     private func execute(
         _ operations: [LayoutOperation],
-        index: Int,
-        windows resolved: [String: WindowRecord],
-        completion: @escaping (Result<Void, Error>) -> Void
-    ) {
-        guard index < operations.count else {
-            completion(.success(()))
-            return
-        }
-
-        do {
-            let operation = operations[index]
+        windows resolved: [String: WindowRecord]
+    ) async throws {
+        for operation in operations {
+            try Task.checkCancellation()
             switch operation {
             case let .setFrame(alias, frame):
                 guard let window = resolved[alias] else {
@@ -166,19 +136,13 @@ final class LayoutController {
                 }
                 try windows.raise(window)
             case let .wait(seconds):
-                DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
-                    self?.execute(operations, index: index + 1, windows: resolved, completion: completion)
-                }
-                return
+                try await Task.sleep(for: .seconds(seconds))
             case let .focus(alias):
                 guard let window = resolved[alias] else {
                     throw AutomationError.windowNotFound(alias)
                 }
                 try windows.focus(window)
             }
-            execute(operations, index: index + 1, windows: resolved, completion: completion)
-        } catch {
-            completion(.failure(error))
         }
     }
 }

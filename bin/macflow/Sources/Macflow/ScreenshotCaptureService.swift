@@ -18,7 +18,17 @@ enum ScreenshotCaptureError: LocalizedError {
     }
 }
 
-final class ScreenshotCaptureService {
+protocol ScreenshotCapturing {
+    func capture(
+        displayID: UInt32?,
+        path: String?,
+        excludingWindowIDs: Set<CGWindowID>,
+        destinationResolved: @escaping (URL) -> Void,
+        completion: @escaping (Result<[String: Any], Error>) -> Void
+    )
+}
+
+final class ScreenshotCaptureService: ScreenshotCapturing {
     private let defaultDirectory: URL
     private let allocator = CapturePathAllocator()
 

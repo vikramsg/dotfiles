@@ -3,8 +3,17 @@ import Foundation
 import MacflowCore
 import MacflowUI
 
+protocol ScreenshotPreviewing: AnyObject {
+    var windowID: CGWindowID? { get }
+    var json: [String: Any] { get }
+    func show(path: String, timeout: Double?) -> Bool
+    func hide()
+}
+
+extension ImageOverlayController: ScreenshotPreviewing {}
+
 final class AutomaticPreviewController {
-    private let overlay: ImageOverlayController
+    private let overlay: any ScreenshotPreviewing
     private let directory: URL
     private let supportedExtensions: Set<String>
     private let debounceSeconds: Double
@@ -16,7 +25,7 @@ final class AutomaticPreviewController {
     init(
         directory: URL,
         configuration: WorkflowConfiguration.Screenshots,
-        overlay: ImageOverlayController
+        overlay: any ScreenshotPreviewing
     ) {
         self.directory = directory
         self.overlay = overlay
@@ -76,7 +85,7 @@ final class AutomaticPreviewController {
         if !presentationState.shouldShow(path: url.path, modificationDate: modification, force: force) {
             return false
         }
-        guard overlay.show(path: url.path) else {
+        guard overlay.show(path: url.path, timeout: nil) else {
             let attempts: Int
             if failedCandidate?.path == url.path, failedCandidate?.modification == modification {
                 attempts = (failedCandidate?.attempts ?? 0) + 1

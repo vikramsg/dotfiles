@@ -44,6 +44,10 @@ macflow permissions request screen-recording
 terminal-aware health report. Permission prompts remain available under the
 `permissions request` subcommand.
 
+If global shortcuts cannot start, the app keeps its HTTP API available so you
+can inspect permissions and request Accessibility access. After approval,
+restart Macflow and run `macflow doctor` again.
+
 Run `macflow --help` to list every command. Each command and nested subcommand
 supports `-h` and `--help`, including:
 
