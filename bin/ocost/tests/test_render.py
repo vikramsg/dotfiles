@@ -1,6 +1,7 @@
 import copy
 from io import StringIO
 
+import pytest
 from rich.console import Console
 
 from ocost.models import Project, ProjectUsage, Report, StatsResponse
@@ -17,7 +18,7 @@ def test_render_contains_sorted_costs_and_literal_model_identities(report):
     text = output.getvalue()
     # THEN cost order and literal identities are retained with readable values
     assert text.index("other / same-model (default)") < text.index("azure / [red]literal[/red] (medium)")
-    for value in ["$12.125000", "$10.000000", "$2.125000", "1,200", "8,000", "500", "90"]:
+    for value in ["$12.125000", "$10.000000", "$2.125000", "0.01M", "0.00M"]:
         assert value in text
     assert "Roots" in text and "Subs" in text and "Prompts" in text
 
@@ -51,7 +52,30 @@ def test_zero_cost_usage_stays_visible(report):
     # THEN it remains visible despite having no cost
     assert "same-model" in output.getvalue()
     assert "$0.000000" in output.getvalue()
-    assert "8,000" in output.getvalue()
+    assert "0.01M" in output.getvalue()
+
+
+@pytest.mark.parametrize("width", [80, 160])
+def test_tokens_use_millions_without_changing_costs_counts_or_json(report, width):
+    # GIVEN usage with distinct token categories and exact API values
+    tokens = report.projects[0].usage.data.tokens
+    tokens.input = 467662
+    tokens.output = 5903
+    tokens.reasoning = 7693
+    tokens.cache.read = 1669628
+    tokens.cache.write = 0
+    original = copy.deepcopy(report.json_data())
+    output = StringIO()
+    # WHEN rendering either layout without color
+    Console(file=output, width=width, no_color=True).print(
+        render_report(report, Window(0, 1000, "All time"), width=width)
+    )
+    # THEN token units are explicit, while dollars, step counts and JSON retain their meaning
+    text = output.getvalue()
+    for value in ["0.47M", "0.01M", "1.67M", "0.00M", "$12.125000", "20 assistant steps", "M = million tokens"]:
+        assert value in text
+    assert "467,662" not in text
+    assert report.json_data() == original
 
 
 def test_empty_window_has_explicit_empty_state(stats_payload):

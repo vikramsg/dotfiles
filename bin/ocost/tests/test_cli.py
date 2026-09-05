@@ -47,7 +47,7 @@ def test_terminal_report_has_project_model_and_token_usage(api_server, cli_envir
     result = subprocess.run([executable, *arguments], env=cli_environment, text=True, capture_output=True, check=False)
     # THEN the required breakdowns are present, without ANSI in redirected output
     assert result.returncode == 0, result.stderr
-    for text in ["OpenCode usage", "dotfiles", "azure", "medium", "other", "default", "$12.125000", "8,000"]:
+    for text in ["OpenCode usage", "dotfiles", "azure", "medium", "other", "default", "$12.125000", "0.01M"]:
         assert text in result.stdout
     assert "\x1b[" not in result.stdout
     assert "fixture-password" not in result.stdout + result.stderr

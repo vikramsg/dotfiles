@@ -20,6 +20,10 @@ def money(value: int | float) -> str:
     return f"${value:,.6f}"
 
 
+def token_count(value: int | float) -> str:
+    return f"{value / 1_000_000:,.2f}M"
+
+
 def table(*columns: str) -> Table:
     result = Table(box=None, show_edge=False, pad_edge=False, header_style="bold", padding=(0, 1))
     for index, column in enumerate(columns):
@@ -56,14 +60,14 @@ def token_table(rows: list[tuple[str, Tokens]], *, width: int) -> Table:
     if width >= 110:
         result = table("Usage", "Input", "Output", "Reasoning", "Cache read", "Cache write")
         for label, tokens in rows:
-            result.add_row(Text(label), *(number(value) for value in tokens.values()))
+            result.add_row(Text(label), *(token_count(value) for value in tokens.values()))
     else:
         result = table("Usage", "Tokens", "Cache")
         for label, tokens in rows:
             result.add_row(
                 Text(label),
                 "\n".join(
-                    f"{label}: {number(value)}"
+                    f"{label}: {token_count(value)}"
                     for label, value in zip(
                         ["Input", "Output", "Reasoning"],
                         tokens.values()[:3],
@@ -71,7 +75,7 @@ def token_table(rows: list[tuple[str, Tokens]], *, width: int) -> Table:
                     )
                 ),
                 "\n".join(
-                    f"{label}: {number(value)}"
+                    f"{label}: {token_count(value)}"
                     for label, value in zip(
                         ["Read", "Write"],
                         tokens.values()[3:],
@@ -112,6 +116,7 @@ def render_report(report: Report, window: Window, *, width: int) -> Group:
 
     content: list[Group | Text] = [
         Text("OpenCode usage", style="bold green"),
+        Text("M = million tokens (rounded to 2 decimals)", style="dim"),
         Text(""),
         section("Summary", summary),
         section("By project", projects if rows else Text("No project usage in this window.", style="dim")),
