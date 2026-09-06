@@ -11,6 +11,8 @@ from rich.text import Text
 from ocost.models import ModelUsage, ProjectUsage, Report, Tokens
 from ocost.window import Window
 
+COMPACT_ROW_LIMIT = 5
+
 
 def number(value: int | float) -> str:
     return f"{value:,}" if isinstance(value, int) else f"{value:,.6f}".rstrip("0").rstrip(".")
@@ -87,7 +89,36 @@ def token_table(rows: list[tuple[str, Tokens]], *, width: int) -> Table:
     return result
 
 
-def render_report(report: Report, window: Window, *, width: int) -> Group:
+def project_table(rows: list[ProjectUsage], *, limit: int | None = None) -> Table:
+    labels = project_labels(rows)
+    visible = rows if limit is None else rows[:limit]
+    result = table("Project", "Cost (USD)", "Roots", "Subs", "Prompts", "Steps")
+    for row in visible:
+        stats = row.usage.data
+        result.add_row(
+            Text(labels[row.project.id]),
+            money(stats.cost),
+            number(stats.sessions),
+            number(stats.subagents),
+            number(stats.prompts),
+            number(stats.steps),
+        )
+    if limit is not None and len(rows) > limit:
+        result.add_row(Text(f"… {len(rows) - limit} more — use --verbose"), *([""] * 5))
+    return result
+
+
+def model_table(models: list[ModelUsage], *, limit: int | None = None) -> Table:
+    visible = models if limit is None else models[:limit]
+    result = table("Provider / model (variant)", "Cost (USD)", "Steps")
+    for model in visible:
+        result.add_row(Text(model_label(model)), money(model.cost), number(model.steps))
+    if limit is not None and len(models) > limit:
+        result.add_row(Text(f"… {len(models) - limit} more — use --verbose"), "", "")
+    return result
+
+
+def render_report(report: Report, window: Window, *, width: int, verbose: bool = False) -> Group:
     overall = report.overall.data
     summary = Table.grid(padding=(0, 2))
     summary.add_column(style="bold")
@@ -102,42 +133,40 @@ def render_report(report: Report, window: Window, *, width: int) -> Group:
 
     rows = [row for row in report.ordered_projects() if row.usage.data.has_usage()]
     labels = project_labels(rows)
-    projects = table("Project", "Cost (USD)", "Roots", "Subs", "Prompts", "Steps")
-    for row in rows:
-        stats = row.usage.data
-        projects.add_row(
-            Text(labels[row.project.id]),
-            money(stats.cost),
-            number(stats.sessions),
-            number(stats.subagents),
-            number(stats.prompts),
-            number(stats.steps),
-        )
+    models = sorted(overall.models, key=lambda item: (-item.cost, model_label(item)))
+    row_limit = None if verbose else COMPACT_ROW_LIMIT
 
     content: list[Group | Text] = [
         Text("OpenCode usage", style="bold green"),
-        Text("M = million tokens (rounded to 2 decimals)", style="dim"),
         Text(""),
         section("Summary", summary),
-        section("By project", projects if rows else Text("No project usage in this window.", style="dim")),
-        section("Total tokens", token_table([("All projects", overall.tokens)], width=width)),
+        section(
+            "By project",
+            project_table(rows, limit=row_limit) if rows else Text("No project usage in this window.", style="dim"),
+        ),
+        section("By model", model_table(models, limit=row_limit) if models else Text("No model usage.", style="dim")),
     ]
-    for row in rows:
-        stats = row.usage.data
-        models = sorted(stats.models, key=lambda item: (-item.cost, model_label(item)))
-        costs = table("Provider / model (variant)", "Cost (USD)", "Steps")
-        for model in models:
-            costs.add_row(Text(model_label(model)), money(model.cost), number(model.steps))
-        content.append(section(labels[row.project.id], costs if models else Text("No model usage.", style="dim")))
-        content.append(
-            section(
-                "Tokens",
-                token_table(
-                    [(model_label(model), model.tokens) for model in models] + [("Project total", stats.tokens)],
-                    width=width,
-                ),
+    if verbose:
+        content.append(section("Total tokens", token_table([("All projects", overall.tokens)], width=width)))
+        for row in rows:
+            stats = row.usage.data
+            project_models = sorted(stats.models, key=lambda item: (-item.cost, model_label(item)))
+            content.append(
+                section(
+                    labels[row.project.id],
+                    model_table(project_models) if project_models else Text("No model usage.", style="dim"),
+                )
             )
-        )
+            content.append(
+                section(
+                    "Tokens",
+                    token_table(
+                        [(model_label(model), model.tokens) for model in project_models]
+                        + [("Project total", stats.tokens)],
+                        width=width,
+                    ),
+                )
+            )
 
     if abs(report.cost_difference()) > 0.000001:
         content.append(
@@ -147,5 +176,4 @@ def render_report(report: Report, window: Window, *, width: int) -> Group:
                 style="yellow",
             )
         )
-    content.append(Text("Source: OpenCode V2 API · costs as reported, not a billing statement", style="dim"))
     return Group(*content)

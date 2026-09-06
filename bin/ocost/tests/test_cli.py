@@ -41,16 +41,40 @@ def test_json_preserves_responses_and_authenticates_using_registration(
 
 
 @pytest.mark.parametrize("arguments", [[], ["--days", "0"], ["--days", "7"]])
-def test_terminal_report_has_project_model_and_token_usage(api_server, cli_environment, executable, arguments):
+def test_terminal_report_defaults_to_compact_project_and_model_costs(
+    api_server, cli_environment, executable, arguments
+):
     # GIVEN a service with cost and token usage
     # WHEN a human-readable report is requested
     result = subprocess.run([executable, *arguments], env=cli_environment, text=True, capture_output=True, check=False)
     # THEN the required breakdowns are present, without ANSI in redirected output
     assert result.returncode == 0, result.stderr
-    for text in ["OpenCode usage", "dotfiles", "azure", "medium", "other", "default", "$12.125000", "0.01M"]:
+    for text in [
+        "OpenCode usage",
+        "By project",
+        "By model",
+        "dotfiles",
+        "azure",
+        "medium",
+        "other",
+        "default",
+        "$12.125000",
+    ]:
         assert text in result.stdout
+    assert "Total tokens" not in result.stdout
+    assert "M = million tokens (rounded to 2 decimals)" not in result.stdout
+    assert len(result.stdout.splitlines()) <= 30
     assert "\x1b[" not in result.stdout
     assert "fixture-password" not in result.stdout + result.stderr
+
+
+def test_verbose_terminal_report_includes_token_usage(api_server, cli_environment, executable):
+    result = subprocess.run([executable, "--verbose"], env=cli_environment, text=True, capture_output=True, check=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "Total tokens" in result.stdout
+    assert "0.01M" in result.stdout
+    assert "M = million tokens (rounded to 2 decimals)" not in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -73,6 +97,7 @@ def test_help_works_without_registration(cli_environment, executable):
     assert result.returncode == 0
     assert "--days" in result.stdout
     assert "--json" in result.stdout
+    assert "--verbose" in result.stdout
 
 
 @pytest.mark.parametrize("arguments", [[], ["--json"]])

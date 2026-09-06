@@ -23,7 +23,8 @@ def fetch_report(api: API, window: Window) -> Report:
 @click.command()
 @click.option("--days", type=click.IntRange(0, 999999), help="0: today since local midnight; N: last N rolling days.")
 @click.option("--json", "as_json", is_flag=True, help="Print complete overall and project API responses as JSON.")
-def main(days: int | None, as_json: bool) -> None:
+@click.option("--verbose", is_flag=True, help="Show token totals and per-project model details.")
+def main(days: int | None, as_json: bool, verbose: bool) -> None:
     """Show OpenCode V2 costs by project and model. Defaults to all time."""
     window = Window.for_days(days, now=time.time())
     state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state")
@@ -39,4 +40,4 @@ def main(days: int | None, as_json: bool) -> None:
         click.echo(json.dumps(report.json_data(), indent=2, ensure_ascii=False, allow_nan=False))
     else:
         console = Console()
-        console.print(render_report(report, window, width=console.width))
+        console.print(render_report(report, window, width=console.width, verbose=verbose))

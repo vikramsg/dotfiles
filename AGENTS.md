@@ -21,6 +21,13 @@ Only interact with their default locations to debug if the config is not correct
 - Declare persistent service lifecycle in `lch/config.toml`.
 - Keep the root `justfile` limited to linking tool configuration and delegating build and installation to `bin/<tool>/justfile`.
 
+## Testing
+
+###  Avoid change-detection tests
+
+- Do not add tests that merely assert that recently changed text, labels, or presentation elements are present or absent. 
+- Test meaningful behavior and invariants instead. For copy-only or cosmetic changes, prefer existing tests and manual verification; adding no new test is acceptable.
+
 ## Justfile Variable Guardrail
 
 When editing `justfile` recipes in this repo:
