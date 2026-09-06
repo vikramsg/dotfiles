@@ -5,6 +5,8 @@ local specs = {
 	"tests.git_review_spec",
 	-- Real PR UI with an intercepted sidecar boundary; never writes to GitHub.
 	"tests.pr_review_spec",
+	-- Verifies local review export confinement and atomic failure behavior.
+	"tests.differ_local_review_spec",
 	-- Verifies the ty LSP configuration and startup command for Python files.
 	"tests.lsp_ty_spec",
 	-- Verifies Snacks Explorer reveals hidden and ignored files with the required options.

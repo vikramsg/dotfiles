@@ -34,7 +34,7 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 ### Git diffs
 
-- `Space + gh`: Open Differ with uncommitted changes, or automatically compare against `main` when the working tree is clean.
+- `Space + gd`: Open Differ with uncommitted changes, or automatically compare against `main` when the working tree is clean.
 - `Enter` in the file tree: Open the selected file and focus its diff.
 - `gf`: Open the real file in an existing editor split in the previous tab at the mapped source line, keeping the review open.
 - `B` in local reviews: Toggle uncommitted changes since `HEAD` and all changes since branching from `main`.
@@ -48,14 +48,38 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 - `X`: Discard the current hunk after confirmation. **In the tree this discards the whole file's changes.** Available in the uncommitted view; this modifies actual files, not just the display.
 Requires Neovim 0.12+. GitHub review requires Go and make to build the sidecar (handled by Lazy's build hook), plus GitHub authentication. Local diffs do not need the sidecar.
 
+#### Local review comments
+
+Open with `Space gd`, then use these keys inside the diff:
+
+- `c`: Add a comment on the current line or visual selection.
+- `ge`: Edit a comment under the cursor.
+- `gx`: Delete a comment under the cursor.
+- In the comment editor, `Ctrl+S` in insert mode or `Esc` then `Enter` saves.
+  If a visual comment opens in normal mode, press `i` to type first.
+- `q` in the comment editor's normal mode cancels only that comment editor.
+- `g?`: Show the destination, workflow hints, and all described buffer-local shortcuts;
+  scroll with `j`/`k`. In the file tree, `c` collapses a directory.
+
+Saved comments automatically export to `.agents/reviews/differ-review.json` in the
+reviewed repository. That directory must be ignored by Git. Comments display inline
+in stacked layout; split layout shows `LOCAL` markers (use `ge` to read/edit a note).
+
+The export is a complete snapshot for the active comparison. `B` keeps separate
+in-memory notes for `HEAD` and `main...`. Opening a fresh review starts empty; its first
+saved comment replaces the previous export. Merely opening, switching comparisons,
+or cancelling does not rewrite the JSON. Saved JSON is never imported or uploaded.
+If exporting fails, the previous JSON stays intact and the new note remains in memory;
+correct the reported problem and save/edit a note to retry.
+
 #### GitHub reviews (Differ buffers only)
 
 - `Space pl`: List/open PRs, landing in the selected PR's diff.
 - `Space pr`: Start/resume the current PR's review; from a local diff, ask for a PR number.
 - `Space ps`: Submit the pending review through the verdict picker and summary editor. Only bound in PR diff/tree buffers.
-- `ga` in a PR diff: Comment on the current line or visual selection.
+- `c` (or native `ga`) in a PR diff: Comment on the current line or visual selection.
 - `gp` in a PR diff: Reply to a thread.
-- In the comment editor, `Esc` then `Enter` saves; `q` in normal mode cancels. Visual `ga` currently opens in normal mode: press `i` to type first.
+- In the comment editor, `Ctrl+S` in insert mode or `Esc` then `Enter` saves; `q` in normal mode cancels only the composer. Visual comments may open in normal mode: press `i` to type first.
 
 Start a review with `Space pr` before commenting to save GitHub drafts. Without a pending review, comments may post immediately. `Space ps` publishes the review after choosing a verdict and submitting its summary with `Esc` then `Enter`. These shortcuts are not installed in ordinary editor buffers.
 
