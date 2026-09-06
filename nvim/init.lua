@@ -23,7 +23,7 @@
 -- Git & Files:
 --   <leader>gb : Show Git blame / line history (with clean diff preview)
 --   <leader>gf : Show Git file history (all commits affecting current file)
---   <leader>gh : Open Differ review
+--   <leader>gd : Open Differ review
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
 --   In Differ: Enter open diff, gf edit, B toggle HEAD/main, [/] hunks, g? help, q close
@@ -734,7 +734,7 @@ require("lazy").setup({
 		cmd = "Differ",
 		keys = {
 			{
-				"<leader>gh",
+				"<leader>gd",
 				function()
 					require("config.git_review").open_differ()
 				end,

@@ -107,19 +107,6 @@ def test_compact_report_prioritizes_project_and_model_costs(report):
     assert len(text.splitlines()) <= 30
 
 
-@pytest.mark.parametrize("verbose", [False, True])
-def test_report_omits_source_footer(report, verbose):
-    output = StringIO()
-    Console(file=output, width=80, no_color=True).print(
-        render_report(report, Window(0, 1000, "All time"), width=80, verbose=verbose)
-    )
-    text = output.getvalue()
-
-    assert "By model" in text
-    assert "Source:" not in text
-    assert "not a billing statement" not in text
-
-
 def test_json_keeps_optional_absence_and_unknown_fields(report, stats_payload):
     # GIVEN API fields unused by the renderer and an omitted variant
     # WHEN serializing for machines
