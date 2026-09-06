@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dotfiles.local/schemas/differ-review.schema.json",
+  "title": "Differ persistent local review",
+  "type": "object",
+  "required": ["schema_version", "repository_root", "branch", "created_at", "updated_at", "comparisons"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "repository_root": { "type": "string", "minLength": 1 },
+    "branch": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": { "const": "branch" },
+            "name": { "type": "string", "minLength": 1 },
+            "head": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "commit"],
+          "properties": {
+            "kind": { "const": "detached" },
+            "commit": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "comparisons": {
+      "type": "object",
+      "required": ["HEAD", "main"],
+      "properties": {
+        "HEAD": { "$ref": "#/$defs/comparison" },
+        "main": { "$ref": "#/$defs/comparison" }
+      },
+      "additionalProperties": false
+    },
+    "migration": {
+      "type": "object",
+      "required": ["source", "source_schema_version", "imported_at", "source_snapshot"],
+      "properties": {
+        "source": { "const": ".agents/reviews/differ-review.json" },
+        "source_schema_version": { "const": 1 },
+        "imported_at": { "type": "string" },
+        "source_snapshot": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": ["side", "line"],
+      "properties": {
+        "side": { "enum": ["old", "new"] },
+        "line": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "note": {
+      "type": "object",
+      "required": ["id", "body", "path", "source_range", "source_context", "anchor_status", "created_at", "updated_at"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "body": { "type": "string" },
+        "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!\\.\\.(?:/|$))(?!.*\\/\\.\\.(?:/|$)).+$" },
+        "source_range": {
+          "type": "object",
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "$ref": "#/$defs/point" },
+            "end": { "$ref": "#/$defs/point" }
+          },
+          "additionalProperties": false
+        },
+        "source_context": {
+          "type": "object",
+          "required": ["comparison", "origin"],
+          "properties": {
+            "comparison": { "enum": ["HEAD", "main..."] },
+            "line_text": { "type": "string" },
+            "start_line_text": { "type": "string" },
+            "range_text": { "type": "string" },
+            "origin": { "enum": ["differ", "legacy-v1"] }
+          },
+          "additionalProperties": false
+        },
+        "anchor_status": { "enum": ["current", "outdated", "unverified"] },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "comparison": {
+      "type": "object",
+      "required": ["spec", "base", "target", "notes"],
+      "properties": {
+        "spec": { "enum": ["HEAD", "main..."] },
+        "base": { "enum": ["HEAD", "main"] },
+        "target": { "const": "working-tree" },
+        "notes": { "type": "array", "items": { "$ref": "#/$defs/note" } }
+      },
+      "additionalProperties": false
+    }
+  }
+}

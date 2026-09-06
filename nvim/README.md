@@ -55,22 +55,41 @@ Open with `Space gd`, then use these keys inside the diff:
 - `c`: Add a comment on the current line or visual selection.
 - `ge`: Edit a comment under the cursor.
 - `gx`: Delete a comment under the cursor.
+- `Space cr`: Copy the absolute path of the saved branch-review JSON. If the branch
+  has not been saved yet, Differ reports that instead. The ordinary `Space cp`
+  current-file mapping is unchanged.
+- `Space cR`: Reset all local notes for the current branch after confirmation.
 - In the comment editor, `Ctrl+S` in insert mode or `Esc` then `Enter` saves.
   If a visual comment opens in normal mode, press `i` to type first.
 - `q` in the comment editor's normal mode cancels only that comment editor.
 - `g?`: Show the destination, workflow hints, and all described buffer-local shortcuts;
   scroll with `j`/`k`. In the file tree, `c` collapses a directory.
 
-Saved comments automatically export to `.agents/reviews/differ-review.json` in the
-reviewed repository. That directory must be ignored by Git. Comments display inline
-in stacked layout; split layout shows `LOCAL` markers (use `ge` to read/edit a note).
+Saved comments persist in a schema-versioned JSON file beneath `.agents/reviews/` in
+the canonical repository. The filename is a safe hash of the branch identity; detached
+HEAD reviews use the commit identity. That directory must be ignored by Git. Closing
+Differ or restarting Neovim does not clear a review. Commits and pushes on a branch keep
+the same review; branches are separate and resume when revisited. `HEAD` and `main...`
+notes are separate comparisons inside the same branch document.
 
-The export is a complete snapshot for the active comparison. `B` keeps separate
-in-memory notes for `HEAD` and `main...`. Opening a fresh review starts empty; its first
-saved comment replaces the previous export. Merely opening, switching comparisons,
-or cancelling does not rewrite the JSON. Saved JSON is never imported or uploaded.
-If exporting fails, the previous JSON stays intact and the new note remains in memory;
-correct the reported problem and save/edit a note to retry.
+The sidebar shows an independent **Review output** section after the changed files when
+that branch JSON exists. `Enter` opens it in a read-only split; `q` closes only that
+split. It is output, not a changed file, so staging, discard, file counts, and file
+navigation ignore it. Comments display inline in stacked layout; split layout shows
+`LOCAL` markers (use `ge` to read/edit a note).
+
+The old `.agents/reviews/differ-review.json` v1 file is imported once into the first
+branch review that opens it and is never modified. Malformed or unsupported branch data
+is reported and protected from overwrite. If saving fails, the previous JSON stays
+intact and the new note remains in memory; correct the reported problem and save/edit a
+note to retry. Local review data is never uploaded to GitHub.
+
+If another review session updates the file, an older session refuses to overwrite it.
+Copy any unsaved draft before closing and reopening to load the latest review.
+
+The file format is defined in [the review JSON Schema](schemas/differ-review.schema.json).
+Notes record their original source text: changed or missing anchors are reported as
+outdated rather than placed on unrelated code. Migrated notes have unverified anchors.
 
 #### GitHub reviews (Differ buffers only)
 
@@ -115,6 +134,9 @@ To update binaries, try doing `:Mason` inside Neovim and doing `U`.
 ## Tests
 
 Headless Neovim tests live in `nvim/tests`.
+
+Install `uv` to run the review schema checks; the test helper declares its pinned
+`jsonschema` dependency and runs through `uv`.
 
 From the repo root, run them with:
 

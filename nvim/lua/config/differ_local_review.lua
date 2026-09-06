@@ -1,7 +1,6 @@
 local M = {}
 
-local EXPORT_RELATIVE_PATH = ".agents/reviews/differ-review.json"
-local REVIEW_DIRECTORY = ".agents/reviews"
+local store = require("config.differ_local_review_store")
 local namespace
 local next_session_id = 0
 local next_note_id = 0
@@ -15,147 +14,30 @@ local function now()
 	return os.date("!%Y-%m-%dT%H:%M:%SZ")
 end
 
-local function path_inside(parent, child)
-	parent, child = vim.fs.normalize(parent), vim.fs.normalize(child)
-	return child ~= parent and child:sub(1, #parent + 1) == parent .. "/"
-end
-
-local function nearest_existing(path)
-	local current = path
-	while not (vim.uv or vim.loop).fs_stat(current) do
-		local parent = vim.fs.dirname(current)
-		if parent == current then
-			return current
-		end
-		current = parent
-	end
-	return current
-end
-
--- Resolve both existing ancestors before checking containment. This rejects an
--- output directory redirected through a symlink as well as a symlink at the file.
-function M.resolve_export_path(root)
-	local uv = vim.uv or vim.loop
-	local canonical_root = uv.fs_realpath(root)
-	if not canonical_root then
-		return nil, "repository root does not exist"
-	end
-	local output = vim.fs.normalize(canonical_root .. "/" .. EXPORT_RELATIVE_PATH)
-	local review_root = vim.fs.normalize(canonical_root .. "/" .. REVIEW_DIRECTORY)
-	local output_stat = uv.fs_lstat(output)
-	if output_stat and output_stat.type == "link" then
-		return nil, "export path must not be a symbolic link"
-	end
-
-	local review_ancestor = nearest_existing(review_root)
-	local canonical_review_ancestor = uv.fs_realpath(review_ancestor)
-	local canonical_review =
-		vim.fs.normalize(canonical_review_ancestor .. "/" .. vim.fs.relpath(review_ancestor, review_root))
-	if not path_inside(canonical_root, canonical_review) then
-		return nil, REVIEW_DIRECTORY .. " must stay inside the repository root"
-	end
-
-	local output_ancestor = nearest_existing(output)
-	local canonical_output_ancestor = uv.fs_realpath(output_ancestor)
-	local canonical_output =
-		vim.fs.normalize(canonical_output_ancestor .. "/" .. vim.fs.relpath(output_ancestor, output))
-	if not path_inside(canonical_review, canonical_output) then
-		return nil, "export path must stay inside " .. REVIEW_DIRECTORY
-	end
-	return canonical_output, canonical_root
-end
-
-local function ignored(root)
-	local result = vim.system({ "git", "-C", root, "check-ignore", "-q", "--", EXPORT_RELATIVE_PATH }, {
-		text = true,
-	}):wait()
-	return result.code == 0
-end
-
--- Write a complete snapshot beside the destination, sync it, then rename it over
--- the old one. Failures only remove our temporary file; the last snapshot survives.
-function M.write_snapshot(path, snapshot)
-	local uv = vim.uv or vim.loop
-	local made, mkdir_err = pcall(vim.fn.mkdir, vim.fs.dirname(path), "p")
-	if not made then
-		return nil, tostring(mkdir_err)
-	end
-	local temporary = string.format("%s.%d.%d.tmp", path, vim.fn.getpid(), uv.hrtime())
-	local fd, open_err = uv.fs_open(temporary, "wx", 384)
-	if not fd then
-		return nil, open_err
-	end
-	local closed = false
-	local ok, err = pcall(function()
-		local encoded = vim.json.encode(snapshot) .. "\n"
-		local offset = 0
-		while offset < #encoded do
-			local written, write_err = uv.fs_write(fd, encoded:sub(offset + 1), offset)
-			assert(written and written > 0, write_err or "snapshot write made no progress")
-			offset = offset + written
-		end
-		assert(uv.fs_fsync(fd))
-		assert(uv.fs_close(fd))
-		closed = true
-		assert(uv.fs_rename(temporary, path))
-	end)
-	if not closed then
-		pcall(uv.fs_close, fd)
-	end
-	if not ok then
-		pcall(uv.fs_unlink, temporary)
-		return nil, tostring(err)
-	end
-	return true
-end
-
-local function comparison(mode)
-	if mode == "main" then
-		return { spec = "main...", base = "main", target = "working-tree" }
-	end
-	return { spec = "HEAD", base = "HEAD", target = "working-tree" }
-end
-
 local function notes_for(session)
-	session.notes[session.mode] = session.notes[session.mode] or {}
-	return session.notes[session.mode]
+	if not session.document then
+		return {}
+	end
+	return session.document.comparisons[session.mode].notes
 end
 
 function M.snapshot(session)
-	local notes = {}
-	for _, note in ipairs(notes_for(session)) do
-		notes[#notes + 1] = {
-			id = note.id,
-			body = note.body,
-			path = note.path,
-			source_range = vim.deepcopy(note.source_range),
-			created_at = note.created_at,
-			updated_at = note.updated_at,
-		}
-	end
-	return {
-		schema_version = 1,
-		root = session.root,
-		comparison = comparison(session.mode),
-		exported_at = now(),
-		notes = notes,
-	}
+	return session.document and vim.deepcopy(session.document) or nil
 end
 
 function M.export(session)
-	local path, root_or_err = M.resolve_export_path(session.root)
-	if not path then
-		return nil, root_or_err
+	if session.load_error or not session.document then
+		return nil, session.load_error or "review data is unavailable"
 	end
-	local root = root_or_err
-	if not ignored(root) then
-		return nil, EXPORT_RELATIVE_PATH .. " is not ignored by Git"
+	local ok, result, new_fingerprint =
+		store.save(session.root, session.identity, session.document, session.fingerprint)
+	if ok then
+		session.path = result
+		session.fingerprint = new_fingerprint
+		session.existed = true
+		require("config.differ_review_output").refresh(session.root)
 	end
-	local ok, err = M.write_snapshot(path, M.snapshot(session))
-	if not ok then
-		return nil, err
-	end
-	return true, path
+	return ok, result
 end
 
 local function export_after_change(session)
@@ -169,7 +51,7 @@ local function export_after_change(session)
 			"saved %d local %s to %s",
 			#notes_for(session),
 			#notes_for(session) == 1 and "note" or "notes",
-			EXPORT_RELATIVE_PATH
+			vim.fn.fnamemodify(session.path, ":~:.")
 		)
 	)
 	return true
@@ -177,17 +59,26 @@ end
 
 function M.new_session(root, mode)
 	next_session_id = next_session_id + 1
-	return {
+	local document, load_error, state = store.load(root)
+	local session = {
 		id = next_session_id,
-		root = (vim.uv or vim.loop).fs_realpath(root) or vim.fs.normalize(root),
+		root = store.canonical_root(root) or vim.fs.normalize(root),
 		mode = mode,
-		notes = {},
+		document = document,
+		identity = state and state.identity,
+		path = state and state.path,
+		fingerprint = state and state.fingerprint,
+		existed = state and state.existed or false,
+		load_error = load_error,
 	}
+	if load_error then
+		notify("review file was not loaded and will not be overwritten: " .. load_error, vim.log.levels.ERROR)
+	end
+	return session
 end
 
 function M.select_mode(session, mode)
 	session.mode = mode
-	notes_for(session)
 end
 
 function M.assign(tab, session, mode)
@@ -204,6 +95,14 @@ function M.session_for_tab(tab)
 	return sessions_by_tab[tab or vim.api.nvim_get_current_tabpage()]
 end
 
+function M.owns_current_branch(session)
+	if not (session and session.identity) then
+		return false
+	end
+	local identity = store.current_identity(session.root)
+	return identity ~= nil and store.same_identity(session.identity, identity)
+end
+
 local function current_context()
 	local review = vim.t.dotfiles_differ_review
 	local session = review and M.session_for_tab()
@@ -213,6 +112,14 @@ local function current_context()
 	end
 	local view_root = (vim.uv or vim.loop).fs_realpath(view.model.root) or vim.fs.normalize(view.model.root)
 	if view_root ~= session.root then
+		return nil
+	end
+	if session.load_error or not session.document then
+		notify("review data is protected: " .. tostring(session.load_error), vim.log.levels.ERROR)
+		return nil
+	end
+	if not M.owns_current_branch(session) then
+		notify("branch changed; close and reopen the review", vim.log.levels.WARN)
 		return nil
 	end
 	return session, view
@@ -239,12 +146,12 @@ local function source_range(anchor)
 	}
 end
 
-local function compose_note(session, view, anchor, anchor_win, existing)
+local function compose_note(session, view, anchor, anchor_win, existing, source_context)
 	local mode = existing and "Edit" or "New"
 	local comparison_mode = session.mode
 	local path = view.model.path
 	require("differ.ui.compose").open({
-		title = mode .. " LOCAL note → " .. EXPORT_RELATIVE_PATH,
+		title = mode .. " LOCAL note → branch review JSON",
 		initial = existing and existing.body or nil,
 		layout = view.layout,
 		anchor_win = anchor_win,
@@ -254,7 +161,12 @@ local function compose_note(session, view, anchor, anchor_win, existing)
 			end
 			-- The composer may outlive its review tab. Never mutate another session.
 			local active = vim.t.dotfiles_differ_review
-			if not active or M.session_for_tab() ~= session or session.mode ~= comparison_mode then
+			if
+				not active
+				or M.session_for_tab() ~= session
+				or session.mode ~= comparison_mode
+				or not M.owns_current_branch(session)
+			then
 				return notify("review changed before the note was saved", vim.log.levels.WARN)
 			end
 			if existing and not vim.tbl_contains(notes_for(session), existing) then
@@ -267,16 +179,18 @@ local function compose_note(session, view, anchor, anchor_win, existing)
 			else
 				next_note_id = next_note_id + 1
 				local note = {
-					id = string.format("local-%d-%d", session.id, next_note_id),
+					id = string.format("local-%d-%d-%d", vim.fn.getpid(), vim.uv.hrtime(), next_note_id),
 					body = body,
 					path = path,
 					source_range = source_range(anchor),
+					source_context = source_context,
+					anchor_status = "current",
 					created_at = timestamp,
 					updated_at = timestamp,
 				}
 				table.insert(notes_for(session), note)
 			end
-			M.render(session, view)
+			M.render(session, view, false)
 			export_after_change(session)
 		end,
 	})
@@ -297,6 +211,47 @@ local function anchor_for_gesture(view, first, last)
 	return anchor, win, err
 end
 
+local function source_text(view, side, first, last)
+	local text = view.model[side .. "_text"]
+	if type(text) == "string" then
+		local lines = vim.split(text, "\n", { plain = true })
+		if lines[#lines] == "" then
+			table.remove(lines)
+		end
+		if last > #lines then
+			return nil
+		end
+		return table.concat(vim.list_slice(lines, first, last), "\n")
+	end
+	-- Controlled views and sources without full text can still resolve visible lines.
+	local column = view:column_for(side)
+	if not column then
+		return nil
+	end
+	local index = side == "old" and column.map.from_old or column.map.from_new
+	local lines = {}
+	for line = first, last do
+		local row = index[line]
+		if not row then
+			return nil
+		end
+		lines[#lines + 1] = vim.api.nvim_buf_get_lines(column.bufnr, row - 1, row, false)[1]
+	end
+	return table.concat(lines, "\n")
+end
+
+local function capture_context(view, anchor, mode)
+	local range = source_range(anchor)
+	local start, finish = range.start, range["end"]
+	return {
+		comparison = mode == "main" and "main..." or "HEAD",
+		origin = "differ",
+		line_text = source_text(view, finish.side, finish.line, finish.line),
+		start_line_text = source_text(view, start.side, start.line, start.line),
+		range_text = start.side == finish.side and source_text(view, start.side, start.line, finish.line) or nil,
+	}
+end
+
 function M.comment()
 	local session, view = current_context()
 	if not session then
@@ -307,7 +262,7 @@ function M.comment()
 	if not anchor then
 		return notify(err or "no commentable line here", vim.log.levels.WARN)
 	end
-	compose_note(session, view, anchor, win)
+	compose_note(session, view, anchor, win, nil, capture_context(view, anchor, session.mode))
 end
 
 function M.comment_range()
@@ -321,14 +276,39 @@ function M.comment_range()
 	if not anchor then
 		return notify(err or "no commentable line here", vim.log.levels.WARN)
 	end
-	compose_note(session, view, anchor, win)
+	-- Range helpers normalize upward selections and can skip filler/meta rows.
+	-- Capture the resolved source endpoint, not the cursor's raw rendered row.
+	compose_note(session, view, anchor, win, nil, capture_context(view, anchor, session.mode))
 end
 
 local function note_anchor(note, view)
+	local start = note.source_range.start
 	local finish = note.source_range["end"]
 	local column = view:column_for(finish.side)
 	local index = column and (finish.side == "old" and column.map.from_old or column.map.from_new)
-	local row = index and require("differ.pr.threads").anchor_row(index, finish.line)
+	local row = index and index[finish.line]
+	local context = note.source_context
+	local actual = source_text(view, finish.side, finish.line, finish.line)
+	local actual_start = source_text(view, start.side, start.line, start.line)
+	local mismatch = actual == nil
+		or actual_start == nil
+		or (context.line_text ~= nil and actual ~= context.line_text)
+		or (context.start_line_text ~= nil and actual_start ~= context.start_line_text)
+		or (context.range_text ~= nil and source_text(view, start.side, start.line, finish.line) ~= context.range_text)
+	if mismatch then
+		if note.anchor_status ~= "outdated" then
+			notify(string.format("outdated anchor: %s:%d", note.path, finish.line), vim.log.levels.WARN)
+		end
+		note.anchor_status = "outdated"
+		return column, nil
+	end
+	local verified = context.line_text ~= nil
+	if start.side == finish.side and start.line ~= finish.line then
+		verified = verified and context.range_text ~= nil
+	elseif start.side ~= finish.side then
+		verified = verified and context.start_line_text ~= nil
+	end
+	note.anchor_status = verified and "current" or "unverified"
 	return column, row
 end
 
@@ -389,7 +369,7 @@ function M.edit()
 			anchor.start_side = start.side == "old" and "LEFT" or "RIGHT"
 			anchor.start_line = start.line
 		end
-		compose_note(session, view, anchor, win, note)
+		compose_note(session, view, anchor, win, note, note.source_context)
 	end)
 end
 
@@ -419,9 +399,48 @@ function M.delete()
 				break
 			end
 		end
-		M.render(session, view)
+		M.render(session, view, false)
 		export_after_change(session)
 	end)
+end
+
+function M.copy_review_path()
+	local session = M.session_for_tab()
+	if not session or not session.path then
+		return notify("open a local Differ review first", vim.log.levels.WARN)
+	end
+	if not M.owns_current_branch(session) then
+		return notify("branch changed; close and reopen the review", vim.log.levels.WARN)
+	end
+	if not session.existed or vim.fn.filereadable(session.path) ~= 1 then
+		return notify("branch review has not been saved yet", vim.log.levels.WARN)
+	end
+	vim.fn.setreg("+", session.path)
+	notify("copied " .. session.path)
+end
+
+function M.reset()
+	local session, view = current_context()
+	if not session then
+		return
+	end
+	if session.load_error or not session.document then
+		return notify("cannot reset protected review data: " .. tostring(session.load_error), vim.log.levels.ERROR)
+	end
+	if vim.fn.confirm("Reset all local notes for this branch?", "&Yes\n&No", 2) ~= 1 then
+		return
+	end
+	if not M.owns_current_branch(session) then
+		return notify("branch changed; close and reopen the review", vim.log.levels.WARN)
+	end
+	session.document.comparisons.HEAD.notes = {}
+	session.document.comparisons.main.notes = {}
+	M.render(session, view, false)
+	local ok, err = M.export(session)
+	if not ok then
+		return notify("reset in memory, but save failed: " .. tostring(err), vim.log.levels.ERROR)
+	end
+	notify("reset branch review")
 end
 
 local function render_note(note, view, column, row)
@@ -443,7 +462,12 @@ local function render_note(note, view, column, row)
 	end
 	if view.layout == "split" then
 		vim.api.nvim_buf_set_extmark(column.bufnr, namespace, row - 1, 0, {
-			virt_text = { { " 📝 LOCAL", "differThreadPending" } },
+			virt_text = {
+				{
+					note.anchor_status == "unverified" and " 📝 LOCAL (unverified)" or " 📝 LOCAL",
+					"differThreadPending",
+				},
+			},
 			virt_text_pos = "eol",
 		})
 		return
@@ -453,15 +477,16 @@ local function render_note(note, view, column, row)
 			return timestamp
 		end,
 	})
-	-- Add an explicit destination to every expanded local note.
-	table.insert(rows, 1, { { "LOCAL → " .. EXPORT_RELATIVE_PATH, "differThreadPending" } })
+	-- Keep the destination explicit without hard-coding a branch-dependent filename.
+	local label = note.anchor_status == "unverified" and "LOCAL (unverified anchor)" or "LOCAL"
+	table.insert(rows, 1, { { label .. " → branch review JSON", "differThreadPending" } })
 	vim.api.nvim_buf_set_extmark(column.bufnr, namespace, row - 1, 0, {
 		virt_lines = rows,
 		virt_lines_above = false,
 	})
 end
 
-function M.render(session, view)
+function M.render(session, view, persist_status)
 	if not (session and view and view.model and view.columns) then
 		return
 	end
@@ -471,12 +496,26 @@ function M.render(session, view)
 			vim.api.nvim_buf_clear_namespace(column.bufnr, namespace, 0, -1)
 		end
 	end
+	if not M.owns_current_branch(session) then
+		return
+	end
+	local status_changed = false
 	for _, note in ipairs(notes_for(session)) do
 		if note.path == view.model.path then
+			local previous_status = note.anchor_status
 			local column, row = note_anchor(note, view)
+			status_changed = status_changed or previous_status ~= note.anchor_status
 			if column and row then
 				render_note(note, view, column, row)
 			end
+		end
+	end
+	-- Persist evaluated status once per render, so the JSON and diff agree. Mutation
+	-- callers already publish the complete document after rendering.
+	if status_changed and persist_status ~= false and session.existed then
+		local ok, err = M.export(session)
+		if not ok then
+			notify("could not save anchor status: " .. tostring(err), vim.log.levels.WARN)
 		end
 	end
 end
@@ -502,6 +541,7 @@ function M.attach(session, view)
 	M.render(session, view)
 end
 
-M.export_relative_path = EXPORT_RELATIVE_PATH
+M.write_snapshot = store.write_snapshot
+M.store = store
 
 return M

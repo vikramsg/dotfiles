@@ -5,51 +5,113 @@ local function git(root, ...)
 	vim.list_extend(args, { ... })
 	local result = vim.system(args, { text = true }):wait()
 	assert(result.code == 0, result.stderr)
+	return vim.trim(result.stdout or "")
 end
 
 local function repository(ignored)
 	local root = vim.fn.resolve(vim.fn.tempname())
 	vim.fn.mkdir(root, "p")
 	git(root, "init", "--initial-branch=main")
+	vim.fn.writefile({ "one", "two" }, root .. "/example.txt")
 	if ignored then
-		assert(vim.fn.writefile({ ".agents/reviews" }, root .. "/.gitignore") == 0)
-		git(root, "add", ".gitignore")
-		git(root, "commit", "-m", "ignore review exports")
+		vim.fn.writefile({ ".agents/reviews" }, root .. "/.gitignore")
 	end
+	git(root, "add", ".")
+	git(root, "commit", "-m", "initial")
 	return root
 end
 
-local function exported(root)
-	local path = root .. "/.agents/reviews/differ-review.json"
-	return vim.json.decode(table.concat(vim.fn.readfile(path), "\n")), path
+local function decoded(path)
+	return vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
+end
+
+local function notes(session, mode)
+	return session.document.comparisons[mode or session.mode].notes
+end
+
+local function stored_note(id, comparison)
+	return {
+		id = id,
+		body = id,
+		path = "example.txt",
+		source_range = { start = { side = "new", line = 1 }, ["end"] = { side = "new", line = 1 } },
+		source_context = { comparison = comparison or "HEAD", origin = "differ", line_text = "one" },
+		anchor_status = "current",
+		created_at = "2026-01-01T00:00:00Z",
+		updated_at = "2026-01-01T00:00:00Z",
+	}
+end
+
+local function validate_with_jsonschema(instance_path)
+	local cwd = vim.fn.getcwd()
+	local result = vim.system({
+		"uv",
+		"run",
+		"--script",
+		cwd .. "/tests/support/validate_json_schema.py",
+		cwd .. "/schemas/differ-review.schema.json",
+		instance_path,
+	}, { text = true }):wait()
+	assert(result.code == 0, result.stderr)
+end
+
+local function load_in_fresh_nvim(root)
+	local output = vim.fn.tempname()
+	local code = string.format(
+		"local s=require('config.differ_local_review').new_session(%q,'HEAD'); assert(s.document,s.load_error); vim.fn.writefile({vim.json.encode(s.document)},%q)",
+		root,
+		output
+	)
+	local result = vim.system({ "nvim", "--headless", "-u", "init.lua", "+lua " .. code, "+qa" }, {
+		cwd = vim.fn.getcwd(),
+		text = true,
+	}):wait()
+	assert(result.code == 0, result.stderr)
+	local document = decoded(output)
+	vim.fn.delete(output)
+	return document
 end
 
 function M.run()
 	local local_review = require("config.differ_local_review")
+	local store = local_review.store
 	local root = repository(true)
 	local second_root = repository(true)
 	local nonignored_root = repository(false)
 	local tracked_root = repository(false)
+	local migration_root = repository(true)
+	local corrupt_root = repository(true)
+	local bad_legacy_root = repository(true)
+	local concurrency_root = repository(true)
+	local validation_root = repository(true)
+	local roots = {
+		root,
+		second_root,
+		nonignored_root,
+		tracked_root,
+		migration_root,
+		corrupt_root,
+		bad_legacy_root,
+		concurrency_root,
+		validation_root,
+	}
 	local original_buf = vim.api.nvim_get_current_buf()
 	local buf = vim.api.nvim_create_buf(false, true)
 	local win = vim.api.nvim_get_current_win()
 	vim.api.nvim_win_set_buf(win, buf)
 
 	local map = {
-		lines = {
-			{ kind = "old", old = 4 },
-			{ kind = "new", new = 7 },
-			{ kind = "new", new = 8 },
-		},
+		lines = { { kind = "old", old = 4 }, { kind = "new", new = 7 }, { kind = "new", new = 8 } },
 		from_old = { [4] = 1 },
 		from_new = { [7] = 2, [8] = 3 },
 	}
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "deleted source", "replacement", "next" })
 	local column = { bufnr = buf, winid = win, side = "unified", map = map }
 	local view = {
-		model = { root = root, path = "deleted.txt" },
+		model = { root = root, path = "example.txt" },
 		layout = "stacked",
 		columns = { column },
-		column_for = function(_, _)
+		column_for = function()
 			return column
 		end,
 	}
@@ -57,17 +119,11 @@ function M.run()
 	local differ = require("differ")
 	local compose = require("differ.ui.compose")
 	local sidecar = require("differ.sidecar")
-	local original_active_view = differ.active_view
-	local original_compose_open = compose.open
-	local original_request = sidecar.request
-	local original_select = vim.ui.select
-	local original_confirm = vim.fn.confirm
-	local original_line = vim.fn.line
-	local original_feedkeys = vim.api.nvim_feedkeys
-	local original_write = vim.uv.fs_write
-	local captured
-	local sidecar_calls = 0
-
+	local original_active_view, original_compose_open = differ.active_view, compose.open
+	local original_request, original_select = sidecar.request, vim.ui.select
+	local original_confirm, original_line = vim.fn.confirm, vim.fn.line
+	local original_feedkeys, original_write = vim.api.nvim_feedkeys, vim.uv.fs_write
+	local captured, sidecar_calls = nil, 0
 	differ.active_view = function()
 		return view
 	end
@@ -83,104 +139,119 @@ function M.run()
 		local session = local_review.new_session(root, "HEAD")
 		local_review.assign(vim.api.nvim_get_current_tabpage(), session, "HEAD")
 		vim.t.dotfiles_differ_review = { root = root, mode = "HEAD", local_session_id = session.id }
+		assert(#notes(session) == 0 and not session.existed)
 
-		-- A normal comment on a deletion records the old-side source coordinate.
 		vim.api.nvim_win_set_cursor(win, { 1, 0 })
-		captured = nil
 		local_review.comment()
-		assert(captured and captured.on_submit, "comment should provide a submit callback")
+		assert(captured and captured.on_submit)
 		captured.on_submit("Deleted-line note")
-		local snapshot, output = exported(root)
-		assert(#snapshot.notes == 1 and snapshot.notes[1].path == "deleted.txt")
-		assert(vim.deep_equal(snapshot.notes[1].source_range, {
+		assert(session.existed and vim.fn.filereadable(session.path) == 1)
+		local snapshot = decoded(session.path)
+		assert(snapshot.schema_version == 2 and #snapshot.comparisons.HEAD.notes == 1)
+		assert(snapshot.comparisons.HEAD.notes[1].source_context.line_text == "deleted source")
+		assert(vim.deep_equal(snapshot.comparisons.HEAD.notes[1].source_range, {
 			start = { side = "old", line = 4 },
 			["end"] = { side = "old", line = 4 },
 		}))
 
-		-- Invoke the visual entry point directly with controlled marks: no key driving.
-		vim.fn.line = function(mark)
-			return mark == "v" and 1 or 2
-		end
-		vim.api.nvim_feedkeys = function() end
-		captured = nil
-		local_review.comment_range()
-		captured.on_submit("Replacement range")
-		vim.fn.line = original_line
-		vim.api.nvim_feedkeys = original_feedkeys
-		snapshot = exported(root)
-		assert(#snapshot.notes == 2)
-		assert(vim.deep_equal(snapshot.notes[2].source_range, {
-			start = { side = "old", line = 4 },
-			["end"] = { side = "new", line = 7 },
-		}))
+		validate_with_jsonschema(session.path)
+		assert(store.validate(snapshot))
 
-		-- Repoint the controlled view to an untracked file and add another note.
-		view.model.path = "untracked.txt"
-		map.lines = { { kind = "new", new = 1 } }
-		map.from_old, map.from_new = {}, { [1] = 1 }
-		vim.api.nvim_win_set_cursor(win, { 1, 0 })
-		local_review.comment()
-		captured.on_submit("Untracked-file note")
-		snapshot = exported(root)
-		assert(#snapshot.notes == 3 and snapshot.notes[3].path == "untracked.txt")
-		assert(snapshot.notes[3].source_range.start.side == "new" and snapshot.notes[3].source_range.start.line == 1)
-
-		-- A cancelled composer performs no mutation and does not rewrite the export.
-		local before_cancel = table.concat(vim.fn.readfile(output), "\n")
-		local before_cancel_stat = (vim.uv or vim.loop).fs_stat(output)
-		local before_count = #local_review.snapshot(session).notes
+		-- Cancelling a composer performs no mutation and does not touch the saved file.
+		local before_cancel = table.concat(vim.fn.readfile(session.path), "\n")
+		local before_cancel_stat = (vim.uv or vim.loop).fs_stat(session.path)
+		local before_cancel_count = #notes(session)
 		local_review.comment()
 		if captured.on_cancel then
 			captured.on_cancel()
 		end
-		assert(#local_review.snapshot(session).notes == before_count)
-		assert(table.concat(vim.fn.readfile(output), "\n") == before_cancel)
-		local after_cancel_stat = (vim.uv or vim.loop).fs_stat(output)
+		assert(#notes(session) == before_cancel_count)
+		assert(table.concat(vim.fn.readfile(session.path), "\n") == before_cancel)
+		local after_cancel_stat = (vim.uv or vim.loop).fs_stat(session.path)
 		assert(after_cancel_stat.size == before_cancel_stat.size)
 		assert(vim.deep_equal(after_cancel_stat.mtime, before_cancel_stat.mtime))
 
-		-- Add a second note at one anchor, then select it for editing and the first for deletion.
+		-- Both comparisons persist independently in the same branch document.
+		local_review.select_mode(session, "main")
+		assert(#notes(session) == 0)
+		vim.api.nvim_win_set_cursor(win, { 2, 0 })
 		local_review.comment()
-		captured.on_submit("Second untracked note")
+		captured.on_submit("Main comparison note")
+		assert(#notes(session, "main") == 1)
+		local_review.select_mode(session, "HEAD")
+		assert(#notes(session) == 1)
+		local fresh_document = load_in_fresh_nvim(root)
+		assert(#fresh_document.comparisons.HEAD.notes == 1)
+		assert(#fresh_document.comparisons.main.notes == 1)
+		validate_with_jsonschema(session.path)
+
+		-- An upward cross-side range captures the resolved endpoint, not the cursor row.
+		vim.fn.line = function(mark)
+			return mark == "v" and 2 or 1
+		end
+		vim.api.nvim_feedkeys = function() end
+		local_review.comment_range()
+		captured.on_submit("Replacement range")
+		vim.fn.line, vim.api.nvim_feedkeys = original_line, original_feedkeys
+		assert(#notes(session) == 2 and notes(session)[2].source_context.line_text == "replacement")
+
+		-- Exact source context prevents a moved/mismatched anchor attaching elsewhere.
+		vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "unrelated source" })
+		local_review.render(session, view)
+		assert(notes(session)[1].anchor_status == "outdated")
+		assert(notes(session)[2].anchor_status == "outdated", "cross-side ranges must validate the starting source")
+		assert(decoded(session.path).comparisons.HEAD.notes[2].anchor_status == "outdated")
+		for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, {})) do
+			assert(mark[2] ~= 0, "the outdated note must not render on its former row")
+		end
+		vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "deleted source" })
+		local_review.render(session, view)
+		assert(notes(session)[1].anchor_status == "current")
+
+		-- Delayed composers and selectors cannot cross comparison or branch ownership.
+		local_review.comment()
+		local delayed_submit = captured.on_submit
+		local before = table.concat(vim.fn.readfile(session.path), "\n")
+		git(root, "switch", "-c", "topic")
+		delayed_submit("stale branch save")
+		assert(table.concat(vim.fn.readfile(session.path), "\n") == before)
+		assert(#notes(session) == 2)
+		git(root, "switch", "main")
+
+		vim.api.nvim_win_set_cursor(win, { 2, 0 })
+		local_review.comment()
+		captured.on_submit("Second note on replacement")
 		vim.ui.select = function(items, _, callback)
-			callback(items[2])
+			local_review.select_mode(session, "main")
+			callback(items[1])
+		end
+		captured = nil
+		local_review.select_mode(session, "HEAD")
+		local_review.edit()
+		assert(captured == nil, "stale selection unexpectedly opened a composer")
+		assert(#notes(session, "HEAD") == 3, "stale selection mutated HEAD notes")
+		local_review.select_mode(session, "HEAD")
+
+		local complete_selection
+		vim.ui.select = function(items, _, callback)
+			complete_selection = function()
+				callback(items[1])
+			end
 		end
 		local_review.edit()
-		captured.on_submit("Second untracked note, edited")
-		snapshot = exported(root)
-		assert(#snapshot.notes == 4 and snapshot.notes[4].body == "Second untracked note, edited")
+		git(root, "switch", "topic")
+		captured = nil
+		complete_selection()
+		assert(captured == nil and #notes(session, "HEAD") == 3)
+		git(root, "switch", "main")
 
-		-- Composers and note pickers must not complete against a different comparison.
-		local before_delayed = table.concat(vim.fn.readfile(output), "\n")
-		local expected_notes = vim.deepcopy(local_review.snapshot(session).notes)
-		vim.fn.confirm = function()
-			error("a stale selection must not reach deletion confirmation")
+		-- Edit and delete mutate the persisted branch document through controlled callbacks.
+		vim.ui.select = function(items, _, callback)
+			callback(items[#items])
 		end
-		for _, action in ipairs({ local_review.comment, local_review.edit }) do
-			action()
-			local_review.select_mode(session, "main")
-			captured.on_submit("Stale HEAD callback")
-			assert(#local_review.snapshot(session).notes == 0)
-			local_review.select_mode(session, "HEAD")
-			assert(vim.deep_equal(local_review.snapshot(session).notes, expected_notes))
-			assert(table.concat(vim.fn.readfile(output), "\n") == before_delayed)
-		end
-		for _, action in ipairs({ local_review.edit, local_review.delete }) do
-			local complete_selection
-			vim.ui.select = function(items, _, callback)
-				complete_selection = function()
-					callback(items[1])
-				end
-			end
-			captured = nil
-			action()
-			local_review.select_mode(session, "main")
-			complete_selection()
-			assert(not captured and #local_review.snapshot(session).notes == 0)
-			local_review.select_mode(session, "HEAD")
-			assert(vim.deep_equal(local_review.snapshot(session).notes, expected_notes))
-			assert(table.concat(vim.fn.readfile(output), "\n") == before_delayed)
-		end
+		local_review.edit()
+		captured.on_submit("Edited replacement note")
+		assert(notes(session, "HEAD")[3].body == "Edited replacement note")
 		vim.ui.select = function(items, _, callback)
 			callback(items[1])
 		end
@@ -188,59 +259,222 @@ function M.run()
 			return 1
 		end
 		local_review.delete()
-		snapshot = exported(root)
-		assert(#snapshot.notes == 3)
-		assert(snapshot.notes[3].body == "Second untracked note, edited")
+		assert(#notes(session, "HEAD") == 2 and #decoded(session.path).comparisons.HEAD.notes == 2)
 
-		-- Comparisons and repositories own independent note collections.
-		local_review.select_mode(session, "main")
-		assert(
-			#local_review.snapshot(session).notes == 0 and local_review.snapshot(session).comparison.spec == "main..."
-		)
-		local_review.select_mode(session, "HEAD")
-		assert(#local_review.snapshot(session).notes == 3)
-		local other_session = local_review.new_session(second_root, "HEAD")
-		assert(#local_review.snapshot(other_session).notes == 0 and other_session.root ~= session.root)
+		-- Branch and repository identities select separate files; returning resumes.
+		git(root, "switch", "topic")
+		local topic = local_review.new_session(root, "HEAD")
+		assert(topic.path ~= session.path and #notes(topic) == 0 and #notes(topic, "main") == 0)
+		git(root, "switch", "main")
+		local returned = local_review.new_session(root, "HEAD")
+		assert(returned.path == session.path and #notes(returned) == 2 and #notes(returned, "main") == 1)
+		vim.fn.writefile({ "one", "two", "commit does not change branch identity" }, root .. "/example.txt")
+		git(root, "add", "example.txt")
+		git(root, "commit", "-m", "advance branch")
+		local after_commit = local_review.new_session(root, "HEAD")
+		assert(after_commit.path == returned.path and #notes(after_commit) == 2)
+		local other = local_review.new_session(second_root, "HEAD")
+		assert(other.path ~= session.path and other.root ~= session.root)
 
-		assert(sidecar_calls == 0, "local review operations must make zero sidecar requests")
+		-- Detached HEAD uses the commit itself as a stable, separate identity.
+		local commit = git(second_root, "rev-parse", "HEAD")
+		git(second_root, "checkout", "--detach", commit)
+		local detached = local_review.new_session(second_root, "HEAD")
+		assert(detached.identity.kind == "detached" and detached.path ~= other.path)
 
-		-- A nonignored destination is rejected before any file is created.
-		local rejected, reason = local_review.export(local_review.new_session(nonignored_root, "HEAD"))
-		assert(not rejected and reason:find("not ignored", 1, true))
-		assert(vim.fn.filereadable(nonignored_root .. "/.agents/reviews/differ-review.json") == 0)
+		-- Reset mutates both comparisons and persists an empty, resumable document.
+		session = returned
+		local_review.assign(vim.api.nvim_get_current_tabpage(), session, "HEAD")
+		vim.t.dotfiles_differ_review.local_session_id = session.id
+		vim.fn.confirm = function()
+			return 1
+		end
+		local_review.reset()
+		assert(#notes(session, "HEAD") == 0 and #notes(session, "main") == 0)
+		assert(#notes(local_review.new_session(root, "HEAD"), "HEAD") == 0)
 
-		-- Git ignores do not make an already tracked export safe to overwrite.
-		vim.fn.mkdir(tracked_root .. "/.agents/reviews", "p")
-		local tracked_output = tracked_root .. "/.agents/reviews/differ-review.json"
-		assert(vim.fn.writefile({ "tracked snapshot" }, tracked_output) == 0)
-		git(tracked_root, "add", tracked_output)
-		git(tracked_root, "commit", "-m", "track review snapshot")
-		assert(vim.fn.writefile({ ".agents/reviews" }, tracked_root .. "/.gitignore") == 0)
+		-- Legacy v1 is copied into one branch document, including its exact source snapshot.
+		local legacy_path = migration_root .. "/" .. store.legacy_relative_path
+		vim.fn.mkdir(vim.fs.dirname(legacy_path), "p")
+		local legacy = {
+			schema_version = 1,
+			root = migration_root,
+			comparison = { spec = "HEAD", base = "HEAD", target = "working-tree" },
+			exported_at = "2026-01-01T00:00:00Z",
+			notes = {
+				{
+					id = "legacy-1",
+					body = "legacy",
+					path = "example.txt",
+					source_range = { start = { side = "new", line = 1 }, ["end"] = { side = "new", line = 1 } },
+					created_at = "2026-01-01T00:00:00Z",
+					updated_at = "2026-01-01T00:00:00Z",
+				},
+			},
+		}
+		vim.fn.writefile({ vim.json.encode(legacy) }, legacy_path)
+		local legacy_bytes = table.concat(vim.fn.readfile(legacy_path), "\n")
+		local migrated = local_review.new_session(migration_root, "HEAD")
+		assert(#notes(migrated) == 1 and migrated.document.migration.source_snapshot.notes[1].body == "legacy")
+		assert(table.concat(vim.fn.readfile(legacy_path), "\n") == legacy_bytes)
+		assert(vim.fn.filereadable(migration_root .. "/.agents/reviews/differ-review-v1-migration.json") == 1)
+		local migration_bytes = table.concat(vim.fn.readfile(migrated.path), "\n")
+		local invalid_migration = vim.deepcopy(migrated.document)
+		invalid_migration.migration.unknown = true
+		assert(not store.save(migration_root, migrated.identity, invalid_migration, migrated.fingerprint))
+		assert(table.concat(vim.fn.readfile(migrated.path), "\n") == migration_bytes)
+		local arbitrary_source = vim.deepcopy(migrated.document)
+		arbitrary_source.migration.source_snapshot.arbitrary_legacy_field = { retained = true }
+		assert(store.validate(arbitrary_source))
+		git(migration_root, "switch", "-c", "second")
+		local no_repeat = local_review.new_session(migration_root, "HEAD")
+		assert(#notes(no_repeat) == 0 and no_repeat.document.migration == nil)
+
+		-- Invalid legacy data is neither imported nor rewritten, and no v2 claim is created.
+		local bad_legacy_path = bad_legacy_root .. "/" .. store.legacy_relative_path
+		vim.fn.mkdir(vim.fs.dirname(bad_legacy_path), "p")
+		vim.fn.writefile({ vim.json.encode({ schema_version = 7 }) }, bad_legacy_path)
+		local bad_legacy_bytes = table.concat(vim.fn.readfile(bad_legacy_path), "\n")
+		local bad_legacy = local_review.new_session(bad_legacy_root, "HEAD")
+		assert(bad_legacy.load_error and bad_legacy.document == nil)
+		assert(vim.fn.filereadable(bad_legacy.path) == 0)
+		assert(table.concat(vim.fn.readfile(bad_legacy_path), "\n") == bad_legacy_bytes)
+
+		-- Malformed and unsupported branch files are protected from mutation.
+		local corrupt_identity = assert(store.current_identity(corrupt_root))
+		local corrupt_path = assert(store.resolve_path(corrupt_root, corrupt_identity))
+		vim.fn.mkdir(vim.fs.dirname(corrupt_path), "p")
+		vim.fn.writefile({ "{ broken" }, corrupt_path)
+		local corrupt = local_review.new_session(corrupt_root, "HEAD")
+		assert(corrupt.load_error and corrupt.document == nil)
+		local saved = local_review.export(corrupt)
+		assert(not saved and vim.deep_equal(vim.fn.readfile(corrupt_path), { "{ broken" }))
+		vim.fn.writefile({ vim.json.encode({ schema_version = 99 }) }, corrupt_path)
+		corrupt = local_review.new_session(corrupt_root, "HEAD")
+		assert(corrupt.load_error and decoded(corrupt_path).schema_version == 99)
+
+		-- Optimistic fingerprints reject writes from stale sessions without merging.
+		local first_absent = local_review.new_session(concurrency_root, "HEAD")
+		local second_absent = local_review.new_session(concurrency_root, "HEAD")
+		assert(first_absent.fingerprint == false and second_absent.fingerprint == false)
+		table.insert(notes(first_absent), stored_note("first-writer"))
+		assert(local_review.export(first_absent))
+		assert(type(first_absent.fingerprint) == "string")
+		local first_bytes = table.concat(vim.fn.readfile(first_absent.path), "\n")
+		table.insert(notes(second_absent), stored_note("stale-absent-writer"))
+		local stale_ok, stale_err = local_review.export(second_absent)
+		assert(not stale_ok and stale_err:find("reopen", 1, true))
+		assert(table.concat(vim.fn.readfile(first_absent.path), "\n") == first_bytes)
+		assert(#notes(second_absent) == 1, "a refused save must retain its in-memory draft")
+
+		local deleting_session = local_review.new_session(concurrency_root, "HEAD")
+		local resurrection_session = local_review.new_session(concurrency_root, "HEAD")
+		deleting_session.document.comparisons.HEAD.notes = {}
+		assert(local_review.export(deleting_session))
+		local deleted_bytes = table.concat(vim.fn.readfile(deleting_session.path), "\n")
+		stale_ok, stale_err = local_review.export(resurrection_session)
+		assert(not stale_ok and stale_err:find("reopen", 1, true))
+		assert(table.concat(vim.fn.readfile(deleting_session.path), "\n") == deleted_bytes)
+		assert(#notes(resurrection_session) == 1, "the stale note remains in memory without being resurrected")
+
+		local externally_changed = local_review.new_session(concurrency_root, "HEAD")
+		vim.fn.writefile({ "{ externally malformed" }, externally_changed.path)
+		stale_ok, stale_err = local_review.export(externally_changed)
+		assert(not stale_ok and stale_err:find("reopen", 1, true))
+		assert(vim.deep_equal(vim.fn.readfile(externally_changed.path), { "{ externally malformed" }))
+
+		-- Runtime validation rejects unknown keys and malformed values before replacing a valid file.
+		local validation_session = local_review.new_session(validation_root, "HEAD")
+		table.insert(notes(validation_session), stored_note("validation-note"))
+		assert(local_review.export(validation_session))
+		validate_with_jsonschema(validation_session.path)
+		local valid_bytes = table.concat(vim.fn.readfile(validation_session.path), "\n")
+		local valid_fingerprint = validation_session.fingerprint
+		local missing_expected, missing_expected_err =
+			store.save(validation_root, validation_session.identity, vim.deepcopy(validation_session.document))
+		assert(not missing_expected and missing_expected_err:find("reopen", 1, true))
+		assert(table.concat(vim.fn.readfile(validation_session.path), "\n") == valid_bytes)
+		local invalid_documents = {}
+		local function invalid(mutator)
+			local document = vim.deepcopy(validation_session.document)
+			mutator(document)
+			table.insert(invalid_documents, document)
+		end
+		invalid(function(document)
+			document.unknown = true
+		end)
+		invalid(function(document)
+			document.branch.unknown = true
+		end)
+		invalid(function(document)
+			document.comparisons.unknown = {}
+		end)
+		invalid(function(document)
+			document.comparisons.HEAD.unknown = true
+		end)
+		invalid(function(document)
+			document.comparisons.HEAD.notes[1].unknown = true
+		end)
+		invalid(function(document)
+			document.comparisons.HEAD.notes[1].source_range.unknown = true
+		end)
+		invalid(function(document)
+			document.comparisons.HEAD.notes[1].source_range.start.unknown = true
+		end)
+		invalid(function(document)
+			document.comparisons.HEAD.notes[1].source_context.unknown = true
+		end)
+		invalid(function(document)
+			document.comparisons.HEAD.notes[1].id = ""
+		end)
+		invalid(function(document)
+			document.branch.head = ""
+		end)
+		for _, field in ipairs({ "line_text", "range_text", "start_line_text" }) do
+			invalid(function(document)
+				document.comparisons.HEAD.notes[1].source_context[field] = 42
+			end)
+		end
+		for _, document in ipairs(invalid_documents) do
+			local invalid_ok = store.save(validation_root, validation_session.identity, document, valid_fingerprint)
+			assert(not invalid_ok)
+			assert(table.concat(vim.fn.readfile(validation_session.path), "\n") == valid_bytes)
+		end
+		local future_context = vim.deepcopy(validation_session.document)
+		future_context.comparisons.HEAD.notes[1].source_context.range_text = "one\ntwo"
+		future_context.comparisons.HEAD.notes[1].source_context.start_line_text = "one"
+		assert(store.validate(future_context))
+
+		-- Nonignored and tracked destinations are rejected without replacement.
+		local rejected = local_review.new_session(nonignored_root, "HEAD")
+		local saved_ok, reason = local_review.export(rejected)
+		assert(not saved_ok and reason:find("not ignored", 1, true) and vim.fn.filereadable(rejected.path) == 0)
+		local tracked = local_review.new_session(tracked_root, "HEAD")
+		vim.fn.mkdir(vim.fs.dirname(tracked.path), "p")
+		vim.fn.writefile({ "tracked snapshot" }, tracked.path)
+		git(tracked_root, "add", "-f", store.relative_path(tracked.identity))
+		git(tracked_root, "commit", "-m", "track review")
+		vim.fn.writefile({ ".agents/reviews" }, tracked_root .. "/.gitignore")
 		git(tracked_root, "add", ".gitignore")
-		git(tracked_root, "commit", "-m", "ignore future review snapshots")
-		rejected, reason = local_review.export(local_review.new_session(tracked_root, "HEAD"))
-		assert(not rejected and reason:find("not ignored", 1, true))
-		assert(vim.deep_equal(vim.fn.readfile(tracked_output), { "tracked snapshot" }))
+		git(tracked_root, "commit", "-m", "ignore reviews")
+		saved_ok, reason = local_review.export(tracked)
+		assert(not saved_ok and reason:find("not ignored", 1, true))
+		assert(vim.deep_equal(vim.fn.readfile(tracked.path), { "tracked snapshot" }))
 
-		-- Neither an ancestor nor the destination may redirect an export elsewhere.
+		-- Symlink confinement and atomic write/short-write protection remain intact.
+		local identity = assert(store.current_identity(root))
+		local second_identity = assert(store.current_identity(second_root))
 		assert(vim.uv.fs_symlink(root .. "/.agents", second_root .. "/.agents"))
-		local escaped = local_review.resolve_export_path(second_root)
-		assert(not escaped, "an ancestor symlink must not escape the reviewed repository")
+		assert(not store.resolve_path(second_root, second_identity))
 		assert(vim.uv.fs_unlink(second_root .. "/.agents"))
 		vim.fn.mkdir(second_root .. "/.agents/reviews", "p")
-		assert(vim.uv.fs_symlink(output, second_root .. "/.agents/reviews/differ-review.json"))
-		escaped = local_review.resolve_export_path(second_root)
-		assert(not escaped, "the export must not overwrite a symbolic-link destination")
+		local second_path = assert(store.resolve_path(second_root, second_identity))
+		assert(vim.uv.fs_symlink(session.path, second_path))
+		assert(not store.resolve_path(second_root, second_identity))
 
-		-- Encoding/write failure leaves the last complete snapshot untouched.
-		local before_failure = table.concat(vim.fn.readfile(output), "\n")
-		local written = local_review.write_snapshot(output, { invalid = function() end })
-		assert(not written)
-		assert(table.concat(vim.fn.readfile(output), "\n") == before_failure)
-		local after_failure = exported(root)
-		assert(#after_failure.notes == 3 and after_failure.notes[3].body == "Second untracked note, edited")
-
-		-- A short write followed by failure must not publish a truncated document.
+		local before_failure = table.concat(vim.fn.readfile(session.path), "\n")
+		local written = store.write_snapshot(session.path, { invalid = function() end })
+		assert(not written and table.concat(vim.fn.readfile(session.path), "\n") == before_failure)
 		local writes = 0
 		vim.uv.fs_write = function(fd, data, offset)
 			writes = writes + 1
@@ -249,42 +483,112 @@ function M.run()
 			end
 			return nil, "simulated disk full"
 		end
-		written = local_review.write_snapshot(output, local_review.snapshot(session))
+		written = store.write_snapshot(session.path, session.document)
 		vim.uv.fs_write = original_write
-		assert(not written and table.concat(vim.fn.readfile(output), "\n") == before_failure)
-
-		-- Successful short writes are completed before publishing the new snapshot.
+		assert(not written and table.concat(vim.fn.readfile(session.path), "\n") == before_failure)
 		vim.uv.fs_write = function(fd, data, offset)
 			return original_write(fd, data:sub(1, 8), offset)
 		end
-		written = local_review.write_snapshot(output, local_review.snapshot(session))
+		written = store.write_snapshot(session.path, session.document)
 		vim.uv.fs_write = original_write
-		assert(written and vim.deep_equal(exported(root).notes, after_failure.notes))
+		assert(written and store.validate(decoded(session.path)))
 
-		local blocker = nonignored_root .. "/file-instead-of-directory"
-		vim.fn.writefile({ "original" }, blocker)
-		written = local_review.write_snapshot(blocker .. "/snapshot.json", {})
-		assert(not written and vim.deep_equal(vim.fn.readfile(blocker), { "original" }))
+		-- Synthetic output metadata is never a file operation target or navigation row.
+		local panel = require("differ.panel").new({
+			sections = {
+				{ title = "Files", entries = { { path = "example.txt", status = "M", additions = 1, deletions = 0 } } },
+			},
+			on_select = function()
+				error("output must not route through file selection")
+			end,
+			root = root,
+		})
+		require("config.differ_review_output").attach(panel)
+		local output_count = 0
+		for _, meta in ipairs(panel.meta) do
+			if meta.kind == "review_output" then
+				output_count = output_count + 1
+				assert(meta.entry == nil)
+			end
+		end
+		assert(output_count == 1 and panel.file_total == 1 and panel:_file_row(#panel.meta, "next") ~= nil)
+		local output = require("config.differ_review_output")
+		local original_output_open, opened_output = output.open, nil
+		output.open = function(path)
+			opened_output = path
+		end
+		panel.winid = win
+		vim.api.nvim_win_set_buf(win, panel.bufnr)
+		for row, meta in ipairs(panel.meta) do
+			if meta.kind == "review_output" then
+				vim.api.nvim_win_set_cursor(win, { row, 0 })
+				break
+			end
+		end
+		output.select(panel)
+		output.open = original_output_open
+		assert(opened_output == session.path, "output selection must bypass file routing")
+		local output_buf = vim.api.nvim_create_buf(false, true)
+		vim.b[output_buf].dotfiles_differ_review_output = session.path
+		vim.api.nvim_buf_set_lines(output_buf, 0, -1, false, { "stale" })
+		output.refresh(root)
+		assert(vim.api.nvim_buf_get_lines(output_buf, 0, 1, false)[1] ~= "stale")
+		vim.api.nvim_buf_delete(output_buf, { force = true })
+		panel.winid = nil
+		vim.api.nvim_win_set_buf(win, buf)
+		panel:close()
+
+		-- Changing only the middle of a same-side range must invalidate the saved
+		-- anchor, including the read-only output's document, without a comment edit.
+		local anchor_root = repository(true)
+		roots[#roots + 1] = anchor_root
+		view.model = { root = anchor_root, path = "example.txt", new_text = "first\nmiddle\nlast\n" }
+		map.lines = { { kind = "new", new = 1 }, { kind = "new", new = 2 }, { kind = "new", new = 3 } }
+		map.from_old, map.from_new = {}, { [1] = 1, [2] = 2, [3] = 3 }
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "first", "middle", "last" })
+		local range_session = local_review.new_session(anchor_root, "HEAD")
+		local_review.assign(vim.api.nvim_get_current_tabpage(), range_session, "HEAD")
+		vim.t.dotfiles_differ_review = { root = anchor_root, mode = "HEAD", local_session_id = range_session.id }
+		vim.fn.line = function(mark)
+			return mark == "v" and 3 or 1
+		end
+		vim.api.nvim_feedkeys = function() end
+		local_review.comment_range()
+		captured.on_submit("Review the entire range")
+		vim.fn.line, vim.api.nvim_feedkeys = original_line, original_feedkeys
+		assert(notes(range_session)[1].source_context.range_text == "first\nmiddle\nlast")
+		local range_output = vim.api.nvim_create_buf(false, true)
+		vim.b[range_output].dotfiles_differ_review_output = range_session.path
+		view.model.new_text = "first\nchanged middle\nlast\n"
+		vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "changed middle" })
+		local_review.render(range_session, view)
+		assert(notes(range_session)[1].anchor_status == "outdated")
+		assert(decoded(range_session.path).comparisons.HEAD.notes[1].anchor_status == "outdated")
+		local visible_document =
+			vim.json.decode(table.concat(vim.api.nvim_buf_get_lines(range_output, 0, -1, false), "\n"))
+		assert(visible_document.comparisons.HEAD.notes[1].anchor_status == "outdated")
+		view.model.new_text = "first\nmiddle\nlast\n"
+		vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "middle" })
+		local_review.render(range_session, view)
+		assert(decoded(range_session.path).comparisons.HEAD.notes[1].anchor_status == "current")
+		vim.api.nvim_buf_delete(range_output, { force = true })
+		assert(sidecar_calls == 0)
 	end, debug.traceback)
 
-	differ.active_view = original_active_view
-	compose.open = original_compose_open
-	sidecar.request = original_request
-	vim.ui.select = original_select
-	vim.fn.confirm = original_confirm
-	vim.fn.line = original_line
-	vim.api.nvim_feedkeys = original_feedkeys
-	vim.uv.fs_write = original_write
+	differ.active_view, compose.open = original_active_view, original_compose_open
+	sidecar.request, vim.ui.select = original_request, original_select
+	vim.fn.confirm, vim.fn.line = original_confirm, original_line
+	vim.api.nvim_feedkeys, vim.uv.fs_write = original_feedkeys, original_write
 	vim.t.dotfiles_differ_review = nil
 	if vim.api.nvim_buf_is_valid(buf) then
 		vim.api.nvim_win_set_buf(win, original_buf)
 		vim.api.nvim_buf_delete(buf, { force = true })
 	end
-	for _, path in ipairs({ root, second_root, nonignored_root, tracked_root }) do
+	for _, path in ipairs(roots) do
 		vim.fn.delete(path, "rf")
 	end
 	assert(ok, err)
-	print("Differ local review: note state, anchors, export safety, and backend isolation passed")
+	print("Differ local review: persistence, ownership, migration, schema, and output isolation passed")
 end
 
 return M
