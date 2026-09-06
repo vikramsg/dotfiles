@@ -1,5 +1,106 @@
 local M = {}
 
+local function append_review_output(panel)
+	local session = panel.dotfiles_local_review_session
+	if not (session and session.path and vim.fn.filereadable(session.path) == 1) then
+		return
+	end
+	local filename = vim.fn.fnamemodify(session.path, ":t")
+	local lines = { "", "Review output (1)", "  .agents/reviews/", "    " .. filename }
+	local meta = {
+		{ kind = "review_output_blank" },
+		{ kind = "review_output_header" },
+		{ kind = "review_output_path" },
+		{ kind = "review_output", path = session.path },
+	}
+	vim.bo[panel.bufnr].modifiable = true
+	vim.api.nvim_buf_set_lines(panel.bufnr, -1, -1, false, lines)
+	vim.bo[panel.bufnr].modifiable = false
+	vim.list_extend(panel.lines, lines)
+	vim.list_extend(panel.meta, meta)
+end
+
+local function review_output_under_cursor(panel)
+	if not (panel and panel.winid and vim.api.nvim_win_is_valid(panel.winid)) then
+		return
+	end
+	local meta = panel.meta[vim.api.nvim_win_get_cursor(panel.winid)[1]]
+	return meta and meta.kind == "review_output" and meta or nil
+end
+
+local function open_review_output(path, panel)
+	if vim.fn.filereadable(path) ~= 1 then
+		return vim.notify("Differ local review: branch review has not been saved yet", vim.log.levels.WARN)
+	end
+	vim.api.nvim_set_current_win(panel:content_win())
+	vim.cmd("belowright split")
+	local win = vim.api.nvim_get_current_win()
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_win_set_buf(win, buf)
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "wipe"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].filetype = "json"
+	vim.api.nvim_buf_set_name(buf, "differ-review://" .. vim.fn.fnamemodify(path, ":t") .. "#" .. buf)
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.fn.readfile(path))
+	vim.bo[buf].modifiable = false
+	vim.bo[buf].readonly = true
+	vim.b[buf].dotfiles_differ_review_output = path
+	vim.keymap.set("n", "q", function()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
+		end
+	end, { buffer = buf, desc = "Close Review Output" })
+end
+
+local function select_panel_row(panel)
+	local output = review_output_under_cursor(panel)
+	if output then
+		return open_review_output(output.path, panel)
+	end
+	panel:select(true)
+end
+
+function M.attach_review_panel(panel, session)
+	if not panel then
+		return
+	end
+	panel.dotfiles_local_review_session = session
+	if not panel.dotfiles_review_output_attached then
+		panel.dotfiles_review_output_attached = true
+		local render = panel.render
+		panel.render = function(self)
+			render(self)
+			append_review_output(self)
+		end
+		local on_refresh = panel.on_refresh
+		panel.on_refresh = function(...)
+			if on_refresh then
+				on_refresh(...)
+			end
+			panel:render()
+		end
+	end
+	panel:render()
+	vim.keymap.set("n", "<CR>", function()
+		select_panel_row(panel)
+	end, { buffer = panel.bufnr, desc = "Open Review Item" })
+end
+
+function M.refresh_review_output(session)
+	local panel = session and session.panel
+	if panel and panel.dotfiles_local_review_session == session and panel:is_alive() then
+		panel:render()
+	end
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].dotfiles_differ_review_output == session.path then
+			vim.bo[buf].modifiable = true
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.fn.readfile(session.path))
+			vim.bo[buf].modifiable = false
+		end
+	end
+end
+
 local function review_comparison()
 	local git_root = Snacks.git.get_root()
 	if not git_root then
@@ -125,7 +226,7 @@ local function schedule_differ_folds(buf)
 	end)
 end
 
-local function open_differ_comparison(git_root, mode, compact)
+local function open_differ_comparison(git_root, mode, compact, local_session)
 	-- Differ chooses its repository from the file or cwd and opens a new tab.
 	-- Keep the invoking window's directory unchanged, including its scope.
 	local origin = vim.api.nvim_get_current_win()
@@ -147,7 +248,12 @@ local function open_differ_comparison(git_root, mode, compact)
 	local panel = require("differ.panel").current()
 	if panel then
 		local tab = vim.api.nvim_win_get_tabpage(panel.origin_win)
-		vim.t[tab].dotfiles_differ_review = { root = git_root, mode = mode }
+		local local_review = require("config.differ_local_review")
+		local_session = local_session or local_review.new_session(git_root, mode)
+		local_review.assign(tab, local_session, mode)
+		local_session.panel = panel
+		M.attach_review_panel(panel, local_session)
+		vim.t[tab].dotfiles_differ_review = { root = git_root, mode = mode, local_session_id = local_session.id }
 		vim.t[tab].dotfiles_differ_compact = compact ~= false
 	end
 end
@@ -162,12 +268,18 @@ end
 local function toggle_differ_comparison()
 	local review = vim.t.dotfiles_differ_review
 	if not review then
-		vim.notify("Open Differ with Space gh to toggle HEAD/main", vim.log.levels.WARN)
+		vim.notify("Open Differ with Space gd to toggle HEAD/main", vim.log.levels.WARN)
 		return
 	end
 	local compact = vim.t.dotfiles_differ_compact
+	local local_review = require("config.differ_local_review")
+	local local_session = local_review.session_for_tab()
+	if not local_review.owns_current_branch(local_session) then
+		vim.notify("Branch changed; close and reopen the Differ review", vim.log.levels.WARN)
+		return
+	end
 	require("differ").close()
-	open_differ_comparison(review.root, review.mode == "main" and "HEAD" or "main", compact)
+	open_differ_comparison(review.root, review.mode == "main" and "HEAD" or "main", compact, local_session)
 end
 
 local function edit_differ_file()
@@ -247,21 +359,36 @@ local function show_differ_help()
 		pr and "Differ PR review" or "Differ local review",
 		"",
 		"Space pl  List / open PRs",
-		"Space pr  Start / resume review (asks for PR if needed)",
+		"Space pr  Start / resume GITHUB PR review (asks for PR if needed)",
 	}
 	if pr then
+		local native_comment = require("differ").get_config().keymaps.diff.comment
+		local native_label = type(native_comment) == "table" and table.concat(native_comment, ", ")
+			or tostring(native_comment)
 		vim.list_extend(lines, {
 			"Space ps  Submit review: Comment / Approve / Request Changes",
-			"ga        Comment on line / visual selection (diff only)",
+			"c         Comment on line / visual selection → GITHUB",
+			"" .. native_label .. "        Native GitHub comment key (also available)",
 			"gp        Reply to thread (diff only)",
+			"gx        Delete latest GitHub thread comment",
 			"i         Type in composer if it opens in normal mode",
-			"Esc then Enter  Save comment in the composer",
+			"Ctrl+S (insert) or Esc then Enter  Save GitHub comment",
+			"q (normal composer)  Cancel composer only",
 			"Start a review first: saved comments become GitHub drafts.",
 			"Without a pending review, comments may post immediately.",
 			"Submit opens a summary editor; Esc then Enter submits it.",
 		})
 	else
 		vim.list_extend(lines, {
+			"Destination: LOCAL → persistent branch review JSON",
+			"c       Add local note on line / visual selection (diff only)",
+			"ge      Edit local note under cursor",
+			"gx      Delete local note under cursor",
+			"Space cr Copy saved branch-review JSON path",
+			"Space cR Reset this branch review (confirmation)",
+			"i       Type in composer if it opens in normal mode",
+			"Ctrl+S (insert) or Esc then Enter  Save local note",
+			"q (normal composer)  Cancel composer only",
 			"B       Toggle HEAD/main comparison",
 			"X       Discard hunk; in tree: WHOLE FILE (confirmation)",
 			"        Uncommitted view only; changes actual files",
@@ -274,7 +401,8 @@ local function show_differ_help()
 		"gf      Edit source in the previous tab (keep review open)",
 		"[ / ]   Previous / next hunk",
 		"[f / ]f Previous / next file",
-		"Enter   Open selected file from the tree",
+		"Enter   Open selected file and focus its diff; toggle directories",
+		"        On Review output: open read-only JSON split (q closes it)",
 		"t       Toggle stacked / split layout",
 		"T       Toggle compact / full context (default: compact)",
 		"q       Close review and return to the editor",
@@ -282,6 +410,21 @@ local function show_differ_help()
 		"R       Refresh file tree",
 		"dd      Toggle file tree",
 	})
+	-- Include the actual mappings too: Differ owns additional tree/thread controls,
+	-- and its configured keys should remain discoverable through our custom help.
+	vim.list_extend(lines, { "", "All buffer-local shortcuts (j/k to scroll):" })
+	for _, mode in ipairs({ "n", "x" }) do
+		local maps = vim.api.nvim_buf_get_keymap(0, mode)
+		table.sort(maps, function(a, b)
+			return a.lhs < b.lhs
+		end)
+		for _, map in ipairs(maps) do
+			if map.desc then
+				local key = map.lhs:gsub("^ ", "Space ")
+				lines[#lines + 1] = string.format("%s%s  %s", key, mode == "x" and " (visual)" or "", map.desc)
+			end
+		end
+	end
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.bo[buf].bufhidden = "wipe"
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -302,6 +445,25 @@ local function show_differ_help()
 			vim.api.nvim_win_close(win, true)
 		end, { buffer = buf })
 	end
+end
+
+local function label_github_composer()
+	if vim.bo.filetype == "markdown" then
+		local winbar = vim.wo.winbar
+		if not winbar:find("GITHUB", 1, true) then
+			vim.wo.winbar = "GITHUB → pull request · " .. winbar
+		end
+	end
+end
+
+local function github_comment()
+	require("differ.pr").comment()
+	label_github_composer()
+end
+
+local function github_comment_range()
+	require("differ.pr").comment_range()
+	label_github_composer()
 end
 
 function M.setup_differ(opts)
@@ -330,7 +492,71 @@ function M.setup_differ(opts)
 				vim.keymap.set("n", "T", toggle_differ_context, { buffer = buf, desc = "Toggle Compact/Full Context" })
 				vim.keymap.set("n", "<leader>pl", list_prs, { buffer = buf, desc = "List/Open PRs" })
 				vim.keymap.set("n", "<leader>pr", start_pr_review, { buffer = buf, desc = "Start/Resume PR Review" })
-				-- Submit, ga/gp, and composer controls stay native to Differ's PR UI.
+				if vim.bo[buf].filetype == "differpanel" then
+					local pr = require("differ.pr").current_session()
+					local panel = pr and pr.panel and pr.panel.bufnr == buf and pr.panel
+						or require("differ.panel").current()
+					if panel and panel.bufnr == buf then
+						vim.keymap.set("n", "<CR>", function()
+							select_panel_row(panel)
+						end, { buffer = buf, desc = "Open Review Item" })
+					end
+				end
+				local review = vim.t.dotfiles_differ_review
+				local local_review = require("config.differ_local_review")
+				local session = local_review.session_for_tab()
+				if review and session and not current_pr() then
+					vim.keymap.set("n", "<leader>cr", local_review.copy_review_path, {
+						buffer = buf,
+						desc = "Copy Branch Review JSON Path",
+					})
+					vim.keymap.set("n", "<leader>cR", local_review.reset, {
+						buffer = buf,
+						desc = "Reset Branch Review",
+					})
+				end
+				if vim.bo[buf].filetype == "differdiff" then
+					local pr = current_pr()
+					if pr then
+						-- c is an explicit alias; Differ's configurable native key remains bound.
+						vim.keymap.set("n", "c", github_comment, { buffer = buf, desc = "Comment on GitHub PR" })
+						vim.keymap.set(
+							"x",
+							"c",
+							github_comment_range,
+							{ buffer = buf, desc = "Comment on GitHub PR Range" }
+						)
+					else
+						if review and session then
+							local_review.attach(session, require("differ").active_view())
+							vim.keymap.set(
+								"n",
+								"c",
+								local_review.comment,
+								{ buffer = buf, desc = "Add Local Review Note" }
+							)
+							vim.keymap.set(
+								"x",
+								"c",
+								local_review.comment_range,
+								{ buffer = buf, desc = "Add Local Review Range Note" }
+							)
+							vim.keymap.set(
+								"n",
+								"ge",
+								local_review.edit,
+								{ buffer = buf, desc = "Edit Local Review Note" }
+							)
+							vim.keymap.set(
+								"n",
+								"gx",
+								local_review.delete,
+								{ buffer = buf, desc = "Delete Local Review Note" }
+							)
+						end
+					end
+				end
+				-- Submit, native comment/reply, and composer controls stay native to Differ's PR UI.
 				if vim.bo[buf].filetype == "differdiff" and not watched_diffs[buf] then
 					watched_diffs[buf] = vim.api.nvim_buf_attach(buf, false, {
 						on_lines = function()

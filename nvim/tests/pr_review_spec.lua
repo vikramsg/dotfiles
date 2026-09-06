@@ -81,11 +81,10 @@ function M.run()
 		vim.cmd("tabnew")
 		vim.cmd("cd " .. vim.fn.fnameescape(root))
 		local editor = vim.api.nvim_get_current_tabpage()
-		assert(vim.fn.maparg(" gd", "n") == "", "removed launcher must not be bound")
 		for _, lhs in ipairs({ " pl", " pr", " ps", "ga", "gp" }) do
 			assert(vim.fn.maparg(lhs, "n") == "", "ordinary buffers should not get " .. lhs)
 		end
-		keys(" gh")
+		keys(" gd")
 		wait("local diff should have PR launchers", function()
 			return mapped(" pl") and mapped(" pr")
 		end)
@@ -134,7 +133,7 @@ function M.run()
 		keys("<Esc>")
 		-- Anchor on the known new-side changed line, not its rendered row number.
 		focus_line("after first")
-		keys("ga")
+		keys("c")
 		compose("Please handle timeouts")
 		wait("saved comment should remain a pending draft", function()
 			return #state.threads == 1

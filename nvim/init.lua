@@ -26,9 +26,9 @@
 --   <leader>gd : Open Differ review
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
---   In Differ: Enter open diff, gf edit, B toggle HEAD/main, [/] hunks, g? help, q close
+--   In Differ diff: c local/GitHub comment, gf edit, B toggle HEAD/main, [/] hunks, g? help, q close
 --   t toggles stacked/split layout; T toggles compact/full context
---   Differ only: <leader>pl list PRs, <leader>pr start/resume, <leader>ps submit PR review
+--   Differ only: <leader>pl list PRs, <leader>pr start/resume GitHub review, <leader>ps submit
 --
 -- Search (Snacks Picker):
 --   <leader>sf : Search Files
