@@ -1,176 +1,176 @@
 {
-    "$schema": "https://opencode.ai/config.json",
-    "update": "notify",
-    "model": "azure/gpt-5.6-sol",
-    "instructions": ["~/.config/opencode/rules.md"],
-    "permissions": [
-        {
-            "action": "shell",
-            "resource": "*rm*.sqlite*",
-            "effect": "deny"
-        },
-        {
-            "action": "shell",
-            "resource": "*rm*.db*",
-            "effect": "deny"
-        },
-        {
-            "action": "external_directory",
-            "resource": "/tmp/**",
-            "effect": "allow"
-        },
-        {
-            "action": "external_directory",
-            "resource": "/private/tmp/**",
-            "effect": "allow"
-        },
-        {
-            "action": "external_directory",
-            "resource": "*.local/**",
-            "effect": "allow"
-        },
-        {
-            "action": "external_directory",
-            "resource": "*.config/**",
-            "effect": "allow"
-        },
-        {
-            "action": "websearch",
-            "resource": "*",
-            "effect": "allow"
-        }
-    ],
-    "agents": {
-        "build": {
-            "request": {
-                "body": {
-                    "serviceTier": "priority"
-                }
-            }
-        },
-        "explore": {
-            "model": "azure/gpt-5.6-terra#medium"
-        },
-        "general": {
-            "model": "azure/gpt-5.6-terra#medium"
-        }
+  "$schema": "https://opencode.ai/config.json",
+  "update": "notify",
+  "model": "azure/gpt-5.6-sol",
+  "instructions": ["~/.config/opencode/rules.md"],
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "*rm*.sqlite*",
+      "effect": "deny"
     },
-    "lsp": false,
-    "formatter": false,
-    "providers": {
-        "azure": {
-            "settings": {
-                "resourceName": "orbio-p-eastus2-openai",
-                "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1"
-            },
-            "models": {
-                "gpt-5.6-sol": {
-                    "name": "gpt-5.6-sol",
-                    "modelID": "gpt-5.6-sol",
-                    "settings": {
-                        "reasoningEffort": "medium",
-                        "reasoningSummary": "auto",
-                        "serviceTier": "priority"
-                    },
-                    "capabilities": {
-                        "tools": true,
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                },
-                "gpt-5.6-terra": {
-                    "name": "gpt-5.6-terra",
-                    "modelID": "gpt-5.6-terra",
-                    "settings": {
-                        "reasoningEffort": "high",
-                        "reasoningSummary": "auto"
-                    },
-                    "capabilities": {
-                        "tools": true,
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                },
-                "gpt-5.6-luna": {
-                    "name": "gpt-5.6-luna",
-                    "modelID": "gpt-5.6-luna",
-                    "settings": {
-                        "reasoningEffort": "medium",
-                        "reasoningSummary": "auto"
-                    },
-                    "capabilities": {
-                        "tools": true,
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                },
-                "gpt-5.5": {
-                    "name": "gpt-5.5",
-                    "modelID": "gpt-5.5",
-                    "settings": {
-                        "reasoningEffort": "high",
-                        "reasoningSummary": "auto"
-                    },
-                    "capabilities": {
-                        "tools": true,
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                },
-                "gpt-6-astra": {
-                    "name": "gpt-6-astra",
-                    "modelID": "gpt-6-astra",
-                    "cost": [
-                        {
-                            "input": 10,
-                            "output": 50,
-                            "cache": {
-                                "read": 1,
-                                "write": 12.5
-                            }
-                        },
-                        {
-                            "tier": {
-                                "type": "context",
-                                "size": 272000
-                            },
-                            "input": 20,
-                            "output": 75,
-                            "cache": {
-                                "read": 2,
-                                "write": 25
-                            }
-                        }
-                    ],
-                    "settings": {
-                        "reasoningEffort": "high",
-                        "reasoningSummary": "auto"
-                    },
-                    "variants": [
-                        {
-                            "id": "low",
-                            "settings": { "reasoningEffort": "low" }
-                        },
-                        {
-                            "id": "medium",
-                            "settings": { "reasoningEffort": "medium" }
-                        },
-                        {
-                            "id": "high",
-                            "settings": { "reasoningEffort": "high" }
-                        },
-                        {
-                            "id": "xhigh",
-                            "settings": { "reasoningEffort": "xhigh" }
-                        }
-                    ],
-                    "capabilities": {
-                        "tools": true,
-                        "input": ["text", "image", "pdf"],
-                        "output": ["text"]
-                    }
-                }
-            }
-        }
+    {
+      "action": "shell",
+      "resource": "*rm*.db*",
+      "effect": "deny"
+    },
+    {
+      "action": "external_directory",
+      "resource": "/tmp/**",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "/private/tmp/**",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "*.local/**",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "*.config/**",
+      "effect": "allow"
+    },
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "allow"
     }
+  ],
+  "agents": {
+    "build": {
+      "request": {
+        "body": {
+          "serviceTier": "priority"
+        }
+      }
+    },
+    "explore": {
+      "model": "azure/gpt-5.6-terra#medium"
+    },
+    "general": {
+      "model": "azure/gpt-5.6-terra#medium"
+    }
+  },
+  "lsp": false,
+  "formatter": false,
+  "providers": {
+    "azure": {
+      "settings": {
+        "resourceName": "orbio-p-eastus2-openai",
+        "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1"
+      },
+      "models": {
+        "gpt-5.6-sol": {
+          "name": "gpt-5.6-sol",
+          "modelID": "gpt-5.6-sol",
+          "settings": {
+            "reasoningEffort": "medium",
+            "reasoningSummary": "auto",
+            "serviceTier": "priority"
+          },
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        },
+        "gpt-5.6-terra": {
+          "name": "gpt-5.6-terra",
+          "modelID": "gpt-5.6-terra",
+          "settings": {
+            "reasoningEffort": "high",
+            "reasoningSummary": "auto"
+          },
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        },
+        "gpt-5.6-luna": {
+          "name": "gpt-5.6-luna",
+          "modelID": "gpt-5.6-luna",
+          "settings": {
+            "reasoningEffort": "medium",
+            "reasoningSummary": "auto"
+          },
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        },
+        "gpt-5.5": {
+          "name": "gpt-5.5",
+          "modelID": "gpt-5.5",
+          "settings": {
+            "reasoningEffort": "high",
+            "reasoningSummary": "auto"
+          },
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        },
+        "gpt-6-astra": {
+          "name": "gpt-6-astra",
+          "modelID": "gpt-6-astra",
+          "cost": [
+            {
+              "input": 10,
+              "output": 50,
+              "cache": {
+                "read": 1,
+                "write": 12.5
+              }
+            },
+            {
+              "tier": {
+                "type": "context",
+                "size": 372000
+              },
+              "input": 20,
+              "output": 75,
+              "cache": {
+                "read": 2,
+                "write": 25
+              }
+            }
+          ],
+          "settings": {
+            "reasoningEffort": "high",
+            "reasoningSummary": "auto"
+          },
+          "variants": [
+            {
+              "id": "low",
+              "settings": { "reasoningEffort": "low" }
+            },
+            {
+              "id": "medium",
+              "settings": { "reasoningEffort": "medium" }
+            },
+            {
+              "id": "high",
+              "settings": { "reasoningEffort": "high" }
+            },
+            {
+              "id": "xhigh",
+              "settings": { "reasoningEffort": "xhigh" }
+            }
+          ],
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        }
+      }
+    }
+  }
 }
