@@ -1,171 +1,122 @@
 # Differ local review implementation
 
-## Purpose and workflow
+## Shape
 
-`<leader>gd` opens the automatic local comparison: uncommitted changes against `HEAD`,
-or the branch against the merge base with `main` when the working tree is clean. Local
-notes are persistent and never use Differ's GitHub sidecar.
+`config/git_review.lua` owns Differ integration: opening local comparisons, buffer
+mappings, and the non-file **Review output** sidebar rows. Local note behavior lives in
+`config/differ_local_review.lua`; persistence and validation remain isolated in
+`config/differ_local_review_store.lua`.
 
-In a local diff:
-
-- `c` adds a line note; visual `c` adds a range note.
-- `ge` edits and `gx` deletes a note under the cursor.
-- insert `<C-s>` or normal `<Enter>` saves the composer; normal `q` cancels it.
-- `B` changes between `HEAD` and `main...` notes in the same branch document.
-- `<leader>cr` copies the absolute saved JSON path without changing `<leader>cp`.
-- `<leader>cR` confirms and resets both comparisons for this branch.
-
-In the file sidebar, `Enter` opens a file and focuses its diff; on a directory it keeps
-Differ's fold toggle. `c` retains Differ's native close-directory behavior. `g?` shows
-the applicable local or GitHub controls. GitHub reviews remain separate: `<leader>pr`
-starts/resumes them and `<leader>ps` submits them.
-
-## Persistent document and identity
-
-The source of truth is one schema-version 2 document per canonical repository and
-branch. It lives under the ignored `.agents/reviews/` directory with a filename derived
-from SHA-256 of the identity, so branch names never become unsafe path components:
+Each canonical repository and branch has one schema-version 2 document at:
 
 ```text
-.agents/reviews/differ-review-v2-<identity-sha256>.json
+.agents/reviews/review-<12-character identity SHA>.json
 ```
 
-A normal branch identity is `{ "kind": "branch", "name": ... }`; its recorded `head`
-is informational and advances without changing the review. A detached checkout uses
-`{ "kind": "detached", "commit": ... }`, giving each detached commit a separate
-review. The document stores canonical `repository_root`, creation/update timestamps,
-and `HEAD` and `main` comparison objects. Each comparison has its spec/base/target and
-its own notes.
+The hash input includes the identity kind and branch name, or the detached commit. A
+branch's recorded `head` is informational, so commits and pushes do not rename its file.
+The stored owner is checked when loading and saving; a short-hash collision therefore
+protects the existing document instead of opening or overwriting another branch's data.
 
-Every note has a stable ID, body, repository-relative path, old/new source range,
-timestamps, `anchor_status`, and `source_context`. Source context records the comparison
-and exact source text at capture time: full text for same-side ranges and both endpoints
-for cross-side ranges. Rendering requires matching source coordinates and text. Missing
-or changed source is marked `outdated` rather
-than using Differ's nearest-line fallback and silently displaying the note on unrelated
-code. Legacy notes without captured text are `unverified`; older v2 ranges without full
-context are also unverified. No fuzzy remapping is done. Evaluated status changes are
-saved and refresh open output buffers. Status applies to files/comparisons that have
-been opened; unopened files retain their last evaluated status.
+The document contains separate `HEAD` and `main...` comparison groups. Notes retain
+their ID, body, repository-relative path, old/new range, timestamps, captured source
+context, and evaluated anchor status. Exact captured source text prevents a stale note
+from moving to unrelated code. Missing or changed text is outdated; insufficient
+context is unverified.
 
 The standalone contract is `schemas/differ-review.schema.json`. Runtime validation
-rejects malformed documents, unsupported versions, invalid ownership, source points,
-and note structures. A rejected existing file puts the session in protected mode: it
-can be inspected and reported, but local mutations do not overwrite it.
+rejects malformed, unsupported, unknown-field, and wrong-owner documents before any
+write. Saves compare the loaded byte fingerprint with the current file, write and fsync
+a private neighboring file, then atomically rename it. This preserves the prior snapshot
+on encoding, partial-write, or rename failure and prevents stale sessions from replacing
+newer data.
 
-## Lifecycle and stale-operation protection
+## Sidebar integration
 
-Opening a review loads the current identity's document. Closing/reopening Differ and
-restarting Neovim therefore resume it. Commits and pushes preserve branch identity;
-switching away and back selects the corresponding branch document. Opening a different
-repository is independent.
+The output rows are appended after Differ renders its `FileEntry` sections and use
+dedicated metadata. They never enter file counts, staging/discard actions, or file
+navigation. The path and filename occupy separate rows so a 35-column sidebar shows:
 
-Every save re-reads Git identity. Composer and `vim.ui.select` callbacks also capture
-their original session and comparison, then check tab/session, comparison, and branch
-again when they complete. A branch switch while a review is open cannot display or save
-its notes as the new branch: rendering clears local extmarks and entry points ask the
-user to close and reopen. `B` similarly refuses to carry an old session across a branch
-change.
+```text
+Review output (1)
+  .agents/reviews/
+    review-123456789abc.json
+```
 
-Adds, edits, deletes, and reset save the entire branch document. Opening or switching
-comparisons never clears notes, but can persist updated anchor status. Cancelling a
-composer does not write. Every session retains a fingerprint of the loaded bytes; a
-save rejects a changed disk snapshot instead of overwriting newer notes or resurrecting
-deleted ones. This is an optimistic conflict check, not a simultaneous-writer lock.
-On conflict, preserve any unsaved draft before reopening the review. The writer resolves
-real ancestors, rejects symlink escapes and tracked/non-ignored destinations, writes a
-private neighboring file through all short writes, fsyncs, and atomically renames it.
-Encoding, short-write, or rename failure leaves the prior complete document untouched.
+The local open path binds the canonical review session directly to the panel. This is
+important because Differ's panel root is display-formatted with `:~` (for example
+`~/Projects/…`), while persistence uses a canonical absolute root. The previous lookup
+compared those representations and omitted the complete section even though the panel
+adapter was attached. Refresh now follows the bound session rather than reconstructing
+ownership from the display root.
 
-## One-time v1 migration
+`Enter` on the output row opens a read-only JSON split; `q` closes it. Successful saves
+rerender the owning panel and refresh matching open output buffers. Other `Enter` rows
+continue through `Panel:select(true)`, which focuses file diffs and preserves directory
+fold toggling for local and GitHub panels.
 
-The legacy `.agents/reviews/differ-review.json` remains byte-for-byte unchanged. When no
-v2 document exists, the first opened branch may import a valid schema-version 1 snapshot
-into its matching comparison. The v2 migration metadata records the legacy relative
-path, version, import time, and a complete `source_snapshot`; migrated notes preserve
-their original paths, bodies, ranges, IDs, and timestamps.
+## Session safety
 
-After publishing the migrated branch document, the loader writes a small migration claim
-and also scans existing v2 documents as a fallback. This prevents the legacy snapshot
-from being copied into every branch, even if the first branch document is later damaged.
-Reset preserves migration metadata, so it does not re-arm the import. Malformed or
-unsupported legacy data is protected and neither the legacy file nor a new v2 destination
-is written.
+Composer, picker, confirmation, and comparison callbacks retain their originating
+session and comparison and recheck branch ownership before mutation. Local operations
+never call the GitHub sidecar. Opening, comparison switching, and review reopening do
+not clear notes; only the confirmed branch reset clears both comparison groups.
 
-## Review output sidebar
+This PR's earlier legacy importer, marker, scans, source snapshot duplication, migration
+metadata, and `legacy-v1` source representation were removed because the feature has not
+been released. Existing development data is converted once outside the runtime: retain
+the document owner/timestamps/comparisons and every note's ID, body, path, range,
+timestamps, context text, and status; remove top-level `migration` and
+`source_context.origin`; write it to the new short filename. No converter ships.
 
-An existing branch JSON appears in a separate **Review output** section. It is appended
-after Differ renders its normal `FileEntry` sections and receives dedicated metadata,
-not a synthetic `FileEntry`. Therefore Differ's file counts, staging/discard targets,
-selection identity, and next/previous-file traversal remain unchanged.
+## Tidy, First
 
-The adaptation is config-local in `lua/config/differ_review_output.lua`: it wraps only
-the live panel instance's render callback and chains that panel's `on_refresh`. It does
-not modify the installed Differ checkout or monkey-patch the Panel class. `Enter` on the
-output opens a read-only JSON scratch split in the review tab; `q` closes only that
-split. Open output buffers and the panel refresh after successful saves.
+The change removes compatibility machinery before adjusting the filename and sidebar.
+It also folds the 130-line output-only runtime module into the existing Differ integration
+instead of adding another abstraction. Persistence stays separate because filesystem
+confinement, validation, atomic replacement, and conflict detection form a coherent
+safety boundary rather than UI behavior.
 
-## Tidy, First rationale
+## Verification evidence
 
-The follow-up first extracted branch identity, validation, migration, path confinement,
-and atomic persistence into the small `differ_local_review_store.lua` boundary. It then
-added the isolated output adapter before changing comment/session integration. That made
-the existing in-memory note operations an uncomplicated consumer of one branch document
-and kept output routing out of Differ's file model.
+The fixed acceptance checklist remains unchanged in `.agents/plans/differ-local-review.md`.
+The coordinator verified the following in the separate `differ-simplify-e2e` Herdr tab:
 
-This deliberately avoids a generic storage framework, a fuzzy anchor engine, changes to
-the installed plugin, and broad class monkey-patches. Differ's composer, anchor helpers,
-view rerender hook, and `Panel:select(true)` remain the narrow integration points.
+| Requirements | Observed result |
+| --- | --- |
+| 1, 5 | Dirty checkout opened `HEAD`; clean checkout opened `main...`. `B` kept comments separate. Closing/reopening and a full Neovim restart after committing and pushing to a disposable bare remote retained both groups and the same filename. |
+| 2, 3 | Line and three-line range comments saved with both gestures; upward visual draft cancellation left the saved notes intact. Multiple notes rendered together; the picker selected a note for editing. Cancelled deletion retained it; confirmed deletion removed it. Stacked bodies and split markers worked. |
+| 4, 8, 16 | The short JSON existed on disk. Clipboard inspection matched its absolute path from both diff and sidebar, including after changing cwd. Unsaved branches reported no saved file; ordinary `Space cp` copied the source path. |
+| 5, 6 | Beta opened empty, saved its own comment, and resumed it. Cancelled reset kept it; confirmed reset persisted an empty review on reopening. Returning to alpha restored its notes. A second repository started independently. |
+| 7, 9 | Changing only the middle of a commented range marked it outdated in memory, saved JSON, and the already-open read-only output split. |
+| 9, 10, 16 | Reproduced the missing output in the actual dotfiles repository before the fix. Afterwards its tilde-formatted root displayed `.agents/reviews/` and `review-29476e119758.json` at 35 columns without focusing the sidebar first, in both comparisons. Enter opened that exact file read-only; `q` closed the split. The section survived refresh and tree hide/show. Directory Enter toggled folding; file Enter focused the diff, including in a PR. Output-row staging/discard left the disposable Git worktree unchanged. |
+| 11 | Local operations made zero sidecar requests. A simulated PR accepted one draft and one submission; cancelling another draft posted nothing. The local JSON remained byte-identical through the GitHub flow. |
+| 12 | Switching branches while composing rejected the old draft. An external writer updated JSON while another composer was open; submission preserved the newer disk bytes and retained the unsaved draft in memory. |
+| 13 | The converted actual review and test snapshots passed the standalone JSON Schema validator. |
+| 14, 15 | Read the help in the live review and checked the README as a usage guide. Removed the storage-design and output-routing prose from the README. |
 
-## Verification
+The four actual user comments were copied to `review-29476e119758.json` after backing up
+the previous files outside the repository. A structural comparison confirmed all comment
+content, IDs, locations, timestamps, comparison membership, and document metadata survived;
+only the removed development-migration fields were stripped. The originals were untouched.
 
-Behavioral tests use controlled views, composer/select callbacks, real temporary Git
-repositories, and filesystem effects rather than automated key-driving. They cover:
+The full headless Neovim suite, real JSON Schema checks, StyLua, and `git diff --check`
+passed. Automated regressions use direct callbacks, repository/filesystem effects, and
+the actual schema validator. They include tilde-display-root ownership, shorter filename
+stability, wrong-owner collision protection, stale writes, invalid data, partial writes,
+and rename failure. No new automated keystroke tests or copy/change-detection assertions
+were added. The separate live tests above establish the UI behavior.
 
-- load/save through a separate Neovim process; repository, branch, detached-commit, and
-  comparison separation;
-- mutation/reset, v1 source-preserving migration and idempotence;
-- stale source context and delayed comparison/branch callbacks;
-- malformed/unsupported protection, schema validation, symlink/ignore/tracked guards,
-  atomic failures, and partial writes;
-- zero GitHub requests and synthetic output exclusion from file routing/counts.
+The background advisory reviewer found one concrete contract gap: the schema accepted
+swapped comparison metadata that the runtime rejected. Fixed per-key `spec`, `base`, and
+note-context constraints; negative validator cases now exercise swapped comparisons and
+misplaced notes. No broader redesign was indicated. During the coordinator's read-through,
+an invalid-file inspection gap was also corrected: readable protected files remain in the
+sidebar and support path-copy while writes remain blocked. A fresh manual session verified
+an unsupported-version file could be opened read-only and its actual path copied. The
+full suite and formatting checks passed after these fixes.
 
-The schema checks use the real Draft 2020-12 validator via `uv` and the pinned PEP 723
-helper in `tests/support/validate_json_schema.py`. The full suite and StyLua checks passed.
-The canonical temporary directory avoids the baseline macOS `/var` versus `/private/var`
-path-alias failure in the existing explorer test.
-
-Manual E2E ran in the separate `differ-branch-e2e` Herdr tab with a disposable two-branch
-repository and simulated GitHub backend. Confirmed save gestures, upward visual ranges,
-restart/commit persistence, comparison isolation, branch switch/resumption, rejected
-stale composer submission, confirmed/cancelled reset, sidebar Enter and directory folds,
-read-only JSON opening/closing and refresh after a save, actual clipboard paths, output
-exclusion from staging/discard, help, and simulated PR draft/submission. No local
-operation called the GitHub backend.
-
-The coordinator also opened this repository's actual review: the saved schema-definition
-comment migrated into the current branch document with its body, ID, range, and timestamps
-intact. `cmp` against the pre-migration backup confirmed the v1 file was byte-identical,
-and the migrated v2 document passed the standalone JSON Schema validator.
-
-Coordinator follow-up kept the same small-boundary approach: replace the bespoke test
-schema interpreter with a standard validator, resolve range text from the normalized
-source anchor, give the output row a readable label, and label legacy anchors unverified.
-
-The background advisory review reproduced four issues, all accepted: stale sessions
-overwriting newer snapshots, incomplete range-context checks, evaluated anchor status
-remaining stale in JSON, and runtime validation accepting schema-invalid fields. Focused
-fixes added byte fingerprints, range/endpoint context, status publication, and explicit
-allowed-key checks at the existing store boundary. No generic merge or validation
-framework was introduced. Behavioral regressions cover conflicts (including initially
-absent files and deleted notes), invalid documents, range-middle and cross-side changes,
-and output-buffer status refresh. The full suite passed after these fixes. Manual follow-up
-confirmed a changed range middle persisted as outdated and a real composer save rejected
-a newer external snapshot without changing its bytes; local sidecar request count was zero.
-The final split-layout pass also confirmed the local marker, `ge` editing, and confirmed
-`gx` deletion persisted correctly after reopening the conflicted session.
-
-Run the full suite from `nvim/`:
+Run from `nvim/` (canonical macOS TMPDIR avoids the existing explorer path-alias issue):
 
 ```sh
 TMPDIR=/private/var/folders/p5/zmhxh9795rzd9nn3115zbjb40000gn/T/opencode \
@@ -174,14 +125,13 @@ TMPDIR=/private/var/folders/p5/zmhxh9795rzd9nn3115zbjb40000gn/T/opencode \
 
 ## What to look for in review
 
-- Close/reopen Differ and restart Neovim on two branches; verify each resumes only its
-  own `HEAD` and `main...` notes through commits and pushes.
-- Switch branches while a composer or note picker is open; verify saving is rejected
-  and reopening selects the new branch review.
-- Verify the actual v1 file remains unchanged while its note appears once in the current
-  branch document, including migration source metadata.
-- Verify Review output opens read-only JSON, updates after saves, and never stages,
-  discards, changes counts, or participates in `[f`/`]f` navigation.
-- Verify `Enter` focuses files and toggles directories in local and GitHub sidebars;
-  `c`, `ge`, `gx`, composer save/cancel, `<leader>cr`, `<leader>cR`, `g?`, and ordinary
-  `<leader>cp` retain their intended scopes.
+- Confirm short filenames remain stable across restart, commit, and push, while branches
+  and repositories remain isolated and wrong-owner documents are protected.
+- Confirm the actual filename appears beneath `.agents/reviews/` at 35 columns without
+  becoming a file action/count/navigation target.
+- Confirm output opens read-only JSON, refreshes after saves, and remains visible when
+  Differ uses a tilde-formatted display root.
+- Exercise stale composers and two open sessions; newer bytes and unsaved drafts must
+  survive rejected writes.
+- Verify local comments never cross the GitHub backend boundary and file `Enter` still
+  focuses diffs in both local and PR sidebars.

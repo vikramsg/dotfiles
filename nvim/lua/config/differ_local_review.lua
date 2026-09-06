@@ -35,7 +35,7 @@ function M.export(session)
 		session.path = result
 		session.fingerprint = new_fingerprint
 		session.existed = true
-		require("config.differ_review_output").refresh(session.root)
+		require("config.git_review").refresh_review_output(session)
 	end
 	return ok, result
 end
@@ -245,7 +245,6 @@ local function capture_context(view, anchor, mode)
 	local start, finish = range.start, range["end"]
 	return {
 		comparison = mode == "main" and "main..." or "HEAD",
-		origin = "differ",
 		line_text = source_text(view, finish.side, finish.line, finish.line),
 		start_line_text = source_text(view, start.side, start.line, start.line),
 		range_text = start.side == finish.side and source_text(view, start.side, start.line, finish.line) or nil,
@@ -412,7 +411,7 @@ function M.copy_review_path()
 	if not M.owns_current_branch(session) then
 		return notify("branch changed; close and reopen the review", vim.log.levels.WARN)
 	end
-	if not session.existed or vim.fn.filereadable(session.path) ~= 1 then
+	if vim.fn.filereadable(session.path) ~= 1 then
 		return notify("branch review has not been saved yet", vim.log.levels.WARN)
 	end
 	vim.fn.setreg("+", session.path)

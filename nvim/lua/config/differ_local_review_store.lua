@@ -1,8 +1,6 @@
 local M = {}
 
 local REVIEW_DIRECTORY = ".agents/reviews"
-local LEGACY_RELATIVE_PATH = REVIEW_DIRECTORY .. "/differ-review.json"
-local MIGRATION_RELATIVE_PATH = REVIEW_DIRECTORY .. "/differ-review-v1-migration.json"
 local SCHEMA_VERSION = 2
 
 local function now()
@@ -55,7 +53,7 @@ local function identity_key(identity)
 end
 
 function M.relative_path(identity)
-	return string.format("%s/differ-review-v2-%s.json", REVIEW_DIRECTORY, vim.fn.sha256(identity_key(identity)))
+	return string.format("%s/review-%s.json", REVIEW_DIRECTORY, vim.fn.sha256(identity_key(identity)):sub(1, 12))
 end
 
 local function path_inside(parent, child)
@@ -204,7 +202,6 @@ local function valid_note(note)
 		type(note.source_context) ~= "table"
 		or not has_only_keys(note.source_context, {
 			comparison = true,
-			origin = true,
 			line_text = true,
 			range_text = true,
 			start_line_text = true,
@@ -214,9 +211,6 @@ local function valid_note(note)
 		return false
 	end
 	if note.source_context.comparison ~= "HEAD" and note.source_context.comparison ~= "main..." then
-		return false
-	end
-	if note.source_context.origin ~= "differ" and note.source_context.origin ~= "legacy-v1" then
 		return false
 	end
 	for _, key in ipairs({ "line_text", "range_text", "start_line_text" }) do
@@ -241,7 +235,6 @@ function M.validate(document)
 			created_at = true,
 			updated_at = true,
 			comparisons = true,
-			migration = true,
 		})
 	then
 		return nil, "unknown review document field"
@@ -303,24 +296,6 @@ function M.validate(document)
 			if note.source_context.comparison ~= comparison.spec then
 				return nil, "note comparison context does not match " .. key
 			end
-		end
-	end
-	if document.migration then
-		local migration = document.migration
-		if
-			type(migration) ~= "table"
-			or not has_only_keys(migration, {
-				source = true,
-				source_schema_version = true,
-				imported_at = true,
-				source_snapshot = true,
-			})
-			or migration.source ~= LEGACY_RELATIVE_PATH
-			or migration.source_schema_version ~= 1
-			or type(migration.imported_at) ~= "string"
-			or type(migration.source_snapshot) ~= "table"
-		then
-			return nil, "invalid migration metadata"
 		end
 	end
 	return true
@@ -393,109 +368,6 @@ local function ignored(root, relative)
 	return result.code == 0
 end
 
-local function legacy_already_imported(root)
-	if (vim.uv or vim.loop).fs_stat(root .. "/" .. MIGRATION_RELATIVE_PATH) then
-		return true
-	end
-	for _, path in ipairs(vim.fn.glob(root .. "/" .. REVIEW_DIRECTORY .. "/differ-review-v2-*.json", false, true)) do
-		local document = read_json(path)
-		if
-			document
-			and M.validate(document)
-			and document.migration
-			and document.migration.source == LEGACY_RELATIVE_PATH
-		then
-			return true
-		end
-	end
-	return false
-end
-
-local function valid_legacy(document, root)
-	if type(document) ~= "table" or document.schema_version ~= 1 then
-		return nil, "unsupported legacy review schema"
-	end
-	if
-		document.root ~= root
-		or type(document.comparison) ~= "table"
-		or (document.comparison.spec ~= "HEAD" and document.comparison.spec ~= "main...")
-		or document.comparison.target ~= "working-tree"
-		or type(document.notes) ~= "table"
-		or not vim.islist(document.notes)
-	then
-		return nil, "invalid legacy review metadata"
-	end
-	for _, note in ipairs(document.notes) do
-		if
-			type(note) ~= "table"
-			or type(note.source_range) ~= "table"
-			or not valid_point(note.source_range.start)
-			or not valid_point(note.source_range["end"])
-			or type(note.path) ~= "string"
-			or type(note.body) ~= "string"
-		then
-			return nil, "invalid legacy review note"
-		end
-	end
-	return true
-end
-
-local function migrate_legacy(root, identity, path, document)
-	local legacy_path = root .. "/" .. LEGACY_RELATIVE_PATH
-	local legacy, err, exists = read_json(legacy_path)
-	if not exists or legacy_already_imported(root) then
-		return document
-	end
-	if not legacy then
-		return nil, err
-	end
-	local valid, legacy_err = valid_legacy(legacy, root)
-	if not valid then
-		return nil, legacy_err
-	end
-	local key = legacy.comparison.spec == "main..." and "main" or "HEAD"
-	for _, old in ipairs(legacy.notes) do
-		local note = vim.deepcopy(old)
-		note.source_context = {
-			comparison = legacy.comparison.spec,
-			origin = "legacy-v1",
-		}
-		note.anchor_status = "unverified"
-		table.insert(document.comparisons[key].notes, note)
-	end
-	document.migration = {
-		source = LEGACY_RELATIVE_PATH,
-		source_schema_version = 1,
-		imported_at = now(),
-		source_snapshot = legacy,
-	}
-	document.updated_at = now()
-	local migrated_valid, migrated_err = M.validate(document)
-	if not migrated_valid then
-		return nil, "legacy migration failed validation: " .. migrated_err
-	end
-	local relative = M.relative_path(identity)
-	if not ignored(root, relative) then
-		return nil, relative .. " is not ignored by Git"
-	end
-	local written, write_err = M.write_snapshot(path, document)
-	if not written then
-		return nil, write_err
-	end
-	-- The branch document is the primary claim. This small marker keeps the import
-	-- one-time even if that document is later damaged; a marker-write failure is
-	-- harmless because the valid document scan above remains an idempotence fallback.
-	if ignored(root, MIGRATION_RELATIVE_PATH) then
-		M.write_snapshot(root .. "/" .. MIGRATION_RELATIVE_PATH, {
-			schema_version = 1,
-			source = LEGACY_RELATIVE_PATH,
-			target = M.relative_path(identity),
-			imported_at = document.migration.imported_at,
-		})
-	end
-	return document
-end
-
 function M.load(root)
 	root = M.canonical_root(root)
 	if not root then
@@ -529,28 +401,7 @@ function M.load(root)
 		end
 		return document, nil, { path = path, identity = identity, fingerprint = loaded_fingerprint, existed = true }
 	end
-	document = new_document(root, identity)
-	local migrated, migration_err = migrate_legacy(root, identity, path, document)
-	if not migrated then
-		return nil, migration_err, { path = path, identity = identity, protected = true }
-	end
-	local migrated_fingerprint = false
-	if migrated.migration then
-		local fingerprint_err
-		migrated_fingerprint, fingerprint_err = fingerprint(path)
-		if not migrated_fingerprint then
-			return nil,
-				fingerprint_err or "migrated review could not be fingerprinted",
-				{
-					path = path,
-					identity = identity,
-					protected = true,
-				}
-		end
-	end
-	return migrated,
-		nil,
-		{ path = path, identity = identity, fingerprint = migrated_fingerprint, existed = migrated.migration ~= nil }
+	return new_document(root, identity), nil, { path = path, identity = identity, fingerprint = false, existed = false }
 end
 
 function M.save(root, identity, document, expected_fingerprint)
@@ -601,7 +452,6 @@ function M.save(root, identity, document, expected_fingerprint)
 	return true, path, new_fingerprint
 end
 
-M.legacy_relative_path = LEGACY_RELATIVE_PATH
 M.schema_version = SCHEMA_VERSION
 
 return M

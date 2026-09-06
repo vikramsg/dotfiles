@@ -1,5 +1,106 @@
 local M = {}
 
+local function append_review_output(panel)
+	local session = panel.dotfiles_local_review_session
+	if not (session and session.path and vim.fn.filereadable(session.path) == 1) then
+		return
+	end
+	local filename = vim.fn.fnamemodify(session.path, ":t")
+	local lines = { "", "Review output (1)", "  .agents/reviews/", "    " .. filename }
+	local meta = {
+		{ kind = "review_output_blank" },
+		{ kind = "review_output_header" },
+		{ kind = "review_output_path" },
+		{ kind = "review_output", path = session.path },
+	}
+	vim.bo[panel.bufnr].modifiable = true
+	vim.api.nvim_buf_set_lines(panel.bufnr, -1, -1, false, lines)
+	vim.bo[panel.bufnr].modifiable = false
+	vim.list_extend(panel.lines, lines)
+	vim.list_extend(panel.meta, meta)
+end
+
+local function review_output_under_cursor(panel)
+	if not (panel and panel.winid and vim.api.nvim_win_is_valid(panel.winid)) then
+		return
+	end
+	local meta = panel.meta[vim.api.nvim_win_get_cursor(panel.winid)[1]]
+	return meta and meta.kind == "review_output" and meta or nil
+end
+
+local function open_review_output(path, panel)
+	if vim.fn.filereadable(path) ~= 1 then
+		return vim.notify("Differ local review: branch review has not been saved yet", vim.log.levels.WARN)
+	end
+	vim.api.nvim_set_current_win(panel:content_win())
+	vim.cmd("belowright split")
+	local win = vim.api.nvim_get_current_win()
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_win_set_buf(win, buf)
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "wipe"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].filetype = "json"
+	vim.api.nvim_buf_set_name(buf, "differ-review://" .. vim.fn.fnamemodify(path, ":t") .. "#" .. buf)
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.fn.readfile(path))
+	vim.bo[buf].modifiable = false
+	vim.bo[buf].readonly = true
+	vim.b[buf].dotfiles_differ_review_output = path
+	vim.keymap.set("n", "q", function()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
+		end
+	end, { buffer = buf, desc = "Close Review Output" })
+end
+
+local function select_panel_row(panel)
+	local output = review_output_under_cursor(panel)
+	if output then
+		return open_review_output(output.path, panel)
+	end
+	panel:select(true)
+end
+
+function M.attach_review_panel(panel, session)
+	if not panel then
+		return
+	end
+	panel.dotfiles_local_review_session = session
+	if not panel.dotfiles_review_output_attached then
+		panel.dotfiles_review_output_attached = true
+		local render = panel.render
+		panel.render = function(self)
+			render(self)
+			append_review_output(self)
+		end
+		local on_refresh = panel.on_refresh
+		panel.on_refresh = function(...)
+			if on_refresh then
+				on_refresh(...)
+			end
+			panel:render()
+		end
+	end
+	panel:render()
+	vim.keymap.set("n", "<CR>", function()
+		select_panel_row(panel)
+	end, { buffer = panel.bufnr, desc = "Open Review Item" })
+end
+
+function M.refresh_review_output(session)
+	local panel = session and session.panel
+	if panel and panel.dotfiles_local_review_session == session and panel:is_alive() then
+		panel:render()
+	end
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].dotfiles_differ_review_output == session.path then
+			vim.bo[buf].modifiable = true
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.fn.readfile(session.path))
+			vim.bo[buf].modifiable = false
+		end
+	end
+end
+
 local function review_comparison()
 	local git_root = Snacks.git.get_root()
 	if not git_root then
@@ -150,6 +251,8 @@ local function open_differ_comparison(git_root, mode, compact, local_session)
 		local local_review = require("config.differ_local_review")
 		local_session = local_session or local_review.new_session(git_root, mode)
 		local_review.assign(tab, local_session, mode)
+		local_session.panel = panel
+		M.attach_review_panel(panel, local_session)
 		vim.t[tab].dotfiles_differ_review = { root = git_root, mode = mode, local_session_id = local_session.id }
 		vim.t[tab].dotfiles_differ_compact = compact ~= false
 	end
@@ -390,12 +493,12 @@ function M.setup_differ(opts)
 				vim.keymap.set("n", "<leader>pl", list_prs, { buffer = buf, desc = "List/Open PRs" })
 				vim.keymap.set("n", "<leader>pr", start_pr_review, { buffer = buf, desc = "Start/Resume PR Review" })
 				if vim.bo[buf].filetype == "differpanel" then
-					local panel = require("differ.panel").current()
+					local pr = require("differ.pr").current_session()
+					local panel = pr and pr.panel and pr.panel.bufnr == buf and pr.panel
+						or require("differ.panel").current()
 					if panel and panel.bufnr == buf then
-						local output = require("config.differ_review_output")
-						output.attach(panel)
 						vim.keymap.set("n", "<CR>", function()
-							output.select(panel)
+							select_panel_row(panel)
 						end, { buffer = buf, desc = "Open Review Item" })
 					end
 				end

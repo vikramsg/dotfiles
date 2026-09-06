@@ -65,31 +65,15 @@ Open with `Space gd`, then use these keys inside the diff:
 - `g?`: Show the destination, workflow hints, and all described buffer-local shortcuts;
   scroll with `j`/`k`. In the file tree, `c` collapses a directory.
 
-Saved comments persist in a schema-versioned JSON file beneath `.agents/reviews/` in
-the canonical repository. The filename is a safe hash of the branch identity; detached
-HEAD reviews use the commit identity. That directory must be ignored by Git. Closing
-Differ or restarting Neovim does not clear a review. Commits and pushes on a branch keep
-the same review; branches are separate and resume when revisited. `HEAD` and `main...`
-notes are separate comparisons inside the same branch document.
+Comments save automatically under `.agents/reviews/` and resume per branch, including
+after restarting Neovim. Committing or pushing keeps the same review; `HEAD` and `main`
+comments stay separate. Local comments never upload to GitHub.
 
-The sidebar shows an independent **Review output** section after the changed files when
-that branch JSON exists. `Enter` opens it in a read-only split; `q` closes only that
-split. It is output, not a changed file, so staging, discard, file counts, and file
-navigation ignore it. Comments display inline in stacked layout; split layout shows
-`LOCAL` markers (use `ge` to read/edit a note).
+Find the saved file under **Review output** in the sidebar. `Enter` opens read-only JSON;
+`q` closes that split. Stacked diffs show comments inline; split diffs show `LOCAL`
+markers—use `ge` to read/edit them. Comments whose source has changed are marked outdated.
 
-The old `.agents/reviews/differ-review.json` v1 file is imported once into the first
-branch review that opens it and is never modified. Malformed or unsupported branch data
-is reported and protected from overwrite. If saving fails, the previous JSON stays
-intact and the new note remains in memory; correct the reported problem and save/edit a
-note to retry. Local review data is never uploaded to GitHub.
-
-If another review session updates the file, an older session refuses to overwrite it.
-Copy any unsaved draft before closing and reopening to load the latest review.
-
-The file format is defined in [the review JSON Schema](schemas/differ-review.schema.json).
-Notes record their original source text: changed or missing anchors are reported as
-outdated rather than placed on unrelated code. Migrated notes have unverified anchors.
+File format: [review JSON Schema](schemas/differ-review.schema.json).
 
 #### GitHub reviews (Differ buffers only)
 

@@ -36,19 +36,34 @@
       "type": "object",
       "required": ["HEAD", "main"],
       "properties": {
-        "HEAD": { "$ref": "#/$defs/comparison" },
-        "main": { "$ref": "#/$defs/comparison" }
-      },
-      "additionalProperties": false
-    },
-    "migration": {
-      "type": "object",
-      "required": ["source", "source_schema_version", "imported_at", "source_snapshot"],
-      "properties": {
-        "source": { "const": ".agents/reviews/differ-review.json" },
-        "source_schema_version": { "const": 1 },
-        "imported_at": { "type": "string" },
-        "source_snapshot": { "type": "object" }
+        "HEAD": {
+          "$ref": "#/$defs/comparison",
+          "properties": {
+            "spec": { "const": "HEAD" },
+            "base": { "const": "HEAD" },
+            "notes": {
+              "items": {
+                "properties": {
+                  "source_context": { "properties": { "comparison": { "const": "HEAD" } } }
+                }
+              }
+            }
+          }
+        },
+        "main": {
+          "$ref": "#/$defs/comparison",
+          "properties": {
+            "spec": { "const": "main..." },
+            "base": { "const": "main" },
+            "notes": {
+              "items": {
+                "properties": {
+                  "source_context": { "properties": { "comparison": { "const": "main..." } } }
+                }
+              }
+            }
+          }
+        }
       },
       "additionalProperties": false
     }
@@ -82,13 +97,12 @@
         },
         "source_context": {
           "type": "object",
-          "required": ["comparison", "origin"],
+          "required": ["comparison"],
           "properties": {
             "comparison": { "enum": ["HEAD", "main..."] },
             "line_text": { "type": "string" },
             "start_line_text": { "type": "string" },
-            "range_text": { "type": "string" },
-            "origin": { "enum": ["differ", "legacy-v1"] }
+            "range_text": { "type": "string" }
           },
           "additionalProperties": false
         },
