@@ -268,11 +268,17 @@ local function empty_and_errors(shortcut)
 	with_fixture(function(f)
 		git(f.root, "checkout", "main")
 		keys(shortcut)
+		wait_for("empty comparison should finish", function()
+			return table.concat(f.notices):find("No changes since HEAD", 1, true) ~= nil
+		end)
 		assert(vim.api.nvim_get_current_tabpage() == f.editor_tab, "no changes should not open a review")
 		assert(table.concat(f.notices):find("No changes since HEAD", 1, true), "empty review should explain why")
 		git(f.root, "branch", "-m", "trunk")
 		local notice_count = #f.notices
 		keys(shortcut)
+		wait_for("missing main comparison should finish", function()
+			return #f.notices > notice_count
+		end)
 		assert(vim.api.nvim_get_current_tabpage() == f.editor_tab, "missing main should not open a review")
 		assert(
 			#f.notices > notice_count and f.notices[#f.notices]:find("main", 1, true),
@@ -290,10 +296,7 @@ local function empty_and_errors(shortcut)
 		vim.cmd("lcd " .. vim.fn.fnameescape(vim.fs.dirname(f.root)))
 		keys(shortcut)
 		assert(vim.api.nvim_get_current_tabpage() == f.editor_tab, "outside Git should not open a review")
-		assert(
-			f.notices[#f.notices]:find("requires a Git repository", 1, true),
-			"outside Git should produce a diagnostic"
-		)
+		assert(f.notices[#f.notices]:find("requires a Git repository", 1, true), "outside Git should produce a diagnostic")
 	end)
 end
 
@@ -411,10 +414,9 @@ local function differ_discard()
 		keys("X")
 		local expected = vim.deepcopy(f.original)
 		expected[25] = "second changed hunk"
-		assert(
-			vim.deep_equal(expected, vim.fn.readfile(f.root .. "/example.txt")),
-			"X should revert only the selected hunk"
-		)
+		wait_for("X should revert only the selected hunk", function()
+			return vim.deep_equal(expected, vim.fn.readfile(f.root .. "/example.txt"))
+		end)
 		assert(git(f.root, "write-tree") == index, "discarding an unstaged hunk must not change the index")
 		assert(vim.fn.readfile(f.root .. "/other.txt")[1] == "other after", "discard must preserve other files")
 		expect_context(true, "discard rerender should retain compact context")
@@ -442,10 +444,7 @@ local function staged_and_deleted()
 		keys("gf")
 		assert(vim.api.nvim_get_current_win() == f.editor_win, "staged-file gf should reuse the source split")
 		assert(vim.api.nvim_win_get_cursor(0)[1] == 2, "staged-file gf should open the mapped line")
-		assert(
-			git(f.root, "diff", "--cached", "--name-only"):find("example.txt", 1, true),
-			"gf must not unstage the file"
-		)
+		assert(git(f.root, "diff", "--cached", "--name-only"):find("example.txt", 1, true), "gf must not unstage the file")
 		vim.api.nvim_set_current_tabpage(tab)
 		focus_text("other.txt", "differpanel")
 		keys("<CR>")
@@ -458,12 +457,143 @@ local function staged_and_deleted()
 	end)
 end
 
+local function staged_discard_conflict()
+	with_fixture(function(f)
+		dirty(f)
+		git(f.root, "add", "example.txt")
+		require("config.git_review").open_differ()
+		local view, section
+		wait_for("staged source should load", function()
+			view = require("config.differ_continuous").current()
+			section = view and view:section_for_path("example.txt")
+			return section and section.map ~= nil
+		end)
+		local changed = vim.fn.readfile(f.root .. "/example.txt")
+		changed[2] = "changed again after staging"
+		write(f.root, "example.txt", changed)
+		local index = git(f.root, "write-tree")
+		vim.api.nvim_win_set_cursor(view.winid, { section.body_first + section.map.from_new[2] - 1, 0 })
+		vim.fn.confirm = function()
+			return 1
+		end
+		-- Exercise the mutation boundary directly; confirmation presentation is
+		-- covered by the manual Herdr workflow rather than another UI script.
+		view.on_discard(view)
+		assert(git(f.root, "write-tree") == index, "a conflicting worktree discard must not change the index")
+		assert(
+			vim.deep_equal(vim.fn.readfile(f.root .. "/example.txt"), changed),
+			"a conflicting discard must preserve unstaged edits"
+		)
+	end)
+end
+
+local function refresh_listing_ownership()
+	with_fixture(function(f)
+		dirty(f)
+		require("config.git_review").open_differ()
+		local view
+		wait_for("continuous review should open", function()
+			view = require("config.differ_continuous").current()
+			return view and view:section_for_path("example.txt")
+		end)
+		local original_system = vim.system
+		local pending = {}
+		local ok, err = xpcall(function()
+			vim.system = function(command, opts, callback)
+				if callback and command[1] == "git" and command[2] == "status" and command[3] == "--porcelain=v1" then
+					return original_system(command, opts, function(result)
+						vim.schedule(function()
+							pending[#pending + 1] = function()
+								callback(result)
+							end
+						end)
+					end)
+				end
+				return original_system(command, opts, callback)
+			end
+			view.on_refresh()
+			wait_for("first Git listing should be captured", function()
+				return #pending == 1
+			end)
+			write(f.root, "later.txt", { "newer listing owns this file" })
+			view.on_refresh()
+			wait_for("second Git listing should be captured", function()
+				return #pending == 2
+			end)
+			pending[2]()
+			wait_for("new listing should add its file", function()
+				return view:section_for_path("later.txt") ~= nil
+			end)
+			pending[1]()
+			local delivered = false
+			vim.schedule(function()
+				delivered = true
+			end)
+			wait_for("older listing should settle", function()
+				return delivered
+			end)
+			assert(view:section_for_path("later.txt"), "an older Git listing must not remove a file from a newer refresh")
+		end, debug.traceback)
+		vim.system = original_system
+		assert(ok, err)
+	end)
+end
+
+local function hunk_stage_ownership()
+	with_fixture(function(f)
+		dirty(f)
+		local index = git(f.root, "write-tree")
+		local working = vim.fn.readfile(f.root .. "/example.txt")
+		require("config.git_review").open_differ()
+		local view, section
+		wait_for("two-hunk source should load", function()
+			view = require("config.differ_continuous").current()
+			section = view and view:section_for_path("example.txt")
+			return section and section.map
+		end)
+		for row, item in ipairs(section.map.lines) do
+			if item.hunk == 2 and item.kind == "new" then
+				vim.api.nvim_win_set_cursor(view.winid, { section.body_first + row - 1, 0 })
+				break
+			end
+		end
+		view.on_stage(view, true)
+		wait_for("staging should retain the action hunk in its new source", function()
+			local active = view:active_section()
+			local item = view.columns[1].map.lines[vim.api.nvim_win_get_cursor(view.winid)[1]]
+			return active.entry.path == "example.txt"
+				and active.entry.staged
+				and active.model
+				and active.model.new_rev == "INDEX"
+				and item
+				and item.hunk == 1
+		end)
+		local expected = vim.deepcopy(f.original)
+		expected[25] = "second changed hunk"
+		assert(
+			git(f.root, "show", ":example.txt") == table.concat(expected, "\n") .. "\n",
+			"staging the later hunk must leave the earlier hunk unstaged"
+		)
+		view.on_stage(view, false)
+		wait_for("immediate unstage must undo the same hunk", function()
+			return git(f.root, "write-tree") == index
+		end)
+		assert(
+			vim.deep_equal(working, vim.fn.readfile(f.root .. "/example.txt")),
+			"stage/unstage must preserve worktree bytes"
+		)
+	end)
+end
+
 function M.run()
 	selection(" gd", "differpanel")
 	differ_editing()
 	differ_context()
 	differ_discard()
 	staged_and_deleted()
+	staged_discard_conflict()
+	refresh_listing_ownership()
+	hunk_stage_ownership()
 	empty_and_errors(" gd")
 	print("Git review: comparison selection, switching, editing, navigation, help, and empty/error cases passed")
 end

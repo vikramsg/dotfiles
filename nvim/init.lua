@@ -70,6 +70,7 @@ local vim = vim
 
 -- Also resolve our modules when this config is launched with `nvim -u /path/init.lua`.
 local config_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+vim.opt.runtimepath:prepend(config_dir)
 
 vim.o.number = true
 vim.o.relativenumber = false
@@ -759,6 +760,7 @@ require("lazy").setup({
 			},
 		},
 		config = function(_, opts)
+			require("config.differ_continuous").setup_highlights()
 			require("config.git_review").setup_differ(opts)
 		end,
 	},
@@ -1398,9 +1400,9 @@ require("lazy").setup({
 
 	-- "gc" to comment visual regions/lines
 	{ "numToStr/Comment.nvim", opts = {} },
-	-- Add this config directory to the runtime path so `require("config.*")` works
-	-- when Neovim is launched directly with `nvim -u /path/to/init.lua`.
-}, { performance = { rtp = { paths = { config_dir } } } })
+	-- Preserve the selected config directory at the front for explicit -u launches.
+	-- Resetting the path would put the symlinked default config before this checkout.
+}, { performance = { rtp = { reset = false } } })
 
 require("noice").setup({
 	presets = {

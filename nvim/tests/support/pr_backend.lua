@@ -6,6 +6,8 @@ function M.install()
 	local sidecar = require("differ.sidecar")
 	local original = sidecar.request
 	local state = { threads = {}, submissions = {}, opened = {}, failures = {} }
+	state.base_sha, state.head_sha = string.rep("a", 40), string.rep("b", 40)
+	state.pending_versions = {}
 	local old, new = {}, {}
 	for i = 1, 70 do
 		old[i], new[i] = "context " .. i, "context " .. i
@@ -23,10 +25,10 @@ function M.install()
 				title = "Fixture PR review",
 				author = "reviewer",
 				state = "OPEN",
-				base_sha = string.rep("a", 40),
-				head_sha = string.rep("b", 40),
+				base_sha = state.base_sha,
+				head_sha = state.head_sha,
 				head_ref = "review-test",
-				files = { { path = "example.txt", status = "modified", additions = 2, deletions = 2 } },
+				files = state.files or { { path = "example.txt", status = "modified", additions = 2, deletions = 2 } },
 			}
 		elseif method == "get_file_versions" then
 			result = { base = { content = state.old_text }, head = { content = state.new_text } }
@@ -78,9 +80,16 @@ function M.install()
 			end)
 			return
 		end
-		vim.schedule(function()
-			callback(nil, result)
-		end)
+		local function deliver()
+			vim.schedule(function()
+				callback(nil, result)
+			end)
+		end
+		if method == "get_file_versions" and state.defer_versions then
+			state.pending_versions[#state.pending_versions + 1] = { args = vim.deepcopy(args), deliver = deliver }
+		else
+			deliver()
+		end
 	end
 	return state, function()
 		sidecar.request = original

@@ -29,8 +29,7 @@ function M.export(session)
 	if session.load_error or not session.document then
 		return nil, session.load_error or "review data is unavailable"
 	end
-	local ok, result, new_fingerprint =
-		store.save(session.root, session.identity, session.document, session.fingerprint)
+	local ok, result, new_fingerprint = store.save(session.root, session.identity, session.document, session.fingerprint)
 	if ok then
 		session.path = result
 		session.fingerprint = new_fingerprint
@@ -106,7 +105,10 @@ end
 local function current_context()
 	local review = vim.t.dotfiles_differ_review
 	local session = review and M.session_for_tab()
-	local view = require("differ").active_view()
+	local view = require("config.differ_continuous").current() or require("differ").active_view()
+	if view and view.active_section then
+		view:_activate(view:active_section())
+	end
 	if not (session and view and view.model and view.model.root) then
 		return nil
 	end
@@ -204,6 +206,9 @@ local function anchor_for_gesture(view, first, last)
 	local comments = require("differ.pr.comment")
 	local anchor, err
 	if last then
+		if view.selection_in_one_section and not view:selection_in_one_section(first, last) then
+			return nil, nil, "a note selection cannot cross file boundaries"
+		end
 		anchor, err = comments.range_anchor(column.map, first, last, column.side)
 	else
 		anchor, err = comments.row_anchor(column.map, first, column.side)
@@ -295,11 +300,7 @@ local function note_anchor(note, view)
 		or (context.start_line_text ~= nil and actual_start ~= context.start_line_text)
 		or (context.range_text ~= nil and source_text(view, start.side, start.line, finish.line) ~= context.range_text)
 	if mismatch then
-		if note.anchor_status ~= "outdated" then
-			notify(string.format("outdated anchor: %s:%d", note.path, finish.line), vim.log.levels.WARN)
-		end
-		note.anchor_status = "outdated"
-		return column, nil
+		return column, nil, "outdated"
 	end
 	local verified = context.line_text ~= nil
 	if start.side == finish.side and start.line ~= finish.line then
@@ -307,8 +308,24 @@ local function note_anchor(note, view)
 	elseif start.side ~= finish.side then
 		verified = verified and context.start_line_text ~= nil
 	end
-	note.anchor_status = verified and "current" or "unverified"
-	return column, row
+	return column, row, verified and "current" or "unverified"
+end
+
+-- Source coordinates remain file-local; only reverse lookups are translated to
+-- the aggregate buffer. This lets notes reuse the same anchor validation in both
+-- the native single-file view and each section of a continuous review.
+local function note_views(view, path)
+	if not view.each_section or view.layout == "split" then
+		return view.model.path == path and { view } or {}
+	end
+	local projections = {}
+	view:each_section(function(section)
+		if section.entry.path ~= path then
+			return
+		end
+		projections[#projections + 1] = view:project_section(section)
+	end)
+	return projections
 end
 
 local function notes_under_cursor(session, view)
@@ -442,7 +459,8 @@ function M.reset()
 	notify("reset branch review")
 end
 
-local function render_note(note, view, column, row)
+local function render_note(note, view, column, row, anchor_status)
+	anchor_status = anchor_status or note.anchor_status
 	local thread = {
 		thread_id = note.id,
 		comments = { { author = "local", body = note.body, created_at = note.updated_at } },
@@ -463,7 +481,7 @@ local function render_note(note, view, column, row)
 		vim.api.nvim_buf_set_extmark(column.bufnr, namespace, row - 1, 0, {
 			virt_text = {
 				{
-					note.anchor_status == "unverified" and " 📝 LOCAL (unverified)" or " 📝 LOCAL",
+					anchor_status == "unverified" and " 📝 LOCAL (unverified)" or " 📝 LOCAL",
 					"differThreadPending",
 				},
 			},
@@ -477,7 +495,7 @@ local function render_note(note, view, column, row)
 		end,
 	})
 	-- Keep the destination explicit without hard-coding a branch-dependent filename.
-	local label = note.anchor_status == "unverified" and "LOCAL (unverified anchor)" or "LOCAL"
+	local label = anchor_status == "unverified" and "LOCAL (unverified anchor)" or "LOCAL"
 	table.insert(rows, 1, { { label .. " → branch review JSON", "differThreadPending" } })
 	vim.api.nvim_buf_set_extmark(column.bufnr, namespace, row - 1, 0, {
 		virt_lines = rows,
@@ -485,28 +503,53 @@ local function render_note(note, view, column, row)
 	})
 end
 
-function M.render(session, view, persist_status)
-	if not (session and view and view.model and view.columns) then
+function M.render(session, view, persist_status, changed_section)
+	if not (session and view and (view.model or view.each_section) and view.columns) then
 		return
 	end
 	namespace = namespace or vim.api.nvim_create_namespace("dotfiles.differ.local-review")
 	for _, column in ipairs(view.columns) do
 		if vim.api.nvim_buf_is_valid(column.bufnr) then
-			vim.api.nvim_buf_clear_namespace(column.bufnr, namespace, 0, -1)
+			vim.api.nvim_buf_clear_namespace(
+				column.bufnr,
+				namespace,
+				changed_section and changed_section.first - 1 or 0,
+				changed_section and changed_section.last + 1 or -1
+			)
 		end
+	end
+	local notes = notes_for(session)
+	if changed_section then
+		notes = vim.tbl_filter(function(note)
+			return note.path == changed_section.entry.path
+		end, notes)
+	end
+	if #notes == 0 then
+		return
 	end
 	if not M.owns_current_branch(session) then
 		return
 	end
 	local status_changed = false
-	for _, note in ipairs(notes_for(session)) do
-		if note.path == view.model.path then
-			local previous_status = note.anchor_status
-			local column, row = note_anchor(note, view)
-			status_changed = status_changed or previous_status ~= note.anchor_status
-			if column and row then
-				render_note(note, view, column, row)
+	for _, note in ipairs(notes) do
+		local status
+		for _, projection in ipairs(note_views(view, note.path)) do
+			local column, row, anchor_status = note_anchor(note, projection)
+			-- A file can occur in both staged and unstaged sections. A matching
+			-- source in either section keeps its note current.
+			if not status or status == "outdated" then
+				status = anchor_status
 			end
+			if column and row and (not changed_section or projection.section == changed_section) then
+				render_note(note, projection, column, row, anchor_status)
+			end
+		end
+		if status and status ~= note.anchor_status then
+			if status == "outdated" then
+				notify(string.format("outdated anchor: %s:%d", note.path, note.source_range["end"].line), vim.log.levels.WARN)
+			end
+			note.anchor_status = status
+			status_changed = true
 		end
 	end
 	-- Persist evaluated status once per render, so the JSON and diff agree. Mutation
@@ -529,12 +572,12 @@ function M.attach(session, view)
 	end
 	view.dotfiles_local_review_session = session
 	local previous_rerender = view.on_rerender
-	view.on_rerender = function()
+	view.on_rerender = function(changed_section)
 		if previous_rerender then
-			previous_rerender()
+			previous_rerender(changed_section)
 		end
 		if view.dotfiles_local_review_session == session then
-			M.render(session, view)
+			M.render(session, view, nil, changed_section)
 		end
 	end
 	M.render(session, view)
