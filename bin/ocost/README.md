@@ -31,4 +31,14 @@ contact the user's service, replace application methods, or monkeypatch the
 process environment. CLI tests pass their environment to the child process.
 Visual quality is checked manually rather than with layout snapshots.
 
-[User guide](../../ocost/README.md) · [Implementation notes](IMPLEMENTATION_NOTES.md)
+## Excluding projects
+
+Repeat `--exclude-project` to omit projects from terminal and JSON reports. A
+selector is an exact project ID, exact canonical path, or a final directory
+name that identifies one project uniquely. Unknown or ambiguous selectors fail
+without printing a report.
+
+```sh
+ocost --exclude-project /work/archive --exclude-project experiments
+```
+

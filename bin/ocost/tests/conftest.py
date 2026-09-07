@@ -25,7 +25,13 @@ def stats_payload():
             "prompts": 8,
             "steps": 20,
             "tokens": copy.deepcopy(tokens),
-            "activity": [{"date": "2026-09-05", "extra": 42}],
+            "activeDays": 1,
+            "streak": 1,
+            "activity": [{"date": "2026-09-05", "steps": 20, "extra": 42}],
+            "tools": {
+                "mode": "summary",
+                "totals": {"calls": 24, "succeeded": 20, "failed": 3, "unfinished": 1},
+            },
             "models": [
                 {
                     "model": {"providerID": "azure", "id": "same-model", "variant": "medium"},
@@ -88,7 +94,8 @@ def api_server(stats_payload, tmp_path):
             if url.path == "/api/project":
                 body = state["projects"]
             else:
-                body = copy.deepcopy(state["payload"])
+                project_id = query.get("project", [None])[0]
+                body = copy.deepcopy(state.get("project_payloads", {}).get(project_id, state["payload"]))
                 body["data"]["range"] = {"from": int(query["from"][0]), "to": int(query["to"][0])}
             self.wfile.write(json.dumps(body).encode())
 
