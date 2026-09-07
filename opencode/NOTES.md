@@ -1,3 +1,11 @@
+1. Root AGENTS.md ask to never give wall of text unless specifically asked
+2. Prefer using Show me skill to illustrate plans
+3. next 
+    - PR description add or update 
+    - Implementation notes in .agents/implementation
+    - prefer using background agents for implementation and review but note they do not have full context so review their output before accepting
+4. 
+
 ## 5.6
 
 - Too happy to invoke subagents

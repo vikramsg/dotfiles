@@ -9,6 +9,8 @@ What you should do after checks and tests are all complete, you should push and 
 ## PR description
 
 You will not give implementation details but the simplest summary of what actually you did
+- Prefer bullet points to separate out main features of the PR 
+- For the PR description, if there has been update, give the updated description while sticking to these principles 
 
 ### Reminder
 
@@ -29,6 +31,11 @@ You will maintain implementation notes in a markdown file and at the end add a s
 
 - You will only write behavioural tests, not change detections tests
 - You will not automate tests that you have to verify manually
+
+## Implementation hygience
+
+- Never add fallback, compatibility, backward shims unless already discussed.
+- Prefer using background agents for implementation and review but note they do not have full context so review their output before accepting
 
 ## Review
 
