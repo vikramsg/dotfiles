@@ -1,10 +1,11 @@
 """Validate consumed API fields without dropping unconsumed response data."""
 
 from dataclasses import dataclass
+from datetime import date
 from math import fsum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 
 class APIModel(BaseModel):
@@ -39,6 +40,28 @@ class ModelUsage(APIModel):
     tokens: Tokens
 
 
+class Activity(APIModel):
+    date: date
+    steps: Annotated[int, Field(ge=0)]
+
+    @field_validator("date", mode="before")
+    @classmethod
+    def parse_date(cls, value: object) -> object:
+        return date.fromisoformat(value) if isinstance(value, str) else value
+
+
+class ToolTotals(APIModel):
+    calls: Annotated[int, Field(ge=0)]
+    succeeded: Annotated[int, Field(ge=0)]
+    failed: Annotated[int, Field(ge=0)]
+    unfinished: Annotated[int, Field(ge=0)]
+
+
+class Tools(APIModel):
+    mode: str
+    totals: ToolTotals
+
+
 class TimeRange(APIModel):
     start: int | float = Field(alias="from")
     to: int | float
@@ -53,6 +76,10 @@ class Stats(APIModel):
     steps: Annotated[int, Field(ge=0)]
     tokens: Tokens
     models: list[ModelUsage]
+    activity: list[Activity] | None = None
+    activeDays: Annotated[int, Field(ge=0)] | None = None
+    streak: Annotated[int, Field(ge=0)] | None = None
+    tools: Tools | None = None
 
     def has_usage(self) -> bool:
         return any([self.cost, self.sessions, self.subagents, self.prompts, self.steps, *self.tokens.values()]) or bool(

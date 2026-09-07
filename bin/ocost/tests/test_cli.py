@@ -1,4 +1,5 @@
 import base64
+import copy
 import json
 import subprocess
 from pathlib import Path
@@ -34,10 +35,12 @@ def test_json_preserves_responses_and_authenticates_using_registration(
     assert {request[0] for request in requests} == {"/api/project", "/api/session/stats"}
     queries = [query for path, query, _ in requests if path == "/api/session/stats"]
     assert len(queries) == 2
-    assert queries[1]["project"] == ["p&1"]
-    assert queries[0]["from"] == queries[1]["from"]
-    assert queries[0]["to"] == queries[1]["to"]
-    assert int(queries[0]["to"][0]) - int(queries[0]["from"][0]) == 7 * 86400000
+    overall_query = next(query for query in queries if "project" not in query)
+    project_query = next(query for query in queries if "project" in query)
+    assert project_query["project"] == ["p&1"]
+    assert overall_query["from"] == project_query["from"]
+    assert overall_query["to"] == project_query["to"]
+    assert int(overall_query["to"][0]) - int(overall_query["from"][0]) == 7 * 86400000
 
 
 @pytest.mark.parametrize("arguments", [[], ["--days", "0"], ["--days", "7"]])
@@ -77,6 +80,109 @@ def test_verbose_terminal_report_includes_token_usage(api_server, cli_environmen
     assert "M = million tokens (rounded to 2 decimals)" not in result.stdout
 
 
+@pytest.mark.parametrize("selector", ["p&1", "/work/dotfiles", "dotfiles"])
+def test_exclude_project_removes_selected_usage_from_json_totals(api_server, cli_environment, executable, selector):
+    # GIVEN a report whose only usage belongs to the selected project
+    zero_usage = copy.deepcopy(api_server["payload"])
+    data = zero_usage["data"]
+    data.update({"cost": 0, "sessions": 0, "subagents": 0, "prompts": 0, "steps": 0, "models": []})
+    data["tokens"] = {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}
+    api_server["projects"].append({"id": "archive", "canonical": "/work/archive", "sandboxes": []})
+    api_server["project_payloads"] = {"archive": zero_usage}
+    # WHEN selecting it by each supported selector form
+    result = subprocess.run(
+        [executable, "--json", "--exclude-project", selector],
+        env=cli_environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    # THEN its project row and all accounted usage are removed
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert [row["project"]["id"] for row in report["projects"]] == ["archive"]
+    assert {field: report["data"][field] for field in ("cost", "sessions", "subagents", "prompts", "steps")} == {
+        "cost": 0,
+        "sessions": 0,
+        "subagents": 0,
+        "prompts": 0,
+        "steps": 0,
+    }
+    assert report["data"]["tokens"] == {
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cache": {"read": 0, "write": 0},
+    }
+    assert report["data"]["models"] == []
+    assert report["data"]["activity"] == []
+    assert report["data"]["activeDays"] == 0
+    assert report["data"]["streak"] == 0
+    assert report["data"]["tools"]["totals"] == {"calls": 0, "succeeded": 0, "failed": 0, "unfinished": 0}
+
+
+def test_exclusion_accounts_for_duplicate_model_rows(api_server, cli_environment, executable):
+    # GIVEN duplicate rows for the same provider, model, and variant identity
+    duplicate = copy.deepcopy(api_server["payload"]["data"]["models"][0])
+    api_server["payload"]["data"]["models"].append(duplicate)
+    # WHEN the project containing both rows is excluded
+    result = subprocess.run(
+        [executable, "--json", "--exclude-project", "dotfiles"],
+        env=cli_environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    # THEN neither duplicate remains in the adjusted model breakdown
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["data"]["models"] == []
+
+
+def test_repeated_exclusions_adjust_terminal_and_json_reports(api_server, cli_environment, executable):
+    # GIVEN a report with two projects and all usage attributed to one of them
+    zero_usage = copy.deepcopy(api_server["payload"])
+    data = zero_usage["data"]
+    data.update({"cost": 0, "sessions": 0, "subagents": 0, "prompts": 0, "steps": 0, "models": []})
+    data["tokens"] = {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}
+    api_server["projects"].append({"id": "archive", "canonical": "/work/archive", "sandboxes": []})
+    api_server["project_payloads"] = {"archive": zero_usage}
+    arguments = ["--exclude-project", "p&1", "--exclude-project", "p&1", "--exclude-project", "archive"]
+    # WHEN one selector is repeated and every project is excluded
+    json_result = subprocess.run(
+        [executable, "--json", *arguments], env=cli_environment, text=True, capture_output=True, check=False
+    )
+    terminal_result = subprocess.run(
+        [executable, "--verbose", *arguments], env=cli_environment, text=True, capture_output=True, check=False
+    )
+    # THEN both outputs represent the adjusted empty report
+    assert json_result.returncode == terminal_result.returncode == 0
+    assert json.loads(json_result.stdout)["projects"] == []
+    assert "No project usage in this window." in terminal_result.stdout
+    assert "No model usage." in terminal_result.stdout
+
+
+@pytest.mark.parametrize(
+    ("selector", "message"),
+    [("missing", "Unknown project selector"), ("dotfiles", "Ambiguous project selector")],
+)
+def test_invalid_exclude_project_never_emits_partial_report(api_server, cli_environment, executable, selector, message):
+    # GIVEN an unknown selector or a basename shared by multiple projects
+    if selector == "dotfiles":
+        api_server["projects"].append({"id": "other", "canonical": "/other/dotfiles", "sandboxes": []})
+    # WHEN requesting an exclusion
+    result = subprocess.run(
+        [executable, "--json", "--exclude-project", selector],
+        env=cli_environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    # THEN selection fails before any report is printed
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert message in result.stderr
+
+
 @pytest.mark.parametrize(
     "arguments", [["--days", "-1"], ["--days", "1.5"], ["--days"], ["--days", "1000000"], ["--wat"]]
 )
@@ -98,6 +204,7 @@ def test_help_works_without_registration(cli_environment, executable):
     assert "--days" in result.stdout
     assert "--json" in result.stdout
     assert "--verbose" in result.stdout
+    assert "--exclude-project" in result.stdout
 
 
 @pytest.mark.parametrize("arguments", [[], ["--json"]])
