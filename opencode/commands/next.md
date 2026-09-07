@@ -26,6 +26,12 @@ Do not include stuff like this in the PR description. These are implementation n
 ## Implementation Notes
 
 You will maintain implementation notes in a markdown file and at the end add a section for what I should look for in a review.
+- Put the notes in .agents/implementation-notes/ 
+- Write every decision you took that we did not already agree on
+- Write every single decision that requires a review. 
+- At the end of the notes write what should be specifically reviewed by me 
+
+NOTE: If we have agreed to a plan, make sure its present in .agents/plans/ and in it note that once we start implementation the plan file itself should not be touched and any changes should be only noted through implementation notes
 
 ## Testing hygiene
 
@@ -40,7 +46,12 @@ You will maintain implementation notes in a markdown file and at the end add a s
 ## Review
 
 After all checks and tests pass launch a background reviewer agent. Make sure it's in the background. 
-But do not let the reviewer be authoritative. Its an advisory agent. The reviewer is prone to trying to suggest over-engineering, over defensive, etc. which you should not blindly follow.
+But do not let the reviewer be authoritative. Its an advisory agent. 
+The reviewer is prone to trying to suggest over-engineering, over defensive, etc. which you should not blindly follow.
+
+However some things we are interested in from the review
+- Could the implementation have been simplified
+- Are we following the correct layer rules
 
 ## Reply right now
 
