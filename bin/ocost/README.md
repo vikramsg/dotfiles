@@ -42,4 +42,3 @@ without printing a report.
 ocost --exclude-project /work/archive --exclude-project experiments
 ```
 
-[User guide](../../ocost/README.md) · [Implementation notes](IMPLEMENTATION_NOTES.md)
