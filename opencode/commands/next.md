@@ -3,8 +3,10 @@ description: Tell me next steps
 agent: build 
 subtask: false
 ---
-Okay, give me a to-do list of everything you will do. 
-What you should do after checks and tests are all complete, you should push and create a PR.
+$ARGUMENTS
+
+Give me a to-do list of everything you will do. 
+After checks and tests are all complete, push and create a PR.
 
 ## PR description
 

@@ -20,6 +20,22 @@ logs, sockets, and persistent session data remain in the normal
 after linking `nvim/` so Lazy installs the matching editor adapter. Interactive
 Zsh panes publish a compact ` branch` label for the Spaces sidebar.
 
+## Remote attach
+
+Use the remote server's keybindings when attaching directly from another
+machine:
+
+```sh
+herdr --remote vm-us --remote-keybindings server
+```
+
+`herdr --remote` otherwise defaults to local keybindings and intentionally does
+not send local custom command bindings to the remote host. As a result, popup
+and shell bindings from this configuration, such as the LazyGit popup, are not
+available. Using `--remote-keybindings server` loads those bindings from
+`vm-us` and makes the session behave like running `herdr` after connecting with
+SSH.
+
 ## Keys
 
 The prefix is `Ctrl+Space`.

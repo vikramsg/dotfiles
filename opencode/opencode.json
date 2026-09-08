@@ -96,20 +96,8 @@
           "modelID": "gpt-5.6-luna",
           "settings": {
             "reasoningEffort": "medium",
-            "reasoningSummary": "auto"
-          },
-          "capabilities": {
-            "tools": true,
-            "input": ["text", "image", "pdf"],
-            "output": ["text"]
-          }
-        },
-        "gpt-5.5": {
-          "name": "gpt-5.5",
-          "modelID": "gpt-5.5",
-          "settings": {
-            "reasoningEffort": "high",
-            "reasoningSummary": "auto"
+            "reasoningSummary": "auto",
+            "serviceTier": "priority"
           },
           "capabilities": {
             "tools": true,
@@ -120,50 +108,11 @@
         "gpt-6-astra": {
           "name": "gpt-6-astra",
           "modelID": "gpt-6-astra",
-          "cost": [
-            {
-              "input": 10,
-              "output": 50,
-              "cache": {
-                "read": 1,
-                "write": 12.5
-              }
-            },
-            {
-              "tier": {
-                "type": "context",
-                "size": 372000
-              },
-              "input": 20,
-              "output": 75,
-              "cache": {
-                "read": 2,
-                "write": 25
-              }
-            }
-          ],
           "settings": {
-            "reasoningEffort": "high",
-            "reasoningSummary": "auto"
+            "reasoningEffort": "medium",
+            "reasoningSummary": "auto",
+            "serviceTier": "priority"
           },
-          "variants": [
-            {
-              "id": "low",
-              "settings": { "reasoningEffort": "low" }
-            },
-            {
-              "id": "medium",
-              "settings": { "reasoningEffort": "medium" }
-            },
-            {
-              "id": "high",
-              "settings": { "reasoningEffort": "high" }
-            },
-            {
-              "id": "xhigh",
-              "settings": { "reasoningEffort": "xhigh" }
-            }
-          ],
           "capabilities": {
             "tools": true,
             "input": ["text", "image", "pdf"],
