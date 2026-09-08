@@ -1,0 +1,1019 @@
+diff --git a/lua/differ/git/async.lua b/lua/differ/git/async.lua
+new file mode 100644
+index 0000000..d8fa869
+--- /dev/null
++++ b/lua/differ/git/async.lua
+@@ -0,0 +1,71 @@
++local M = {}
++
++local limit = 1
++local batch_size = 4
++local active = 0
++local queue = {}
++local scheduled = false
++local module_path = debug.getinfo(1, "S").source:sub(2)
++local worker_path = vim.fs.joinpath(vim.fs.dirname(module_path), "worker.lua")
++
++local function command(payload, callback)
++    payload.runtime_paths = vim.api.nvim_list_runtime_paths()
++    vim.system({ "nice", "-n", "10", vim.v.progpath, "--headless", "--clean", "-l", worker_path }, {
++        stdin = vim.mpack.encode(payload),
++    }, function(result)
++        vim.schedule(function()
++            if result.code ~= 0 then
++                return callback(nil, vim.trim(result.stderr or "git worker failed"))
++            end
++            local ok, decoded = pcall(vim.mpack.decode, result.stdout or "")
++            if not ok then
++                return callback(nil, tostring(decoded))
++            end
++            callback(decoded)
++        end)
++    end)
++end
++
++function M.list(root, args, callback)
++    command({ action = "list", root = root, args = args }, function(result, err)
++        if not result then
++            return callback(nil, err)
++        end
++        callback(result.sections, result.err, result.source)
++    end)
++end
++
++local function pump()
++    scheduled = false
++    while active < limit and #queue > 0 do
++        local jobs = {}
++        for _ = 1, math.min(batch_size, #queue) do
++            jobs[#jobs + 1] = table.remove(queue, 1)
++        end
++        active = active + 1
++        local requests = {}
++        for i, job in ipairs(jobs) do
++            requests[i] = { source = job.source, root = job.root, entry = job.entry }
++        end
++        command({ action = "models", requests = requests }, function(results, err)
++            active = active - 1
++            for i, job in ipairs(jobs) do
++                local index, target = i, job
++                vim.defer_fn(function()
++                    target.callback(results and results[index] or nil, err)
++                end, index - 1)
++            end
++            pump()
++        end)
++    end
++end
++
++function M.model(source, root, entry, callback)
++    queue[#queue + 1] = { source = source, root = root, entry = entry, callback = callback }
++    if not scheduled then
++        scheduled = true
++        vim.defer_fn(pump, 2)
++    end
++end
++
++return M
+diff --git a/lua/differ/git/init.lua b/lua/differ/git/init.lua
+index 8e997b1..291873d 100644
+--- a/lua/differ/git/init.lua
++++ b/lua/differ/git/init.lua
+@@ -562,6 +562,14 @@ function M.model(source, root, file, head)
+     })
+ end
+ 
++function M.list_async(root, args, callback)
++    require("differ.git.async").list(root, args or {}, callback)
++end
++
++function M.model_async(source, root, file, callback)
++    require("differ.git.async").model(source, root, file, callback)
++end
++
+ -- the full commit message (subject + body) for `sha`, for the history details
+ -- float. read on demand (a keypress), so a synchronous local git call is fine
+ ---@param root string
+@@ -778,7 +786,7 @@ end
+ ---@param entry differ.FileEntry
+ ---@param staged boolean
+ ---@return boolean ok
+-local function set_staged(root, entry, staged)
++function M.set_staged(root, entry, staged)
+     local ok = true
+     for _, p in ipairs(entry_paths(entry)) do
+         if staged then
+@@ -1150,10 +1158,10 @@ function M.panel(opts)
+         end
+         actions = {
+             stage = function(entry)
+-                set_staged(root, entry, true)
++                M.set_staged(root, entry, true)
+             end,
+             unstage = function(entry)
+-                set_staged(root, entry, false)
++                M.set_staged(root, entry, false)
+             end,
+             stage_all = function()
+                 M.stage_all(root)
+@@ -1340,9 +1348,9 @@ function M.panel(opts)
+         -- on a staged pair it also stages whatever the file's unstaged row holds
+         local function whole_file_apply(model, _, _, reverse)
+             if reverse then
+-                return set_staged(root, entry, false)
++                return M.set_staged(root, entry, false)
+             end
+-            local ok = set_staged(root, entry, true)
++            local ok = M.set_staged(root, entry, true)
+             if ok and entry.staged and M.read(WORKTREE, root, entry.path) ~= model.new_text then
+                 local msg = "%s is fully staged now, including the edits you had left unstaged"
+                 notify(msg:format(entry.path), vim.log.levels.WARN)
+diff --git a/lua/differ/git/worker.lua b/lua/differ/git/worker.lua
+new file mode 100644
+index 0000000..b9aea94
+--- /dev/null
++++ b/lua/differ/git/worker.lua
+@@ -0,0 +1,32 @@
++local payload = vim.mpack.decode(io.stdin:read("*a"))
++vim.opt.runtimepath = payload.runtime_paths
++local git = require("differ.git")
++if payload.action == "list" then
++    local source = git.resolve(require("differ.git.rev").source(payload.args), payload.root)
++    if not source then
++        io.stdout:write(vim.mpack.encode({ err = "could not resolve comparison" }))
++    elseif #payload.args == 0 then
++        local sections, err = git.status_sections(payload.root)
++        sections = vim.tbl_filter(function(section)
++            return #section.entries > 0
++        end, sections)
++        io.stdout:write(vim.mpack.encode({ sections = sections, err = err, source = source }))
++    else
++        local entries, err = git.file_entries(source, payload.root)
++        io.stdout:write(
++            vim.mpack.encode({
++                sections = { { title = "Changes", entries = entries } },
++                err = err,
++                source = source,
++            })
++        )
++    end
++else
++    local models = {}
++    for i, request in ipairs(payload.requests) do
++        models[i] = git.model(request.source, request.root, request.entry)
++    end
++    io.stdout:write(vim.mpack.encode(models))
++end
++io.stdout:flush()
++vim.cmd("qa!")
+diff --git a/lua/differ/pr/init.lua b/lua/differ/pr/init.lua
+index c8f0e6f..9385108 100644
+--- a/lua/differ/pr/init.lua
++++ b/lua/differ/pr/init.lua
+@@ -188,6 +188,43 @@ local function prefetch_around(entry)
+     end
+ end
+ 
++-- Load one PR file through the session's pinned refs and version memo. Consumers
++-- that present more than one file can share the native ownership/cache rules without
++-- duplicating the PR client lifecycle.
++function M.load_model(s, entry, callback)
++    local refs = { base = s.pr_meta.base_sha, head = s.pr_meta.head_sha }
++    local function build(vers)
++        local base, head = vers.base or {}, vers.head or {}
++        return require("differ.model.diff").build({
++            path = entry.path,
++            old_rev = short(refs.base),
++            new_rev = short(refs.head),
++            old_text = (base.missing and "") or base.content or "",
++            new_text = (head.missing and "") or head.content or "",
++            root = s.root,
++        })
++    end
++    local cached = s.versions[entry.path]
++    if cached then
++        return vim.schedule(function()
++            if not guard.owns(s) or not pins_hold(s, refs) then
++                return callback(nil, "stale PR source")
++            end
++            callback(build(cached))
++        end)
++    end
++    client.get_file_versions(s.pr, entry, refs, function(err, vers)
++        if not guard.owns(s) or not pins_hold(s, refs) then
++            return callback(nil, "stale PR source")
++        end
++        if err then
++            return callback(nil, err)
++        end
++        s.versions[entry.path] = vers
++        callback(build(vers))
++    end)
++end
++
+ -- (re)source the one driven View for a file. base/head shas are pinned for the
+ -- session, so the per-path memo makes re-visits instant (no IPC hop); `focus_line`
+ -- holds the cursor across an in-place refresh of the same file
+@@ -198,16 +235,7 @@ local function show_file(entry, focus_line)
+     if not s then
+         return
+     end
+-    local function render(vers)
+-        local base, head = vers.base or {}, vers.head or {}
+-        local model = require("differ.model.diff").build({
+-            path = entry.path,
+-            old_rev = short(session.pr_meta.base_sha),
+-            new_rev = short(session.pr_meta.head_sha),
+-            old_text = (base.missing and "") or base.content or "",
+-            new_text = (head.missing and "") or head.content or "",
+-            root = session.root,
+-        })
++    local function render(model)
+         if session.view and session.view:is_open() then
+             session.view:set_source(model, nil, focus_line and { focus_line = focus_line } or nil)
+         else
+@@ -254,31 +282,16 @@ local function show_file(entry, focus_line)
+         end
+     end
+ 
+-    local cached = session.versions[entry.path]
+-    if cached then
+-        return render(cached)
+-    end
+-    -- the pinned shas skip the sidecar's prRefs round-trip (latency discipline); the
+-    -- entry rides along whole so a rename's base side is read from its previous_path
+-    local refs = { base = session.pr_meta.base_sha, head = session.pr_meta.head_sha }
+-    client.get_file_versions(session.pr, entry, refs, function(err, vers)
+-        if not guard.owns(s) then
+-            return -- session torn down (or replaced) while the blob was in flight
+-        end
++    M.load_model(s, entry, function(model, err)
+         if err then
+-            return notify_err(err)
+-        end
+-        if not pins_hold(s, refs) then
+-            return -- the head moved in flight; handle_conflict's re-source owns the refetch
++            if err ~= "stale PR source" then
++                notify_err(err)
++            end
++            return
+         end
+-        -- the memo is keyed on pinned shas, so it stands whether or not the panel is showing
+-        s.versions[entry.path] = vers
+-        -- the render additionally waits on a visible sidebar (the overview hop hides it)
+-        -- and on `entry` still being the shown file: a blob for a file stepped away from
+-        -- mid-flight would otherwise land over the one stepped to
+         local cur = s.panel and s.panel:is_open() and s.panel:current_entry()
+         if cur and cur.path == entry.path then
+-            render(vers)
++            render(model)
+         end
+     end)
+ end
+diff --git a/lua/differ/pr/threads.lua b/lua/differ/pr/threads.lua
+index bd6ce39..fb99b9c 100644
+--- a/lua/differ/pr/threads.lua
++++ b/lua/differ/pr/threads.lua
+@@ -202,23 +202,25 @@ function M.apply(session)
+     if not (view and view.model and view.columns) then
+         return
+     end
+-    local path = view.model.path
+     for _, col in ipairs(view.columns) do
+         vim.api.nvim_buf_clear_namespace(col.bufnr, namespace(), 0, -1)
+     end
+ 
+-    -- group this file's threads by the buffer row they anchor to
++    -- A normal View owns one file. A changeset view may expose file-local
++    -- projections into one aggregate buffer; thread grouping remains native.
+     local groups = {}
+     for _, t in ipairs(session.threads or {}) do
+-        if t.path == path then
++        local projections = view.views_for_path and view:views_for_path(t.path)
++            or (t.path == view.model.path and { view } or {})
++        for _, projection in ipairs(projections) do
+             local side = M.side_of(t)
+-            local col = view:column_for(side)
++            local col = projection:column_for(side)
+             local index = col and (side == "old" and col.map.from_old or col.map.from_new)
+             local row = index and M.anchor_row(index, M.anchor_line(t))
+             if col and row then
+                 local key = col.bufnr .. ":" .. row
+                 groups[key] = groups[key]
+-                    or { key = key, bufnr = col.bufnr, row = row, threads = {} }
++                    or { key = key, bufnr = col.bufnr, row = row, threads = {}, view = projection }
+                 table.insert(groups[key].threads, t)
+             end
+         end
+@@ -232,7 +234,7 @@ function M.apply(session)
+         if marker then
+             M.apply_marker(g)
+         else
+-            M.apply_box(session, view, g, reltime)
++            M.apply_box(session, g.view or view, g, reltime)
+         end
+         anchors[#anchors + 1] = { key = g.key, bufnr = g.bufnr, row = g.row, threads = g.threads }
+     end
+diff --git a/lua/differ/render/async.lua b/lua/differ/render/async.lua
+new file mode 100644
+index 0000000..bec236e
+--- /dev/null
++++ b/lua/differ/render/async.lua
+@@ -0,0 +1,92 @@
++local LineMap = require("differ.render.linemap")
++local M = {}
++
++local module_path = debug.getinfo(1, "S").source:sub(2)
++local lua_root = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(module_path)))
++local worker_package_path = lua_root .. "/?.lua;" .. lua_root .. "/?/init.lua"
++
++function M.render(model, opts, callback)
++    local payload = vim.mpack.encode({ model = model, opts = opts })
++    local work
++    work = (vim.uv or vim.loop).new_work(function(encoded, lua_path)
++        package.path = lua_path
++        local ok, result = pcall(function()
++            local input = vim.mpack.decode(encoded)
++            local output = require("differ.render").render(input.model, input.opts)
++            local columns = {}
++            local codes = { context = "c", old = "o", new = "n", meta = "m", filler = "f" }
++            for ci, column in ipairs(output.columns) do
++                local records, spans = {}, {}
++                for index, item in ipairs(column.map.lines) do
++                    records[index] = table.concat({
++                        codes[item.kind],
++                        tostring(item.old or 0),
++                        tostring(item.new or 0),
++                        tostring(item.hunk or 0),
++                    }, ",")
++                    if item.spans then
++                        spans[index] = item.spans
++                    end
++                end
++                columns[ci] = {
++                    side = column.side,
++                    lines = table.concat(column.lines, "\0"),
++                    map = table.concat(records, "\n"),
++                    spans = spans,
++                    folds = column.folds,
++                }
++            end
++            return columns
++        end)
++        return vim.mpack.encode({ ok = ok, result = result })
++    end, function(encoded)
++        vim.schedule(function()
++            local decoded = vim.mpack.decode(encoded)
++            if not decoded.ok then
++                return callback(nil, tostring(decoded.result))
++            end
++            local result = { columns = {} }
++            local ci, line_offset, map_offset, index = 1, 1, 1, 1
++            local map, lines = LineMap.new(), {}
++            local kinds = { c = "context", o = "old", n = "new", m = "meta", f = "filler" }
++            local function build_batch()
++                local started = (vim.uv or vim.loop).hrtime()
++                while ci <= #decoded.result do
++                    local raw = decoded.result[ci]
++                    local line_end = raw.lines:find("\0", line_offset, true)
++                    lines[index] = line_end and raw.lines:sub(line_offset, line_end - 1)
++                        or raw.lines:sub(line_offset)
++                    line_offset = line_end and line_end + 1 or #raw.lines + 1
++                    local map_end = raw.map:find("\n", map_offset, true)
++                    local record = raw.map:sub(map_offset, map_end and map_end - 1 or -1)
++                    map_offset = map_end and map_end + 1 or #raw.map + 1
++                    local kind, old, new, hunk = record:match("^(%a),(%d+),(%d+),(%d+)$")
++                    map:push({
++                        kind = kinds[kind],
++                        old = tonumber(old) ~= 0 and tonumber(old) or nil,
++                        new = tonumber(new) ~= 0 and tonumber(new) or nil,
++                        hunk = tonumber(hunk) ~= 0 and tonumber(hunk) or nil,
++                        spans = raw.spans[index],
++                    })
++                    index = index + 1
++                    if map_offset > #raw.map then
++                        result.columns[ci] =
++                            { side = raw.side, lines = lines, map = map, folds = raw.folds }
++                        ci, line_offset, map_offset, index = ci + 1, 1, 1, 1
++                        map, lines = LineMap.new(), {}
++                    end
++                    if ((vim.uv or vim.loop).hrtime() - started) / 1e6 >= 4 then
++                        return vim.defer_fn(build_batch, 1)
++                    end
++                end
++                result.rows = #(result.columns[1] and result.columns[1].lines or {})
++                callback(result)
++            end
++            build_batch()
++        end)
++    end)
++    work:queue(payload, worker_package_path)
++    return work
++end
++
++return M
+diff --git a/lua/differ/render/init.lua b/lua/differ/render/init.lua
+index 0da28fa..7d4a301 100644
+--- a/lua/differ/render/init.lua
++++ b/lua/differ/render/init.lua
+@@ -52,4 +52,8 @@ function M.render(model, opts)
+     return renderer(model, opts)
+ end
+ 
++function M.render_async(model, opts, callback)
++    return require("differ.render.async").render(model, opts, callback)
++end
++
+ return M
+diff --git a/lua/differ/syntax/async.lua b/lua/differ/syntax/async.lua
+new file mode 100644
+index 0000000..a997ede
+--- /dev/null
++++ b/lua/differ/syntax/async.lua
+@@ -0,0 +1,135 @@
++local M = {}
++
++local process_limit = 1
++local files_per_process = 32
++local active = 0
++local queue = {}
++local scheduled = false
++local module_path = debug.getinfo(1, "S").source:sub(2)
++local worker_path = vim.fs.joinpath(vim.fs.dirname(module_path), "worker.lua")
++
++-- Packed array records avoid a hash table per capture in the editor. Consumers
++-- retain the same named source-coordinate fields without another allocation.
++local fields = { row = 1, col_start = 2, col_end = 3, hl = 4 }
++local mark_record = {
++    __index = function(mark, field)
++        return rawget(mark, fields[field])
++    end,
++}
++
++local function decode_frames(raw, jobs, done)
++    local offset, decoded = 1, {}
++    for i = 1, #jobs do
++        decoded[i] = {}
++    end
++    local function batch()
++        local started = (vim.uv or vim.loop).hrtime()
++        while offset <= #raw do
++            local size = tonumber(raw:sub(offset, offset + 7), 16)
++            if not size then
++                return done(nil, "invalid syntax worker frame")
++            end
++            offset = offset + 8
++            local ok, frame = pcall(vim.mpack.decode, raw:sub(offset, offset + size - 1))
++            if not ok then
++                return done(nil, tostring(frame))
++            end
++            offset = offset + size
++            for _, mark in ipairs(frame.marks) do
++                decoded[frame.job][#decoded[frame.job] + 1] = setmetatable(mark, mark_record)
++            end
++            if ((vim.uv or vim.loop).hrtime() - started) / 1e6 >= 2 then
++                return vim.defer_fn(batch, 1)
++            end
++        end
++        done(decoded)
++    end
++    batch()
++end
++
++local function pump()
++    scheduled = false
++    while active < process_limit and #queue > 0 do
++        local jobs = {}
++        for _ = 1, math.min(files_per_process, #queue) do
++            jobs[#jobs + 1] = table.remove(queue, 1)
++        end
++        active = active + 1
++        local input = {}
++        for i, job in ipairs(jobs) do
++            input[i] = {
++                model = {
++                    path = job.model.path,
++                    old_text = job.model.old_text,
++                    new_text = job.model.new_text,
++                },
++                side = job.column.side,
++                map = not job.render_opts and {
++                    from_old = job.column.map.from_old,
++                    from_new = job.column.map.from_new,
++                } or nil,
++                render_opts = job.render_opts,
++            }
++        end
++        local ok, payload = pcall(vim.mpack.encode, {
++            jobs = input,
++            runtime_paths = vim.api.nvim_list_runtime_paths(),
++        })
++        if not ok then
++            active = active - 1
++            for _, job in ipairs(jobs) do
++                vim.schedule(function()
++                    job.callback(nil, tostring(payload))
++                end)
++            end
++        else
++            local spawned, spawn_err = pcall(vim.system, {
++                "nice",
++                "-n",
++                "10",
++                vim.v.progpath,
++                "--headless",
++                "--clean",
++                "-l",
++                worker_path,
++            }, { stdin = payload }, function(result)
++                vim.schedule(function()
++                    local function finish(results, decode_err)
++                        active = active - 1
++                        for i, job in ipairs(jobs) do
++                            job.callback(results and results[i] or nil, decode_err)
++                        end
++                        pump()
++                    end
++                    if result.code ~= 0 then
++                        return finish(nil, vim.trim(result.stderr or "syntax worker failed"))
++                    end
++                    decode_frames(result.stdout or "", jobs, finish)
++                end)
++            end)
++            if not spawned then
++                active = active - 1
++                for _, job in ipairs(jobs) do
++                    vim.schedule(function()
++                        job.callback(nil, tostring(spawn_err))
++                    end)
++                end
++            end
++        end
++    end
++    if active < process_limit and #queue > 0 and not scheduled then
++        scheduled = true
++        vim.defer_fn(pump, 1)
++    end
++end
++
++function M.collect(column, model, callback, render_opts)
++    queue[#queue + 1] =
++        { column = column, model = model, callback = callback, render_opts = render_opts }
++    if not scheduled then
++        scheduled = true
++        vim.defer_fn(pump, 2)
++    end
++end
++
++return M
+diff --git a/lua/differ/syntax/init.lua b/lua/differ/syntax/init.lua
+index cb4790e..c748da1 100644
+--- a/lua/differ/syntax/init.lua
++++ b/lua/differ/syntax/init.lua
+@@ -86,21 +86,17 @@ local function captures_for(text, lang)
+     return out
+ end
+ 
+--- apply the syntax pass to one column's buffer: parse the real source(s) the
+--- column draws from (old, new, or both for a unified/stacked column), project the
+--- captures through the map, and paint them as extmarks. no-op when the language
+--- has no parser. idempotent, clears its namespace first, so it doubles as a
+--- refresh after a re-render
+----@param bufnr integer
++-- Collect source-derived syntax without choosing a destination buffer. Aggregate
++-- views use this to cache each file independently and translate the returned rows
++-- when sections move. Native views continue to use apply() below.
+ ---@param column differ.Column
+ ---@param model differ.DiffModel
+-function M.apply(bufnr, column, model)
+-    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
++---@return differ.SyntaxMark[]
++function M.collect(column, model)
+     local lang = resolve_lang(model.path)
+     if not lang then
+-        return
++        return {}
+     end
+-
+     local marks = {}
+     if column.side == "old" or column.side == "unified" then
+         vim.list_extend(
+@@ -114,16 +110,264 @@ function M.apply(bufnr, column, model)
+             project.project(captures_for(model.new_text, lang), column.map.from_new)
+         )
+     end
++    -- Unified context projects both sources onto the same rows. Keep the last
++    -- identical mark, preserving precedence while avoiding duplicate extmarks.
++    local seen, unique = {}, {}
++    for i = #marks, 1, -1 do
++        local mark = marks[i]
++        local key = table.concat({ mark.row, mark.col_start, mark.col_end, mark.hl }, ":")
++        if not seen[key] then
++            seen[key] = true
++            unique[#unique + 1] = mark
++        end
++    end
++    for i = 1, math.floor(#unique / 2) do
++        unique[i], unique[#unique - i + 1] = unique[#unique - i + 1], unique[i]
++    end
++    for index, mark in ipairs(unique) do
++        mark.order = index
++    end
++    table.sort(unique, function(left, right)
++        return left.row == right.row and left.order < right.order or left.row < right.row
++    end)
++    return unique
++end
++
++---@class differ.SyntaxLayer
++---@field bufnr integer
++---@field marks differ.SyntaxMark[] Sorted by row, preserving capture precedence per row.
++---@field row_offset integer|fun(): integer
++---@field valid? fun(): boolean
++---@field on_done? fun()
++---@field first_row? integer
++---@field last_row? integer
++---@field complete boolean
++---@field cancelled boolean
++
++---@type table<integer, { layers: differ.SyntaxLayer[], attached: boolean }>
++local buffers = {}
++local visible = {}
++local generations = {}
++local redraw_scheduled = false
++
++local function layer_offset(layer)
++    return type(layer.row_offset) == "function" and layer.row_offset() or (layer.row_offset or 0)
++end
++
++local function request_redraw()
++    if redraw_scheduled then
++        return
++    end
++    redraw_scheduled = true
++    vim.schedule(function()
++        redraw_scheduled = false
++        pcall(vim.cmd, "redraw")
++    end)
++end
+ 
+-    for _, m in ipairs(marks) do
+-        -- end_col is byte-identical to the source line (same content), but guard
+-        -- against any treesitter range quirk rather than abort the whole pass
+-        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, m.row, m.col_start, {
+-            end_col = m.col_end,
+-            hl_group = m.hl,
+-            priority = PRIORITY,
++local function ensure_buffer(bufnr)
++    local state = buffers[bufnr]
++    if state then
++        return state
++    end
++    state = { layers = {}, attached = true }
++    buffers[bufnr] = state
++    if
++        not vim.api.nvim_buf_attach(bufnr, false, {
++            on_detach = function()
++                local detached = buffers[bufnr]
++                if detached then
++                    for _, layer in ipairs(detached.layers) do
++                        layer.cancelled = true
++                        layer.marks = {}
++                    end
++                end
++                buffers[bufnr] = nil
++                generations[bufnr] = nil
++                visible = {}
++            end,
+         })
++    then
++        state.attached = false
++    end
++    return state
++end
++
++vim.api.nvim_set_decoration_provider(ns, {
++    on_win = function(_, winid, bufnr, topline, botline)
++        local state = buffers[bufnr]
++        if not state then
++            visible[winid] = nil
++            return false
++        end
++        local active = {}
++        for _, layer in ipairs(state.layers) do
++            local offset = layer_offset(layer)
++            if
++                layer.complete
++                and layer.has_marks
++                and not layer.cancelled
++                and (not layer.valid or layer.valid())
++                and layer.first_row + offset <= botline
++                and layer.last_row + offset >= topline
++            then
++                active[#active + 1] = layer
++            end
++        end
++        visible[winid] = active
++        return #active > 0
++    end,
++    on_line = function(_, winid, bufnr, row)
++        for _, layer in ipairs(visible[winid] or {}) do
++            local marks = layer.marks
++            local target = row - layer_offset(layer)
++            local lo, hi = 1, #marks + 1
++            while lo < hi do
++                local mid = math.floor((lo + hi) / 2)
++                if marks[mid].row < target then
++                    lo = mid + 1
++                else
++                    hi = mid
++                end
++            end
++            while not layer.cancelled and marks[lo] and marks[lo].row == target do
++                local mark = marks[lo]
++                pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, row, mark.col_start, {
++                    end_col = mark.col_end,
++                    hl_group = mark.hl,
++                    priority = PRIORITY,
++                    ephemeral = true,
++                })
++                lo = lo + 1
++            end
++        end
++    end,
++})
++
++function M.collect_async(column, model, callback, render_opts)
++    require("differ.syntax.async").collect(column, model, callback, render_opts)
++end
++
++function M.paint_async(bufnr, marks, opts)
++    opts = opts or {}
++    if not vim.api.nvim_buf_is_valid(bufnr) or (opts.valid and not opts.valid()) then
++        return
++    end
++    local state = ensure_buffer(bufnr)
++    local layer = {
++        bufnr = bufnr,
++        marks = marks,
++        row_offset = opts.row_offset or 0,
++        valid = opts.valid,
++        on_done = opts.on_done,
++        first_row = marks[1] and marks[1].row,
++        last_row = marks[#marks] and marks[#marks].row,
++        has_marks = #marks > 0,
++        complete = true,
++        cancelled = false,
++    }
++    state.layers[#state.layers + 1] = layer
++    request_redraw()
++    if opts.on_done then
++        vim.schedule(opts.on_done)
++    end
++end
++
++-- Return the prepared cache in current buffer coordinates. This is an inspection
++-- API for ownership/invariant tests; rendering itself stays viewport-driven.
++function M.get_marks(bufnr, first_row, last_row)
++    local result = {}
++    local state = buffers[bufnr]
++    first_row = first_row or 0
++    last_row = last_row or math.huge
++    for _, layer in ipairs((state and state.layers) or {}) do
++        if layer.complete and not layer.cancelled and (not layer.valid or layer.valid()) then
++            local offset = layer_offset(layer)
++            for _, mark in ipairs(layer.marks) do
++                local row = mark.row + offset
++                if row >= first_row and row < last_row then
++                    result[#result + 1] = {
++                        row = row,
++                        col_start = mark.col_start,
++                        col_end = mark.col_end,
++                        hl = mark.hl,
++                    }
++                end
++            end
++        end
++    end
++    table.sort(result, function(left, right)
++        if left.row ~= right.row then
++            return left.row < right.row
++        elseif left.col_start ~= right.col_start then
++            return left.col_start < right.col_start
++        elseif left.col_end ~= right.col_end then
++            return left.col_end < right.col_end
++        end
++        return left.hl < right.hl
++    end)
++    return result
++end
++
++-- apply the syntax pass to one column's buffer: parse the real source(s) the
++-- column draws from (old, new, or both for a unified/stacked column), project the
++-- captures through the map, and paint them as extmarks. no-op when the language
++-- has no parser. idempotent, clears its namespace first, so it doubles as a
++-- refresh after a re-render
++---@param bufnr integer
++---@param column differ.Column
++---@param model differ.DiffModel
++function M.apply(bufnr, column, model, render_opts)
++    M.clear(bufnr, 0, -1)
++    generations[bufnr] = (generations[bufnr] or 0) + 1
++    local generation = generations[bufnr]
++    M.collect_async(column, model, function(marks, err)
++        if generations[bufnr] ~= generation then
++            return
++        end
++        if not marks then
++            return vim.notify(
++                ("differ: syntax highlighting failed for %s: %s"):format(
++                    model.path,
++                    err or "unknown error"
++                ),
++                vim.log.levels.WARN
++            )
++        end
++        M.paint_async(bufnr, marks, {
++            valid = function()
++                return generations[bufnr] == generation
++            end,
++        })
++    end, render_opts)
++end
++
++function M.clear(bufnr, first, last)
++    first, last = first or 0, last or -1
++    vim.api.nvim_buf_clear_namespace(bufnr, ns, first, last)
++    local state = buffers[bufnr]
++    if not state then
++        return
++    end
++    local kept = {}
++    for _, layer in ipairs(state.layers) do
++        local remove = last == -1
++        if not remove then
++            local offset = layer_offset(layer)
++            local layer_first = offset + (layer.first_row or 0)
++            local layer_last = offset + (layer.last_row or layer.first_row or 0) + 1
++            remove = (offset >= first and offset < last)
++                or (layer_first < last and layer_last > first)
++        end
++        if remove then
++            layer.cancelled = true
++            layer.marks = {}
++        else
++            kept[#kept + 1] = layer
++        end
+     end
++    state.layers = kept
++    request_redraw()
+ end
+ 
+ -- apply the syntax pass to detached code snippets (the overview's diff hunks): parse
+diff --git a/lua/differ/syntax/worker.lua b/lua/differ/syntax/worker.lua
+new file mode 100644
+index 0000000..b659dce
+--- /dev/null
++++ b/lua/differ/syntax/worker.lua
+@@ -0,0 +1,39 @@
++local payload = vim.mpack.decode(io.stdin:read("*a"))
++vim.opt.runtimepath = payload.runtime_paths
++local syntax = require("differ.syntax")
++local chunk_size = 64
++for job_index, job in ipairs(payload.jobs) do
++    local model = require("differ.model.diff").build(job.model)
++    local column
++    if job.render_opts then
++        local columns = require("differ.render").render(model, job.render_opts).columns
++        for _, candidate in ipairs(columns) do
++            if candidate.side == job.side or candidate.side == "unified" then
++                column = candidate
++                break
++            end
++        end
++    else
++        column = { side = job.side, map = job.map }
++    end
++    local marks = syntax.collect(column, model)
++    if #marks == 0 then
++        local encoded = vim.mpack.encode({ job = job_index, marks = {} })
++        io.stdout:write(string.format("%08x", #encoded), encoded)
++    else
++        for first = 1, #marks, chunk_size do
++            local compact = {}
++            for index = first, math.min(first + chunk_size - 1, #marks) do
++                local mark = marks[index]
++                compact[#compact + 1] = { mark.row, mark.col_start, mark.col_end, mark.hl }
++            end
++            local encoded = vim.mpack.encode({
++                job = job_index,
++                marks = compact,
++            })
++            io.stdout:write(string.format("%08x", #encoded), encoded)
++        end
++    end
++end
++io.stdout:flush()
++vim.cmd("qa!")
+diff --git a/lua/differ/ui/paint.lua b/lua/differ/ui/paint.lua
+index ec69987..07db848 100644
+--- a/lua/differ/ui/paint.lua
++++ b/lua/differ/ui/paint.lua
+@@ -14,14 +14,10 @@ local WORD_HL = { old = "differWordDelete", new = "differWordAdd" }
+ ---@param bufnr integer
+ ---@param ns integer
+ ---@param column differ.Column
+-function M.apply(bufnr, ns, column)
+-    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
++function M.apply_line(bufnr, ns, column, row_offset)
++    row_offset = row_offset or 0
+     for i, line in ipairs(column.map.lines) do
+-        local row = i - 1
+-        -- split's filler: a meta row with no text, padding the column opposite an
+-        -- inserted/deleted block. fill it with dashes (columns wide, clipped to the
+-        -- pane) so the empty side reads as "no line here", not a blank void. anchored
+-        -- at window col 0; the binary-notice meta row carries text, so it's excluded
++        local row = row_offset + i - 1
+         if line.kind == "meta" and (column.lines[i] == nil or column.lines[i] == "") then
+             vim.api.nvim_buf_set_extmark(bufnr, ns, row, 0, {
+                 virt_text = { { string.rep("-", vim.o.columns), "differFiller" } },
+@@ -31,9 +27,6 @@ function M.apply(bufnr, ns, column)
+         end
+         local line_hl = LINE_HL[line.kind]
+         if line_hl then
+-            -- char-level full-line fill, not line_hl_group: a line_hl_group bg wins
+-            -- over a character hl_group bg regardless of priority, which buries the
+-            -- word spans. hl_eol extends the fill past EOL so it still spans the row
+             vim.api.nvim_buf_set_extmark(bufnr, ns, row, 0, {
+                 end_row = row + 1,
+                 end_col = 0,
+@@ -55,4 +48,37 @@ function M.apply(bufnr, ns, column)
+     end
+ end
+ 
++function M.apply(bufnr, ns, column)
++    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
++    M.apply_line(bufnr, ns, column)
++end
++
++local generations = {}
++function M.apply_async(bufnr, ns, column, opts)
++    opts = opts or {}
++    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
++    generations[bufnr] = (generations[bufnr] or 0) + 1
++    local generation, index = generations[bufnr], 1
++    local function batch()
++        if not vim.api.nvim_buf_is_valid(bufnr) or generations[bufnr] ~= generation then
++            return
++        end
++        local started = (vim.uv or vim.loop).hrtime()
++        repeat
++            local line = column.map.lines[index]
++            if not line then
++                if opts.on_done then
++                    opts.on_done()
++                end
++                return
++            end
++            local one = { lines = { column.lines[index] }, map = { lines = { line } } }
++            M.apply_line(bufnr, ns, one, index - 1)
++            index = index + 1
++        until ((vim.uv or vim.loop).hrtime() - started) / 1e6 >= (opts.budget_ms or 2)
++        vim.defer_fn(batch, 1)
++    end
++    vim.defer_fn(batch, 1)
++end
++
+ return M
+diff --git a/lua/differ/view.lua b/lua/differ/view.lua
+index 4e33778..46aa8d9 100644
+--- a/lua/differ/view.lua
++++ b/lua/differ/view.lua
+@@ -288,7 +288,7 @@ function View:rerender(opts)
+     self.layout = opts.layout
+     self.context = opts.context
+     self.deep_diff = opts.deep_diff
+-    local result = render.render(self.model, opts)
++    local result = opts.prepared or render.render(self.model, opts)
+ 
+     for i, col in ipairs(result.columns) do
+         local existing = self.columns[i]
+@@ -299,8 +299,16 @@ function View:rerender(opts)
+         vim.bo[bufnr].modifiable = true
+         vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, col.lines)
+         vim.bo[bufnr].modifiable = false
+-        paint.apply(bufnr, ns, col)
+-        syntax.apply(bufnr, col, self.model)
++        if opts.async_decorations then
++            paint.apply_async(bufnr, ns, col)
++        else
++            paint.apply(bufnr, ns, col)
++        end
++        syntax.apply(bufnr, col, self.model, {
++            layout = opts.layout,
++            context = opts.context,
++            deep_diff = opts.deep_diff,
++        })
+         statuscolumn.set(bufnr, statuscolumn.format(col))
+         self.columns[i] = {
+             bufnr = bufnr,

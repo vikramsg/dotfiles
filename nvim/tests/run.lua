@@ -3,6 +3,10 @@ local M = {}
 local specs = {
 	-- Verifies Differ's comparison selection and source navigation with real Git/plugin views.
 	"tests.git_review_spec",
+	-- Changeset source ownership and incremental updates; visual workflows are manual.
+	"tests.continuous_review_spec",
+	-- Source-based syntax projection and isolation across mixed-language sections.
+	"tests.continuous_syntax_spec",
 	-- Real PR UI with an intercepted sidecar boundary; never writes to GitHub.
 	"tests.pr_review_spec",
 	-- Verifies persistent local-review ownership, schema, and atomic writes.

@@ -1,0 +1,3 @@
+# Unified patches encode empty context lines with a required single-space prefix.
+# Validate whitespace in the applied dependency separately.
+patches/*.patch whitespace=-blank-at-eol

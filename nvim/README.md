@@ -34,8 +34,9 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 ### Git diffs
 
-- `Space + gd`: Open Differ with uncommitted changes, or automatically compare against `main` when the working tree is clean.
-- `Enter` in the file tree: Open the selected file and focus its diff.
+- `Space + gd`: Open a continuous Differ review of all changed files, using uncommitted changes or automatically comparing against `main` when the working tree is clean.
+- Scroll through file boundaries without opening each file. Full-width header bands separate files, and the window bar identifies the current file.
+- `Enter` in the file tree: Jump to the selected file in the review and focus its diff.
 - `gf`: Open the real file in an existing editor split in the previous tab at the mapped source line, keeping the review open.
 - `B` in local reviews: Toggle uncommitted changes since `HEAD` and all changes since branching from `main`.
 - `g?`: Show context-aware local/PR review shortcuts.
@@ -43,10 +44,18 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 - `[` / `]`: Move to the previous/next changed hunk.
 - `[f` / `]f`: Move to the previous/next changed file.
 
-- `t`: Toggle stacked and side-by-side layouts. Stacked is an inline diff of one file, not a multi-file view.
+- `t`: Inspect the current file side by side; press again to return to its position in the continuous inline review.
+- `df` in side-by-side inspection: Open Differ's native editable source pane beside the diff.
+- Both review layouts retain source-language syntax highlighting alongside diff-line and word-level colors, using each file's installed Tree-sitter parser.
 - `T`: Toggle compact/full context from the diff or tree. Reviews start compact, with three lines of context around changes; the choice persists across files, layouts, refreshes, and `B` comparisons.
 - `X`: Discard the current hunk after confirmation. **In the tree this discards the whole file's changes.** Available in the uncommitted view; this modifies actual files, not just the display.
 Requires Neovim 0.12+. GitHub review requires Go and make to build the sidecar (handled by Lazy's build hook), plus GitHub authentication. Local diffs do not need the sidecar.
+
+Differ is pinned to the revision in `init.lua`. Lazy's build hook applies the
+repository's [Differ extension](patches/differ-continuous-sections.patch) before
+building the sidecar. After changing the extension, run `:Lazy build differ.nvim`
+and restart Neovim. The extension exposes native operations for continuous review
+and schedules source highlighting without disabling it for large files.
 
 #### Local review comments
 

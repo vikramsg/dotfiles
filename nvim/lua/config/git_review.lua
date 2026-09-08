@@ -1,4 +1,21 @@
 local M = {}
+local open_generation = 0
+
+local function active_review_view()
+	local continuous = require("config.differ_continuous")
+	local view = continuous.current()
+	if view then
+		return view
+	end
+	local panel = require("differ.panel").current()
+	if panel and panel.origin_win and vim.api.nvim_win_is_valid(panel.origin_win) then
+		view = continuous.for_buf(vim.api.nvim_win_get_buf(panel.origin_win))
+		if view then
+			return view
+		end
+	end
+	return require("differ").active_view()
+end
 
 local function append_review_output(panel)
 	local session = panel.dotfiles_local_review_session
@@ -101,37 +118,42 @@ function M.refresh_review_output(session)
 	end
 end
 
-local function review_comparison()
+local function review_comparison(done)
 	local git_root = Snacks.git.get_root()
 	if not git_root then
 		vim.notify("Differ requires a Git repository", vim.log.levels.ERROR)
-		return
+		return done()
 	end
 
-	local status = vim.system({ "git", "status", "--porcelain", "--untracked-files=normal" }, {
+	vim.system({ "git", "status", "--porcelain", "--untracked-files=normal" }, {
 		cwd = git_root,
 		text = true,
-	}):wait()
-	if status.code ~= 0 then
-		vim.notify(status.stderr or "Unable to read Git status", vim.log.levels.ERROR)
-		return
-	end
-
-	if status.stdout ~= "" then
-		return git_root, "HEAD"
-	end
-
-	local against_main = vim.system({ "git", "diff", "--quiet", "main...HEAD", "--" }, {
-		cwd = git_root,
-		text = true,
-	}):wait()
-	if against_main.code == 1 then
-		return git_root, "main"
-	elseif against_main.code == 0 then
-		vim.notify("No changes since HEAD or since branching from main", vim.log.levels.INFO)
-	else
-		vim.notify(against_main.stderr or "Unable to compare against main", vim.log.levels.ERROR)
-	end
+	}, function(status)
+		vim.schedule(function()
+			if status.code ~= 0 then
+				vim.notify(status.stderr or "Unable to read Git status", vim.log.levels.ERROR)
+				return done()
+			end
+			if status.stdout ~= "" then
+				return done(git_root, "HEAD")
+			end
+			vim.system({ "git", "diff", "--quiet", "main...HEAD", "--" }, {
+				cwd = git_root,
+				text = true,
+			}, function(against_main)
+				vim.schedule(function()
+					if against_main.code == 1 then
+						return done(git_root, "main")
+					elseif against_main.code == 0 then
+						vim.notify("No changes since HEAD or since branching from main", vim.log.levels.INFO)
+					else
+						vim.notify(against_main.stderr or "Unable to compare against main", vim.log.levels.ERROR)
+					end
+					done()
+				end)
+			end)
+		end)
+	end)
 end
 
 -- Reuse an editor split rather than replacing whichever scratch/explorer split
@@ -200,6 +222,12 @@ local function apply_differ_folds(win)
 end
 
 local function toggle_differ_context()
+	local continuous = active_review_view()
+	if continuous then
+		if continuous.toggle_context then
+			return continuous:toggle_context()
+		end
+	end
 	vim.t.dotfiles_differ_compact = vim.t.dotfiles_differ_compact == false
 	for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
 		if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "differdiff" then
@@ -226,43 +254,48 @@ local function schedule_differ_folds(buf)
 	end)
 end
 
-local function open_differ_comparison(git_root, mode, compact, local_session)
-	-- Differ chooses its repository from the file or cwd and opens a new tab.
-	-- Keep the invoking window's directory unchanged, including its scope.
-	local origin = vim.api.nvim_get_current_win()
-	local cwd, scope = vim.fn.getcwd(), vim.fn.haslocaldir()
-	vim.cmd("lcd " .. vim.fn.fnameescape(git_root))
-	local ok, err = pcall(function()
-		require("differ").open(mode == "main" and "main..." or "HEAD")
-	end)
-	if vim.api.nvim_win_is_valid(origin) then
-		vim.api.nvim_win_call(origin, function()
-			local command = scope == 1 and "lcd" or (scope == 2 and "tcd" or "cd")
-			vim.cmd(command .. " " .. vim.fn.fnameescape(cwd))
-		end)
-	end
-	if not ok then
-		vim.notify(tostring(err), vim.log.levels.ERROR)
-		return
-	end
-	local panel = require("differ.panel").current()
-	if panel then
+local function open_differ_comparison(git_root, mode, compact, local_session, valid)
+	local local_review = require("config.differ_local_review")
+	local_session = local_session or local_review.new_session(git_root, mode)
+	require("config.differ_continuous_review").open_local({
+		root = git_root,
+		mode = mode,
+		compact = compact,
+		valid = valid,
+	}, function(panel, continuous)
+		if not panel then
+			return
+		end
 		local tab = vim.api.nvim_win_get_tabpage(panel.origin_win)
-		local local_review = require("config.differ_local_review")
-		local_session = local_session or local_review.new_session(git_root, mode)
 		local_review.assign(tab, local_session, mode)
 		local_session.panel = panel
 		M.attach_review_panel(panel, local_session)
 		vim.t[tab].dotfiles_differ_review = { root = git_root, mode = mode, local_session_id = local_session.id }
 		vim.t[tab].dotfiles_differ_compact = compact ~= false
-	end
+		if continuous then
+			local_review.attach(local_session, continuous)
+		end
+	end)
 end
 
 function M.open_differ()
-	local root, mode = review_comparison()
-	if root then
-		open_differ_comparison(root, mode)
+	open_generation = open_generation + 1
+	local generation = open_generation
+	local origin_tab = vim.api.nvim_get_current_tabpage()
+	local origin_win = vim.api.nvim_get_current_win()
+	local origin_buf = vim.api.nvim_win_get_buf(origin_win)
+	local function valid()
+		return generation == open_generation
+			and vim.api.nvim_tabpage_is_valid(origin_tab)
+			and vim.api.nvim_get_current_tabpage() == origin_tab
+			and vim.api.nvim_win_is_valid(origin_win)
+			and vim.api.nvim_win_get_buf(origin_win) == origin_buf
 	end
+	review_comparison(function(root, mode)
+		if root and valid() then
+			open_differ_comparison(root, mode, nil, nil, valid)
+		end
+	end)
 end
 
 local function toggle_differ_comparison()
@@ -279,13 +312,24 @@ local function toggle_differ_comparison()
 		return
 	end
 	require("differ").close()
+	open_generation = open_generation + 1
 	open_differ_comparison(review.root, review.mode == "main" and "HEAD" or "main", compact, local_session)
 end
 
 local function edit_differ_file()
-	local view = require("differ").active_view()
+	local view = active_review_view()
 	if not view then
 		return
+	end
+	if view.source_position then
+		local section, line, col = view:source_position()
+		if not section then
+			return
+		end
+		local path = view.root and (view.root .. "/" .. section.entry.path)
+		local review_tab = view.winid and vim.api.nvim_win_is_valid(view.winid) and vim.api.nvim_win_get_tabpage(view.winid)
+			or vim.api.nvim_get_current_tabpage()
+		return edit_review_file(review_tab, path, { line or 1, col or 0 })
 	end
 	-- Diff rows contain deletions and metadata. Resolve through Differ's line map,
 	-- including when gf is invoked from the old side of a split diff.
@@ -313,6 +357,10 @@ local function current_pr()
 	local session = require("differ.pr").current_session()
 	local buf = vim.api.nvim_get_current_buf()
 	if session then
+		local continuous = active_review_view()
+		if continuous and session.view == continuous then
+			return session
+		end
 		if session.panel and session.panel.bufnr == buf then
 			return session
 		end
@@ -393,7 +441,6 @@ local function show_differ_help()
 			"X       Discard hunk; in tree: WHOLE FILE (confirmation)",
 			"        Uncommitted view only; changes actual files",
 			"s / u   Stage / unstage hunk or file",
-			"df      Edit beside an uncommitted diff",
 		})
 	end
 	vim.list_extend(lines, {
@@ -403,7 +450,7 @@ local function show_differ_help()
 		"[f / ]f Previous / next file",
 		"Enter   Open selected file and focus its diff; toggle directories",
 		"        On Review output: open read-only JSON split (q closes it)",
-		"t       Toggle stacked / split layout",
+		"t       Inspect current file side by side / return to continuous",
 		"T       Toggle compact / full context (default: compact)",
 		"q       Close review and return to the editor",
 		"",
@@ -462,6 +509,14 @@ local function github_comment()
 end
 
 local function github_comment_range()
+	local view = active_review_view()
+	if
+		view
+		and view.selection_in_one_section
+		and not view:selection_in_one_section(vim.fn.line("v"), vim.fn.line("."))
+	then
+		return vim.notify("Differ: a comment selection cannot cross file boundaries", vim.log.levels.WARN)
+	end
 	require("differ.pr").comment_range()
 	label_github_composer()
 end
@@ -481,12 +536,7 @@ function M.setup_differ(opts)
 				if not vim.api.nvim_buf_is_valid(buf) then
 					return
 				end
-				vim.keymap.set(
-					"n",
-					"B",
-					toggle_differ_comparison,
-					{ buffer = buf, desc = "Toggle HEAD/Main Comparison" }
-				)
+				vim.keymap.set("n", "B", toggle_differ_comparison, { buffer = buf, desc = "Toggle HEAD/Main Comparison" })
 				vim.keymap.set("n", "gf", edit_differ_file, { buffer = buf, desc = "Edit File at Current Line" })
 				vim.keymap.set("n", "g?", show_differ_help, { buffer = buf, desc = "Differ Review Help" })
 				vim.keymap.set("n", "T", toggle_differ_context, { buffer = buf, desc = "Toggle Compact/Full Context" })
@@ -494,12 +544,23 @@ function M.setup_differ(opts)
 				vim.keymap.set("n", "<leader>pr", start_pr_review, { buffer = buf, desc = "Start/Resume PR Review" })
 				if vim.bo[buf].filetype == "differpanel" then
 					local pr = require("differ.pr").current_session()
-					local panel = pr and pr.panel and pr.panel.bufnr == buf and pr.panel
-						or require("differ.panel").current()
+					local panel = pr and pr.panel and pr.panel.bufnr == buf and pr.panel or require("differ.panel").current()
 					if panel and panel.bufnr == buf then
 						vim.keymap.set("n", "<CR>", function()
 							select_panel_row(panel)
 						end, { buffer = buf, desc = "Open Review Item" })
+						vim.keymap.set("n", "]", function()
+							local view = active_review_view()
+							if view and view.jump_hunk then
+								view:jump_hunk("next")
+							end
+						end, { buffer = buf, desc = "Next Hunk Across Files" })
+						vim.keymap.set("n", "[", function()
+							local view = active_review_view()
+							if view and view.jump_hunk then
+								view:jump_hunk("prev")
+							end
+						end, { buffer = buf, desc = "Previous Hunk Across Files" })
 					end
 				end
 				local review = vim.t.dotfiles_differ_review
@@ -520,44 +581,28 @@ function M.setup_differ(opts)
 					if pr then
 						-- c is an explicit alias; Differ's configurable native key remains bound.
 						vim.keymap.set("n", "c", github_comment, { buffer = buf, desc = "Comment on GitHub PR" })
-						vim.keymap.set(
-							"x",
-							"c",
-							github_comment_range,
-							{ buffer = buf, desc = "Comment on GitHub PR Range" }
-						)
+						vim.keymap.set("x", "c", github_comment_range, { buffer = buf, desc = "Comment on GitHub PR Range" })
 					else
 						if review and session then
 							local_review.attach(session, require("differ").active_view())
-							vim.keymap.set(
-								"n",
-								"c",
-								local_review.comment,
-								{ buffer = buf, desc = "Add Local Review Note" }
-							)
+							vim.keymap.set("n", "c", local_review.comment, { buffer = buf, desc = "Add Local Review Note" })
 							vim.keymap.set(
 								"x",
 								"c",
 								local_review.comment_range,
 								{ buffer = buf, desc = "Add Local Review Range Note" }
 							)
-							vim.keymap.set(
-								"n",
-								"ge",
-								local_review.edit,
-								{ buffer = buf, desc = "Edit Local Review Note" }
-							)
-							vim.keymap.set(
-								"n",
-								"gx",
-								local_review.delete,
-								{ buffer = buf, desc = "Delete Local Review Note" }
-							)
+							vim.keymap.set("n", "ge", local_review.edit, { buffer = buf, desc = "Edit Local Review Note" })
+							vim.keymap.set("n", "gx", local_review.delete, { buffer = buf, desc = "Delete Local Review Note" })
 						end
 					end
 				end
 				-- Submit, native comment/reply, and composer controls stay native to Differ's PR UI.
-				if vim.bo[buf].filetype == "differdiff" and not watched_diffs[buf] then
+				if
+					vim.bo[buf].filetype == "differdiff"
+					and not require("config.differ_continuous").for_buf(buf)
+					and not watched_diffs[buf]
+				then
 					watched_diffs[buf] = vim.api.nvim_buf_attach(buf, false, {
 						on_lines = function()
 							schedule_differ_folds(buf)
@@ -568,6 +613,14 @@ function M.setup_differ(opts)
 					})
 					schedule_differ_folds(buf)
 				end
+				-- PR sessions are created asynchronously. Once their first native file is
+				-- present, replace that single-file projection with the repo-owned aggregate.
+				vim.schedule(function()
+					local pr = current_pr()
+					if pr and pr.view and not pr.dotfiles_continuous_view then
+						require("config.differ_continuous_review").adopt_pr(pr)
+					end
+				end)
 			end)
 		end,
 	})

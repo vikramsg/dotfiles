@@ -38,13 +38,96 @@ local function focus_line(target)
 	if vim.bo.filetype == "differpanel" then
 		keys("<C-w>l")
 	end
-	for row, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
-		if line == target then
-			vim.api.nvim_win_set_cursor(0, { row, 0 })
-			return
+	wait("PR diff should load " .. target, function()
+		for row, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+			if line == target then
+				vim.api.nvim_win_set_cursor(0, { row, 0 })
+				return true
+			end
+		end
+		return false
+	end)
+end
+
+local function refreshed_pr_sources(state)
+	local pr = require("differ.pr")
+	state.files = {
+		{ path = "example.txt", status = "modified", additions = 2, deletions = 2 },
+		{ path = "other.txt", status = "modified", additions = 2, deletions = 2 },
+	}
+	local coords = pr.current_session().coords
+	-- show starts a fresh fixture session; open deliberately reuses matching PRs.
+	pr.show({ owner = coords.owner, repo = coords.repo, number = 17 }, { land = "files" })
+	local session
+	wait("both pinned PR sources should load", function()
+		session = pr.current_session()
+		local sections = session and session.view and session.view.sections
+		return sections and #sections == 2 and sections[1].map and sections[2].map
+	end)
+	session.panel:goto_path("example.txt", true)
+	state.defer_versions = true
+	local intermediate, final = string.rep("c", 40), string.rep("d", 40)
+	state.head_sha = intermediate
+	state.new_text = state.new_text:gsub("after first", "intermediate head")
+	pr.handle_conflict()
+	local function pending(path, head)
+		local found
+		wait("version request should use the requested pinned head", function()
+			for _, request in ipairs(state.pending_versions) do
+				if not request.delivered and request.args.path == path and request.args.head == head then
+					found = request
+					return true
+				end
+			end
+		end)
+		return found
+	end
+	local first = pending("example.txt", intermediate)
+	first.delivered = true
+	first.deliver()
+	pending("other.txt", intermediate)
+	state.head_sha = final
+	state.new_text = state.new_text:gsub("intermediate head", "final head")
+	pr.handle_conflict()
+	local latest = pending("example.txt", final)
+	state.defer_versions = false
+	latest.delivered = true
+	latest.deliver()
+	local function all_final()
+		local sections = session.view.sections
+		if not sections or #sections ~= 2 then
+			return false
+		end
+		for _, section in ipairs(sections) do
+			if
+				not (
+					section.model
+					and section.model.new_rev == final:sub(1, 7)
+					and table.concat(section.lines or {}, "\n"):find("final head", 1, true)
+				)
+			then
+				return false
+			end
+		end
+		return true
+	end
+	wait("a moved head must refresh every aggregate source", all_final)
+	-- Deliver older versions after the newer head is fully visible. This exercises
+	-- the source boundary, not a scripted composer/overview walkthrough.
+	for _, request in ipairs(state.pending_versions) do
+		if not request.delivered and request.args.head == intermediate then
+			request.delivered = true
+			request.deliver()
 		end
 	end
-	error("diff should contain " .. target)
+	local delivered = false
+	vim.schedule(function()
+		delivered = true
+	end)
+	wait("stale versions should settle", function()
+		return delivered and not session.view.render_scheduled
+	end)
+	assert(all_final(), "late old-head versions must not overwrite refreshed PR contents")
 end
 
 function M.run()
@@ -200,12 +283,15 @@ function M.run()
 			assert(opts.prompt == "Select a pull request", "pl should open the PR picker")
 			cb(items[1])
 		end
+		local previous_session = require("differ.pr").current_session()
 		keys(" pl")
+		wait("PR picker should finish replacing its session", function()
+			local current = require("differ.pr").current_session()
+			return current ~= nil and current ~= previous_session
+		end)
 		diff_ready()
-		assert(
-			#state.failures == 0,
-			"all test requests must use the simulated backend: " .. vim.inspect(state.failures)
-		)
+		assert(#state.failures == 0, "all test requests must use the simulated backend: " .. vim.inspect(state.failures))
+		refreshed_pr_sources(state)
 	end, debug.traceback)
 	pcall(require("differ").close)
 	for _, tab in ipairs(vim.api.nvim_list_tabpages()) do

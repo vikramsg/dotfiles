@@ -70,6 +70,7 @@ local vim = vim
 
 -- Also resolve our modules when this config is launched with `nvim -u /path/init.lua`.
 local config_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+vim.opt.runtimepath:prepend(config_dir)
 
 vim.o.number = true
 vim.o.relativenumber = false
@@ -730,7 +731,25 @@ require("lazy").setup({
 	},
 	{
 		"undont/differ.nvim",
-		build = "make go-build",
+		commit = "20dc7bbc28eedf3180d9ae3eb6d85506e45b4697",
+		build = function(plugin)
+			local patch = config_dir .. "/patches/differ-continuous-sections.patch"
+			local check = vim.system({ "git", "apply", "--reverse", "--check", patch }, { cwd = plugin.dir }):wait()
+			if check.code ~= 0 then
+				local applied = vim.system({ "git", "apply", "--check", patch }, { cwd = plugin.dir }):wait()
+				if applied.code ~= 0 then
+					error("Differ section extension does not apply: " .. vim.trim(applied.stderr or ""))
+				end
+				local result = vim.system({ "git", "apply", patch }, { cwd = plugin.dir }):wait()
+				if result.code ~= 0 then
+					error("Could not install Differ section extension: " .. vim.trim(result.stderr or ""))
+				end
+			end
+			local built = vim.system({ "make", "go-build" }, { cwd = plugin.dir }):wait()
+			if built.code ~= 0 then
+				error("Could not build Differ sidecar: " .. vim.trim(built.stderr or ""))
+			end
+		end,
 		cmd = "Differ",
 		keys = {
 			{
@@ -759,6 +778,7 @@ require("lazy").setup({
 			},
 		},
 		config = function(_, opts)
+			require("config.differ_continuous").setup_highlights()
 			require("config.git_review").setup_differ(opts)
 		end,
 	},
@@ -1398,9 +1418,9 @@ require("lazy").setup({
 
 	-- "gc" to comment visual regions/lines
 	{ "numToStr/Comment.nvim", opts = {} },
-	-- Add this config directory to the runtime path so `require("config.*")` works
-	-- when Neovim is launched directly with `nvim -u /path/to/init.lua`.
-}, { performance = { rtp = { paths = { config_dir } } } })
+	-- Preserve the selected config directory at the front for explicit -u launches.
+	-- Resetting the path would put the symlinked default config before this checkout.
+}, { performance = { rtp = { reset = false } } })
 
 require("noice").setup({
 	presets = {
