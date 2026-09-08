@@ -496,20 +496,18 @@ local function refresh_listing_ownership()
 			view = require("config.differ_continuous").current()
 			return view and view:section_for_path("example.txt")
 		end)
-		local original_system = vim.system
+		local native_git = require("differ.git")
+		local original_list = native_git.list_async
 		local pending = {}
 		local ok, err = xpcall(function()
-			vim.system = function(command, opts, callback)
-				if callback and command[1] == "git" and command[2] == "status" and command[3] == "--porcelain=v1" then
-					return original_system(command, opts, function(result)
-						vim.schedule(function()
-							pending[#pending + 1] = function()
-								callback(result)
-							end
-						end)
-					end)
-				end
-				return original_system(command, opts, callback)
+			-- Delay real source results at Differ's async boundary, independently
+			-- of whether its Git commands run in this process or a worker.
+			native_git.list_async = function(root, args, callback)
+				return original_list(root, args, function(sections, listing_err, base)
+					pending[#pending + 1] = function()
+						callback(sections, listing_err, base)
+					end
+				end)
 			end
 			view.on_refresh()
 			wait_for("first Git listing should be captured", function()
@@ -534,7 +532,7 @@ local function refresh_listing_ownership()
 			end)
 			assert(view:section_for_path("later.txt"), "an older Git listing must not remove a file from a newer refresh")
 		end, debug.traceback)
-		vim.system = original_system
+		native_git.list_async = original_list
 		assert(ok, err)
 	end)
 end

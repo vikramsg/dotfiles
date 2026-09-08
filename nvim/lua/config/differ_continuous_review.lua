@@ -77,318 +77,20 @@ local function same_model_content(left, right)
 		and left.notice == right.notice
 end
 
-local function system(args, opts, callback)
-	opts = vim.tbl_extend("force", { text = false }, opts or {})
-	local ok, process = pcall(vim.system, args, opts, function(result)
-		vim.schedule(function()
-			if result.code ~= 0 then
-				callback(nil, vim.trim(result.stderr or "command failed"))
-			else
-				callback(result.stdout or "")
-			end
-		end)
-	end)
-	if not ok then
-		vim.schedule(function()
-			callback(nil, tostring(process))
-		end)
-	end
-end
-
-local function collect(commands, callback)
-	local remaining, values, failed = #commands, {}, false
-	for index, command in ipairs(commands) do
-		system(command.args, { cwd = command.cwd, text = command.text }, function(output, err)
-			if failed then
-				return
-			end
-			if err then
-				failed = true
-				return callback(nil, err)
-			end
-			values[index] = output
-			remaining = remaining - 1
-			if remaining == 0 then
-				callback(values)
-			end
-		end)
-	end
-end
-
-local function nonempty(sections)
-	local result = {}
-	for _, section in ipairs(sections) do
-		if #section.entries > 0 then
-			result[#result + 1] = section
-		end
-	end
-	return result
+local function list(root, args, callback)
+	require("differ.git").list_async(root, args, callback)
 end
 
 local function list_head(root, callback)
-	collect({
-		{ args = { "git", "status", "--porcelain=v1", "-z", "-uall" }, cwd = root },
-		{ args = { "git", "diff", "--numstat", "-z", "--cached" }, cwd = root },
-		{ args = { "git", "diff", "--numstat", "-z" }, cwd = root },
-	}, function(outputs, err)
-		if not outputs then
-			return callback(nil, err)
-		end
-		local parser = require("differ.git.rev")
-		local staged_counts = parser.parse_numstat(outputs[2])
-		local unstaged_counts = parser.parse_numstat(outputs[3])
-		local staged, unstaged, untracked = {}, {}, {}
-		for _, status in ipairs(parser.parse_status(outputs[1])) do
-			if status.x == "?" then
-				untracked[#untracked + 1] = {
-					path = status.path,
-					status = "?",
-					additions = 0,
-					deletions = 0,
-					staged = false,
-				}
-			else
-				if status.x ~= " " then
-					local count = staged_counts[status.path] or {}
-					staged[#staged + 1] = {
-						path = status.path,
-						status = status.x,
-						additions = count.additions or 0,
-						deletions = count.deletions or 0,
-						staged = true,
-						previous_path = (status.x == "R" or status.x == "C") and status.previous_path or nil,
-					}
-				end
-				if status.y ~= " " then
-					local count = unstaged_counts[status.path] or {}
-					unstaged[#unstaged + 1] = {
-						path = status.path,
-						status = status.y,
-						additions = count.additions or 0,
-						deletions = count.deletions or 0,
-						staged = false,
-						previous_path = (status.y == "R" or status.y == "C") and status.previous_path or nil,
-					}
-				end
-			end
-		end
-		callback(nonempty({
-			{ title = "Staged", entries = staged },
-			{ title = "Unstaged", entries = unstaged },
-			{ title = "Untracked", entries = untracked },
-		}))
-	end)
+	list(root, {}, callback)
 end
 
 local function list_main(root, callback)
-	system({ "git", "merge-base", "main", "HEAD" }, { cwd = root, text = true }, function(base, base_err)
-		if not base then
-			return callback(nil, base_err)
-		end
-		base = vim.trim(base)
-		collect({
-			{ args = { "git", "diff", "--name-status", "-z", base }, cwd = root },
-			{ args = { "git", "diff", "--numstat", "-z", base }, cwd = root },
-			{ args = { "git", "ls-files", "--others", "--exclude-standard", "-z" }, cwd = root },
-		}, function(outputs, err)
-			if not outputs then
-				return callback(nil, err)
-			end
-			local parser = require("differ.git.rev")
-			local counts = parser.parse_numstat(outputs[2])
-			local entries, seen = {}, {}
-			for _, file in ipairs(parser.parse_name_status(outputs[1])) do
-				local count = counts[file.path] or {}
-				entries[#entries + 1] = {
-					path = file.path,
-					status = file.status,
-					previous_path = file.previous_path,
-					additions = count.additions or 0,
-					deletions = count.deletions or 0,
-				}
-				seen[file.path] = true
-			end
-			for _, path in ipairs(parser.parse_paths(outputs[3])) do
-				if not seen[path] then
-					entries[#entries + 1] = { path = path, status = "?", additions = 0, deletions = 0 }
-				end
-			end
-			callback({ { title = "Changes", entries = entries } }, nil, base)
-		end)
-	end)
+	list(root, { "main..." }, callback)
 end
 
-local function read_file(path, allow_missing, callback)
-	local uv = vim.uv or vim.loop
-	uv.fs_open(path, "r", 438, function(err, fd)
-		if err or not fd then
-			return vim.schedule(function()
-				if allow_missing and tostring(err):find("ENOENT", 1, true) then
-					callback("")
-				else
-					callback(nil, tostring(err or "unable to open file"))
-				end
-			end)
-		end
-		uv.fs_fstat(fd, function(stat_err, stat)
-			if stat_err or not stat then
-				uv.fs_close(fd)
-				return vim.schedule(function()
-					callback(nil, tostring(stat_err or "unable to stat file"))
-				end)
-			end
-			uv.fs_read(fd, stat.size, 0, function(read_err, data)
-				uv.fs_close(fd)
-				vim.schedule(function()
-					if read_err then
-						callback(nil, tostring(read_err))
-					else
-						callback(data or "")
-					end
-				end)
-			end)
-		end)
-	end)
-end
-
-local function blob_spec(side, path)
-	return side.kind == "index" and (":" .. path) or (side.rev .. ":" .. path)
-end
-
-local function batch_blob_chunk(root, specs, callback)
-	if #specs == 0 then
-		return callback({})
-	end
-	system({ "git", "cat-file", "--batch" }, {
-		cwd = root,
-		stdin = table.concat(specs, "\n") .. "\n",
-	}, function(output, err)
-		if not output then
-			return callback(nil, err)
-		end
-		local blobs, offset = {}, 1
-		for _, spec in ipairs(specs) do
-			local newline = output:find("\n", offset, true)
-			if not newline then
-				return callback(nil, "truncated git cat-file response")
-			end
-			local header = output:sub(offset, newline - 1)
-			offset = newline + 1
-			local size = tonumber(header:match(" (%d+)$"))
-			if header:sub(-8) == " missing" then
-				blobs[spec] = false
-			elseif not size then
-				return callback(nil, "invalid git cat-file response: " .. header)
-			else
-				blobs[spec] = output:sub(offset, offset + size - 1)
-				offset = offset + size + 1
-			end
-		end
-		callback(blobs)
-	end)
-end
-
-local function batch_blobs(root, specs, callback)
-	if #specs <= 64 then
-		return batch_blob_chunk(root, specs, callback)
-	end
-	local chunks = {}
-	for first = 1, #specs, 64 do
-		chunks[#chunks + 1] = vim.list_slice(specs, first, math.min(first + 63, #specs))
-	end
-	local combined, remaining, failed = {}, #chunks, false
-	each_bounded(chunks, 1, function(chunk, done)
-		batch_blob_chunk(root, chunk, function(blobs, err)
-			if failed then
-				return done()
-			end
-			if not blobs then
-				failed = true
-				callback(nil, err)
-				return done()
-			end
-			for spec, content in pairs(blobs) do
-				combined[spec] = content
-			end
-			remaining = remaining - 1
-			if remaining == 0 then
-				callback(combined)
-			end
-			done()
-		end)
-	end)
-end
-
-local function read_side(root, side, path, allow_missing, blobs, callback)
-	if side.kind == "worktree" then
-		return read_file(root .. "/" .. path, allow_missing, callback)
-	end
-	local spec = blob_spec(side, path)
-	if blobs then
-		local value = blobs[spec]
-		if value == false and allow_missing then
-			return callback("")
-		elseif value == false then
-			return callback(nil, spec .. " is missing")
-		elseif value == nil then
-			return callback(nil, "no batched result for " .. spec)
-		end
-		return callback(value)
-	end
-	system({ "git", "show", spec }, { cwd = root }, function(output, err)
-		if err and not allow_missing then
-			callback(nil, err)
-		else
-			callback(output or "")
-		end
-	end)
-end
-
-local function load_model(root, pair, section, blobs, callback)
-	local old_path = section.entry.previous_path or section.entry.path
-	local old_text, new_text
-	local function done()
-		if old_text == nil or new_text == nil then
-			return
-		end
-		local model = require("differ.model.diff").build({
-			path = section.entry.path,
-			old_rev = pair.old.label,
-			new_rev = pair.new.label,
-			old_text = old_text,
-			new_text = new_text,
-			root = root,
-		})
-		if #model.hunks == 0 and not model.binary then
-			model.notice = section.entry.previous_path
-					and ("Renamed from " .. section.entry.previous_path .. ", content unchanged")
-				or "No content change"
-		end
-		-- Yield between source-model construction and render-worker serialization;
-		-- a large sparse file can make either phase substantial on its own.
-		vim.defer_fn(function()
-			callback(model)
-		end, 1)
-	end
-	local old_missing = section.entry.status == "A" or section.entry.status == "?"
-	local new_missing = section.entry.status == "D"
-	local failed
-	read_side(root, pair.old, old_path, old_missing, blobs, function(text, err)
-		if err and not failed then
-			failed = true
-			return callback(nil, ("could not read old side of %s: %s"):format(section.entry.path, err))
-		end
-		old_text = text
-		done()
-	end)
-	read_side(root, pair.new, section.entry.path, new_missing, blobs, function(text, err)
-		if err and not failed then
-			failed = true
-			return callback(nil, ("could not read new side of %s: %s"):format(section.entry.path, err))
-		end
-		new_text = text
-		done()
-	end)
+local function load_model(root, pair, section, _, callback)
+	require("differ.git").model_async(pair, root, section.entry, callback)
 end
 
 local function current_hunk(view)
@@ -410,22 +112,7 @@ local function apply_patch(root, text, reverse, target)
 end
 
 local function set_entry_staged(root, entry, staged)
-	local git = require("differ.git")
-	local paths = { entry.path }
-	if entry.status == "R" and entry.previous_path then
-		paths[#paths + 1] = entry.previous_path
-	end
-	local ok = true
-	for _, path in ipairs(paths) do
-		local applied
-		if staged then
-			applied = git.stage(root, path)
-		else
-			applied = git.unstage(root, path)
-		end
-		ok = applied and ok
-	end
-	return ok
+	return require("differ.git").set_staged(root, entry, staged)
 end
 
 local function staging_handlers(root, panel, on_hunk_action)
@@ -661,13 +348,8 @@ local function local_review(panel, root, mode, compact, base)
 			restore_hunk_action(changed_section)
 		end
 	end
-	local function comparison_pair(merge_base)
-		if mode == "main" then
-			return {
-				old = { kind = "rev", rev = merge_base, label = "main..." },
-				new = { kind = "worktree", label = "WORKTREE" },
-			}
-		end
+	local function comparison_pair(source)
+		return mode == "main" and source or nil
 	end
 	local load_generation = 0
 	local function pair_for(section, pair)
@@ -685,67 +367,44 @@ local function local_review(panel, root, mode, compact, base)
 		load_generation = load_generation + 1
 		local generation = load_generation
 		local loading_sections = vim.list_slice(sections)
-		local specs, seen = {}, {}
 		for _, section in ipairs(loading_sections) do
 			section.render_generation = (section.render_generation or 0) + 1
-			local file_pair = pair_for(section, pair)
-			local old_path = section.entry.previous_path or section.entry.path
-			for _, candidate in ipairs({ { file_pair.old, old_path }, { file_pair.new, section.entry.path } }) do
-				if candidate[1].kind ~= "worktree" then
-					local spec = blob_spec(candidate[1], candidate[2])
-					if not seen[spec] then
-						seen[spec] = true
-						specs[#specs + 1] = spec
-					end
-				end
-			end
 		end
-		batch_blobs(root, specs, function(blobs, batch_err)
-			if generation ~= load_generation or not view:is_alive() then
-				return
+		each_bounded(loading_sections, 64, function(section, done)
+			if generation ~= load_generation or not view:is_alive() or not view:has_section(section) then
+				return done()
 			end
-			if not blobs then
-				local message = batch_err or "could not load Git blobs"
-				for _, section in ipairs(loading_sections) do
-					view:set_error(section, message)
-				end
-				return notify(message, vim.log.levels.ERROR)
-			end
-			each_bounded(loading_sections, 64, function(section, done)
+			local previous_model = section.model
+			load_model(root, pair_for(section, pair), section, nil, function(model, err)
 				if generation ~= load_generation or not view:is_alive() or not view:has_section(section) then
 					return done()
 				end
-				local previous_model = section.model
-				load_model(root, pair_for(section, pair), section, blobs, function(model, err)
-					if generation ~= load_generation or not view:is_alive() or not view:has_section(section) then
-						return done()
+				if model then
+					section.staged_hunks = {}
+					local additions, deletions = 0, 0
+					for index, hunk in ipairs(model.hunks) do
+						section.staged_hunks[index] = section.entry.staged == true
+						additions = additions + hunk.new_count
+						deletions = deletions + hunk.old_count
 					end
-					if model then
-						section.staged_hunks = {}
-						local additions, deletions = 0, 0
-						for index, hunk in ipairs(model.hunks) do
-							section.staged_hunks[index] = section.entry.staged == true
-							additions = additions + hunk.new_count
-							deletions = deletions + hunk.old_count
-						end
-						section.entry.additions, section.entry.deletions = additions, deletions
-						section.additions, section.deletions = additions, deletions
-						if same_model_content(previous_model, model) and section.map and section.lines then
-							section.model = model
-							view:update_section_metadata(section)
-							restore_hunk_action(section)
-						else
-							view:set_model(section, model)
-						end
+					section.entry.additions, section.entry.deletions = additions, deletions
+					section.additions, section.deletions = additions, deletions
+					if same_model_content(previous_model, model) and section.map and section.lines then
+						section.model = model
+						view:update_section_metadata(section)
+						restore_hunk_action(section)
 					else
-						view:set_error(section, err)
-						notify(err, vim.log.levels.ERROR)
+						view:set_model(section, model)
 					end
-					done()
-				end)
+				else
+					view:set_error(section, err)
+					notify(err, vim.log.levels.ERROR)
+				end
+				done()
 			end)
 		end)
 	end
+
 	local function refresh_sections(merge_base)
 		if not view:is_alive() then
 			return
@@ -995,7 +654,6 @@ function M.adopt_pr(session)
 		apply_pending_focus(view:active_section())
 		return landed
 	end
-	local client = require("differ.pr.client")
 	local generation = 0
 	refresh_pr = function(incoming_model)
 		generation = generation + 1
@@ -1023,40 +681,19 @@ function M.adopt_pr(session)
 			if not current() then
 				return done()
 			end
-			local cached = session.versions[section.entry.path]
-			local function accept(versions)
+			require("differ.pr").load_model(session, section.entry, function(model, err)
 				if not current() then
 					return done()
 				end
-				session.versions[section.entry.path] = versions
-				local base_blob, head_blob = versions.base or {}, versions.head or {}
-				local model = require("differ.model.diff").build({
-					path = section.entry.path,
-					old_rev = refs.base:sub(1, 7),
-					new_rev = refs.head:sub(1, 7),
-					old_text = base_blob.missing and "" or (base_blob.content or ""),
-					new_text = head_blob.missing and "" or (head_blob.content or ""),
-					root = session.root,
-				})
-				if current() then
-					view:set_model(section, model)
-				end
-				done()
-			end
-			if cached then
-				accept(cached)
-			else
-				client.get_file_versions(session.pr, section.entry, refs, function(err, versions)
-					if not current() then
-						return done()
-					end
-					if err then
+				if not model then
+					if err ~= "stale PR source" then
 						require("differ.pr").notify_err(err)
-						return done()
 					end
-					accept(versions)
-				end)
-			end
+					return done()
+				end
+				view:set_model(section, model)
+				done()
+			end)
 		end)
 	end
 	refresh_pr()

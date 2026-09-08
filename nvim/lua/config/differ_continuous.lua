@@ -1,17 +1,12 @@
 local M = {}
 
 local render = require("differ.render")
-local LineMap = require("differ.render.linemap")
-local paint = require("differ.ui.paint")
-local statuscolumn = require("differ.ui.statuscolumn")
+local syntax = require("differ.syntax")
 
 local diff_namespace = vim.api.nvim_create_namespace("dotfiles.differ.continuous.diff")
 local header_namespace = vim.api.nvim_create_namespace("dotfiles.differ.continuous.header")
 local views = {}
 local sequence = 0
-local render_module = debug.getinfo(render.render, "S").source:sub(2)
-local plugin_lua = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(render_module)))
-local worker_package_path = plugin_lua .. "/?.lua;" .. plugin_lua .. "/?/init.lua"
 
 local function notify(message, level)
 	vim.notify("Differ continuous review: " .. message, level or vim.log.levels.INFO)
@@ -208,6 +203,19 @@ function View:project_section(section)
 	}
 end
 
+function View:views_for_path(path)
+	if self.layout == "split" then
+		return self.model.path == path and { self } or {}
+	end
+	local projections = {}
+	self:each_section(function(section)
+		if section.entry.path == path then
+			projections[#projections + 1] = self:project_section(section)
+		end
+	end)
+	return projections
+end
+
 function View:has_section(target)
 	for _, section in ipairs(self.sections) do
 		if section == target then
@@ -345,6 +353,9 @@ end
 
 function View:_paint_line(section, index)
 	local item = section.map.lines[index]
+	if not item then
+		return
+	end
 	local row = section.body_first + index - 2
 	local line_hl = item.kind == "old" and "differLineDelete" or (item.kind == "new" and "differLineAdd" or nil)
 	if line_hl then
@@ -427,6 +438,46 @@ function View:_paint_sections_bounded(sections, on_done)
 	vim.defer_fn(paint_batch, 1)
 end
 
+-- Differ parses each file's real old/new sources and projects captures through
+-- that file's native line map. Only the final row translation belongs here.
+function View:_paint_syntax_bounded(section)
+	if not (section.syntax_marks and section.body_first) then
+		return
+	end
+	local generation = section.syntax_generation
+	section.syntax_paint_generation = (section.syntax_paint_generation or 0) + 1
+	local paint_generation = section.syntax_paint_generation
+	syntax.clear(self.bufnr, section.body_first - 1, section.last)
+	syntax.paint_async(self.bufnr, section.syntax_marks, {
+		row_offset = function()
+			return section.body_first - 1
+		end,
+		budget_ms = 2,
+		valid = function()
+			return self:is_alive()
+				and self:has_section(section)
+				and section.syntax_generation == generation
+				and section.syntax_paint_generation == paint_generation
+		end,
+	})
+end
+
+function View:_queue_syntax(section)
+	section.syntax_generation = (section.syntax_generation or 0) + 1
+	local generation = section.syntax_generation
+	local column = section.output or { side = "unified", map = section.map }
+	syntax.collect_async(column, section.model, function(marks, err)
+		if not self:is_alive() or not self:has_section(section) or section.syntax_generation ~= generation then
+			return
+		end
+		if not marks then
+			return notify(("syntax failed for %s: %s"):format(section.entry.path, err), vim.log.levels.WARN)
+		end
+		section.syntax_marks = marks
+		self:_paint_syntax_bounded(section)
+	end, { layout = "stacked", context = self.context, deep_diff = self.deep_diff })
+end
+
 function View:render()
 	if not vim.api.nvim_buf_is_valid(self.bufnr) then
 		return
@@ -469,6 +520,7 @@ function View:render()
 	vim.bo[self.bufnr].modifiable = false
 	vim.api.nvim_buf_clear_namespace(self.bufnr, diff_namespace, 0, -1)
 	vim.api.nvim_buf_clear_namespace(self.bufnr, header_namespace, 0, -1)
+	syntax.clear(self.bufnr)
 	local paintable, paint_lines = {}, 0
 	for _, section in ipairs(self.sections) do
 		if section.model then
@@ -477,6 +529,11 @@ function View:render()
 		if section.map then
 			paintable[#paintable + 1] = section
 			paint_lines = paint_lines + #section.map.lines
+			if section.syntax_marks then
+				self:_paint_syntax_bounded(section)
+			elseif section.model then
+				self:_queue_syntax(section)
+			end
 		end
 	end
 	self:_apply_folds()
@@ -573,86 +630,14 @@ function View:set_model(section, model)
 	end
 	-- Full-context rows also cost work, even when a large file has one small hunk.
 	if rows >= 5000 or #model.old_text + #model.new_text >= 256 * 1024 then
-		local payload = vim.mpack.encode({
-			model = model,
-			opts = { layout = "stacked", context = self.context, deep_diff = self.deep_diff },
-		})
-		local work
-		work = (vim.uv or vim.loop).new_work(function(encoded, lua_path)
-			package.path = lua_path
-			local ok, result = pcall(function()
-				local input = vim.mpack.decode(encoded)
-				local output = require("differ.render").render(input.model, input.opts)
-				local column = output.columns[1]
-				local records, spans = {}, {}
-				local codes = { context = "c", old = "o", new = "n", meta = "m" }
-				for index, item in ipairs(column.map.lines) do
-					records[index] = table.concat({
-						codes[item.kind],
-						tostring(item.old or 0),
-						tostring(item.new or 0),
-						tostring(item.hunk or 0),
-					}, ",")
-					if item.spans then
-						spans[index] = item.spans
-					end
-				end
-				return {
-					lines = table.concat(column.lines, "\0"),
-					map = table.concat(records, "\n"),
-					spans = spans,
-					folds = column.folds,
-				}
-			end)
-			return vim.mpack.encode({ ok = ok, result = result })
-		end, function(encoded)
-			vim.schedule(function()
-				section.render_work = nil
-				local result = vim.mpack.decode(encoded)
-				if not result.ok then
-					return ready(nil, tostring(result.result))
-				end
-				local raw, map, lines = result.result, LineMap.new(), {}
-				local line_offset, map_offset, index = 1, 1, 1
-				local kinds = { c = "context", o = "old", n = "new", m = "meta" }
-				local function build_map()
-					if not self:is_alive() or section.render_generation ~= generation then
-						return
-					end
-					local started = (vim.uv or vim.loop).hrtime()
-					repeat
-						local line_end = raw.lines:find("\0", line_offset, true)
-						if line_end then
-							lines[index] = raw.lines:sub(line_offset, line_end - 1)
-							line_offset = line_end + 1
-						else
-							lines[index] = raw.lines:sub(line_offset)
-							line_offset = #raw.lines + 1
-						end
-						local map_end = raw.map:find("\n", map_offset, true)
-						local record = raw.map:sub(map_offset, map_end and map_end - 1 or -1)
-						map_offset = map_end and map_end + 1 or (#raw.map + 1)
-						local kind, old, new, hunk = record:match("^(%a),(%d+),(%d+),(%d+)$")
-						map:push({
-							kind = kinds[kind],
-							old = tonumber(old) ~= 0 and tonumber(old) or nil,
-							new = tonumber(new) ~= 0 and tonumber(new) or nil,
-							hunk = tonumber(hunk) ~= 0 and tonumber(hunk) or nil,
-							spans = raw.spans[index],
-						})
-						index = index + 1
-					until map_offset > #raw.map or ((vim.uv or vim.loop).hrtime() - started) / 1e6 >= 8
-					if map_offset <= #raw.map then
-						vim.defer_fn(build_map, 1)
-					else
-						ready({ columns = { { lines = lines, map = map, folds = raw.folds } } })
-					end
-				end
-				build_map()
-			end)
+		section.render_work = render.render_async(model, {
+			layout = "stacked",
+			context = self.context,
+			deep_diff = self.deep_diff,
+		}, function(output, err)
+			section.render_work = nil
+			ready(output, err)
 		end)
-		section.render_work = work
-		work:queue(payload, worker_package_path)
 		return
 	end
 	ready(render.render(model, {
@@ -772,6 +757,7 @@ function View:_update_run(changed)
 				self.on_rerender(section)
 			end
 		end)
+		self:_queue_syntax(section)
 	end
 end
 
@@ -824,7 +810,7 @@ function View:jump_file(direction)
 	if index < 1 or index > #self.sections then
 		return notify(direction == "next" and "no next file" or "no previous file")
 	end
-	self:jump_section(self.sections[index])
+	return self:jump_section(self.sections[index])
 end
 
 function View:jump_hunk(direction)
@@ -927,83 +913,128 @@ function View:selection_in_one_section(first, last)
 		and math.max(first, last) <= left.last
 end
 
-function View:inspect_split()
+function View:inspect_split(prepared)
 	local section = self:active_section()
 	if not (section and section.model) then
 		return
 	end
-	local return_win, return_cursor = self.winid, vim.api.nvim_win_get_cursor(self.winid)
-	local output = render.render(section.model, {
+	local rows = 0
+	for _, hunk in ipairs(section.model.hunks or {}) do
+		rows = rows + hunk.old_count + hunk.new_count
+	end
+	if not prepared and (rows >= 5000 or #section.model.old_text + #section.model.new_text >= 256 * 1024) then
+		self.inspection_generation = (self.inspection_generation or 0) + 1
+		local generation = self.inspection_generation
+		render.render_async(section.model, {
+			layout = "split",
+			context = self.context,
+			deep_diff = self.deep_diff,
+		}, function(output, err)
+			if
+				not self:is_alive()
+				or not self:is_continuous_visible()
+				or self:active_section() ~= section
+				or self.inspection_generation ~= generation
+			then
+				return
+			end
+			if not output then
+				return notify(err or "split rendering failed", vim.log.levels.ERROR)
+			end
+			self:inspect_split(output)
+		end)
+		return
+	end
+	local return_win = self.winid
+	local anchor = self:snapshot_logical_position()
+	local aggregate_columns = self.columns
+	local config = require("differ").get_config()
+	vim.api.nvim_set_current_win(return_win)
+	local native = require("differ.view").new(section.model, {
 		layout = "split",
 		context = self.context,
-		deep_diff = self.deep_diff,
-	}).columns
-	local wins, bufs = {}, {}
-	self.inspection = {}
-	self.aggregate_columns = self.columns
-	self.columns = {}
+		wrap = config.wrap,
+		counter = config.diff_counter,
+		cursorline_tint = config.cursorline_tint,
+		deep_diff = config.deep_diff,
+		prepared = prepared,
+		async_decorations = prepared ~= nil,
+		keymaps = config.keymaps.diff,
+		extra_keymaps = self.extra_keymaps,
+		on_rerender = function()
+			if self.on_rerender then
+				self.on_rerender()
+			end
+		end,
+	})
+	native:open()
+	self.native_inspection = native
+	self.aggregate_columns = aggregate_columns
+	self.columns = native.columns
 	self.layout = "split"
 	self.model = section.model
-	for index, column in ipairs(output) do
-		if index == 1 then
-			vim.api.nvim_set_current_win(return_win)
-		else
-			vim.cmd("rightbelow vsplit")
-		end
-		local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_create_buf(false, true)
-		vim.api.nvim_win_set_buf(win, buf)
-		vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].filetype = "nofile", "wipe", "differdiff"
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, column.lines)
-		vim.bo[buf].modifiable = false
-		paint.apply(buf, diff_namespace, column)
-		statuscolumn.set(buf, statuscolumn.format(column))
-		vim.wo[win].statuscolumn = '%!v:lua.require("differ.ui.statuscolumn").render()'
-		vim.wo[win].winbar = string.format(" %s · %s", section.entry.path:gsub("%%", "%%%%"), column.side:upper())
-		views[buf] = self
-		self.inspection[buf] = { section = section, column = column, new_column = output[#output], win = win }
-		self.columns[#self.columns + 1] = {
-			bufnr = buf,
-			winid = win,
-			map = column.map,
-			side = column.side,
-			folds = column.folds,
+	self.inspection = {}
+	for _, column in ipairs(native.columns) do
+		views[column.bufnr] = self
+		vim.wo[column.winid].winbar = string.format(" %s · %s", section.entry.path:gsub("%%", "%%%%"), column.side:upper())
+		self.inspection[column.bufnr] = {
+			section = section,
+			column = column,
+			new_column = native.columns[#native.columns],
+			win = column.winid,
 		}
-		wins[#wins + 1], bufs[#bufs + 1] = win, buf
 	end
 	local function close()
-		for _, buf in ipairs(bufs) do
-			views[buf] = nil
-			statuscolumn.clear(buf)
+		if self.native_inspection ~= native then
+			return
 		end
+		for _, column in ipairs(native.columns) do
+			views[column.bufnr] = nil
+		end
+		self.native_inspection = nil
 		self.inspection = nil
 		self.columns = self.aggregate_columns
 		self.aggregate_columns = nil
 		self.layout = "stacked"
-		for _, win in ipairs(wins) do
-			if win ~= return_win and vim.api.nvim_win_is_valid(win) then
-				pcall(vim.api.nvim_win_close, win, true)
-			end
-		end
+		self.model = section.model
+		native:close(return_win)
 		if vim.api.nvim_win_is_valid(return_win) then
 			vim.api.nvim_set_current_win(return_win)
 			vim.api.nvim_win_set_buf(return_win, self.bufnr)
-			pcall(vim.api.nvim_win_set_cursor, return_win, return_cursor)
 			self:_apply_folds()
-			if self.pending_logical_position then
-				local anchor = self.pending_logical_position
-				self.pending_logical_position = nil
-				self:restore_logical_position(anchor)
-			end
-			if self.on_rerender then
-				self.on_rerender()
-			end
+			self:restore_logical_position(self.pending_logical_position or anchor)
+			self.pending_logical_position = nil
+		end
+		if self.on_rerender then
+			self.on_rerender()
 		end
 	end
-	for _, buf in ipairs(bufs) do
-		local bind = require("differ.util.keymap").bind
-		for _, mapping in ipairs(self.extra_keymaps or {}) do
-			bind(buf, mapping.spec, mapping.fn, mapping.desc, mapping.mode)
-		end
+	for _, column in ipairs(native.columns) do
+		local buf = column.bufnr
+		vim.keymap.set("n", "]", function()
+			local win = vim.api.nvim_get_current_win()
+			local target = require("differ.nav").next_hunk(column.map, vim.api.nvim_win_get_cursor(win)[1])
+			if target then
+				vim.api.nvim_win_set_cursor(win, { target, 0 })
+			else
+				close()
+				if self:jump_file("next") then
+					self:inspect_split()
+				end
+			end
+		end, { buffer = buf, desc = "Next Hunk Across Files" })
+		vim.keymap.set("n", "[", function()
+			local win = vim.api.nvim_get_current_win()
+			local target = require("differ.nav").prev_hunk(column.map, vim.api.nvim_win_get_cursor(win)[1])
+			if target then
+				vim.api.nvim_win_set_cursor(win, { target, 0 })
+			else
+				close()
+				if self:jump_file("prev") then
+					self:inspect_split()
+				end
+			end
+		end, { buffer = buf, desc = "Previous Hunk Across Files" })
 		vim.keymap.set("n", "t", close, { buffer = buf, desc = "Return to Continuous Diff" })
 		vim.keymap.set("n", "q", function()
 			close()
@@ -1019,6 +1050,31 @@ function View:inspect_split()
 			self:jump_file("prev")
 			self:inspect_split()
 		end, { buffer = buf, desc = "Previous File Section" })
+		vim.keymap.set("n", "s", function()
+			if self.on_stage then
+				self.on_stage(self, true)
+			end
+		end, { buffer = buf, desc = "Stage Current Hunk" })
+		vim.keymap.set("n", "u", function()
+			if self.on_stage then
+				self.on_stage(self, false)
+			end
+		end, { buffer = buf, desc = "Unstage Current Hunk" })
+		vim.keymap.set("n", "S", function()
+			if self.on_stage then
+				self.on_stage(self, true, true)
+			end
+		end, { buffer = buf, desc = "Stage Current File" })
+		vim.keymap.set("n", "U", function()
+			if self.on_stage then
+				self.on_stage(self, false, true)
+			end
+		end, { buffer = buf, desc = "Unstage Current File" })
+		vim.keymap.set("n", "X", function()
+			if self.on_discard then
+				self.on_discard(self)
+			end
+		end, { buffer = buf, desc = "Discard Current Hunk" })
 	end
 	self:_apply_inspection_folds()
 	if self.on_rerender then
@@ -1131,28 +1187,17 @@ function View:close(keep_win)
 	end
 	self.closed = true
 	views[self.bufnr] = nil
-	for buf, inspected in pairs(self.inspection or {}) do
+	for buf in pairs(self.inspection or {}) do
 		views[buf] = nil
-		statuscolumn.clear(buf)
-		local win = inspected.win
-		if win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
-			if win == keep_win then
-				local placeholder = vim.api.nvim_create_buf(false, true)
-				vim.bo[placeholder].bufhidden = "wipe"
-				vim.api.nvim_win_set_buf(win, placeholder)
-			else
-				pcall(vim.api.nvim_win_close, win, true)
-			end
-		end
-		if vim.api.nvim_buf_is_valid(buf) then
-			pcall(vim.api.nvim_buf_delete, buf, { force = true })
-		end
+	end
+	if self.native_inspection then
+		self.native_inspection:close(keep_win)
+		self.native_inspection = nil
 	end
 	self.inspection = nil
 	if self.augroup then
 		pcall(vim.api.nvim_del_augroup_by_id, self.augroup)
 	end
-	statuscolumn.clear(self.bufnr)
 	if self.winid and vim.api.nvim_win_is_valid(self.winid) and vim.api.nvim_win_get_buf(self.winid) == self.bufnr then
 		local placeholder = vim.api.nvim_create_buf(false, true)
 		vim.bo[placeholder].bufhidden = "wipe"

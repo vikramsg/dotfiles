@@ -44,9 +44,12 @@ local function pending_open_ownership()
 			return "/tmp/opencode"
 		end
 		vim.notify = function() end
-		vim.system = function(command, _, callback)
+		vim.system = function(command, opts, callback)
+			if command[1] ~= "git" or command[2] ~= "status" or opts.cwd ~= "/tmp/opencode" then
+				return system(command, opts, callback)
+			end
 			requests = requests + 1
-			assert(command[2] == "status" and callback, "only asynchronous selection may run for a stale invocation")
+			assert(callback, "comparison selection must remain asynchronous")
 			callbacks[#callbacks + 1] = callback
 			return { kill = function() end }
 		end

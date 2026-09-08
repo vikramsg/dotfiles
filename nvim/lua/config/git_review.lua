@@ -523,7 +523,6 @@ end
 
 function M.setup_differ(opts)
 	require("differ").setup(opts)
-	require("config.differ_continuous_threads").setup()
 	local group = vim.api.nvim_create_augroup("dotfiles-differ-review", { clear = true })
 	vim.api.nvim_create_autocmd({ "FileType", "BufEnter" }, {
 		group = group,

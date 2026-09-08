@@ -45,10 +45,17 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 - `[f` / `]f`: Move to the previous/next changed file.
 
 - `t`: Inspect the current file side by side; press again to return to its position in the continuous inline review.
-- These review layouts use diff-line and word-level highlighting. Source-language syntax highlighting is not currently applied.
+- `df` in side-by-side inspection: Open Differ's native editable source pane beside the diff.
+- Both review layouts retain source-language syntax highlighting alongside diff-line and word-level colors, using each file's installed Tree-sitter parser.
 - `T`: Toggle compact/full context from the diff or tree. Reviews start compact, with three lines of context around changes; the choice persists across files, layouts, refreshes, and `B` comparisons.
 - `X`: Discard the current hunk after confirmation. **In the tree this discards the whole file's changes.** Available in the uncommitted view; this modifies actual files, not just the display.
 Requires Neovim 0.12+. GitHub review requires Go and make to build the sidecar (handled by Lazy's build hook), plus GitHub authentication. Local diffs do not need the sidecar.
+
+Differ is pinned to the revision in `init.lua`. Lazy's build hook applies the
+repository's [Differ extension](patches/differ-continuous-sections.patch) before
+building the sidecar. After changing the extension, run `:Lazy build differ.nvim`
+and restart Neovim. The extension exposes native operations for continuous review
+and schedules source highlighting without disabling it for large files.
 
 #### Local review comments
 

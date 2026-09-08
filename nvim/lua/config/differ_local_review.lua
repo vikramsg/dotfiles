@@ -315,17 +315,10 @@ end
 -- the aggregate buffer. This lets notes reuse the same anchor validation in both
 -- the native single-file view and each section of a continuous review.
 local function note_views(view, path)
-	if not view.each_section or view.layout == "split" then
-		return view.model.path == path and { view } or {}
+	if view.views_for_path then
+		return view:views_for_path(path)
 	end
-	local projections = {}
-	view:each_section(function(section)
-		if section.entry.path ~= path then
-			return
-		end
-		projections[#projections + 1] = view:project_section(section)
-	end)
-	return projections
+	return view.model.path == path and { view } or {}
 end
 
 local function notes_under_cursor(session, view)
