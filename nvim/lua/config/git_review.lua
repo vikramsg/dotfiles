@@ -358,73 +358,70 @@ local function show_differ_help()
 	local lines = {
 		pr and "Differ PR review" or "Differ local review",
 		"",
-		"Space pl  List / open PRs",
-		"Space pr  Start / resume GITHUB PR review (asks for PR if needed)",
+		"ESSENTIALS",
+		"c             Add comment on line / visual selection (diff only)",
+		"Esc + Enter   Save comment from composer",
+		"t             Toggle stacked / split layout",
+		"T             Toggle compact / full context",
+		"dd            Toggle file tree",
+		"[ / ]         Previous / next hunk",
+		"q             Close review and return to editor",
+		"",
+		"NAVIGATION",
+		"[f / ]f       Previous / next file",
+		"Enter         Open selected file / toggle directory",
+		"gf            Edit source while keeping review open",
 	}
 	if pr then
 		local native_comment = require("differ").get_config().keymaps.diff.comment
 		local native_label = type(native_comment) == "table" and table.concat(native_comment, ", ")
 			or tostring(native_comment)
 		vim.list_extend(lines, {
-			"Space ps  Submit review: Comment / Approve / Request Changes",
-			"c         Comment on line / visual selection → GITHUB",
-			"" .. native_label .. "        Native GitHub comment key (also available)",
-			"gp        Reply to thread (diff only)",
-			"gx        Delete latest GitHub thread comment",
-			"i         Type in composer if it opens in normal mode",
-			"Ctrl+S (insert) or Esc then Enter  Save GitHub comment",
-			"q (normal composer)  Cancel composer only",
-			"Start a review first: saved comments become GitHub drafts.",
-			"Without a pending review, comments may post immediately.",
-			"Submit opens a summary editor; Esc then Enter submits it.",
+			"",
+			"COMMENTS",
+			"gp            Reply to thread",
+			"gx            Delete latest thread comment",
+			"" .. native_label .. "            Native GitHub comment key",
+			"i             Enter insert mode in composer",
+			"q             Cancel composer (when composer is focused)",
+			"",
+			"REVIEW",
+			"Space ps      Submit: Comment / Approve / Request Changes",
+			"Space pl      List / open pull requests",
+			"Space pr      Start / resume GitHub PR review",
+			"              Start first to save comments as GitHub drafts",
+			"              Esc + Enter submits the review summary",
 		})
 	else
 		vim.list_extend(lines, {
-			"Destination: LOCAL → persistent branch review JSON",
-			"c       Add local note on line / visual selection (diff only)",
-			"ge      Edit local note under cursor",
-			"gx      Delete local note under cursor",
-			"Space cr Copy saved branch-review JSON path",
-			"Space cR Reset this branch review (confirmation)",
-			"i       Type in composer if it opens in normal mode",
-			"Ctrl+S (insert) or Esc then Enter  Save local note",
-			"q (normal composer)  Cancel composer only",
-			"B       Toggle HEAD/main comparison",
-			"X       Discard hunk; in tree: WHOLE FILE (confirmation)",
-			"        Uncommitted view only; changes actual files",
-			"s / u   Stage / unstage hunk or file",
-			"df      Edit beside an uncommitted diff",
+			"",
+			"COMMENTS — saved to branch review JSON",
+			"ge            Edit comment under cursor",
+			"gx            Delete comment under cursor",
+			"i             Enter insert mode in composer",
+			"q             Cancel composer (when composer is focused)",
+			"",
+			"CHANGES — uncommitted view only",
+			"s / u         Stage / unstage hunk or file",
+			"X             Discard hunk or selected file (confirmation)",
+			"df            Edit beside the diff",
+			"B             Toggle HEAD / main comparison",
+			"",
+			"REVIEW",
+			"Space pl      List / open pull requests",
+			"Space pr      Start / resume GitHub PR review",
+			"Space cr      Copy branch-review JSON path",
+			"Space cR      Reset branch review (confirmation)",
 		})
 	end
 	vim.list_extend(lines, {
 		"",
-		"gf      Edit source in the previous tab (keep review open)",
-		"[ / ]   Previous / next hunk",
-		"[f / ]f Previous / next file",
-		"Enter   Open selected file and focus its diff; toggle directories",
-		"        On Review output: open read-only JSON split (q closes it)",
-		"t       Toggle stacked / split layout",
-		"T       Toggle compact / full context (default: compact)",
-		"q       Close review and return to the editor",
+		"SESSION",
+		"R             Refresh file tree",
+		"g?            Show this help",
 		"",
-		"R       Refresh file tree",
-		"dd      Toggle file tree",
+		"In Review output, Enter opens read-only JSON; q closes it.",
 	})
-	-- Include the actual mappings too: Differ owns additional tree/thread controls,
-	-- and its configured keys should remain discoverable through our custom help.
-	vim.list_extend(lines, { "", "All buffer-local shortcuts (j/k to scroll):" })
-	for _, mode in ipairs({ "n", "x" }) do
-		local maps = vim.api.nvim_buf_get_keymap(0, mode)
-		table.sort(maps, function(a, b)
-			return a.lhs < b.lhs
-		end)
-		for _, map in ipairs(maps) do
-			if map.desc then
-				local key = map.lhs:gsub("^ ", "Space ")
-				lines[#lines + 1] = string.format("%s%s  %s", key, mode == "x" and " (visual)" or "", map.desc)
-			end
-		end
-	end
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.bo[buf].bufhidden = "wipe"
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
