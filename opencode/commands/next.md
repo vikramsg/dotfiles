@@ -53,6 +53,7 @@ The reviewer is prone to trying to suggest over-engineering, over defensive, etc
 
 However some things we are interested in from the review
 - Could the implementation have been simplified
+    - Make the reviewer really try to come up with simplifications, since you are prone to just add instead of reuse and refactor.
 - Are we following the correct layer rules
 
 ## Reply right now
