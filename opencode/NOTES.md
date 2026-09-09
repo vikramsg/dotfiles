@@ -4,7 +4,7 @@
     - PR description add or update 
     - Implementation notes in .agents/implementation
     - prefer using background agents for implementation and review but note they do not have full context so review their output before accepting
-4. 
+4. Always keep a plan doc handy so that through a PR we always know what we agreed to as well as what implementation decisions were taken 
 
 ## 5.6
 

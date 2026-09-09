@@ -6,12 +6,12 @@
   "permissions": [
     {
       "action": "shell",
-      "resource": "*rm*.sqlite*",
+      "resource": "rm *.sqlite*",
       "effect": "deny"
     },
     {
       "action": "shell",
-      "resource": "*rm*.db*",
+      "resource": "rm *.db*",
       "effect": "deny"
     },
     {
