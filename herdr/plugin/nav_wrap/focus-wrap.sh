@@ -35,6 +35,13 @@ focus() {
 	fi
 }
 
+# Wrapping needs to read the focus result. Without jq, fall back to a plain
+# directional move so non-wrapping navigation still works.
+if ! command -v jq >/dev/null 2>&1; then
+	focus "$dir"
+	exit 0
+fi
+
 response="$(focus "$dir")"
 if jq -e '.result.focus.changed' >/dev/null 2>&1 <<<"$response"; then
 	exit 0

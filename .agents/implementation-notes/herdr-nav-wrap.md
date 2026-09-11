@@ -31,6 +31,12 @@ and the Neovim adapter.
 - **Wrap uses repeated opposite-direction focus.** As agreed, this reuses Herdr's
   spatial geometry instead of recomputing layout rects, at the cost of one CLI
   call per pane crossed. Single-pane presses make two no-op calls.
+- **Added a `jq`-absent branch to `focus-wrap.sh`.** Reviewer flagged that the
+  unconditional `jq` use makes a successful first move look like an edge and then
+  performs an unintended opposite move; it also contradicted the documented
+  "movement still works without jq". The guard now does one plain directional
+  move when `jq` is missing. This is dependency handling for a real wrong-move
+  bug, not a compatibility shim.
 - **Tests use a mock `herdr`.** The mock is driven by an explicit transition
   table, so the tests assert the focus calls issued for each scenario. No
   change-detection tests, and the real-TTY checks are left manual.
@@ -43,6 +49,15 @@ and the Neovim adapter.
   only.
 - A temporary `~/.config/herdr-nav-wrap` symlink was created to run the full
   Neovim suite, then removed.
+- Live verification was run in an isolated named session, not the user's
+  session: `herdr --session navwrap-test server` + a 3-pane row, running the real
+  `focus-wrap.sh` inside the real panes. Wrap-left from leftmost → rightmost,
+  normal-left from rightmost → middle, wrap-right from rightmost → leftmost, and
+  single-pane-left → unchanged all passed. The session was deleted and the
+  background server exited. The plugin manifest was also linked, enumerated
+  (`down/left/right/up`), and unlinked against the real binary.
+- Still human-only and **not** done: real `Ctrl+hjkl` keypresses, `Ctrl+H` vs
+  Backspace under the kitty keyboard protocol, and tmux-inside-Herdr.
 - `tests.git_review_spec` and `tests.pr_review_spec` fail identically on `main`
   (confirmed baseline); unrelated to this change.
 
