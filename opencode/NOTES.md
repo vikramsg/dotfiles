@@ -16,6 +16,7 @@
 - Need more control
   - Planner should be smaller and always instruction to add implementation notes.md 
 - docs, tickets everything leans how not what. Do not write a plan in a doc unless its specifically a plan
+- Doesn't use herdr skill very well. Doesn't load it on demand
 
 ## Workflow
 
