@@ -1,0 +1,34 @@
+id = "dotfiles.nav-wrap"
+name = "Dotfiles Nav Wrap"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Ctrl+h/j/k/l navigation across Herdr panes and Vim/Neovim splits, wrapping at pane edges"
+platforms = ["linux", "macos"]
+
+# One action per direction. Herdr binds these to direct Ctrl chords in
+# herdr/config.toml. Each action forwards the chord when Vim/Neovim owns the
+# focused pane, and otherwise moves or wraps Herdr pane focus.
+
+[[actions]]
+id = "left"
+title = "Navigate left (wraps)"
+contexts = ["global"]
+command = ["bash", "navigate.sh", "left"]
+
+[[actions]]
+id = "down"
+title = "Navigate down (wraps)"
+contexts = ["global"]
+command = ["bash", "navigate.sh", "down"]
+
+[[actions]]
+id = "up"
+title = "Navigate up (wraps)"
+contexts = ["global"]
+command = ["bash", "navigate.sh", "up"]
+
+[[actions]]
+id = "right"
+title = "Navigate right (wraps)"
+contexts = ["global"]
+command = ["bash", "navigate.sh", "right"]

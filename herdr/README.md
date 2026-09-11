@@ -13,11 +13,12 @@ just herdr
 herdr
 ```
 
-`just herdr` links `config.toml` and installs the audited
-`vim-herdr-navigation` revision into Herdr's managed plugin directory. Herdr's
-logs, sockets, and persistent session data remain in the normal
-`~/.config/herdr` directory and outside this repository. Start Neovim once
-after linking `nvim/` so Lazy installs the matching editor adapter. Interactive
+`just herdr` links `config.toml`, links `herdr/plugin/nav_wrap/` to the
+`~/.config/herdr-nav-wrap` anchor, and registers it with Herdr. Herdr's logs,
+sockets, and persistent session data remain in the normal `~/.config/herdr`
+directory and outside this repository. The plugin's `navigate.sh` and the
+repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
+linking `nvim/`. Interactive
 Zsh panes publish a compact ` branch` label for the Spaces sidebar.
 
 ## Remote attach
@@ -42,7 +43,7 @@ The prefix is `Ctrl+Space`.
 
 | Keys | Action |
 | --- | --- |
-| `Ctrl+H/J/K/L` | Navigate left / down / up / right across Neovim splits and Herdr panes |
+| `Ctrl+H/J/K/L` | Navigate left / down / up / right across Neovim splits and Herdr panes, wrapping at pane edges |
 | `prefix+q` | Reload configuration |
 | `prefix+?` | Show help |
 | `prefix+d` | Detach |
@@ -66,12 +67,14 @@ Quitting Hunk with `q` closes its tab and returns to the tab it was opened from,
 rather than leaving a shell prompt. If the original tab was closed in the
 meantime, Herdr uses its normal tab-close behavior.
 
-`vim-herdr-navigation` gives Neovim the chord first and crosses into a Herdr pane
-only at a split edge. Its Neovim adapter falls back to `vim-tmux-navigator`
-inside tmux and to plain split movement outside either multiplexer. The direct
-bindings replace shell behavior such as `Ctrl+K` kill-line and `Ctrl+L`
-clear-screen while Herdr is active. Resize commands use Herdr's default step and
-are not repeat-mode bindings, so press the prefix for each resize.
+`dotfiles.nav-wrap` gives Neovim the chord first and crosses into a Herdr pane
+only at a split edge. When it reaches a Herdr pane edge it wraps to the far
+edge, matching tmux's `select-pane` behavior. The Neovim adapter falls back to
+`vim-tmux-navigator` inside tmux and to plain split movement outside either
+multiplexer. The direct bindings replace shell behavior such as `Ctrl+K`
+kill-line and `Ctrl+L` clear-screen while Herdr is active. Resize commands use
+Herdr's default step and are not repeat-mode bindings, so press the prefix for
+each resize.
 
 ## Intentional differences from tmux
 
@@ -82,7 +85,8 @@ are not repeat-mode bindings, so press the prefix for each resize.
 - Herdr uses its native sidebar and tab UI instead of gitmux and battery status.
 - Herdr's native persistence replaces tmux-resurrect and tmux-continuum rather
   than copying their implementation.
-- Herdr/Neovim navigation requires `vim-herdr-navigation` and `jq`; without
-  `jq`, Herdr pane movement still works but Vim process detection does not.
+- Herdr/Neovim navigation is provided by the repo-local `dotfiles.nav-wrap`
+  plugin and requires `jq`; without `jq`, Herdr pane movement still works but
+  Vim process detection does not.
 
 Reload a running session with `prefix+q` or `herdr server reload-config`.
