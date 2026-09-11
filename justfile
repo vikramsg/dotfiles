@@ -60,18 +60,6 @@ tmux:
         echo "TPM is already installed."; \
     fi
 
-# Set up Yazi config symlink
-yazi:
-    @echo "Setting up Yazi config symlink..."
-    mkdir -p ~/.config/yazi
-    mkdir -p ~/.config/yazi/profiles/screenshots
-    ln -sfn {{justfile_directory()}}/yazi/yazi.toml ~/.config/yazi/yazi.toml
-    ln -sfn {{justfile_directory()}}/yazi/keymap.toml ~/.config/yazi/keymap.toml
-    ln -sfn {{justfile_directory()}}/yazi/profiles/screenshots/yazi.toml ~/.config/yazi/profiles/screenshots/yazi.toml
-    @echo "Yazi config symlink created at ~/.config/yazi/yazi.toml -> {{justfile_directory()}}/yazi/yazi.toml"
-    @echo "Yazi keymap symlink created at ~/.config/yazi/keymap.toml -> {{justfile_directory()}}/yazi/keymap.toml"
-    @echo "Yazi Screenshots config symlink created at ~/.config/yazi/profiles/screenshots/yazi.toml -> {{justfile_directory()}}/yazi/profiles/screenshots/yazi.toml"
-
 # Set up Herdr config symlink while preserving its runtime directory
 herdr:
     @CONFIG_FILE="{{justfile_directory()}}/herdr/config.toml"; \
@@ -103,6 +91,7 @@ herdr:
         fi; \
         echo "Herdr config symlink created at $TARGET -> $CONFIG_FILE"
     just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
+    just --justfile "{{justfile_directory()}}/herdr/justfile" install
 
 # Set up tuicr config symlink
 tuicr:
@@ -497,7 +486,7 @@ terminal-browser:
     @curl -fsSL https://terminal-browser.sh/install | bash
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux yazi herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit hunk television harlequin-if-configured
+all: npm-global-bin nvim tmux herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit hunk television harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

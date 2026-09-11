@@ -1,0 +1,6 @@
+{
+  "plugins": [
+    { "source": "ChmaraX/herdr-nvim" },
+    { "source": "persiyanov/herdr-reviewr" }
+  ]
+}

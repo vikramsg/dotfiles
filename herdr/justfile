@@ -1,0 +1,44 @@
+# Herdr plugins declared in plugins.json and installed from GitHub.
+#
+# `install` adds declared plugins that are not installed yet; `update`
+# reinstalls every declared plugin to refresh its managed checkout. Herdr
+# stores the plugin source under its own runtime directory, so this repository
+# only holds the declaration.
+
+# Install declared plugins that are missing.
+install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    plugins_file="{{justfile_directory()}}/plugins.json"
+    installed="$(herdr plugin list --json | jq -r '.result.plugins[] | select(.source.kind == "github") | "\(.source.owner)/\(.source.repo)"')"
+
+    while IFS="$(printf '\t')" read -r source ref; do
+        [ -n "$source" ] || continue
+        if printf '%s\n' "$installed" | grep -Fxqi "$source"; then
+            echo "already installed: $source"
+            continue
+        fi
+        echo "installing: $source"
+        if [ -n "$ref" ]; then
+            herdr plugin install "$source" --ref "$ref" -y
+        else
+            herdr plugin install "$source" -y
+        fi
+    done < <(jq -r '.plugins[] | [.source, (.ref // "")] | @tsv' "$plugins_file")
+
+# Reinstall every declared plugin to refresh its managed checkout.
+update:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    plugins_file="{{justfile_directory()}}/plugins.json"
+    while IFS="$(printf '\t')" read -r source ref; do
+        [ -n "$source" ] || continue
+        echo "updating: $source"
+        if [ -n "$ref" ]; then
+            herdr plugin install "$source" --ref "$ref" -y
+        else
+            herdr plugin install "$source" -y
+        fi
+    done < <(jq -r '.plugins[] | [.source, (.ref // "")] | @tsv' "$plugins_file")

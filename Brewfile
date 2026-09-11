@@ -23,9 +23,7 @@ brew "gh"
 # Terminal code review UI.
 brew "tuicr"
 
-# Yazi file manager
-brew "yazi"
-# Parse Herdr API responses for the Yazi tab shortcut.
+# Parse Herdr API responses in shell scripts.
 brew "jq"
 
 # Shows current git branch/status directly in tmux status line.

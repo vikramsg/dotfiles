@@ -76,6 +76,37 @@ kill-line and `Ctrl+L` clear-screen while Herdr is active. Resize commands use
 Herdr's default step and are not repeat-mode bindings, so press the prefix for
 each resize.
 
+## Troubleshooting
+
+### `Ctrl+h/j/k/l` does nothing inside Neovim
+
+- Confirm the Neovim adapter loaded:
+  ```vim
+  :map <C-l>
+  ```
+  Expect a mapping described as `Navigate right (dotfiles.nav-wrap)`.
+- If it is missing, restart Neovim or run `:Lazy sync`, then check for errors:
+  ```vim
+  :messages
+  ```
+- Confirm Herdr is healthy:
+  ```sh
+  herdr config check
+  herdr plugin list
+  ```
+  Expect `dotfiles.nav-wrap` enabled.
+- If it only fails inside the `chmarax.herdr-nvim` sidebar (`prefix+e`), know how the sidebar is wired:
+  - The visible pane is a `nvim --remote-ui` client attached to a per-tab headless daemon, `nvim --headless --listen /run/user/<uid>/herdr-nvim/<tab>.sock`.
+  - The navigation adapter runs in that daemon, not in the visible client.
+  - The socket is keyed by tab id only, so sessions sharing a tab id (`dot` and `dotfiles`, both `w1:t1`) share one daemon.
+  - The daemon captures `HERDR_SESSION`, `HERDR_SOCKET_PATH`, and `HERDR_PANE_ID` once when it starts; if those are stale, `Ctrl+h/j/k/l` silently does nothing.
+- Reset the stale daemon:
+  ```sh
+  # toggle the sidebar off first: prefix+e
+  pkill -f '[n]vim --headless --listen.*herdr-nvim'
+  rm -rf /run/user/$UID/herdr-nvim
+  ```
+
 ## Intentional differences from tmux
 
 - Herdr has only the `Ctrl+Space` prefix; tmux also retains `Ctrl+B`.
