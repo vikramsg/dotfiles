@@ -86,7 +86,12 @@ vim.o.cmdheight = 0 -- Remove gap between statusline and tmux
 -- This avoids issues with broken xclip/x11 forwarding
 vim.schedule(function()
 	vim.opt.clipboard = "unnamedplus"
-	if vim.fn.exists("$SSH_CONNECTION") == 1 or vim.fn.exists("$TMUX") == 1 then
+	-- Herdr panes are spawned by the long-lived Herdr server, so they may not
+	-- carry SSH_CONNECTION from the current SSH client. Treat HERDR_ENV as its
+	-- own trigger, otherwise Neovim falls back to the host's pbcopy and the
+	-- yank never reaches the terminal's clipboard.
+	local in_herdr = vim.env.HERDR_ENV == "1"
+	if vim.fn.exists("$SSH_CONNECTION") == 1 or vim.fn.exists("$TMUX") == 1 or in_herdr then
 		local osc52 = require("vim.ui.clipboard.osc52")
 		local clipboard = {
 			name = "OSC 52",
@@ -100,7 +105,7 @@ vim.schedule(function()
 			},
 		}
 
-		if vim.env.HERDR_ENV == "1" then
+		if in_herdr then
 			-- Herdr forwards OSC 52 writes but not clipboard-read responses.
 			-- Use terminal paste for external content and the local register for `p`.
 			local function paste_from_nvim()
