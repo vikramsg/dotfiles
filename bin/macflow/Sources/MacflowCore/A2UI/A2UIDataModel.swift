@@ -71,7 +71,7 @@ public enum A2UIPath {
             values[token] = set(child, tokens: rest, value: value)
             return .object(values)
         case .array(var items):
-            guard let index = Int(token) else { return node }
+            guard let index = Int(token), index >= 0 else { return node }
             while items.count <= index { items.append(.null) }
             items[index] = set(items[index], tokens: rest, value: value)
             return .array(items)

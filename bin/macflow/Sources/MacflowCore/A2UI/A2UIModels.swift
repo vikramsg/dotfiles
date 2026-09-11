@@ -126,8 +126,8 @@ public enum A2UIMessageDecoder {
     }
 
     private static func decodeMessage(_ dictionary: [String: Any]) throws -> A2UIMessage {
-        guard dictionary["version"] is String else {
-            throw A2UIError.invalidPayload("Every message requires a version")
+        guard let version = dictionary["version"] as? String, version == "v0.9.1" else {
+            throw A2UIError.invalidPayload("Only A2UI version v0.9.1 is supported")
         }
         let keys = ["createSurface", "updateComponents", "updateDataModel", "deleteSurface"]
             .filter { dictionary[$0] != nil }
@@ -197,25 +197,23 @@ public enum A2UICatalog {
     public static let defaultCatalogId = "macflow/v1"
 
     public static let componentTypes: Set<String> = [
-        "Text", "Image", "Icon", "Video", "AudioPlayer",
-        "Row", "Column", "List", "Card", "Tabs", "Modal", "Divider",
-        "Button", "TextField", "CheckBox", "ChoicePicker", "Slider", "DateTimeInput",
-        "FileThumbnail",
+        "Text", "Image", "Row", "Column", "List", "Card", "Tabs", "Divider",
+        "Button", "FileThumbnail",
     ]
 
     public static let functions: Set<String> = [
-        "required", "regex", "length", "numeric", "email",
-        "formatString", "formatNumber", "formatCurrency", "formatDate", "pluralize",
-        "openUrl", "and", "or", "not",
-        "files.open", "files.reveal", "files.drag", "surface.dismiss",
+        "openUrl", "files.open", "files.reveal", "surface.dismiss",
     ]
 
     public static func validate(_ component: A2UIComponent) throws {
         guard componentTypes.contains(component.type) else {
             throw A2UIError.unknownComponent(component.type)
         }
-        if let action = component.properties["action"],
-           case let .object(container) = action,
+        guard let action = component.properties["action"] else { return }
+        guard component.type == "Button" else {
+            throw A2UIError.invalidProperty("\(component.type) does not support action")
+        }
+        if case let .object(container) = action,
            case let .object(call)? = container["functionCall"],
            let name = call["call"]?.stringValue,
            !functions.contains(name)

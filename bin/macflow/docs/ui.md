@@ -66,7 +66,8 @@ which renders a thumbnail and provides native file behavior: left-click opens,
 right-click reveals, and dragging starts a real file drag.
 
 Actions use `functionCall` or `event`. Local functions are `files.open`,
-`files.reveal`, `files.drag`, `surface.dismiss`, and the built-in `openUrl`.
+`files.reveal`, `surface.dismiss`, and the built-in `openUrl`. Dragging is
+intrinsic to `FileThumbnail`; there is no drag function to call.
 
 ## Files
 

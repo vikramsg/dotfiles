@@ -33,8 +33,12 @@ Plan: `.agents/plans/macflow-a2ui-json-ui.md` (frozen; deviations recorded here)
   group so `ui` is only the A2UI surface command.
 - **`Image` is display-only** (no action); `FileThumbnailView` already provides
   open/reveal/drag, so the `FileThumbnail` node reuses it directly.
-- **Not implemented (deliberately):** `weight`, precise `justify` (only
+- Not implemented (deliberately): `weight`, precise `justify` (only
   space-between style is approximated), and scrolling for long `List`s.
+- Only implemented components/functions are accepted by the catalog, so
+  unsupported payloads are rejected instead of silently doing nothing.
+  `files.drag` was dropped from the catalog: drag is intrinsic to
+  `FileThumbnail`, so there is no drag function to invoke.
 
 ## Known limitations to review
 
@@ -53,6 +57,25 @@ Plan: `.agents/plans/macflow-a2ui-json-ui.md` (frozen; deviations recorded here)
   the second tab, updated the data model and confirmed a re-render, and
   dismissed with Escape.
 - Not automated (manual by policy): the visual frames and the drag-to-Finder drop.
+
+## Advisory review triage
+
+Accepted (fixed):
+- `A2UISurfaceStore.apply` is now atomic — it mutates a copy and publishes only
+  after every message validates.
+- The catalog now lists only implemented components/functions, and `action` is
+  rejected on anything but `Button`, so unsupported payloads fail validation
+  instead of returning 200 and silently rendering nothing.
+- The resolver tracks a visiting set and reports component cycles.
+- A negative array index (`/items/-1`) no longer traps.
+- The decoder requires `v0.9.1` exactly.
+
+Rejected (advisory only):
+- Routing `FileThumbnail` open/reveal through the controller's action dispatch.
+  `FileThumbnailView` already implements open/reveal/drag; re-plumbing them
+  through callbacks would duplicate its behavior rather than simplify. The
+  controller's `handle` and the view both call `NSWorkspace` on the same paths,
+  so open/reveal behavior is identical.
 
 ## To review
 

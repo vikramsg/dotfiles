@@ -49,23 +49,25 @@ public struct A2UISurfaceStore {
 
     @discardableResult
     public mutating func apply(_ messages: [A2UIMessage]) throws -> [String] {
+        var working = surfaces
         var touched: [String] = []
         for message in messages {
             switch message {
             case let .createSurface(id, catalogId, properties):
-                surfaces[id] = A2UISurface(id: id, catalogId: catalogId, properties: properties)
+                working[id] = A2UISurface(id: id, catalogId: catalogId, properties: properties)
             case let .updateComponents(id, components):
                 try components.forEach(A2UICatalog.validate)
-                if surfaces[id] == nil { surfaces[id] = A2UISurface(id: id) }
-                surfaces[id]?.upsert(components: components)
+                if working[id] == nil { working[id] = A2UISurface(id: id) }
+                working[id]?.upsert(components: components)
             case let .updateDataModel(id, path, value):
-                if surfaces[id] == nil { surfaces[id] = A2UISurface(id: id) }
-                surfaces[id]?.setDataModel(path: path, value: value)
+                if working[id] == nil { working[id] = A2UISurface(id: id) }
+                working[id]?.setDataModel(path: path, value: value)
             case let .deleteSurface(id):
-                surfaces.removeValue(forKey: id)
+                working.removeValue(forKey: id)
             }
             if !touched.contains(message.surfaceId) { touched.append(message.surfaceId) }
         }
+        surfaces = working
         return touched
     }
 }
@@ -99,13 +101,22 @@ public enum A2UIAction: Equatable {
 
 public enum A2UIResolver {
     public static func resolve(_ surface: A2UISurface) throws -> A2UINode {
-        try resolveComponent(id: "root", surface: surface, scope: nil)
+        try resolveComponent(id: "root", surface: surface, scope: nil, visiting: [])
     }
 
-    static func resolveComponent(id: String, surface: A2UISurface, scope: JSONValue?) throws -> A2UINode {
+    static func resolveComponent(
+        id: String,
+        surface: A2UISurface,
+        scope: JSONValue?,
+        visiting: Set<String>
+    ) throws -> A2UINode {
+        guard !visiting.contains(id) else {
+            throw A2UIError.invalidPayload("Component cycle at \(id)")
+        }
         guard let component = surface.components[id] else {
             throw A2UIError.invalidPayload("Unknown component reference: \(id)")
         }
+        let visiting = visiting.union([id])
         switch component.type {
         case "Text":
             return .text(
@@ -127,7 +138,7 @@ public enum A2UIResolver {
                 throw A2UIError.invalidProperty("Button requires child")
             }
             return .button(
-                child: try resolveComponent(id: child, surface: surface, scope: scope),
+                child: try resolveComponent(id: child, surface: surface, scope: scope, visiting: visiting),
                 action: action(component.properties["action"], surface: surface, scope: scope),
                 variant: string(component.properties["variant"], surface: surface, scope: scope) ?? "default"
             )
@@ -135,26 +146,26 @@ public enum A2UIResolver {
             guard let child = string(component.properties["child"], surface: surface, scope: scope) else {
                 throw A2UIError.invalidProperty("Card requires child")
             }
-            return .card(child: try resolveComponent(id: child, surface: surface, scope: scope))
+            return .card(child: try resolveComponent(id: child, surface: surface, scope: scope, visiting: visiting))
         case "Divider":
             return .divider(axis: string(component.properties["axis"], surface: surface, scope: scope) ?? "horizontal")
         case "Row":
             return .stack(
                 axis: "row",
-                children: try children(component, surface: surface, scope: scope),
+                children: try children(component, surface: surface, scope: scope, visiting: visiting),
                 justify: string(component.properties["justify"], surface: surface, scope: scope) ?? "start",
                 align: string(component.properties["align"], surface: surface, scope: scope) ?? "stretch"
             )
         case "Column":
             return .stack(
                 axis: "column",
-                children: try children(component, surface: surface, scope: scope),
+                children: try children(component, surface: surface, scope: scope, visiting: visiting),
                 justify: string(component.properties["justify"], surface: surface, scope: scope) ?? "start",
                 align: string(component.properties["align"], surface: surface, scope: scope) ?? "stretch"
             )
         case "List":
             return .list(
-                children: try children(component, surface: surface, scope: scope),
+                children: try children(component, surface: surface, scope: scope, visiting: visiting),
                 direction: string(component.properties["direction"], surface: surface, scope: scope) ?? "vertical"
             )
         case "Tabs":
@@ -167,7 +178,7 @@ public enum A2UIResolver {
                 }
                 return A2UITab(
                     title: string(values["title"], surface: surface, scope: scope) ?? "",
-                    child: try resolveComponent(id: child, surface: surface, scope: scope)
+                    child: try resolveComponent(id: child, surface: surface, scope: scope, visiting: visiting)
                 )
             }
             return .tabs(tabs)
@@ -176,13 +187,18 @@ public enum A2UIResolver {
         }
     }
 
-    static func children(_ component: A2UIComponent, surface: A2UISurface, scope: JSONValue?) throws -> [A2UINode] {
+    static func children(
+        _ component: A2UIComponent,
+        surface: A2UISurface,
+        scope: JSONValue?,
+        visiting: Set<String>
+    ) throws -> [A2UINode] {
         guard let children = component.properties["children"] else { return [] }
         switch children {
         case let .array(items):
             return try items.compactMap { item -> A2UINode? in
                 guard let id = item.stringValue else { return nil }
-                return try resolveComponent(id: id, surface: surface, scope: scope)
+                return try resolveComponent(id: id, surface: surface, scope: scope, visiting: visiting)
             }
         case let .object(values):
             guard let componentId = values["componentId"]?.stringValue,
@@ -192,7 +208,7 @@ public enum A2UIResolver {
             }
             let items = surface.dataModel.value(at: path, scope: scope)?.arrayValue ?? []
             return try items.map { item in
-                try resolveComponent(id: componentId, surface: surface, scope: item)
+                try resolveComponent(id: componentId, surface: surface, scope: item, visiting: visiting)
             }
         default:
             return []

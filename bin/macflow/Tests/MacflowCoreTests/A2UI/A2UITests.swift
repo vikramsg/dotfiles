@@ -41,23 +41,77 @@ import Testing
         }
     }
 
+    @Test func rejectsUnsupportedProtocolVersion() {
+        #expect(throws: A2UIError.self) {
+            try decode(#"{"version":"v1.0","deleteSurface":{"surfaceId":"s"}}"#)
+        }
+    }
+
     @Test func rejectsUnknownComponentsAndFunctions() {
-        let unknownComponent = A2UIComponent(id: "root", type: "Spaceship")
         #expect(throws: A2UIError.unknownComponent("Spaceship")) {
-            try A2UICatalog.validate(unknownComponent)
+            try A2UICatalog.validate(A2UIComponent(id: "root", type: "Spaceship"))
+        }
+        // Components the renderer does not implement are rejected rather than stored.
+        #expect(throws: A2UIError.unknownComponent("Icon")) {
+            try A2UICatalog.validate(A2UIComponent(id: "root", type: "Icon"))
         }
 
         let unknownFunction = A2UIComponent(
             id: "root",
-            type: "Image",
+            type: "Button",
             properties: [
-                "url": .string("file:///a.png"),
+                "child": .string("label"),
                 "action": .object(["functionCall": .object(["call": .string("files.explode")])]),
             ]
         )
         #expect(throws: A2UIError.unknownFunction("files.explode")) {
             try A2UICatalog.validate(unknownFunction)
         }
+    }
+
+    @Test func rejectsActionOnNonInteractiveComponents() {
+        let image = A2UIComponent(
+            id: "root",
+            type: "Image",
+            properties: [
+                "url": .string("file:///a.png"),
+                "action": .object(["functionCall": .object(["call": .string("files.open")])]),
+            ]
+        )
+        #expect(throws: A2UIError.invalidProperty("Image does not support action")) {
+            try A2UICatalog.validate(image)
+        }
+    }
+
+    @Test func rejectsComponentCycles() {
+        let row = A2UIComponent(id: "root", type: "Row", properties: ["children": .array([.string("root")])])
+        let surface = A2UISurface(id: "s", components: ["root": row])
+        #expect(throws: A2UIError.self) {
+            try A2UIResolver.resolve(surface)
+        }
+    }
+
+    @Test func negativeArrayIndexDoesNotTrap() {
+        var model = A2UIDataModel()
+        model.set(path: "/items", value: .array([.string("a")]))
+        model.set(path: "/items/-1", value: .string("bad"))
+        #expect(model.value(at: "/items/0") == .string("a"))
+    }
+
+    @Test func rejectedBatchLeavesTheStoreUnchanged() throws {
+        var store = A2UISurfaceStore()
+        try store.apply(try decode(
+            #"[{"version":"v0.9.1","createSurface":{"surfaceId":"s"}},{"version":"v0.9.1","updateComponents":{"surfaceId":"s","components":[{"id":"root","component":"Text","text":"ok"}]}}]"#
+        ))
+        let before = store.surface(id: "s")
+
+        #expect(throws: A2UIError.self) {
+            try store.apply(try decode(
+                #"[{"version":"v0.9.1","deleteSurface":{"surfaceId":"s"}},{"version":"v0.9.1","updateComponents":{"surfaceId":"t","components":[{"id":"root","component":"Spaceship"}]}}]"#
+            ))
+        }
+        #expect(store.surface(id: "s") == before)
+        #expect(store.surface(id: "t") == nil)
     }
 
     @Test func dataModelMergesAtPathAndResolvesValues() {
