@@ -13,16 +13,11 @@ fi
 export EDITOR="nvim"
 export VISUAL="nvim"
 bindkey -e
-# Default options for yazi. Opens preview on right and uses Tokyo Night
+# Default options for fzf. Opens preview on right and uses Tokyo Night
 export FZF_DEFAULT_OPTS="--style full \
 --color='fg:#c0caf5,bg:#1a1b26,hl:#ff9e64,fg+:#c0caf5,bg+:#292e42,hl+:#ff9e64,info:#7dcfff,prompt:#7aa2f7,pointer:#9ece6a,marker:#9ece6a,spinner:#bb9af7,header:#565f89,border:#3b4261,label:#bb9af7,query:#c0caf5' \
 --preview 'fzf-preview.sh {}' \
 --bind 'focus:transform-header:file --brief {}'"
-
-if [[ ${HERDR_START_YAZI:-} == 1 ]]; then
-    unset HERDR_START_YAZI
-    exec yazi
-fi
 
 if [[ ${HERDR_START_TUICR:-} == 1 ]]; then
     unset HERDR_START_TUICR
@@ -37,7 +32,7 @@ fi
 
 ##################################################################################
 # The settings above are ones we need for fast setup
-# For example when opening a tab in herdr for Yazi we need some minimal setup
+# They run before the plugins below load (e.g. Herdr-launched tabs).
 ##################################################################################
 # Install zinit
 # Home is $HOME/.local/share/zinit/

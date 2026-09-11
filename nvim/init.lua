@@ -1337,6 +1337,13 @@ require("lazy").setup({
 		end,
 	},
 
+	-- nvim sidebar and agent code annotations. The Herdr plugin
+	-- (chmarax.herdr-nvim) provides the sidebar pane and file picker.
+	{
+		"ChmaraX/herdr-nvim",
+		opts = {},
+	},
+
 	-- Statusline with git branch
 	{
 		"nvim-lualine/lualine.nvim",
