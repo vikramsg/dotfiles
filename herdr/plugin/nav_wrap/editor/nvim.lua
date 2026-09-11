@@ -11,11 +11,16 @@ local focus_wrap = plugin_root .. "/focus-wrap.sh"
 
 local tmux_direction = { left = "Left", down = "Down", up = "Up", right = "Right" }
 
+-- Herdr is checked before tmux because both can be set (Herdr can host tmux in
+-- a pane), and Herdr is the pane manager whose panes we move in.
 local function cross_out(dir)
 	if vim.env.HERDR_PANE_ID and vim.env.HERDR_PANE_ID ~= "" then
 		vim.fn.system({ focus_wrap, dir })
 		return true
 	elseif vim.env.TMUX and vim.env.TMUX ~= "" then
+		-- This adapter is loaded whenever the shared Neovim config runs, so it
+		-- must also cover tmux: outside Herdr, hand off to vim-tmux-navigator's
+		-- commands so tmux pane crossing keeps working.
 		pcall(vim.cmd, "TmuxNavigate" .. tmux_direction[dir])
 		return true
 	end

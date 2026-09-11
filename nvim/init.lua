@@ -1325,10 +1325,14 @@ require("lazy").setup({
 	{
 		"christoomey/vim-tmux-navigator",
 		lazy = false,
+		-- Loaded here so it runs after the plugin's own maps: inside Herdr the
+		-- adapter wins <C-h/j/k/l>; outside Herdr the tmux plugin keeps them.
 		config = function()
 			dofile(vim.fn.expand("~/.config/herdr-nav-wrap/editor/nvim.lua"))
 		end,
 		init = function()
+			-- The adapter owns <C-h/j/k/l>. This plugin stays installed because
+			-- the adapter delegates tmux to its :TmuxNavigate* commands.
 			vim.g.tmux_navigator_no_mappings = 1
 		end,
 	},
