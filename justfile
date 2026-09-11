@@ -235,16 +235,6 @@ validate-screenshot-directories:
         printf 'ERROR: Macflow capture directory (%s) does not match screenshot directory (%s).\n' "$MACFLOW_CAPTURE_DIR" "$SCREENSHOT_DIR" >&2
         exit 1
     fi
-    MACFLOW_LOCAL_DIR=$(jq -er '.shelves.screenshots.sources[] | select(.id == "local") | .directory' "$MACFLOW_CONFIG")
-    if [[ "$MACFLOW_LOCAL_DIR" != "$SCREENSHOT_DIR" ]]; then
-        printf 'ERROR: Macflow local shelf directory (%s) does not match screenshot directory (%s).\n' "$MACFLOW_LOCAL_DIR" "$SCREENSHOT_DIR" >&2
-        exit 1
-    fi
-    MACFLOW_WEB_LOCAL_DIR=$(jq -er '.surfaces["screenshots-web"].configuration.sources[] | select(.id == "local") | .directory' "$MACFLOW_CONFIG")
-    if [[ "$MACFLOW_WEB_LOCAL_DIR" != "$SCREENSHOT_DIR" ]]; then
-        printf 'ERROR: Macflow WebKit local shelf directory (%s) does not match screenshot directory (%s).\n' "$MACFLOW_WEB_LOCAL_DIR" "$SCREENSHOT_DIR" >&2
-        exit 1
-    fi
 
 # Set up screenshot config symlink, install tool, and apply macOS location
 screenshot: validate-screenshot-directories
@@ -342,15 +332,9 @@ link-macflow-config:
     set -euo pipefail
     CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
     CONFIG_DIR="$CONFIG_HOME/macflow"
-    UI_SOURCE="{{justfile_directory()}}/macflow/ui"
-    UI_TARGET="$CONFIG_DIR/ui"
     mkdir -p "$CONFIG_DIR"
     ln -sfn "{{justfile_directory()}}/macflow/config.json" "$CONFIG_DIR/config.json"
-    if [ -e "$UI_TARGET" ] && [ ! -L "$UI_TARGET" ]; then
-        echo "ERROR: $UI_TARGET exists and is not a symlink."
-        exit 1
-    fi
-    ln -sfn "$UI_SOURCE" "$UI_TARGET"
+    rm -f "$CONFIG_DIR/ui"
 
 # Link macflow configuration and delegate installation to its package.
 macflow: validate-screenshot-directories link-macflow-config

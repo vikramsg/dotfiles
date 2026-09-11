@@ -3,8 +3,9 @@
 ## Global shortcuts do not work
 
 If a menu action works but its global shortcut does not, macOS may be blocking
-Macflow's keyboard event tap with Secure Input. For example, **Show Screenshot
-Shelf** may work from the menu bar while `cmd + shift + h` does nothing.
+Macflow's keyboard event tap with Secure Input. For example, a configured
+layout shortcut such as `cmd + shift + 1` may do nothing while the app is
+otherwise healthy.
 
 Secure Input protects password entry by preventing other applications from
 observing keyboard events. It can remain enabled after a password field closes,
