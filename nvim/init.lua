@@ -150,7 +150,7 @@ for i = 1, 9 do
 	end, { desc = "Jump to visual buffer " .. i })
 end
 
--- Split-navigation fallbacks not owned by vim-herdr-navigation below.
+-- Split-navigation fallbacks not owned by dotfiles.nav-wrap below.
 vim.keymap.set("n", "<leader>wh", "<C-w><C-h>", { desc = "Move focus to the left window" })
 vim.keymap.set("n", "<leader>wl", "<C-w><C-l>", { desc = "Move focus to the right window" })
 -- Does not seem to work
@@ -1325,15 +1325,9 @@ require("lazy").setup({
 	{
 		"christoomey/vim-tmux-navigator",
 		lazy = false,
-		dependencies = {
-			{
-				"paulbkim-dev/vim-herdr-navigation",
-				commit = "79679dacc791f70fc34de8b29a3cf9706c0f5b2f",
-				config = function(plugin)
-					dofile(plugin.dir .. "/editor/nvim.lua")
-				end,
-			},
-		},
+		config = function()
+			dofile(vim.fn.expand("~/.config/herdr-nav-wrap/editor/nvim.lua"))
+		end,
 		init = function()
 			vim.g.tmux_navigator_no_mappings = 1
 		end,

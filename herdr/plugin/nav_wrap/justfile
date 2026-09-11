@@ -1,0 +1,14 @@
+# Link the plugin through its home anchor and register it with Herdr.
+link:
+    ln -sfn "{{justfile_directory()}}" "$HOME/.config/herdr-nav-wrap"
+    herdr plugin link "$HOME/.config/herdr-nav-wrap"
+    -herdr plugin uninstall vim-herdr-navigation
+
+# Remove the plugin registration. Leaves the anchor symlink in place.
+unlink:
+    herdr plugin unlink dotfiles.nav-wrap
+
+# Run behavioural tests for the action scripts and the Neovim adapter.
+test:
+    bash "{{justfile_directory()}}/tests/run.sh"
+    nvim --headless -u NONE -l "{{justfile_directory()}}/tests/nvim.lua"
