@@ -15,7 +15,7 @@ func testDirectory() throws -> URL {
 func runtimeConfiguration(directory: URL) throws -> WorkflowConfiguration {
     let object: [String: Any] = [
         "server": ["host": "127.0.0.1", "port": 0],
-        "applications": [:], "layouts": [:], "shelves": [:], "hotkeys": [],
+        "applications": [:], "layouts": [:], "hotkeys": [],
         "screenshots": [
             "directory": directory.path, "extensions": ["png"],
             "debounce_seconds": 0.01, "capture_settle_seconds": 0.01,
@@ -39,6 +39,26 @@ func request(port: UInt16, method: String = "GET", path: String, body: [String: 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     }
+    let (data, response) = try await URLSession.shared.data(for: request)
+    return APIReply(
+        status: try #require(response as? HTTPURLResponse).statusCode,
+        body: try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    )
+}
+
+func requestRawBody(
+    port: UInt16,
+    method: String = "POST",
+    path: String,
+    body: Data,
+    contentType: String
+) async throws -> APIReply {
+    var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
+    request.httpMethod = method
+    request.timeoutInterval = 3
+    request.setValue("Bearer test-token", forHTTPHeaderField: "Authorization")
+    request.httpBody = body
+    request.setValue(contentType, forHTTPHeaderField: "Content-Type")
     let (data, response) = try await URLSession.shared.data(for: request)
     return APIReply(
         status: try #require(response as? HTTPURLResponse).statusCode,

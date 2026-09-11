@@ -4,7 +4,6 @@ import MacflowUI
 
 @MainActor
 final class AutomationRuntime {
-    private let configurationURL: URL
     private let startupConfiguration: WorkflowConfiguration
     private let windows: WindowService
     private let screens: ScreenService
@@ -12,8 +11,7 @@ final class AutomationRuntime {
     private let overlay: ImageOverlayController
     private let automaticPreview: AutomaticPreviewController
     private let layout: LayoutController
-    private let shelf: FileShelfController
-    private let webSurface: WebSurfaceController
+    private let ui: A2UISurfaceController
     private let capture: ScreenshotCaptureService
     private let server: HTTPServer
 
@@ -47,14 +45,7 @@ final class AutomationRuntime {
             windows: windows,
             screens: screens
         )
-        let shelf = FileShelfController(windows: windows, screens: screens, hotKeys: hotKeys, theme: theme)
-        let webSurface = WebSurfaceController(
-            configurationURL: configurationURL,
-            windows: windows,
-            screens: screens,
-            hotKeys: hotKeys,
-            theme: theme
-        )
+        let ui = A2UISurfaceController(windows: windows, screens: screens, hotKeys: hotKeys, theme: theme)
         let capture = ScreenshotCaptureService(defaultDirectory: screenshotDirectory)
         let server = HTTPServer(
             configuration: configuration.server,
@@ -67,11 +58,10 @@ final class AutomationRuntime {
                 capture: capture, preview: overlay, watcher: automaticPreview,
                 settleSeconds: configuration.screenshots.captureSettleSeconds
             ),
-            shelf: shelf,
+            ui: ui,
             hotKeyStatus: { hotKeys.status },
             permissions: permissions
         )
-        self.configurationURL = configurationURL
         self.startupConfiguration = configuration
         self.windows = windows
         self.screens = screens
@@ -79,8 +69,7 @@ final class AutomationRuntime {
         self.overlay = overlay
         self.automaticPreview = automaticPreview
         self.layout = layout
-        self.shelf = shelf
-        self.webSurface = webSurface
+        self.ui = ui
         self.capture = capture
         self.server = server
     }
@@ -112,20 +101,10 @@ final class AutomationRuntime {
     var httpPort: UInt16? { server.port }
 
     func stop() {
+        ui.dismissAll(restoreFocus: false)
         server.stop()
         automaticPreview.stop()
         hotKeys.stop()
-    }
-
-    func showFirstShelf() {
-        guard let configuration = loadCurrentConfigurationOrReport() else { return }
-        guard let name = configuration.shelves.keys.sorted().first,
-              let shelfConfiguration = configuration.shelves[name]
-        else {
-            NSSound.beep()
-            return
-        }
-        presentShelf(named: name, configuration: shelfConfiguration)
     }
 
     private func execute(_ action: WorkflowConfiguration.Action) {
@@ -139,49 +118,6 @@ final class AutomationRuntime {
                     report(error.localizedDescription)
                 }
             }
-        case .showFileShelf:
-            guard let name = action.shelf else { return report("show_file_shelf requires shelf") }
-            showShelf(named: name)
-        case .showSurface:
-            guard let name = action.surface else { return report("show_surface requires surface") }
-            showSurface(named: name)
-        }
-    }
-
-    private func showShelf(named name: String) {
-        guard let workflow = loadCurrentConfigurationOrReport() else { return }
-        guard let configuration = workflow.shelves[name] else {
-            return report("Unknown shelf: \(name)")
-        }
-        presentShelf(named: name, configuration: configuration)
-    }
-
-    private func presentShelf(named name: String, configuration: WorkflowConfiguration.Shelf) {
-        webSurface.hide(restoreFocus: true)
-        if !shelf.show(configuration: configuration) {
-            report("Could not show shelf: \(name)")
-        }
-    }
-
-    private func showSurface(named name: String) {
-        guard let workflow = loadCurrentConfigurationOrReport() else { return }
-        guard let configuration = workflow.surfaces[name] else {
-            return report("Unknown surface: \(name)")
-        }
-        shelf.hide(restoreFocus: true)
-        if !webSurface.show(configuration: configuration) {
-            report("Could not show surface: \(name)")
-        }
-    }
-
-    private func loadCurrentConfigurationOrReport() -> WorkflowConfiguration? {
-        do {
-            let configuration = try ConfigurationLoader.loadWorkflow(from: configurationURL)
-            try configuration.validate()
-            return configuration
-        } catch {
-            report("Could not load configuration: \(error.localizedDescription)")
-            return nil
         }
     }
 
