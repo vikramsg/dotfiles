@@ -79,6 +79,24 @@ if tmux then
 end
 check("tmux fallback calls TmuxNavigateRight", tmux_ok)
 
+-- A left-docked Snacks picker float must hand off instead of bouncing.
+vim.fn.setenv("HERDR_PANE_ID", "p1")
+vim.fn.setenv("TMUX", "")
+local picker = vim.api.nvim_create_buf(false, true)
+vim.bo[picker].filetype = "snacks_picker_list"
+vim.api.nvim_open_win(picker, true, {
+	relative = "win",
+	win = vim.api.nvim_get_current_win(),
+	row = 0,
+	col = 0,
+	width = 10,
+	height = 5,
+})
+local reset = io.open(state .. "/calls", "w")
+reset:close()
+feed("<C-h>")
+check("left-docked picker hands off left", read_calls():match("focus left p1 %-> none") ~= nil, read_calls())
+
 if failures > 0 then
 	print("\n" .. failures .. " test(s) failed")
 	os.exit(1)
