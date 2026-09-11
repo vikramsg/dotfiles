@@ -4,6 +4,38 @@ Herdr is a persistent terminal multiplexer that coexists with tmux. This
 configuration adds seamless Neovim split navigation while preserving the
 existing tmux key habits and configuration.
 
+## Shortcuts
+
+The prefix is `Ctrl+Space`.
+
+| Keys | Action |
+| --- | --- |
+| `Ctrl+H/J/K/L` | Navigate left / down / up / right across Neovim splits and Herdr panes, wrapping at pane edges |
+| `prefix+←` / `prefix+↓` / `prefix+↑` / `prefix+→` | Focus pane left / down / up / right |
+| `prefix+h/l/k/j` | Resize pane left / right / down / up |
+| `prefix+Shift+H/J/K/L` | Swap pane left / down / up / right |
+| `prefix+x` / `prefix+z` | Close / zoom pane |
+| `prefix+;` | Focus the last pane |
+| `prefix+[` | Enter copy mode |
+| `prefix+c` | Create a tab |
+| `prefix+1..9` | Switch tabs |
+| `prefix+p` / `prefix+n` | Previous / next tab |
+| `prefix+$` | Rename the current tab |
+| `prefix+"` / `prefix+%` | Stacked / side-by-side split |
+| `prefix+Shift+1..9` | Focus agent 1–9 |
+| `prefix+s` | Session navigator (goto) |
+| `prefix+w` | Workspace navigation |
+| `prefix+Shift+C` | Create a workspace |
+| `prefix+q` / `prefix+?` / `prefix+d` | Reload config / help / detach |
+| `prefix+e` / `prefix+f` | Toggle the nvim sidebar / open the nvim file picker |
+| `prefix+r` | Toggle the reviewr pane |
+| `prefix+v` | Pick and watch a Markdown file in a popup |
+| `prefix+g` | Open the LazyGit popup |
+| `prefix+Shift+T` | Open the terminal popup |
+| `prefix+Shift+D` | Open the current repository in a new Hunk tab |
+| `prefix+Shift+G` | Review the current PR in a new tab |
+| `prefix+Shift+O` | Append OpenCode and nvim project tabs |
+
 ## Setup
 
 ```sh
@@ -38,30 +70,6 @@ available. Using `--remote-keybindings server` loads those bindings from
 SSH.
 
 ## Keys
-
-The prefix is `Ctrl+Space`.
-
-| Keys | Action |
-| --- | --- |
-| `Ctrl+H/J/K/L` | Navigate left / down / up / right across Neovim splits and Herdr panes, wrapping at pane edges |
-| `prefix+q` | Reload configuration |
-| `prefix+?` | Show help |
-| `prefix+d` | Detach |
-| `prefix+[` | Enter copy mode |
-| `prefix+c` | Create a tab |
-| `prefix+1..9` | Switch tabs |
-| `prefix+Shift+1..9` | Focus agents |
-| `prefix+p` / `prefix+n` | Previous / next tab |
-| `prefix+$` | Rename the current tab |
-| `prefix+v` | Pick and watch a Markdown file in a popup |
-| `prefix+"` / `prefix+%` | Stacked / side-by-side split |
-| `prefix+x` / `prefix+z` | Close / zoom pane |
-| `prefix+;` | Focus the last pane |
-| `prefix+Shift+C` | Create a workspace |
-| `prefix+h/l/k/j` | Resize left / right / down / up |
-| `prefix+Shift+H/J/K/L` | Swap left / down / up / right |
-| `prefix+Shift+D` | Open the current repository in a new Hunk tab |
-| `prefix+Shift+G` | Review the current PR in a new tab |
 
 Quitting Hunk with `q` closes its tab and returns to the tab it was opened from,
 rather than leaving a shell prompt. If the original tab was closed in the
