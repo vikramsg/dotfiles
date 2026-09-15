@@ -40,6 +40,28 @@ NOTE: If we have agreed to a plan, make sure its present in .agents/plans/ and i
 - You will only write behavioural tests, not change detections tests
 - You will not automate tests that you have to verify manually
 
+## Naming and Code comment hygiene
+
+### Code comment and Docstring hygiene
+
+- Explain what the code cannot readily tell the reader: reasons, constraints, and consequences.
+- Use concrete domain terms rather than vague architectural language.
+- Write for a developer unfamiliar with our earlier discussions.
+- Describe the actual behavior; update explanations affected by code changes.
+- Use enough detail. Shorter is not automatically clearer.
+- Use lists, examples, tables, or diagrams when they reduce reading effort.
+- Remove comments that merely repeat the code.
+
+### Naming
+
+- Name what a value contains or what a function does.
+- Use clear domain terminology and distinguish easily confused concepts, such as raw IDs versus stable IDs.
+- Make conversion direction, units, and side effects clear where relevant.
+- Avoid vague qualifiers such as scoped, resolved, or normalized unless their meaning is clear in context.
+- Prefer a better name over a comment explaining a poor name.
+- Do not lengthen names unnecessarily; judge clarity at the call site.
+
+
 ## Implementation hygience
 
 - Never add fallback, compatibility, backward shims unless already discussed.
@@ -62,4 +84,5 @@ However some things we are interested in from the review
 2. PR description
 3. What review points will be allowed to make you change your implementation 
 4. What tests will you write, how will you maintain testing hygiene and how will you verify e2e.
+5. How will you maintain code comments, documentation and naming hygiene
 
