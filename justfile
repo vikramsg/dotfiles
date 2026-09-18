@@ -478,13 +478,6 @@ harlequin-if-configured:
         echo "Skipping Harlequin: create harlequin/config.toml from config.example.toml to enable it."; \
     fi
 
-# Install or update terminal-browser
-# Installs binary to ~/.local/bin/terminal-browser (already exported in ~/.zshrc)
-# the installation also links the agent skill into ~/.agents/skills for automatic OpenCode/agent discovery.
-terminal-browser:
-    @echo "Installing terminal-browser..."
-    @curl -fsSL https://terminal-browser.sh/install | bash
-
 # Set up all symlinks
 all: npm-global-bin nvim tmux herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit hunk television harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
