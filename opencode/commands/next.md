@@ -13,6 +13,7 @@ After checks and tests are all complete, push and create a PR.
 You will not give implementation details but the simplest summary of what actually you did
 - Prefer bullet points to separate out main features of the PR 
 - For the PR description, if there has been update, give the updated description while sticking to these principles 
+- Make sure to follow PR templates if there are any that exist in the repo.
 
 ### Reminder
 
