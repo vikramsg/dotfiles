@@ -1,5 +1,8 @@
 brew "autossh"
 
+# JavaScript runtime used by open-cursor to install its OpenCode provider dependency.
+brew "bun"
+
 brew "fzf"
 # Syntax highlighting for file previews in fzf.
 brew "bat"

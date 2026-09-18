@@ -4,6 +4,12 @@ This repository tracks configuration and learnings about the `opencode` and
 `opencode2` CLI agents. V1 terminal settings live in `tui.json`; V2 terminal
 settings live in `cli.json`.
 
+## Integration guides
+
+- [Cursor models](docs/cursor.md) explains installation, authentication, model
+  discovery, and the local proxy used to expose Cursor subscription models to
+  OpenCode.
+
 ## Configuration Modes
 
 OpenCode operates based on the configuration defined in `opencode.json` (by default). This dictates the AI's permissions for reading, editing, and executing terminal commands.
