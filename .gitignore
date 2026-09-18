@@ -33,3 +33,7 @@ lazy-lock.json
 
 # Local Swift workflow utility build products.
 bin/macflow/.build
+
+# Plan files
+.agents/plans/*
+.agents/implementation-notes/*

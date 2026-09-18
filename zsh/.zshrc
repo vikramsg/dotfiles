@@ -12,6 +12,8 @@ fi
 # Environment variables
 export EDITOR="nvim"
 export VISUAL="nvim"
+# Preserve the curated Cursor model list instead of repopulating every account model.
+export CURSOR_ACP_MODEL_AUTO_REFRESH="false"
 bindkey -e
 # Default options for fzf. Opens preview on right and uses Tokyo Night
 export FZF_DEFAULT_OPTS="--style full \

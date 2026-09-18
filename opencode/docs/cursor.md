@@ -99,6 +99,21 @@ entries to populate its model picker. A model appearing in the picker confirms
 that it is configured; it does not by itself confirm that the runtime plugin
 loaded successfully.
 
+This repository intentionally curates the synchronized list by excluding
+OpenAI, Claude, and Gemini model families. Running `open-cursor sync-models`
+again will restore every model reported by `cursor-agent`, so review and
+reapply that filtering before committing a refreshed configuration.
+
+Automatic startup synchronization is disabled in `zsh/.zshrc` to prevent the
+plugin from restoring those model families whenever OpenCode starts:
+
+```bash
+export CURSOR_ACP_MODEL_AUTO_REFRESH="false"
+```
+
+Run synchronization explicitly when the account's available models need to be
+refreshed, then curate the resulting list again.
+
 Use the upstream compact form when a grouped model and variant list is
 preferred:
 
@@ -121,4 +136,3 @@ OpenCode plugin-load failures are recorded in:
 ```text
 ~/.local/share/opencode/log/opencode.log
 ```
-
