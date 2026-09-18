@@ -90,7 +90,7 @@ class API:
         params = window.params()
         if project is not None:
             params["project"] = project
-        response = self._get("/api/session/stats", params=params)
+        response = self._get("/api/experimental/session/stats", params=params)
         try:
             usage = StatsResponse.model_validate_json(response.content)
         except ValidationError:
