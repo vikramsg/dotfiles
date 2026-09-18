@@ -121,7 +121,6 @@
       }
     }
   },
-  "plugin": ["cursor-acp"],
   "provider": {
     "cursor-acp": {
       "name": "Cursor",
