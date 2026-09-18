@@ -73,8 +73,14 @@
           },
           "capabilities": {
             "tools": true,
-            "input": ["text", "image", "pdf"],
-            "output": ["text"]
+            "input": [
+              "text",
+              "image",
+              "pdf"
+            ],
+            "output": [
+              "text"
+            ]
           }
         },
         "gpt-5.6-terra": {
@@ -86,8 +92,14 @@
           },
           "capabilities": {
             "tools": true,
-            "input": ["text", "image", "pdf"],
-            "output": ["text"]
+            "input": [
+              "text",
+              "image",
+              "pdf"
+            ],
+            "output": [
+              "text"
+            ]
           }
         },
         "gpt-5.6-luna": {
@@ -100,8 +112,14 @@
           },
           "capabilities": {
             "tools": true,
-            "input": ["text", "image", "pdf"],
-            "output": ["text"]
+            "input": [
+              "text",
+              "image",
+              "pdf"
+            ],
+            "output": [
+              "text"
+            ]
           }
         },
         "gpt-6-astra": {
@@ -114,8 +132,14 @@
           },
           "capabilities": {
             "tools": true,
-            "input": ["text", "image", "pdf"],
-            "output": ["text"]
+            "input": [
+              "text",
+              "image",
+              "pdf"
+            ],
+            "output": [
+              "text"
+            ]
           }
         }
       }
