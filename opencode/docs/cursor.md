@@ -100,9 +100,10 @@ that it is configured; it does not by itself confirm that the runtime plugin
 loaded successfully.
 
 This repository intentionally curates the synchronized list by excluding
-OpenAI, Claude, and Gemini model families. Running `open-cursor sync-models`
-again will restore every model reported by `cursor-agent`, so review and
-reapply that filtering before committing a refreshed configuration.
+OpenAI, Claude, and Gemini model families, along with Grok 4.5 and GLM 5.2.
+Running `open-cursor sync-models` again will restore every model reported by
+`cursor-agent`, so review and reapply that filtering before committing a
+refreshed configuration.
 
 Automatic startup synchronization is disabled in `zsh/.zshrc` to prevent the
 plugin from restoring those model families whenever OpenCode starts:

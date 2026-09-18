@@ -73,14 +73,8 @@
           },
           "capabilities": {
             "tools": true,
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           }
         },
         "gpt-5.6-terra": {
@@ -92,14 +86,8 @@
           },
           "capabilities": {
             "tools": true,
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           }
         },
         "gpt-5.6-luna": {
@@ -112,14 +100,8 @@
           },
           "capabilities": {
             "tools": true,
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           }
         },
         "gpt-6-astra": {
@@ -132,14 +114,8 @@
           },
           "capabilities": {
             "tools": true,
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           }
         }
       }
@@ -162,41 +138,14 @@
             "cache_write": 1.25
           }
         },
-        "composer-1.5": {
-          "name": "Composer 1.5",
-          "cost": {
-            "input": 3.5,
-            "output": 17.5,
-            "cache_read": 0.35,
-            "cache_write": 3.5
-          }
-        },
-        "composer-1": {
-          "name": "Composer 1"
-        },
         "grok": {
           "name": "Grok"
-        },
-        "kimi-k2.5": {
-          "name": "Kimi K2.5",
-          "cost": {
-            "input": 0.6,
-            "output": 3,
-            "cache_read": 0.1,
-            "cache_write": 0.6
-          }
         },
         "cursor-grok-4.6-high-fast": {
           "name": "Cursor Grok 4.6 Fast"
         },
         "composer-2.5": {
           "name": "Composer 2.5"
-        },
-        "cursor-grok-4.5-high": {
-          "name": "Cursor Grok 4.5"
-        },
-        "cursor-grok-4.5-high-fast": {
-          "name": "Cursor Grok 4.5 Fast"
         },
         "cursor-grok-4.6-low": {
           "name": "Cursor Grok 4.6 Low"
@@ -222,18 +171,6 @@
         "composer-2.5-fast": {
           "name": "Composer 2.5 Fast"
         },
-        "cursor-grok-4.5-low": {
-          "name": "Cursor Grok 4.5 Low"
-        },
-        "cursor-grok-4.5-low-fast": {
-          "name": "Cursor Grok 4.5 Low Fast"
-        },
-        "cursor-grok-4.5-medium": {
-          "name": "Cursor Grok 4.5 Medium"
-        },
-        "cursor-grok-4.5-medium-fast": {
-          "name": "Cursor Grok 4.5 Medium Fast"
-        },
         "muse-spark-1.3-minimal": {
           "name": "Muse Spark 1.3 1M Minimal"
         },
@@ -252,23 +189,8 @@
         "muse-spark-1.3-max": {
           "name": "Muse Spark 1.3 1M Max"
         },
-        "kimi-k3-low": {
-          "name": "Kimi K3 Low"
-        },
-        "kimi-k3-high": {
-          "name": "Kimi K3 High"
-        },
-        "kimi-k3-max": {
-          "name": "Kimi K3"
-        },
         "kimi-k2.7-code": {
           "name": "Kimi K2.7 Code"
-        },
-        "glm-5.2-high": {
-          "name": "GLM 5.2"
-        },
-        "glm-5.2-max": {
-          "name": "GLM 5.2 Max"
         }
       }
     }
