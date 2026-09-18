@@ -32,8 +32,8 @@ def test_json_preserves_responses_and_authenticates_using_registration(
     requests = api_server["requests"]
     expected_auth = "Basic " + base64.b64encode(b"opencode:fixture-password").decode()
     assert all(request[2] == expected_auth for request in requests)
-    assert {request[0] for request in requests} == {"/api/project", "/api/session/stats"}
-    queries = [query for path, query, _ in requests if path == "/api/session/stats"]
+    assert {request[0] for request in requests} == {"/api/project", "/api/experimental/session/stats"}
+    queries = [query for path, query, _ in requests if path == "/api/experimental/session/stats"]
     assert len(queries) == 2
     overall_query = next(query for query in queries if "project" not in query)
     project_query = next(query for query in queries if "project" in query)
