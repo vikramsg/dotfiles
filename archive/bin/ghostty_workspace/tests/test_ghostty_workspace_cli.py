@@ -73,7 +73,7 @@ def test_render_applescript_preserves_toml_tab_order():
         focus_tab=1,
         tabs=[
             WorkspaceTab(name="dotfiles", command="ssh vm.dotfiles", path=Path("~")),
-            WorkspaceTab(name="knda", command="ssh vm.kunda", path=Path("~")),
+            WorkspaceTab(name="project", command="ssh vm.project", path=Path("~")),
             WorkspaceTab(name="mx", command="ssh vm.mx", path=Path("~")),
             WorkspaceTab(name="btop", command="ssh vm.btop", path=Path("~")),
         ],
@@ -82,11 +82,11 @@ def test_render_applescript_preserves_toml_tab_order():
     script = render_applescript(cfg)
 
     dotfiles_idx = script.index("dotfiles")
-    knda_idx = script.index("knda")
+    project_idx = script.index("project")
     mx_idx = script.index("mx")
     btop_idx = script.index("btop")
 
-    assert dotfiles_idx < knda_idx < mx_idx < btop_idx
+    assert dotfiles_idx < project_idx < mx_idx < btop_idx
 
 
 def test_cli_runs_osascript_with_rendered_script(tmp_path):

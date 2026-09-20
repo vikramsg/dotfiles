@@ -82,7 +82,7 @@ func TestReconcilePreservesPriorInventoryWhenTmuxReadFails(t *testing.T) {
 }
 
 func TestReconcileRecordsNoopForUnchangedInventory(t *testing.T) {
-	worktree := "/home/vikram/projects/meanderx/kunda-wt"
+	worktree := "/home/user/projects/example/project-wt"
 	session, err := inventory.SessionForWorktree(worktree, 8)
 	if err != nil {
 		t.Fatalf("derive session: %v", err)
@@ -107,7 +107,7 @@ func TestReconcileRecordsNoopForUnchangedInventory(t *testing.T) {
 }
 
 func TestReconcilePreviewDoesNotPersistOrRecordEvents(t *testing.T) {
-	worktree := "/home/vikram/projects/meanderx/kunda-wt"
+	worktree := "/home/user/projects/example/project-wt"
 	session, err := inventory.SessionForWorktree(worktree, 8)
 	if err != nil {
 		t.Fatalf("derive session: %v", err)
@@ -133,7 +133,7 @@ func TestReconcilePreviewDoesNotPersistOrRecordEvents(t *testing.T) {
 }
 
 func TestReconcileRecordsUnresolvedLiveSession(t *testing.T) {
-	session, err := inventory.SessionForWorktree("/home/vikram/projects/meanderx/kunda-wt", 8)
+	session, err := inventory.SessionForWorktree("/home/user/projects/example/project-wt", 8)
 	if err != nil {
 		t.Fatalf("derive session: %v", err)
 	}
@@ -192,13 +192,13 @@ func TestReconcileRecordsFailureWhenPersistingSnapshotFails(t *testing.T) {
 
 func TestTerminalInitScriptKeepsTmuxExecutionInTheShell(t *testing.T) {
 	script := terminalInitScript(inventory.Session{
-		Name:     "zwm-v1-deadbeef-meanderx-kunda-wt",
-		Worktree: "/home/vikram/projects/meanderx/kunda-wt",
+		Name:     "zwm-v1-deadbeef-example-project-wt",
+		Worktree: "/home/user/projects/example/project-wt",
 	}, "/home/linuxbrew/.linuxbrew/bin/tmux")
 
 	for _, required := range []string{
-		"session='zwm-v1-deadbeef-meanderx-kunda-wt'",
-		"worktree='/home/vikram/projects/meanderx/kunda-wt'",
+		"session='zwm-v1-deadbeef-example-project-wt'",
+		"worktree='/home/user/projects/example/project-wt'",
 		"tmux_command='/home/linuxbrew/.linuxbrew/bin/tmux'",
 		"\"$tmux_command\" new-session -d -s \"$session\" -c \"$worktree\"",
 		"\"$tmux_command\" set-option -t \"$session\" @zwm_worktree \"$worktree\"",

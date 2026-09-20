@@ -27,7 +27,27 @@ from lch.jobs import (
 
 
 SERVICE_RESTART_THROTTLE_SECONDS = 10
-LAUNCHD_PATH = f"{Path.home() / '.local/bin'}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+
+def build_launchd_path(home: Path) -> str:
+    """PATH handed to a launchd service.
+
+    launchd gives services a minimal PATH rather than a login shell's, so the plist has to
+    name the directories a service resolves its commands from. `opener-tunnel` runs from
+    ~/.local/bin and shells out to `tmux`, which mise installs into its shims directory.
+    """
+    return ":".join(
+        [
+            str(home / ".local/bin"),
+            str(home / ".local/share/mise/shims"),
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+        ]
+    )
 
 
 @dataclass(frozen=True)
@@ -224,13 +244,14 @@ def build_launch_agent_service_plist(
     *,
     executable_path: Path,
     paths: JobPaths,
+    home: Path | None = None,
 ) -> dict[str, object]:
     return {
         "Label": service.label,
         "ProgramArguments": [str(executable_path), "run", service.job_id],
         "StandardOutPath": str(paths.stdout_log_path),
         "StandardErrorPath": str(paths.stderr_log_path),
-        "EnvironmentVariables": {"PATH": LAUNCHD_PATH},
+        "EnvironmentVariables": {"PATH": build_launchd_path(get_home_directory(home))},
         "RunAtLoad": True,
         "KeepAlive": True,
         "ThrottleInterval": SERVICE_RESTART_THROTTLE_SECONDS,

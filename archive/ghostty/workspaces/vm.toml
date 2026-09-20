@@ -21,16 +21,16 @@ name = "mx-worktree"
 command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.mx-worktree"
 
 [[tabs]]
-name = "orbio-github"
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.orbio-github"
+name = "work-github"
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.work-github"
 
 [[tabs]]
-name = "knda"
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.kunda"
+name = "project"
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.project"
 
 [[tabs]]
-name = "infra"
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.infra"
+name = "services"
+command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes vm.services"
 
 [[tabs]]
 name = "btop"

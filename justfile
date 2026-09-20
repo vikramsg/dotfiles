@@ -11,8 +11,8 @@ set positional-arguments := true
 default:
     @just --list
 
-# Bootstrap Homebrew and install tools from Brewfile
-brew:
+# Install the mise-managed tool set declared in mise/config.toml
+mise:
     @echo "Ensuring Homebrew is installed..."
     @if ! command -v brew > /dev/null; then \
         echo "Homebrew not found. Installing..."; \
@@ -25,7 +25,14 @@ brew:
     elif [ -x /usr/local/bin/brew ]; then \
         eval "$(/usr/local/bin/brew shellenv)"; \
     fi; \
-    brew bundle check --file "{{justfile_directory()}}/Brewfile" || brew bundle --file "{{justfile_directory()}}/Brewfile"
+    if ! command -v mise > /dev/null; then \
+        echo "mise not found. Installing with Homebrew..."; \
+        brew install mise; \
+    fi; \
+    mkdir -p "$HOME/.config/mise"; \
+    ln -sfn "{{justfile_directory()}}/mise/config.toml" "$HOME/.config/mise/config.toml"; \
+    mise trust "$HOME/.config/mise/config.toml"; \
+    mise install
 
 # Configure npm global installs to place binaries in ~/.local/bin
 npm-global-bin:
@@ -188,9 +195,7 @@ ghostty:
     @echo "Setting up Ghostty symlink..."
     mkdir -p ~/.config/ghostty
     ln -sfn {{justfile_directory()}}/ghostty/config ~/.config/ghostty/config
-    ln -sfn {{justfile_directory()}}/ghostty/workspaces ~/.config/ghostty/workspaces
     @echo "Ghostty symlink created at ~/.config/ghostty/config -> {{justfile_directory()}}/ghostty/config"
-    @echo "Ghostty workspaces symlink created at ~/.config/ghostty/workspaces -> {{justfile_directory()}}/ghostty/workspaces"
 
 # Set up Zed symlink
 zed:
@@ -200,25 +205,6 @@ zed:
     ln -sfn {{justfile_directory()}}/zed/keymap.json ~/.config/zed/keymap.json
     @echo "Zed settings symlink created at ~/.config/zed/settings.json -> {{justfile_directory()}}/zed/settings.json"
     @echo "Zed keymap symlink created at ~/.config/zed/keymap.json -> {{justfile_directory()}}/zed/keymap.json"
-
-# Install ZWM locally and, from macOS, on the configured VM.
-zwm:
-    @SOURCE="{{justfile_directory()}}/zwm/config.json"; \
-    TARGET="$HOME/.config/zwm/config.json"; \
-    mkdir -p "$HOME/.config/zwm"; \
-    if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
-        :; \
-    elif [ -e "$TARGET" ] && [ ! -L "$TARGET" ]; then \
-        echo "ERROR: $TARGET exists and is not a symlink."; \
-        exit 1; \
-    else \
-        TEMP_DIR="$(mktemp -d "$HOME/.config/zwm/.link.XXXXXX")"; \
-        trap 'rm -f "$TEMP_DIR/config.json"; rmdir "$TEMP_DIR" 2>/dev/null || true' EXIT; \
-        ln -s "$SOURCE" "$TEMP_DIR/config.json"; \
-        mv -f "$TEMP_DIR/config.json" "$TARGET"; \
-    fi
-    just --justfile "{{justfile_directory()}}/bin/zwm/justfile" install
-
 
 # Verify independently owned screenshot paths before installing either tool.
 [private]
@@ -272,7 +258,6 @@ lch:
                 "$watch_path" \
                 "$SCREENSHOT" sync run "$source_id"; \
         done; \
-        "$HOME/.local/bin/lch" install lch-zwm; \
     elif [ "$(uname)" = "Linux" ]; then \
         "$HOME/.local/bin/lch" install lch-screenshot-clipboard; \
     fi
@@ -307,7 +292,6 @@ opener-tunnel-if-supported:
 bin:
     @echo "Setting up custom bin symlinks..."
     mkdir -p ~/.local/bin
-    ln -sfn {{justfile_directory()}}/bin/lc ~/.local/bin/lc
     ln -sfn {{justfile_directory()}}/bin/xdg-open ~/.local/bin/xdg-open
     @echo "bin symlinks created at ~/.local/bin"
 
@@ -322,16 +306,6 @@ lazygit:
         ln -sfn {{justfile_directory()}}/lazygit/config.yml "$HOME/Library/Application Support/lazygit/config.yml"; \
         echo "lazygit symlink created at ~/Library/Application Support/lazygit/config.yml"; \
     fi
-
-# Set up Hunk config and extensions symlink
-hunk:
-    @echo "Setting up Hunk config and extension symlinks..."
-    mkdir -p ~/.config/hunk
-    ln -sfn {{justfile_directory()}}/hunk/config.toml ~/.config/hunk/config.toml
-    @if [ -d {{justfile_directory()}}/hunk/extensions ]; then \
-        ln -sfn {{justfile_directory()}}/hunk/extensions ~/.config/hunk/extensions; \
-    fi
-    @echo "Hunk config symlinked to ~/.config/hunk"
 
 # Link Macflow configuration without building or restarting the service.
 [private]
@@ -448,13 +422,6 @@ git-doctor:
         echo "Git identity resolves without printing PII."
 
 
-# Set up television symlink
-television:
-    @echo "Setting up television symlink..."
-    mkdir -p ~/.config/television
-    ln -sfn {{justfile_directory()}}/television/cable ~/.config/television/cable
-    @echo "Television symlink created at ~/.config/television/cable -> {{justfile_directory()}}/television/cable"
-
 # Set up Harlequin symlink
 harlequin:
     @echo "Setting up Harlequin symlink..."
@@ -477,7 +444,7 @@ harlequin-if-configured:
     fi
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit hunk television harlequin-if-configured
+all: npm-global-bin nvim tmux herdr tuicr opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
@@ -486,7 +453,7 @@ python-tests:
     uv run --group dev pytest
 
 
-# Configure remote sshd for resilient autossh reconnects (Linux only)
+# Configure remote sshd for resilient reconnects (Linux only)
 # Run this on the REMOTE VM from its dotfiles checkout.
 setup-ssh-forwarding:
     @if [ "$(uname)" = "Linux" ]; then \
@@ -496,7 +463,7 @@ setup-ssh-forwarding:
         sudo mkdir -p "$CONFIG_DIR"; \
         printf '%s\n' \
             '# Managed by: just setup-ssh-forwarding' \
-            '# Purpose: make sleep/wake autossh reconnects fast and predictable.' \
+            '# Purpose: make sleep/wake reconnects fast and predictable.' \
             '' \
             '# Remove stale Unix domain socket forwards cleanly.' \
             'StreamLocalBindUnlink yes' \

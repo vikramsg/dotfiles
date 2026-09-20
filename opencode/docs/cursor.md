@@ -37,8 +37,8 @@ open-cursor install
 ```
 
 The installer uses Bun to install `@ai-sdk/openai-compatible` under the
-OpenCode configuration directory. Bun is therefore declared in the repository
-`Brewfile`.
+OpenCode configuration directory. Bun is therefore declared in
+`mise/config.toml`.
 
 The installer creates a symlink at:
 

@@ -12,7 +12,7 @@
 
 ## Next Steps
 
-1. We have created a record tool call plugin - /home/vikram_orbio_earth/personal/dotfiles-wt/opencode/sandbox/cli-v2/fixtures/plugins/record-tool-call.ts. 
+1. We have created a record tool call plugin - opencode/sandbox/cli-v2/fixtures/plugins/record-tool-call.ts. 
    - The idea is that we can tune it so that we can record tool calls in a file and test this file against an expectation.
 2. First figure out how subagent runs work? Is it just a tool call?
    - If its just a tool call then, we just need to use the record tool call plugin

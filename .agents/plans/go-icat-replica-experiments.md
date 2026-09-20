@@ -333,7 +333,7 @@ This prevents premature framework design and ensures each optimization has a mea
 Start with the existing screenshot corpus:
 
 ```text
-/home/vikram_orbio_earth/Desktop/Screenshots
+/home/user/Desktop/Screenshots
 ```
 
 Record a manifest containing file name, byte size, dimensions, format, alpha presence, and content hash. Do not commit personal screenshots.

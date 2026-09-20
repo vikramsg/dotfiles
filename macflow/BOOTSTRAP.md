@@ -39,10 +39,10 @@ git clone https://github.com/vikramsg/dotfiles.git
 cd dotfiles
 ```
 
-Install the repository's Homebrew dependencies:
+Install the repository's mise-managed tools:
 
 ```bash
-just brew
+just mise
 ```
 
 ## Install Supporting Services

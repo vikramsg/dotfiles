@@ -7,7 +7,7 @@ when one exists, then falls back to tuicr's normal selector.
 ## Setup
 
 ```sh
-just brew
+just mise
 just tuicr
 ```
 

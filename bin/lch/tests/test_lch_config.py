@@ -113,20 +113,23 @@ command = ["opener-tunnel", "run"]
     assert service.service == configured_service
 
 
-def test_repository_toml_loads_with_configured_service():
+def test_repository_toml_loads_with_configured_service(tmp_path, monkeypatch):
+    # Guards against shipping an unparseable config. Individual values are covered by the
+    # fake-config tests rather than restated from the repository's own file.
+    monkeypatch.setenv("HOME", str(tmp_path))
+
     from lch.config import ApplicationService, CommandService, MacOSApplication, load_config
 
     config = load_config(REPOSITORY_ROOT / "lch/config.toml")
 
-    assert config.namespace == "com.vikramsg.dotfiles"
     assert isinstance(config.services["lch-opener-tunnel"], CommandService)
     macflow = config.services["lch-macflow"]
     assert isinstance(macflow, ApplicationService)
     assert isinstance(macflow.application, MacOSApplication)
-    assert macflow.application.path == Path.home() / "Applications/Macflow.app"
+    assert macflow.application.path == tmp_path / "Applications/Macflow.app"
 
 
-def test_load_config_accepts_reserved_linux_application(tmp_path):
+def test_load_config_accepts_reserved_linux_application(tmp_path, monkeypatch):
     config_file = tmp_path / "config.toml"
     config_file.write_text(
         """
@@ -139,12 +142,15 @@ path = "~/.local/share/applications/example.desktop"
         + "\n"
     )
 
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
     from lch.config import ApplicationService, LinuxApplication, load_config
 
     service = load_config(config_file).services["example"]
     assert isinstance(service, ApplicationService)
     assert isinstance(service.application, LinuxApplication)
-    assert service.application.path == Path.home() / ".local/share/applications/example.desktop"
+    assert service.application.path == home / ".local/share/applications/example.desktop"
 
 
 @pytest.mark.parametrize(

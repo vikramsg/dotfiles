@@ -24,8 +24,8 @@ func TestScanMappingRepresentsMissingZedTimestampsAsUnobserved(t *testing.T) {
 	mapping, err := scanMapping(fakeScanner{values: []any{
 		"vm-us",
 		"deadbeef",
-		"zwm-v1-deadbeef-meanderx-kunda-wt",
-		"/home/vikram/projects/meanderx/kunda-wt",
+		"zwm-v1-deadbeef-example-project-wt",
+		"/home/user/projects/example/project-wt",
 		"",
 		"2026-08-29T12:00:00Z",
 		"2026-08-29T12:00:00Z",
@@ -47,7 +47,7 @@ func TestSaveSnapshotClearsStaleTerminalMatchForUnresolvedSession(t *testing.T) 
 	}
 	defer store.Close()
 
-	session := inventory.Session{Name: "zwm-v1-deadbeef-meanderx-kunda", ID: "deadbeef", Worktree: "/work/kunda"}
+	session := inventory.Session{Name: "zwm-v1-deadbeef-example-project", ID: "deadbeef", Worktree: "/work/project"}
 	mapping := inventory.Mapping{Host: "vm-us", Session: session, TerminalID: "terminal-1", Worktree: session.Worktree}
 	if err := store.SaveSnapshot(context.Background(), "vm-us", time.Now().UTC(), []inventory.Session{session}, []inventory.Mapping{mapping}); err != nil {
 		t.Fatalf("save matched snapshot: %v", err)

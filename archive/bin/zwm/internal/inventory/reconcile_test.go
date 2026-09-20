@@ -3,7 +3,7 @@ package inventory
 import "testing"
 
 func TestReconcileMatchesSessionToSameHashedWorktree(t *testing.T) {
-	worktree := "/home/vikram/projects/meanderx/kunda-wt"
+	worktree := "/home/user/projects/example/project-wt"
 	session, err := SessionForWorktree(worktree, shortIDWidth)
 	if err != nil {
 		t.Fatalf("derive session: %v", err)
@@ -27,7 +27,7 @@ func TestReconcileMatchesSessionToSameHashedWorktree(t *testing.T) {
 }
 
 func TestReconcileDoesNotMatchDifferentWorktreeWithSameHost(t *testing.T) {
-	session, err := SessionForWorktree("/home/vikram/projects/meanderx/kunda-wt", shortIDWidth)
+	session, err := SessionForWorktree("/home/user/projects/example/project-wt", shortIDWidth)
 	if err != nil {
 		t.Fatalf("derive session: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestReconcileDoesNotMatchDifferentWorktreeWithSameHost(t *testing.T) {
 	mappings, unresolved := Reconcile("vm-us", []Session{session}, []WorktreeRecord{{
 		Host:       "vm-us",
 		TerminalID: "terminal-1",
-		Worktree:   "/home/vikram/projects/meanderx/kunda-wt2",
+		Worktree:   "/home/user/projects/example/project-wt2",
 	}})
 
 	if len(mappings) != 0 {
@@ -60,7 +60,7 @@ func TestMatchRecordRejectsAmbiguousHashCandidates(t *testing.T) {
 }
 
 func TestReconcileRecoversContinuumSessionWithoutWorktreeMetadata(t *testing.T) {
-	worktree := "/home/vikram/projects/meanderx/kunda-wt"
+	worktree := "/home/user/projects/example/project-wt"
 	expected, err := SessionForWorktree(worktree, shortIDWidth)
 	if err != nil {
 		t.Fatalf("derive session: %v", err)

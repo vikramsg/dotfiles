@@ -1,0 +1,33 @@
+# Global tool set for this Intel Mac and the remote VM. Replaces the curated Brewfile.
+#
+# Consumed via a symlink at ~/.config/mise/config.toml, set up by `just mise`.
+#
+# Most tools resolve through mise's registry. Where the registry's default macOS
+# backend is unusable, the backend is stated explicitly below.
+[tools]
+bun = "latest"
+fzf = "latest"
+ripgrep = "latest"
+lazygit = "latest"
+github-cli = "latest"
+jq = "latest"
+tmux = "latest"
+herdr = "latest"
+zoxide = "latest"
+actionlint = "latest"
+neovim = "latest"
+tree-sitter = "latest"
+go = "latest"
+duckdb = "latest"
+terraform = "latest"
+
+# The registry points imagemagick at an aqua release that only publishes Windows
+# binaries, so the conda backend is named directly. mise selects the osx-64
+# subdirectory automatically.
+"conda:imagemagick" = "latest"
+
+# Absent from mise's registry, so each backend is named explicitly.
+"aqua:arl/gitmux" = "latest"
+"ubi:agavra/tuicr" = "latest"
+"github:RivoLink/leaf" = { version = "latest", bin = "leaf" }
+"conda:chafa" = "latest"

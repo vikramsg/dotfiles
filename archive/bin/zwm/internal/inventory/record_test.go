@@ -7,7 +7,7 @@ import (
 )
 
 func TestSessionForWorktreeUsesDeterministicEightCharacterHash(t *testing.T) {
-	worktree := "/home/vikram/projects/meanderx/kunda-wt"
+	worktree := "/home/user/projects/example/project-wt"
 
 	session, err := SessionForWorktree(worktree, shortIDWidth)
 	if err != nil {
@@ -40,19 +40,19 @@ func TestNormalizeWorktreeRejectsRelativePaths(t *testing.T) {
 }
 
 func TestParseSessionRejectsForeignSession(t *testing.T) {
-	if _, ok := ParseSession("zed-meanderx-kunda-wt", "/home/vikram/projects/meanderx/kunda-wt"); ok {
+	if _, ok := ParseSession("zed-example-project-wt", "/home/user/projects/example/project-wt"); ok {
 		t.Fatal("ParseSession accepted foreign session")
 	}
 }
 
 func TestParseSessionRejectsSessionIDThatDoesNotMatchWorktree(t *testing.T) {
-	if _, ok := ParseSession("zwm-v1-deadbeef-meanderx-kunda-wt", "/home/vikram/projects/meanderx/kunda-wt"); ok {
+	if _, ok := ParseSession("zwm-v1-deadbeef-example-project-wt", "/home/user/projects/example/project-wt"); ok {
 		t.Fatal("ParseSession accepted a session ID unrelated to its worktree")
 	}
 }
 
 func TestParseSessionNameAcceptsDeterministicSessionWithoutMetadata(t *testing.T) {
-	session, ok := ParseSessionName("zwm-v1-deadbeef-meanderx-kunda-wt")
+	session, ok := ParseSessionName("zwm-v1-deadbeef-example-project-wt")
 	if !ok {
 		t.Fatal("ParseSessionName rejected deterministic session name")
 	}

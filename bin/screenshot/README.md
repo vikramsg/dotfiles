@@ -52,7 +52,7 @@ The repo-managed config source of truth lives at `screenshot/config.json`. Use `
 - `ss ls` -> `screenshot clipboard list`
 - `ss <index>` -> `screenshot clipboard copy --index <index>`
 - `ss cp <dest>` -> copy the current history item 1 file into `<dest>`
-- `vm-tab` -> pick an existing remote tmux session with `fzf`, rename the current Ghostty tab, and attach via `autossh`
+- `vm-tab` -> pick an existing remote tmux session with `fzf`, rename the current Ghostty tab, and attach via `ssh`
 
 Sync sources are configured in `screenshot/config.json`. Each source owns its stable lowercase slug ID, local directory, matching rules, VM host, and remote destination; the CLI does not hard-code source paths or filename filters. `screenshot sync list` prints the configured source IDs for orchestrators such as LCH.
 

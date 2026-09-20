@@ -229,7 +229,7 @@ Moving work into `spawn_blocking` protects the async executor but does not reduc
 - Intel Xeon 2.80 GHz.
 - 4 logical CPUs.
 - 31 GiB memory.
-- Corpus: `/home/vikram_orbio_earth/Desktop/Screenshots`.
+- Corpus: `/home/user/Desktop/Screenshots`.
 
 ### Corpus
 

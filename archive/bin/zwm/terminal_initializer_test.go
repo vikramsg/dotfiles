@@ -7,7 +7,7 @@ import (
 )
 
 func TestPlanForWorktreeCreatesShortSessionWhenNoSessionExists(t *testing.T) {
-	plan, err := PlanTerminal("/home/vikram/projects/meanderx/kunda-wt", nil)
+	plan, err := PlanTerminal("/home/user/projects/example/project-wt", nil)
 	if err != nil {
 		t.Fatalf("plan terminal init: %v", err)
 	}
@@ -20,7 +20,7 @@ func TestPlanForWorktreeCreatesShortSessionWhenNoSessionExists(t *testing.T) {
 }
 
 func TestPlanForWorktreeAttachesExistingMatchingSession(t *testing.T) {
-	session, err := inventory.SessionForWorktree("/home/vikram/projects/meanderx/kunda-wt", 8)
+	session, err := inventory.SessionForWorktree("/home/user/projects/example/project-wt", 8)
 	if err != nil {
 		t.Fatalf("derive session: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestPlanForWorktreeAttachesExistingMatchingSession(t *testing.T) {
 }
 
 func TestPlanForWorktreeRepairsContinuumSessionWithoutMetadata(t *testing.T) {
-	worktree := "/home/vikram/projects/meanderx/kunda-wt"
+	worktree := "/home/user/projects/example/project-wt"
 	session, err := inventory.SessionForWorktree(worktree, 8)
 	if err != nil {
 		t.Fatalf("derive session: %v", err)
@@ -55,12 +55,12 @@ func TestPlanForWorktreeRepairsContinuumSessionWithoutMetadata(t *testing.T) {
 }
 
 func TestPlanForWorktreeUsesLongIDAfterShortNameCollision(t *testing.T) {
-	worktree := "/home/vikram/projects/meanderx/kunda-wt"
+	worktree := "/home/user/projects/example/project-wt"
 	short, err := inventory.SessionForWorktree(worktree, 8)
 	if err != nil {
 		t.Fatalf("derive short session: %v", err)
 	}
-	short.Worktree = "/other/root/kunda-wt"
+	short.Worktree = "/other/root/project-wt"
 
 	plan, err := PlanTerminal(worktree, []inventory.Session{short})
 	if err != nil {

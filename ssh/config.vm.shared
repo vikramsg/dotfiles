@@ -3,12 +3,12 @@ Host vm vm.*
     # Remove stale local UNIX sockets during reconnects.
     StreamLocalBindUnlink yes
 
-    # Autossh resilience: force SSH to fail fast after sleep/wake so autossh can retry.
+    # Force SSH to fail fast after sleep/wake so the session exits rather than hanging.
     # Client sends keepalive probes every 15 seconds.
     ServerAliveInterval 15
     # After 3 missed probes (45s), SSH exits instead of hanging forever.
     ServerAliveCountMax 3
-    # If any port forward cannot bind on reconnect, fail hard and let autossh restart.
+    # If any port forward cannot bind on reconnect, fail hard rather than running degraded.
     ExitOnForwardFailure yes
 
 Host vm.mx
@@ -55,12 +55,12 @@ Host vm-us vm-us.*
     # Remove stale local UNIX sockets during reconnects.
     StreamLocalBindUnlink yes
 
-    # Autossh resilience: force SSH to fail fast after sleep/wake so autossh can retry.
+    # Force SSH to fail fast after sleep/wake so the session exits rather than hanging.
     # Client sends keepalive probes every 15 seconds.
     ServerAliveInterval 15
     # After 3 missed probes (45s), SSH exits instead of hanging forever.
     ServerAliveCountMax 3
-    # If any port forward cannot bind on reconnect, fail hard and let autossh restart.
+    # If any port forward cannot bind on reconnect, fail hard rather than running degraded.
     ExitOnForwardFailure yes
 
 Host vm-us.mx

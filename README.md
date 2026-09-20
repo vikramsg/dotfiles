@@ -10,10 +10,10 @@ sudo apt install just
 
 ### Utilities
 
-All utilities required are part of the `Brewfile`.
+All utilities required are part of `mise/config.toml`.
 
 ```bash
-just brew
+just mise
 ```
 
 Then do the following to setup dotfiles. 
@@ -34,7 +34,7 @@ Custom tools use a split layout:
 ## Troubleshooting
 
 1. When initially installing on a machine, prefer first installing
-    - `just brew`
+    - `just mise`
     - `tmux`
     - `opencode2` - `npm install -g @opencode-ai/cli@beta`
 
@@ -66,7 +66,7 @@ This is more so that if I do change I want to make sure I can figure out if its 
 ### Why Not
 
 1. The ssh experience is not nice. It loses state especially if there are multiple worktrees open and I have to start everyone of them
-  - In Ghostty etc I can use `autossh` and am always connected.
+  - In Ghostty etc I can use `ssh` and stay connected.
   - That plus `tmux` means that I essentially never need to fiddle around with finding my sessions. 
 2. Its not NeoVim
   - Ghostty is fast and nice but it does not feel as fast and as nice as NeoVim

@@ -22,7 +22,7 @@ zwm-v1-<session-id>-<parent>-<leaf>
 Example:
 
 ```text
-zwm-v1-7aef9c52-meanderx-kunda-wt
+zwm-v1-7aef9c52-example-project-wt
 ```
 
 - `zwm-v1` identifies ZWM ownership and the naming-schema version.

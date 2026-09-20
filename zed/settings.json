@@ -27,7 +27,7 @@
       "enable_thinking": true,
       "effort": "high"
     },
-    "terminal_init_command": "eval \"$(zwm terminal-init-command-session)\"",
+    "terminal_init_command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit; session=\"zed-$(printf %s \"$root\" | shasum -a 256 | cut -c1-8)-$(basename \"$(dirname \"$root\")\")-$(basename \"$root\")\"; tmux has-session -t \"$session\" 2>/dev/null || tmux new-session -d -s \"$session\" -c \"$root\"; printf '\\033]2;%s\\007' \"$(basename \"$(dirname \"$root\")\")/$(basename \"$root\")\"; exec tmux attach-session -t \"$session\"",
   },
   "ssh_connections": [
     {

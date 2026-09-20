@@ -11,7 +11,7 @@ def write_config(path: Path, payload: dict) -> Path:
 
 
 def test_launch_agent_paths_follow_label_conventions(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.example.test"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     from lch.jobs import get_job_definition
@@ -20,13 +20,13 @@ def test_launch_agent_paths_follow_label_conventions(tmp_path, monkeypatch):
     job = get_job_definition("lch-screenshot-clipboard")
     paths = get_job_paths(job, home=tmp_path)
 
-    assert paths.plist_path == tmp_path / "Library/LaunchAgents/com.vikramsg.dotfiles.lch-screenshot-clipboard.plist"
-    assert paths.stdout_log_path == tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-clipboard.out.log"
-    assert paths.stderr_log_path == tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-clipboard.err.log"
+    assert paths.plist_path == tmp_path / "Library/LaunchAgents/com.example.test.lch-screenshot-clipboard.plist"
+    assert paths.stdout_log_path == tmp_path / "Library/Logs/com.example.test.lch-screenshot-clipboard.out.log"
+    assert paths.stderr_log_path == tmp_path / "Library/Logs/com.example.test.lch-screenshot-clipboard.err.log"
 
 
 def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.example.test"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     from lch.jobs import get_job_definition
@@ -34,16 +34,18 @@ def test_build_launch_agent_plist_uses_watch_path_and_program_arguments(tmp_path
 
     job = get_job_definition("lch-screenshot-clipboard")
     paths = get_job_paths(job, home=tmp_path)
+    watch_path = tmp_path / "Screenshots"
+    executable_path = tmp_path / ".local/bin/lch"
     plist = build_launch_agent_plist(
         job,
-        watch_path=Path("/Users/vikramsingh/Desktop/Screenshots"),
-        executable_path=Path("/Users/vikramsingh/.local/bin/lch"),
+        watch_path=watch_path,
+        executable_path=executable_path,
         paths=paths,
     )
 
     assert plist["Label"] == job.label
-    assert plist["WatchPaths"] == ["/Users/vikramsingh/Desktop/Screenshots"]
-    assert plist["ProgramArguments"] == ["/Users/vikramsingh/.local/bin/lch", "run", "lch-screenshot-clipboard"]
+    assert plist["WatchPaths"] == [str(watch_path)]
+    assert plist["ProgramArguments"] == [str(executable_path), "run", "lch-screenshot-clipboard"]
     assert plist["StandardOutPath"] == str(paths.stdout_log_path)
     assert plist["StandardErrorPath"] == str(paths.stderr_log_path)
 
@@ -55,36 +57,62 @@ def test_build_service_plist_has_persistent_policy_without_watch_paths(tmp_path)
 
     service = ServiceDefinition(
         job_id="lch-opener-tunnel",
-        label="com.vikramsg.dotfiles.lch-opener-tunnel",
+        label="com.example.test.lch-opener-tunnel",
         service=CommandService(command=("opener-tunnel", "run")),
     )
     paths = get_job_paths(service, home=tmp_path)
+    executable_path = tmp_path / ".local/bin/lch"
 
     plist = build_launch_agent_service_plist(
         service,
-        executable_path=Path("/Users/vikramsingh/.local/bin/lch"),
+        executable_path=executable_path,
         paths=paths,
     )
 
     assert plist["ProgramArguments"] == [
-        "/Users/vikramsingh/.local/bin/lch",
+        str(executable_path),
         "run",
         "lch-opener-tunnel",
     ]
     assert plist["RunAtLoad"] is True
     assert plist["KeepAlive"] is True
     assert plist["ThrottleInterval"] == 10
-    assert plist["EnvironmentVariables"] == {
-        "PATH": "/Users/vikramsingh/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    }
     assert "WatchPaths" not in plist
+
+
+def test_build_service_plist_supplies_a_path_that_resolves_the_service_commands(tmp_path):
+    from lch.config import CommandService
+    from lch.jobs import ServiceDefinition
+    from lch.launchd import build_launch_agent_service_plist, get_job_paths
+
+    service = ServiceDefinition(
+        job_id="lch-opener-tunnel",
+        label="com.example.test.lch-opener-tunnel",
+        service=CommandService(command=("opener-tunnel", "run")),
+    )
+    home = tmp_path / "home"
+    paths = get_job_paths(service, home=home)
+
+    plist = build_launch_agent_service_plist(
+        service,
+        executable_path=home / ".local/bin/lch",
+        paths=paths,
+        home=home,
+    )
+
+    # launchd gives services a minimal PATH rather than a login shell's, so the plist has
+    # to name the directories the service resolves commands from. `opener-tunnel` runs from
+    # ~/.local/bin and shells out to `tmux`, which mise installs into its shims directory.
+    path_entries = plist["EnvironmentVariables"]["PATH"].split(":")
+    assert str(home / ".local/bin") in path_entries
+    assert str(home / ".local/share/mise/shims") in path_entries
 
 
 def test_build_watcher_plist_uses_explicit_path_and_dispatch_command(
     tmp_path, monkeypatch
 ):
     config_file = write_config(
-        tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"}
+        tmp_path / ".config/lch/config.toml", {"namespace": "com.example.test"}
     )
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
@@ -100,7 +128,7 @@ def test_build_watcher_plist_uses_explicit_path_and_dispatch_command(
         paths=paths,
     )
 
-    assert plist["Label"] == "com.vikramsg.dotfiles.lch-example-watcher"
+    assert plist["Label"] == "com.example.test.lch-example-watcher"
     assert plist["WatchPaths"] == ["/tmp/watched"]
     assert plist["ProgramArguments"] == [
         "/usr/local/bin/example",
@@ -149,7 +177,7 @@ def test_list_known_jobs_includes_installed_generic_watchers_without_duplicates(
 
 def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.example.test"})
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
     import lch.cli as cli_module
@@ -159,11 +187,11 @@ def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path,
 
     def fake_install_job(job_id: str) -> Path:
         calls.append(["install", job_id])
-        return tmp_path / "Library/LaunchAgents/com.vikramsg.dotfiles.lch-screenshot-clipboard.plist"
+        return tmp_path / "Library/LaunchAgents/com.example.test.lch-screenshot-clipboard.plist"
 
     def fake_uninstall_job(job_id: str) -> Path:
         calls.append(["uninstall", job_id])
-        return tmp_path / "Library/LaunchAgents/com.vikramsg.dotfiles.lch-screenshot-clipboard.plist"
+        return tmp_path / "Library/LaunchAgents/com.example.test.lch-screenshot-clipboard.plist"
 
     def fake_status_job(job_id: str) -> str:
         calls.append(["status", job_id])
@@ -172,8 +200,8 @@ def test_install_status_logs_and_uninstall_commands_use_expected_paths(tmp_path,
     def fake_logs_job(job_id: str) -> tuple[Path, Path]:
         calls.append(["logs", job_id])
         return (
-            tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-clipboard.out.log",
-            tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-screenshot-clipboard.err.log",
+            tmp_path / "Library/Logs/com.example.test.lch-screenshot-clipboard.out.log",
+            tmp_path / "Library/Logs/com.example.test.lch-screenshot-clipboard.err.log",
         )
 
     monkeypatch.setattr(cli_module, "install_job_launchd", fake_install_job)
@@ -244,8 +272,8 @@ def test_logs_command_shows_launchd_log_contents_by_default(tmp_path, monkeypatc
     import lch.cli as cli_module
 
     monkeypatch.setattr(cli_module.sys, "platform", "darwin")
-    stdout_log_path = tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-example-watcher.out.log"
-    stderr_log_path = tmp_path / "Library/Logs/com.vikramsg.dotfiles.lch-example-watcher.err.log"
+    stdout_log_path = tmp_path / "Library/Logs/com.example.test.lch-example-watcher.out.log"
+    stderr_log_path = tmp_path / "Library/Logs/com.example.test.lch-example-watcher.err.log"
     stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
     stdout_log_path.write_text("stdout full log\n")
     stderr_log_path.write_text("stderr full log\n")
@@ -272,8 +300,8 @@ def test_logs_command_shows_launchd_log_contents_by_default(tmp_path, monkeypatc
     result = runner.invoke(cli_module.main, ["logs", "lch-example-watcher", "--lines", "50"])
 
     assert result.exit_code == 0
-    assert "== stdout: ~/Library/Logs/com.vikramsg.dotfiles.lch-example-watcher.out.log ==\n\n" in result.output
-    assert "== stderr: ~/Library/Logs/com.vikramsg.dotfiles.lch-example-watcher.err.log ==\n\n" in result.output
+    assert "== stdout: ~/Library/Logs/com.example.test.lch-example-watcher.out.log ==\n\n" in result.output
+    assert "== stderr: ~/Library/Logs/com.example.test.lch-example-watcher.err.log ==\n\n" in result.output
     assert "tail for" in result.output
     assert calls == [
         ["tail", "-n", "50", str(stdout_log_path)],

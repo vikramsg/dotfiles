@@ -13,18 +13,14 @@ from opener_tunnel.config import (
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_loads_commented_repository_config(monkeypatch, tmp_path):
+def test_repository_config_parses_and_expands_socket_path(monkeypatch, tmp_path):
+    # Guards against shipping an unparseable config. Individual values are covered by the
+    # fake-config tests below rather than restated from the repository's own config file.
     monkeypatch.setenv("HOME", str(tmp_path))
 
     config = load_config(REPOSITORY_ROOT / "opener_tunnel/config.toml")
 
     assert config.socket_path == tmp_path / ".opener.sock"
-    assert config.browser.command == ("open",)
-    assert config.tmux.session == "lch-opener-tunnel"
-    assert config.tmux.command == ("tmux",)
-    assert config.ssh.command == "ssh"
-    assert config.vm.host == "vm-us"
-    assert config.vm.socket_path == "/home/vikram_orbio_earth/.opener.sock"
 
 
 def test_config_override_and_ssh_argv_order(monkeypatch, tmp_path):
