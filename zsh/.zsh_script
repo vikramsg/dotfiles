@@ -102,11 +102,6 @@ vm-tab() {
         return 1
     fi
 
-    if [[ ! -x /opt/homebrew/bin/autossh ]]; then
-        print "/opt/homebrew/bin/autossh is required" >&2
-        return 1
-    fi
-
     local session
     session="$(ssh vm '/home/linuxbrew/.linuxbrew/bin/tmux list-sessions -F "#S"' | fzf)" || {
         print "failed to select tmux session" >&2
@@ -140,15 +135,14 @@ EOF
         return 1
     }
 
-    env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 \
-        /opt/homebrew/bin/autossh -M 0 -o ClearAllForwardings=yes \
+    ssh -o ClearAllForwardings=yes \
         vm "exec /home/linuxbrew/.linuxbrew/bin/tmux attach-session -d -t $remote_session"
 }
 
 # Fuzzy find and open file in Neovim
 fz() {
     local file visible_files hidden_files
-    visible_files='fd --type f --strip-cwd-prefix --exclude .git'
+    visible_files='rg --files'
     hidden_files="$visible_files --hidden"
 
     file=$(eval "$visible_files" | fzf \

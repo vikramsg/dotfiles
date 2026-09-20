@@ -50,7 +50,7 @@ clicks.
 
 Open Ghostty's command palette with `Cmd+Shift+P`, search for **Reset
 Terminal**, and run it. This resets Ghostty's terminal state without closing
-the tab or abandoning the reconnecting `autossh` session. Avoid moving or
+the tab or abandoning the SSH session. Avoid moving or
 clicking the mouse until the reset completes.
 
 ## Automating Multiple Tabs & SSH Sessions

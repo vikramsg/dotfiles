@@ -30,9 +30,9 @@ func TestFormatTimestampUsesRFC3339(t *testing.T) {
 func TestMappingOutputIncludesRequiredProvenance(t *testing.T) {
 	at := time.Date(2026, time.August, 29, 12, 0, 0, 0, time.UTC)
 	output := mappingOutput(zwm.StateMapping{
-		SessionName:           "zwm-v1-deadbeef-meanderx-kunda-wt",
+		SessionName:           "zwm-v1-deadbeef-example-project-wt",
 		Host:                  "vm-us",
-		Worktree:              "/home/vikram/projects/meanderx/kunda-wt",
+		Worktree:              "/home/user/projects/example/project-wt",
 		RecordedAt:            at,
 		LastSeenOnVMAt:        at,
 		LastMatchedToZedAt:    at,
@@ -56,9 +56,9 @@ func TestStatusOutputShowsLiveInventoryAndLatestAttempt(t *testing.T) {
 	success := zwm.StateEvent{At: time.Date(2026, time.August, 29, 12, 0, 0, 0, time.UTC)}
 	failure := zwm.StateEvent{At: time.Date(2026, time.August, 29, 12, 10, 0, 0, time.UTC)}
 	output := newRenderer(&bytes.Buffer{}, false).status(zwm.Inventory{
-		Sessions: []inventory.Session{{Name: "zwm-v1-deadbeef-meanderx-kunda"}},
+		Sessions: []inventory.Session{{Name: "zwm-v1-deadbeef-example-project"}},
 		Records:  []inventory.WorktreeRecord{{TerminalID: "terminal-1"}},
-		Mappings: []inventory.Mapping{{Worktree: "/work/kunda", Session: inventory.Session{Name: "zwm-v1-deadbeef-meanderx-kunda"}}},
+		Mappings: []inventory.Mapping{{Worktree: "/work/project", Session: inventory.Session{Name: "zwm-v1-deadbeef-example-project"}}},
 	}, 2, success, true, failure, true, "running", time.Date(2026, time.August, 29, 12, 12, 0, 0, time.UTC))
 
 	for _, required := range []string{
@@ -146,12 +146,12 @@ func TestExecuteRestoreRecordsFailedOutcome(t *testing.T) {
 
 func TestRestorePlanOutputDescribesLatestPlanWithoutHidingMissingTargets(t *testing.T) {
 	output := newRenderer(&bytes.Buffer{}, false).restorePlan("latest", zwm.Inventory{
-		Sessions:   []inventory.Session{{Name: "zwm-v1-deadbeef-meanderx-kunda", Worktree: "/work/kunda"}},
-		Records:    []inventory.WorktreeRecord{{Host: "vm-us", TerminalID: "terminal-1", Worktree: "/work/kunda"}},
-		Mappings:   []inventory.Mapping{{Host: "vm-us", Session: inventory.Session{Name: "zwm-v1-deadbeef-meanderx-kunda"}, TerminalID: "terminal-1", Worktree: "/work/kunda"}},
-		Unresolved: []inventory.Session{{Name: "zwm-v1-feedface-meanderx-missing"}},
+		Sessions:   []inventory.Session{{Name: "zwm-v1-deadbeef-example-project", Worktree: "/work/project"}},
+		Records:    []inventory.WorktreeRecord{{Host: "vm-us", TerminalID: "terminal-1", Worktree: "/work/project"}},
+		Mappings:   []inventory.Mapping{{Host: "vm-us", Session: inventory.Session{Name: "zwm-v1-deadbeef-example-project"}, TerminalID: "terminal-1", Worktree: "/work/project"}},
+		Unresolved: []inventory.Session{{Name: "zwm-v1-feedface-example-missing"}},
 	}, zwm.RestorePlan{
-		Opens:   []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}},
+		Opens:   []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-example-project", TerminalID: "terminal-1", Worktree: "/work/project"}}},
 		Missing: []string{"/work/missing"},
 	})
 
@@ -162,7 +162,7 @@ func TestRestorePlanOutputDescribesLatestPlanWithoutHidingMissingTargets(t *test
 		"Mappings        1 ready",
 		"Unresolved      1 sessions",
 		"Planned opens   1",
-		"zed -n ssh://vm-us:/work/kunda",
+		"zed -n ssh://vm-us:/work/project",
 		"MISSING REQUESTED WORKTREES",
 		"/work/missing",
 		"DRY RUN No Zed workspaces opened; no state persisted.",
@@ -184,7 +184,7 @@ func TestRestorePlanOutputExplainsAnEmptyPlan(t *testing.T) {
 }
 
 func TestStyledAndPlainRestorePlansHaveTheSameContent(t *testing.T) {
-	plan := zwm.RestorePlan{Opens: []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}}}
+	plan := zwm.RestorePlan{Opens: []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-example-project", TerminalID: "terminal-1", Worktree: "/work/project"}}}}
 	plain := newRenderer(&bytes.Buffer{}, false).restorePlan("latest", zwm.Inventory{}, plan)
 	styled := newRenderer(&bytes.Buffer{}, true).restorePlan("latest", zwm.Inventory{}, plan)
 	if !strings.Contains(styled, "\x1b[") {
@@ -199,9 +199,9 @@ func TestStyledAndPlainRestorePlansHaveTheSameContent(t *testing.T) {
 }
 
 func TestNarrowRestorePlanStacksFieldValues(t *testing.T) {
-	plan := zwm.RestorePlan{Opens: []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-meanderx-kunda", TerminalID: "terminal-1", Worktree: "/work/kunda"}}}}
+	plan := zwm.RestorePlan{Opens: []zwm.RestoreAction{{Mode: "-n", Mapping: zwm.StateMapping{Host: "vm-us", SessionName: "zwm-v1-deadbeef-example-project", TerminalID: "terminal-1", Worktree: "/work/project"}}}}
 	output := newRendererAtWidth(&bytes.Buffer{}, false, 60).restorePlan("latest", zwm.Inventory{}, plan)
-	if !strings.Contains(output, "  Worktree\n  /work/kunda\n") {
+	if !strings.Contains(output, "  Worktree\n  /work/project\n") {
 		t.Fatalf("narrow fields are not stacked:\n%s", output)
 	}
 }

@@ -39,7 +39,7 @@ The prefix is `Ctrl+Space`.
 ## Setup
 
 ```sh
-just brew
+just mise
 just tuicr
 just herdr
 herdr

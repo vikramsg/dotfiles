@@ -42,8 +42,8 @@ These instructions apply to `bin/ocint/`.
 - Ctx DB lifecycle, physical schema, and Alembic files stay under `ctx/db/`. Example: import `ctx_session` from `ocint.ctx.db` in the CLI and physical tables from `ocint.ctx.db.schema` in repositories.
 - Do not add root god modules. Example: no `ctx/repository.py`, `ctx/service.py`, or `ctx/workflow.py`.
 - Do not re-add root ctx DB ownership modules. Example: no `ctx/db.py`, `ctx/schema.py`, or root `ctx/migrations/` source package.
-- Use the package justfile for verification. Example: `just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt/bin/ocint/justfile check`.
-- Use root workspace `uv` execution. Example: `uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt --package ocint --frozen pytest ...`.
+- Use the package justfile for verification. Example: `just --justfile <repo>/bin/ocint/justfile check`.
+- Use root workspace `uv` execution. Example: `uv run --directory <repo> --package ocint --frozen pytest ...`.
 - Follow justfile shell variable rules. Example: use `$VAR`, use `$(...)`, do not use `$$VAR`.
 
 ### Python conventions

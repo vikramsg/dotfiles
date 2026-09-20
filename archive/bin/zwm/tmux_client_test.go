@@ -33,11 +33,11 @@ func TestSSHArgumentsDisableTTYAllocationForInventoryCommands(t *testing.T) {
 }
 
 func TestParseSessionsPreservesEmptyMetadataOnFinalRow(t *testing.T) {
-	sessions := parseTmuxSessions("zwm-v1-1beec1f3-meanderx-kunda\t\nzwm-v1-f7c9927e-meanderx-kunda-wt2\t\n")
+	sessions := parseTmuxSessions("zwm-v1-1beec1f3-example-project\t\nzwm-v1-f7c9927e-example-project-wt2\t\n")
 	if len(sessions) != 2 {
 		t.Fatalf("sessions = %#v, want two", sessions)
 	}
-	if sessions[1].Name != "zwm-v1-f7c9927e-meanderx-kunda-wt2" || sessions[1].Worktree != "" {
+	if sessions[1].Name != "zwm-v1-f7c9927e-example-project-wt2" || sessions[1].Worktree != "" {
 		t.Fatalf("final session = %#v", sessions[1])
 	}
 }

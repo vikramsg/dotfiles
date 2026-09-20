@@ -1,10 +1,24 @@
 import socket
 import subprocess
+import tempfile
 import threading
+from pathlib import Path
 
 import pytest
 
 from opener_tunnel.server import UnixSocketServer
+
+
+@pytest.fixture
+def socket_dir():
+    """A short directory to hold AF_UNIX sockets.
+
+    Unix socket paths are capped near 104 characters, and pytest's tmp_path on macOS
+    under /private/var/folders/... routinely exceeds that, which made these tests fail
+    or pass depending on the machine's TMPDIR rather than on the code.
+    """
+    with tempfile.TemporaryDirectory(prefix="opener-", dir="/tmp") as directory:
+        yield Path(directory)
 
 
 def send_request(socket_path, payload: bytes) -> None:
@@ -16,14 +30,14 @@ def send_request(socket_path, payload: bytes) -> None:
         client.close()
 
 
-def test_valid_url_reaches_configured_browser_command(tmp_path):
+def test_valid_url_reaches_configured_browser_command(socket_dir):
     calls: list[tuple[list[str], bool]] = []
 
     def fake_run(command: list[str], *, check: bool):
         calls.append((command, check))
         return subprocess.CompletedProcess(command, 0)
 
-    socket_path = tmp_path / "opener.sock"
+    socket_path = socket_dir / "opener.sock"
     server = UnixSocketServer(
         socket_path,
         ["browser", "--new-window"],
@@ -45,14 +59,14 @@ def test_valid_url_reaches_configured_browser_command(tmp_path):
 
 
 @pytest.mark.parametrize("url", ["file:///tmp/a", "javascript:alert(1)", "not-a-url"])
-def test_rejects_non_http_urls(tmp_path, url):
+def test_rejects_non_http_urls(socket_dir, url):
     calls: list[list[str]] = []
 
     def fake_run(command: list[str], *, check: bool):
         calls.append(command)
         return subprocess.CompletedProcess(command, 0)
 
-    socket_path = tmp_path / "opener.sock"
+    socket_path = socket_dir / "opener.sock"
     server = UnixSocketServer(socket_path, ["browser"], run_command=fake_run)
     server.start()
     thread = threading.Thread(target=server.accept_once, kwargs={"timeout": 2})
@@ -65,8 +79,8 @@ def test_rejects_non_http_urls(tmp_path, url):
     assert calls == []
 
 
-def test_cleanup_preserves_replacement_path(tmp_path):
-    socket_path = tmp_path / "opener.sock"
+def test_cleanup_preserves_replacement_path(socket_dir):
+    socket_path = socket_dir / "opener.sock"
     server = UnixSocketServer(socket_path, ["browser"])
     server.start()
 

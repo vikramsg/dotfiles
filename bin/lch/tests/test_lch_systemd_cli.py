@@ -10,7 +10,7 @@ def write_config(path: Path, payload: dict) -> Path:
 
 
 def test_systemd_install_writes_units_and_enables_path(tmp_path, monkeypatch):
-    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.vikramsg.dotfiles"})
+    config_file = write_config(tmp_path / ".config/lch/config.toml", {"namespace": "com.example.test"})
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
 
@@ -40,15 +40,15 @@ def test_systemd_install_writes_units_and_enables_path(tmp_path, monkeypatch):
 
     unit_path = systemd_module.install_job("lch-screenshot-clipboard")
 
-    assert unit_path == tmp_path / ".config/systemd/user/com.vikramsg.dotfiles.lch-screenshot-clipboard.path"
+    assert unit_path == tmp_path / ".config/systemd/user/com.example.test.lch-screenshot-clipboard.path"
     assert unit_path.exists()
-    service_path = tmp_path / ".config/systemd/user/com.vikramsg.dotfiles.lch-screenshot-clipboard.service"
+    service_path = tmp_path / ".config/systemd/user/com.example.test.lch-screenshot-clipboard.service"
     assert service_path.exists()
     assert f"ExecStart={tmp_path}/.local/bin/lch run lch-screenshot-clipboard" in service_path.read_text()
     assert f"PathModified={tmp_path / 'Desktop/Screenshots'}" in unit_path.read_text()
     assert calls == [
         ["systemctl", "--user", "daemon-reload"],
-        ["systemctl", "--user", "enable", "--now", "com.vikramsg.dotfiles.lch-screenshot-clipboard.path"],
+        ["systemctl", "--user", "enable", "--now", "com.example.test.lch-screenshot-clipboard.path"],
     ]
 
 
@@ -172,8 +172,8 @@ def test_cli_logs_runs_journalctl_on_linux(monkeypatch):
         cli_module,
         "logs_job_systemd",
         lambda _job_id: (
-            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
-            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
+            "journalctl --user -u com.example.test.lch-example-watcher.service",
+            "journalctl --user -u com.example.test.lch-example-watcher.path",
         ),
     )
 
@@ -204,9 +204,9 @@ def test_cli_logs_runs_journalctl_on_linux(monkeypatch):
             "-n",
             "50",
             "-u",
-            "com.vikramsg.dotfiles.lch-example-watcher.service",
+            "com.example.test.lch-example-watcher.service",
             "-u",
-            "com.vikramsg.dotfiles.lch-example-watcher.path",
+            "com.example.test.lch-example-watcher.path",
         ]
     ]
 
@@ -219,8 +219,8 @@ def test_cli_logs_can_follow_journalctl_on_linux(monkeypatch):
         cli_module,
         "logs_job_systemd",
         lambda _job_id: (
-            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
-            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
+            "journalctl --user -u com.example.test.lch-example-watcher.service",
+            "journalctl --user -u com.example.test.lch-example-watcher.path",
         ),
     )
 
@@ -253,9 +253,9 @@ def test_cli_logs_can_follow_journalctl_on_linux(monkeypatch):
             "50",
             "-f",
             "-u",
-            "com.vikramsg.dotfiles.lch-example-watcher.service",
+            "com.example.test.lch-example-watcher.service",
             "-u",
-            "com.vikramsg.dotfiles.lch-example-watcher.path",
+            "com.example.test.lch-example-watcher.path",
         ]
     ]
 
@@ -268,8 +268,8 @@ def test_cli_logs_can_print_journalctl_commands_on_linux(monkeypatch):
         cli_module,
         "logs_job_systemd",
         lambda _job_id: (
-            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
-            "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
+            "journalctl --user -u com.example.test.lch-example-watcher.service",
+            "journalctl --user -u com.example.test.lch-example-watcher.path",
         ),
     )
 
@@ -278,6 +278,6 @@ def test_cli_logs_can_print_journalctl_commands_on_linux(monkeypatch):
 
     assert result.exit_code == 0
     assert result.output.splitlines() == [
-        "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
-        "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
+        "journalctl --user -u com.example.test.lch-example-watcher.service",
+        "journalctl --user -u com.example.test.lch-example-watcher.path",
     ]

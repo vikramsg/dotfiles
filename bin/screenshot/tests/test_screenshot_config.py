@@ -28,6 +28,8 @@ def system_sync(local_dir: str, vm_host: str, remote_dir: str) -> dict:
 
 def test_load_config_reads_screenshot_and_sync_settings(tmp_path, monkeypatch):
     monkeypatch.delenv("SCREENSHOT_DIR", raising=False)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
     config_file = write_config(
         tmp_path / ".config/screenshot/config.json",
         {
@@ -41,7 +43,7 @@ def test_load_config_reads_screenshot_and_sync_settings(tmp_path, monkeypatch):
 
     config = load_config(config_file=config_file)
 
-    assert config.screenshot_dir == Path.home() / "Desktop/Screenshots"
+    assert config.screenshot_dir == home / "Desktop/Screenshots"
     assert config.clipboard_history_limit == 7
     assert config.sync.sources[0].id == "system"
     assert config.sync.sources[0].vm_host == "test-vm"
@@ -51,6 +53,8 @@ def test_load_config_reads_screenshot_and_sync_settings(tmp_path, monkeypatch):
 
 def test_load_config_uses_defaults_when_values_are_omitted(tmp_path, monkeypatch):
     monkeypatch.delenv("SCREENSHOT_DIR", raising=False)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
     config_file = write_config(
         tmp_path / ".config/screenshot/config.json",
         {
@@ -62,7 +66,7 @@ def test_load_config_uses_defaults_when_values_are_omitted(tmp_path, monkeypatch
 
     config = load_config(config_file=config_file)
 
-    assert config.screenshot_dir == Path.home() / "Desktop/Screenshots"
+    assert config.screenshot_dir == home / "Desktop/Screenshots"
     assert config.clipboard_history_limit == DEFAULT_CLIPBOARD_HISTORY_LIMIT == 5
     assert config.filename_patterns == DEFAULT_FILENAME_PATTERNS
 

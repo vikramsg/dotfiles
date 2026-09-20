@@ -971,26 +971,26 @@ integration is intentionally retired.
 Baseline and focused tests:
 
 ```bash
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt2 --package ocint --frozen pytest /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/tests/e2e/ocint/daemon/test_github.py
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt2 --package ocint --frozen pytest /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/tests/unit/ocint/daemon/tasks
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt2 --package ocint --frozen pytest /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/tests/unit/ocint/daemon/lch
+uv run --directory /home/user/personal/dotfiles-wt2 --package ocint --frozen pytest /home/user/personal/dotfiles-wt2/bin/ocint/tests/e2e/ocint/daemon/test_github.py
+uv run --directory /home/user/personal/dotfiles-wt2 --package ocint --frozen pytest /home/user/personal/dotfiles-wt2/bin/ocint/tests/unit/ocint/daemon/tasks
+uv run --directory /home/user/personal/dotfiles-wt2 --package ocint --frozen pytest /home/user/personal/dotfiles-wt2/bin/ocint/tests/unit/ocint/daemon/lch
 ```
 
 After Slack tests exist, run their canonical mirrored paths:
 
 ```bash
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt2 --package ocint --frozen pytest /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/tests/unit/ocint/daemon/channels/slack
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt2 --package ocint --frozen pytest /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/tests/integration/ocint/daemon/channels/test_slack.py
-uv run --directory /home/vikram_orbio_earth/personal/dotfiles-wt2 --package ocint --frozen pytest /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/tests/e2e/ocint/daemon/test_slack.py
+uv run --directory /home/user/personal/dotfiles-wt2 --package ocint --frozen pytest /home/user/personal/dotfiles-wt2/bin/ocint/tests/unit/ocint/daemon/channels/slack
+uv run --directory /home/user/personal/dotfiles-wt2 --package ocint --frozen pytest /home/user/personal/dotfiles-wt2/bin/ocint/tests/integration/ocint/daemon/channels/test_slack.py
+uv run --directory /home/user/personal/dotfiles-wt2 --package ocint --frozen pytest /home/user/personal/dotfiles-wt2/bin/ocint/tests/e2e/ocint/daemon/test_slack.py
 ```
 
 Architecture and complete package verification:
 
 ```bash
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/justfile tach
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/justfile test
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/justfile check
-just --justfile /home/vikram_orbio_earth/personal/dotfiles-wt2/bin/ocint/justfile smoke-daemon
+just --justfile /home/user/personal/dotfiles-wt2/bin/ocint/justfile tach
+just --justfile /home/user/personal/dotfiles-wt2/bin/ocint/justfile test
+just --justfile /home/user/personal/dotfiles-wt2/bin/ocint/justfile check
+just --justfile /home/user/personal/dotfiles-wt2/bin/ocint/justfile smoke-daemon
 ```
 
 Do not add a live marker command to default CI. Document its exact environment

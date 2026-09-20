@@ -45,13 +45,8 @@ For laptop sleep/wake and network changes:
 
 - `ServerAliveInterval 15` + `ServerAliveCountMax 3` makes dead sessions exit instead of hanging.
 - `ExitOnForwardFailure yes` prevents half-broken reconnects.
-- `autossh` supervises SSH and restarts when SSH exits.
 
-Useful autossh flags/env:
-
-- `AUTOSSH_POLL=30`: fast child-health checks.
-- `AUTOSSH_GATETIME=0`: keep retrying even if initial reconnect attempt fails.
-- `-M 0`: disable autossh monitor-port mode and rely on SSH keepalive behavior.
+A dropped session is not restarted automatically. Reconnect by re-running the same `ssh` alias.
 
 ---
 
@@ -124,20 +119,18 @@ Without lingering, user processes can be cleaned up when SSH disconnects.
 
 ---
 
-## VM + Ghostty Example
+## VM Sessions
 
-This repo's workspace file is `ghostty/workspaces/vm.toml`.
+- Forwarding owner session (`vm.dotfiles`):
 
-- Forwarding owner tab (`vm.dotfiles`):
-
-```toml
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 vm.dotfiles"
+```bash
+ssh vm.dotfiles
 ```
 
-- Non-owner tabs (clear inherited forwards):
+- Non-owner sessions (clear inherited forwards):
 
-```toml
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 -o ClearAllForwardings=yes vm.kunda"
+```bash
+ssh -o ClearAllForwardings=yes vm.kunda
 ```
 
 Shared alias behavior is defined in `ssh/config.vm.shared`.
@@ -152,7 +145,7 @@ If you see:
 
 `bind [127.0.0.1]:8080: Address already in use`
 
-then multiple SSH/autossh sessions are trying to bind the same local port.
+then multiple SSH sessions are trying to bind the same local port.
 
 Fix:
 
@@ -204,10 +197,10 @@ Use `tmux a -d -t <session>` so stale clients are detached on reconnect.
 
 ```bash
 # Forwarding-owner interactive session
-env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 vm.dotfiles
+ssh vm.dotfiles
 
 # Non-owner interactive session
-env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 -o ClearAllForwardings=yes vm.kunda
+ssh -o ClearAllForwardings=yes vm.kunda
 
 # Inspect local forwarded port ownership
 lsof -nP -iTCP:5173,8080,8081,19876,54321,54323 -sTCP:LISTEN

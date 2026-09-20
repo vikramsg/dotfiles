@@ -7,7 +7,6 @@ This directory contains custom scripts for the dotfiles environment.
 Install tools from this repo with `uv`:
 
 ```bash
-uv tool install ./bin/ghostty_workspace --force
 uv tool install ./bin/screenshot --force
 uv tool install ./bin/lch --force
 uv tool install ./bin/opener_tunnel --force
@@ -24,7 +23,6 @@ just macflow
 Upgrade an installed local tool after changes:
 
 ```bash
-uv tool install ./bin/ghostty_workspace --force --no-cache
 uv tool install ./bin/screenshot --force --no-cache
 uv tool install ./bin/lch --force --no-cache
 uv tool install ./bin/opener_tunnel --force --no-cache
@@ -65,16 +63,6 @@ Thin native lifecycle adapter that installs and manages launchd/systemd watchers
 - Test: from `bin/lch`, run `uv run pytest`
 - Docs: `bin/lch/README.md`, `lch/README.md`
 
-## ghostty-workspace
-
-Open a Ghostty window with tabs/commands/directories from a TOML workspace config.
-
-Requires `window-new-tab-position = end` in `ghostty/config` for deterministic tab append order during scripted startup.
-
-- Install: `uv tool install ./bin/ghostty_workspace --force`
-- Test: from `bin/ghostty_workspace`, run `uv run pytest`
-- Docs: `bin/ghostty_workspace/README.md`
-
 ## ocint
 
 Read-only local OpenCode SQLite usage analytics and history search.
@@ -101,8 +89,3 @@ to send one newline-terminated URL to `~/.opener.sock`.
 
 See `bin/opener_tunnel/README.md` and `opener_tunnel/config.toml`.
 
----
-
-## lc
-
-A wrapper for `ls`/`eza` and `cat`/`bat` that provides a consistent file/directory preview experience.

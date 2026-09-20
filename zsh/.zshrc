@@ -1,9 +1,10 @@
 #########################################
 # Setup PATH to use locally installed binaries
 export PATH="$HOME/.local/bin:$PATH"
-if [[ -d /opt/homebrew/opt/rustup/bin ]]; then
-    export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
-fi
+# mise shims rather than `mise activate`: the tmux status line, launchd services and
+# Zed terminals all resolve tools without an interactive shell, so they need the
+# shims directory on PATH. See .agents/plans/brewfile-to-mise.md.
+export PATH="$HOME/.local/share/mise/shims:$PATH"
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 fi
@@ -111,9 +112,6 @@ setopt HIST_REDUCE_BLANKS    # Remove extra blanks from commands
 alias vi="nvim"
 
 [[ -f ~/.zsh_script ]] && source ~/.zsh_script
-
-# Replace standard ls with eza (icons + grid view)
-alias ls='eza --icons --grid'
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     export BROWSER="xdg-open"

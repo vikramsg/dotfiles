@@ -3,14 +3,14 @@
 Zed stores Agent Panel state per workspace.
 
 ```text
-zed -n ssh://vm-us:/home/vikram_orbio_earth/projects/orbio/meanderx/kunda
+zed -n ssh://<vm-host>:/home/<user>/projects/<project>
 ```
 
-`-n` opens `kunda` in a new Zed window.
+`-n` opens `<project>` in a new Zed window.
 
 ```text
-zed -r ssh://vm-us:/home/vikram_orbio_earth/projects/orbio/meanderx/kunda-wt
-zed -r ssh://vm-us:/home/vikram_orbio_earth/projects/orbio/meanderx/kunda-wt2
+zed -r ssh://<vm-host>:/home/<user>/projects/<project>-wt
+zed -r ssh://<vm-host>:/home/<user>/projects/<project>-wt2
 ```
 
 `-r` reuses a Zed window for the same remote identity and opens each path as
@@ -18,9 +18,9 @@ another workspace. With AI enabled, Zed retains the workspaces in the
 multi-workspace window.
 
 ```text
-kunda
-kunda-wt
-kunda-wt2
+<project>
+<project>-wt
+<project>-wt2
 ```
 
 When a worktree workspace opens, Zed loads its Agent Panel state.
