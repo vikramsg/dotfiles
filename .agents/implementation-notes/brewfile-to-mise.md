@@ -126,6 +126,50 @@ New: `archive/README.md`.
 
 ---
 
+## Review round 1 — findings and fixes
+
+A review agent was run against the branch diff. Four findings, all confirmed and fixed:
+
+### R1. `mise/config.toml` did not select the conda backend (broken)
+
+- **Finding:** `imagemagick = { version = "latest", backend = "conda:imagemagick" }` does not work.
+  `backend` is not a supported `[tools]` option; backend selection is part of the tool *key*.
+- **Confirmed against the mise docs:** the conda backend page documents exactly
+  `"conda:imagemagick" = "latest"`. The `backend` key form appears nowhere.
+- **Fix:** replaced with `"conda:imagemagick" = "latest"`, matching the `"conda:chafa"` entry
+  already in the file.
+- **Note:** this defect came from the approved plan, which specified the invalid form. Following the
+  plan literally is what produced it.
+
+### R2. The `hunk()` shell function survived the Hunk removal
+
+- **Finding:** `zsh/.zsh_script` still defined a `hunk()` wrapper invoking `command hunk` in three
+  places, after this branch deleted Hunk entirely.
+- **Fix:** deleted the whole function.
+
+### R3. `ghostty/README.md` documented the archived `ghostty-workspace`
+
+- **Finding:** a subsection pointed at `ghostty/workspaces/example.toml` and described configuring the
+  CLI, both of which moved to `archive/`.
+- **Fix:** removed the subsection, keeping the `ghostty/script.md` reference and the note about the
+  `window-new-tab-position = end` setting, which is still live.
+
+### R4. `pyproject.toml` still declared the archived package
+
+- **Finding:** `bin/ghostty_workspace` remained in `[tool.uv.workspace].members` and
+  `bin/ghostty_workspace/tests` in `testpaths`, though the path no longer exists. `uv` tolerates this,
+  so it was stale configuration rather than an immediate failure.
+- **Fix:** removed both entries.
+
+### Confirmed clean by the same review
+
+`justfile` `mise` recipe syntax and shell-invocation structure; the `ssh` and `rg --files`
+replacements in `zsh/.zsh_script`; the PATH wiring in `tmux/tmux.conf` and `bin/lch/lch/launchd.py`;
+the `zed/settings.json` escaping and hash derivation; and the `mise/config.toml` file location
+against the repo's existing configuration pattern.
+
+---
+
 ## Verification performed
 
 | Check | Result |

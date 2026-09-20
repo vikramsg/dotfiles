@@ -22,8 +22,9 @@ duckdb = "latest"
 terraform = "latest"
 
 # The registry points imagemagick at an aqua release that only publishes Windows
-# binaries, so the conda backend is forced instead.
-imagemagick = { version = "latest", backend = "conda:imagemagick" }
+# binaries, so the conda backend is named directly. mise selects the osx-64
+# subdirectory automatically.
+"conda:imagemagick" = "latest"
 
 # Absent from mise's registry, so each backend is named explicitly.
 "aqua:arl/gitmux" = "latest"

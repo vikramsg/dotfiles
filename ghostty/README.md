@@ -65,14 +65,4 @@ See `ghostty/script.md` for:
 - how to set each tab title using native `perform action "set_tab_title:..."`
 - source references for the behavior and commands used
 
-For the `ghostty-workspace` CLI, an example TOML workspace config is at:
-
-- `ghostty/workspaces/example.toml`
-
-For deterministic tab order with `ghostty-workspace`, set this in `ghostty/config`:
-
-```ini
-window-new-tab-position = end
-```
-
-This keeps scripted tab creation in append order. The workspace CLI then focuses the requested tab index using Ghostty's `goto_tab` action.
+`ghostty/script.md` and the `window-new-tab-position = end` setting in `ghostty/config` together keep scripted tab creation in append order.
