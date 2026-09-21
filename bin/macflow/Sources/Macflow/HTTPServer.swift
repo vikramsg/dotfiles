@@ -36,7 +36,7 @@ final class HTTPServer {
     private let screens: ScreenService
     private let preview: any ScreenshotPreviewing
     private let screenshots: ScreenshotController
-    private let shelf: FileShelfController
+    private let ui: A2UISurfaceController
     private let hotKeyStatus: () -> HotKeyStatus
     private let permissions: PermissionAccess
     private var listener: NWListener?
@@ -50,7 +50,7 @@ final class HTTPServer {
         screens: ScreenService,
         preview: any ScreenshotPreviewing,
         screenshots: ScreenshotController,
-        shelf: FileShelfController,
+        ui: A2UISurfaceController,
         hotKeyStatus: @escaping () -> HotKeyStatus,
         permissions: PermissionAccess = .live
     ) {
@@ -61,7 +61,7 @@ final class HTTPServer {
         self.screens = screens
         self.preview = preview
         self.screenshots = screenshots
-        self.shelf = shelf
+        self.ui = ui
         self.hotKeyStatus = hotKeyStatus
         self.permissions = permissions
     }
@@ -185,34 +185,16 @@ final class HTTPServer {
             case ("DELETE", "/v1/overlays"):
                 preview.hide()
                 completion(.ok(["hidden": true]))
-            case ("GET", "/v1/file-shelves"):
-                completion(.ok(["file_shelves": [shelf.json]]))
-            case ("POST", "/v1/file-shelves"):
-                let body = try jsonBody(request)
-                guard let directory = body["directory"] as? String else {
-                    completion(.error(400, "directory is required"))
-                    return
+            case ("GET", "/v1/ui"):
+                completion(.ok(["surfaces": ui.json]))
+            case ("POST", "/v1/ui"):
+                do {
+                    completion(.ok(["surfaces": try ui.apply(payload: request.body)]))
+                } catch {
+                    completion(.error(422, error.localizedDescription))
                 }
-                let options = WorkflowConfiguration.Shelf(
-                    sources: [WorkflowConfiguration.Shelf.Source(
-                        id: "files",
-                        label: "Files",
-                        icon: "folder",
-                        directory: directory
-                    )],
-                    extensions: body["extensions"] as? [String] ?? ["png", "jpg", "jpeg", "webp"],
-                    width: body["width"] as? Double ?? 1200,
-                    height: body["height"] as? Double ?? 420,
-                    thumbnailWidth: body["thumbnail_width"] as? Double ?? 240,
-                    spacing: body["spacing"] as? Double ?? 12,
-                    margin: body["margin"] as? Double ?? 20,
-                    closeAfterDrag: body["close_after_drag"] as? Bool ?? true,
-                    closeDelay: body["close_delay"] as? Double ?? 0.2,
-                    restoreFocus: body["restore_focus"] as? Bool ?? true
-                )
-                completion(shelf.show(configuration: options, allowsEmpty: false)
-                    ? .ok(shelf.json)
-                    : .error(422, "No supported files available"))
+            case ("GET", "/v1/files"):
+                completion(listFiles(request))
             case ("POST", "/v1/input/keystroke"):
                 let body = try jsonBody(request)
                 guard let key = body["key"] as? String,
@@ -265,14 +247,14 @@ final class HTTPServer {
                     }
                 }
             default:
-                if request.method == "DELETE", request.path.hasPrefix("/v1/file-shelves/") {
-                    let identifier = String(request.path.dropFirst("/v1/file-shelves/".count))
-                    guard shelf.identifier == identifier else {
-                        completion(.error(404, "File shelf not found"))
+                if request.method == "DELETE", request.path.hasPrefix("/v1/ui/") {
+                    let identifier = String(request.path.dropFirst("/v1/ui/".count))
+                    guard ui.json.contains(where: { $0["surfaceId"] as? String == identifier }) else {
+                        completion(.error(404, "Surface not found"))
                         return
                     }
-                    shelf.hide()
-                    completion(.ok(["closed": true, "id": identifier]))
+                    ui.dismiss(id: identifier, restoreFocus: true)
+                    completion(.ok(["dismissed": true, "surfaceId": identifier]))
                 } else if request.path.hasPrefix("/v1/windows/") {
                     routeWindow(request, completion: completion)
                 } else {
@@ -319,6 +301,39 @@ final class HTTPServer {
         } catch {
             completion(.error(422, error.localizedDescription))
         }
+    }
+
+    private func listFiles(_ request: HTTPRequest) -> HTTPResponse {
+        guard let rawDirectory = request.queryItems["directory"] else {
+            return .error(400, "directory is required")
+        }
+        let directory = URL(
+            fileURLWithPath: NSString(string: rawDirectory).expandingTildeInPath,
+            isDirectory: true
+        ).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else {
+            return .error(422, "Directory is unavailable: \(directory.path)")
+        }
+        let extensions = request.queryItems["extensions"]?.split(separator: ",").map(String.init)
+            ?? ["png", "jpg", "jpeg", "webp"]
+        let limit = Int(request.queryItems["limit"] ?? "5") ?? 5
+        let items = FileCatalog.items(
+            in: directory,
+            supportedExtensions: Set(extensions.map { $0.lowercased() }),
+            maximumCount: max(1, min(limit, 100))
+        )
+        let files = items.map { item -> [String: Any] in
+            [
+                "name": item.url.lastPathComponent,
+                "path": item.url.path,
+                "url": item.url.absoluteString,
+                "modifiedAt": item.modificationDate.timeIntervalSince1970,
+            ]
+        }
+        return .ok(["files": files])
     }
 
     private func jsonBody(_ request: HTTPRequest) throws -> [String: Any] {

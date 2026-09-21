@@ -1,11 +1,10 @@
 # Macflow APIs
 
-Macflow has two APIs:
+Macflow exposes one HTTP API over its loopback server:
 
-- [HTTP Actions API](http-api.md): external processes perform macOS actions
-  through the loopback server.
-- [WebKit UI API](ui-api.md): configured HTML/JavaScript surfaces request
-  native capabilities through `window.macflow`.
+- [HTTP reference](http-api.md): authentication, routes, and payloads used by the
+  CLI and other external processes. This includes `POST /v1/ui`, which renders a
+  native surface from an A2UI payload.
 
-The HTTP API controls Macflow from outside the app. The UI API is available
-only inside a Macflow-hosted `WKWebView`.
+The `macflow` CLI is a client for these routes; it does not control macOS
+directly.
