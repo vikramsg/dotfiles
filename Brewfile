@@ -1,8 +1,5 @@
 brew "autossh"
 
-# JavaScript runtime used by the Hunk behavioural tests.
-brew "bun"
-
 brew "fzf"
 # Syntax highlighting for file previews in fzf.
 brew "bat"
@@ -37,9 +34,6 @@ brew "tmux"
 
 # Persistent terminal multiplexer alternative to tmux.
 brew "herdr"
-
-# Review-first terminal diff viewer for agent-authored changesets.
-brew "hunk"
 
 # `cat` replacement used in terminal workflows for readable file previews.
 brew "mcat"
