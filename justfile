@@ -323,16 +323,6 @@ lazygit:
         echo "lazygit symlink created at ~/Library/Application Support/lazygit/config.yml"; \
     fi
 
-# Set up Hunk config and extensions symlink
-hunk:
-    @echo "Setting up Hunk config and extension symlinks..."
-    mkdir -p ~/.config/hunk
-    ln -sfn {{justfile_directory()}}/hunk/config.toml ~/.config/hunk/config.toml
-    @if [ -d {{justfile_directory()}}/hunk/extensions ]; then \
-        ln -sfn {{justfile_directory()}}/hunk/extensions ~/.config/hunk/extensions; \
-    fi
-    @echo "Hunk config symlinked to ~/.config/hunk"
-
 # Link Macflow configuration without building or restarting the service.
 [private]
 link-macflow-config:
@@ -477,7 +467,7 @@ harlequin-if-configured:
     fi
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit hunk television harlequin-if-configured
+all: npm-global-bin nvim tmux herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit television harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

@@ -32,7 +32,6 @@ The prefix is `Ctrl+Space`.
 | `prefix+v` | Pick and watch a Markdown file in a popup |
 | `prefix+g` | Open the LazyGit popup |
 | `prefix+Shift+T` | Open the terminal popup |
-| `prefix+Shift+D` | Open the current repository in a new Hunk tab |
 | `prefix+Shift+G` | Review the current PR in a new tab |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
 
@@ -70,10 +69,6 @@ available. Using `--remote-keybindings server` loads those bindings from
 SSH.
 
 ## Keys
-
-Quitting Hunk with `q` closes its tab and returns to the tab it was opened from,
-rather than leaving a shell prompt. If the original tab was closed in the
-meantime, Herdr uses its normal tab-close behavior.
 
 `dotfiles.nav-wrap` gives Neovim the chord first and crosses into a Herdr pane
 only at a split edge. When it reaches a Herdr pane edge it wraps to the far
