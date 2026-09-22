@@ -68,3 +68,6 @@ brew "duckdb"
 
 # For runnin Terraform format
 brew "terraform"
+
+# Batteries included tui editor with vim mode and tokyo night included
+brew "fresh-editor"
