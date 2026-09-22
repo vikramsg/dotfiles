@@ -45,6 +45,11 @@ NOTE: If we have agreed to a plan, make sure its present in .agents/plans/ and i
 
 ## Naming and Code comment hygiene
 
+### Documentation hygiene
+
+- Documentation files must be operational documentation, without conversation history, implementation-plan links, agent progress, or test-result reports.
+- Never use artificial 80 column limits for writing code comments, docs etc
+
 ### Code comment and Docstring hygiene
 
 - Explain what the code cannot readily tell the reader: reasons, constraints, and consequences.

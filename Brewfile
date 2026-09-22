@@ -1,6 +1,6 @@
 brew "autossh"
 
-# JavaScript runtime used by open-cursor to install its OpenCode provider dependency.
+# JavaScript runtime used by the Hunk behavioural tests.
 brew "bun"
 
 brew "fzf"
