@@ -153,38 +153,6 @@ herdr agent read <unique-agent-name> --source recent-unwrapped
 
 If a wait fails or returns `blocked`, inspect `agent get` and `agent read` before deciding what input to send. Use the pane surface only when raw terminal control is intentional.
 
-## Coordinate background OpenCode work
-
-When an OpenCode agent should work in a background tab, create the tab in the current workspace. Do not create another workspace. Choose a task-specific tab label and keep focus on the caller's tab. Use the explicitly requested target directory as `--cwd`, or `$PWD` only when no other directory was requested. Do not preflight or inspect that directory or require the controlling agent to have tool permissions for it; the child OpenCode 2 process operates from its own cwd. Read the root pane ID from `.result.root_pane.pane_id` in the creation response, then launch OpenCode 2 directly in that pane:
-
-```bash
-herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd <target-directory> --label <task-label> --no-focus
-herdr pane run <returned-root-pane-id> 'exec opencode2'
-```
-
-Never use `herdr agent start --kind opencode` for this workflow; that kind launches the V1 `opencode` executable. Wait only as needed for Herdr to detect the process as an agent. If a stable label is useful, then optionally assign a unique name with `herdr agent rename <returned-root-pane-id> <unique-agent-name>`. If naming is unnecessary or the rename fails, keep using the root pane ID as the agent target.
-
-Submit the task through the OpenCode shell tool with `background=true`. Run the complete Herdr prompt-and-wait operation as the background shell command:
-
-```text
-shell(
-  command='herdr agent prompt <agent-name-or-root-pane-id> "<delegated-task>" --wait',
-  background=true
-)
-```
-
-The shell call must return control after moving the command into the background. Do not run this command in the caller's foreground, append `&`, poll the agent, or replace it with repeated state checks.
-
-`agent prompt --wait` observes prompt delivery and finishes at the first settled `idle`, `done`, or `blocked` state. Do not stop at `working` and then wait only for `done`; a focused tab settles as `idle`, so a done-only wait can hang.
-
-When the background shell task completes, inspect its result. If it completed successfully, read the delegated agent's output:
-
-```bash
-herdr agent read <agent-name-or-root-pane-id> --source recent-unwrapped
-```
-
-Report or act on the delegated result only after reading it. If the shell tool does not support `background=true`, stop and report that this OpenCode environment cannot perform this asynchronous workflow. Do not substitute a foreground wait.
-
 ## Run an ordinary command in another pane
 
 Create a sibling pane with the same geometry rule, preserve the caller's working directory, and keep user focus unchanged:
