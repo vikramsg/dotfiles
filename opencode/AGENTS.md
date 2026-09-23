@@ -26,6 +26,8 @@ If the user asks for a plan as a file, always put in `.agents/plans/`.
 - Never add fallback, compatibility, backward shims unless already discussed.
 - Prefer using background agents for implementation and review but note they do not have full context so review their output before accepting
 - When implementing/building make sure to follow [Implementation Notes](#implementation-notes).
+- Prefer launching shell commands in parallel where feasible.
+    - Prefer running shell commands in background so that the user can continue interacting with you while you are waiting for commands to complete.
 
 ### Implementation Notes
 
@@ -73,12 +75,14 @@ NOTE: If we have agreed to a plan, make sure its present in .agents/plans/ and i
 ## Review
 
 After all checks and tests pass launch a background reviewer agent. Make sure it's in the background. 
-But do not let the reviewer be authoritative. Its an advisory agent. 
+Note that the review is advisory. 
 The reviewer is prone to trying to suggest over-engineering, over defensive, etc. which you should not blindly follow.
+Do not overconstrain the reviewer in the review prompt, otherwise the reviewer is prone to just agreeeing with whatever you asked it to do.
 
 Some things of special interested in from the review
 - Could the implementation have been simplified
     - Make the reviewer really try to come up with simplifications, since you are prone to just add instead of reuse and refactor.
 - Are we following the correct layer rules
+- Do the documentation and code comments are at appropriate places. Do they sound like a human and not an agent.
 
 
