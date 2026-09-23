@@ -48,10 +48,10 @@
       }
     },
     "explore": {
-      "model": "azure/gpt-5.6-terra#medium"
+      "model": "azure/gpt-6-luna#high"
     },
     "general": {
-      "model": "azure/gpt-5.6-terra#medium"
+      "model": "azure/gpt-6-luna#high"
     }
   },
   "lsp": false,
@@ -73,38 +73,13 @@
           },
           "capabilities": {
             "tools": true,
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           }
         },
-        "gpt-5.6-terra": {
-          "name": "gpt-5.6-terra",
-          "modelID": "gpt-5.6-terra",
-          "settings": {
-            "reasoningEffort": "high",
-            "reasoningSummary": "auto"
-          },
-          "capabilities": {
-            "tools": true,
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
-          }
-        },
-        "gpt-5.6-luna": {
-          "name": "gpt-5.6-luna",
-          "modelID": "gpt-5.6-luna",
+        "gpt-6-sol": {
+          "name": "gpt-6-sol",
+          "modelID": "gpt-6-sol",
           "settings": {
             "reasoningEffort": "medium",
             "reasoningSummary": "auto",
@@ -112,14 +87,22 @@
           },
           "capabilities": {
             "tools": true,
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        },
+        "gpt-6-luna": {
+          "name": "gpt-6-luna",
+          "modelID": "gpt-6-luna",
+          "settings": {
+            "reasoningEffort": "medium",
+            "reasoningSummary": "auto",
+            "serviceTier": "priority"
+          },
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           }
         },
         "gpt-6-astra": {
@@ -132,14 +115,8 @@
           },
           "capabilities": {
             "tools": true,
-            "input": [
-              "text",
-              "image",
-              "pdf"
-            ],
-            "output": [
-              "text"
-            ]
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
           }
         }
       }
