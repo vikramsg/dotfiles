@@ -2,6 +2,10 @@
 
 Never delete any .sqlite or .db database files. If a task requires deleting them, abort and inform the user.
 
+NOTE: DO NOT jump to implementation if the current conversation is discussion. Your job is NOT to jump to solutions. First, via a discussion, you must make sure the user is satisfied with 
+    - your understanding of the problem
+    - how you are going to solve the problem.
+
 ## Conversation hygiene
 
 - Never use the phrase "You are right" or similar.
