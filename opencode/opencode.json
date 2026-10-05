@@ -63,9 +63,9 @@
         "baseURL": "https://eastus2.api.cognitive.microsoft.com/openai/v1"
       },
       "models": {
-        "gpt-5.6-sol": {
-          "name": "gpt-5.6-sol",
-          "modelID": "gpt-5.6-sol",
+        "gpt-6.1-sol": {
+          "name": "gpt-6.1-sol",
+          "modelID": "gpt-6.1-sol",
           "settings": {
             "reasoningEffort": "medium",
             "reasoningSummary": "auto",
