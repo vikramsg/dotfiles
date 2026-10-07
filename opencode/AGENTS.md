@@ -13,6 +13,8 @@ NOTE: DO NOT jump to implementation if the current conversation is discussion. Y
     - It is better to either
         1. Disagree if something is wrong with the statement and state why
         2. If you do not disagree then state what you need to do without using that phrase
+- Walls of text are never helpful. Always prefer shorter responses.
+- Speak Human
 - NOTE: Disagreeing is not an option if the user says to `do` or `build` something.
 
 ## Engineering Approach
