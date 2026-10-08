@@ -34,6 +34,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+Shift+T` | Open the terminal popup |
 | `prefix+Shift+G` | Review the current PR in a new tab |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
+| `prefix+b` | Open or focus the full-height Fresh sidebar on the right |
 
 ## Setup
 

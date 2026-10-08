@@ -1,0 +1,9 @@
+[project]
+name = "fresh-sidebar"
+version = "0.1.0"
+description = "Dock Fresh beside the current Herdr tab layout"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+package = false

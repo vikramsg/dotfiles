@@ -1,0 +1,55 @@
+{
+  "theme": "builtin://tokyo-night",
+  "file_explorer": {
+    "side": "right"
+  },
+  "keybindings": [
+    {
+      "key": "enter",
+      "action": "review_open_working_file",
+      "when": "mode:review-diff"
+    },
+    {
+      "key": "enter",
+      "action": "review_open_working_file",
+      "when": "mode:review-mode"
+    },
+    {
+      "key": "enter",
+      "action": "review_diff_open_working_at_cursor",
+      "when": "mode:diff-view"
+    },
+    {
+      "keys": [{ "key": "space" }, { "key": "e" }],
+      "action": "toggle_file_explorer",
+      "when": "mode:vi-normal"
+    },
+    {
+      "keys": [{ "key": "space" }, { "key": "s" }, { "key": "f" }],
+      "action": "quick_open_files",
+      "when": "mode:vi-normal"
+    },
+    {
+      "keys": [{ "key": "space" }, { "key": "s" }, { "key": "g" }],
+      "action": "open_live_grep",
+      "when": "mode:vi-normal"
+    },
+    {
+      "keys": [{ "key": "space" }, { "key": "g" }, { "key": "d" }],
+      "action": "start_review_diff",
+      "when": "mode:vi-normal"
+    }
+  ],
+  "orchestrator_mode": false,
+  "plugins": {
+    "orchestrator": {
+      "enabled": false
+    },
+    "vi_mode": {
+      "enabled": true,
+      "settings": {
+        "autoStart": true
+      }
+    }
+  }
+}

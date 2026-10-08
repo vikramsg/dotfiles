@@ -1,0 +1,17 @@
+package_root := justfile_directory()
+
+default:
+    @just --justfile "{{justfile()}}" --list
+
+# Install Fresh using the platform's documented package or tarball method.
+install:
+    "{{package_root}}/install.sh"
+
+# Register the sidebar launcher through its stable config anchor.
+link:
+    mkdir -p "$HOME/.config"
+    ln -sfn "{{package_root}}" "$HOME/.config/herdr-fresh-sidebar"
+    herdr plugin link "$HOME/.config/herdr-fresh-sidebar"
+
+test:
+    uv run --project "{{package_root}}" python -m unittest discover -s "{{package_root}}/tests" -v
