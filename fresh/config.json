@@ -1,0 +1,14 @@
+{
+  "orchestrator_mode": false,
+  "plugins": {
+    "orchestrator": {
+      "enabled": false
+    },
+    "vi_mode": {
+      "enabled": true,
+      "settings": {
+        "autoStart": true
+      }
+    }
+  }
+}

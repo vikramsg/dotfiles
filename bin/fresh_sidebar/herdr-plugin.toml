@@ -1,0 +1,18 @@
+id = "dotfiles.fresh-sidebar"
+name = "Fresh sidebar"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+platforms = ["linux", "macos"]
+description = "Open Fresh at the right edge of the current tab"
+
+[[actions]]
+id = "open"
+title = "Open or focus Fresh sidebar"
+contexts = ["pane"]
+command = ["python3", "sidebar.py", "open"]
+
+[[panes]]
+id = "editor"
+title = "Fresh"
+placement = "split"
+command = ["sh", "-c", "exec python3 \"$HERDR_PLUGIN_ROOT/sidebar.py\" run"]
