@@ -42,6 +42,11 @@ in Insert mode or using the file explorer and prompts.
 | `Space s g` | Live project search |
 | `Space g d` | Review working-tree Git diff |
 
+In Git diff review, Enter opens the editable working-tree file instead of
+opening another diff view. In standalone side-by-side diffs, it opens the
+working file even when the cursor is on the historical side. File-filter
+prompts retain Enter to accept the filter.
+
 ## Installation
 
 The root `just fresh` recipe delegates installation to `bin/fresh_sidebar`:
