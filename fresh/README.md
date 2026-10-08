@@ -30,6 +30,18 @@ bindings continue to move between Herdr terminals, rather than Fresh splits.
 Use `Ctrl+P` to find Fresh commands such as **Focus Editor** and **Focus File
 Explorer**. Herdr's prefix bindings remain available outside Fresh's vi modes.
 
+## Space leader shortcuts
+
+These bindings apply while the editor is in Vim Normal mode, not while typing
+in Insert mode or using the file explorer and prompts.
+
+| Keys | Action |
+| --- | --- |
+| `Space e` | Toggle file explorer |
+| `Space s f` | Find a project file |
+| `Space s g` | Live project search |
+| `Space g d` | Review working-tree Git diff |
+
 ## Installation
 
 The root `just fresh` recipe delegates installation to `bin/fresh_sidebar`:

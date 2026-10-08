@@ -3,6 +3,28 @@
   "file_explorer": {
     "side": "right"
   },
+  "keybindings": [
+    {
+      "keys": [{ "key": "space" }, { "key": "e" }],
+      "action": "toggle_file_explorer",
+      "when": "mode:vi-normal"
+    },
+    {
+      "keys": [{ "key": "space" }, { "key": "s" }, { "key": "f" }],
+      "action": "quick_open_files",
+      "when": "mode:vi-normal"
+    },
+    {
+      "keys": [{ "key": "space" }, { "key": "s" }, { "key": "g" }],
+      "action": "open_live_grep",
+      "when": "mode:vi-normal"
+    },
+    {
+      "keys": [{ "key": "space" }, { "key": "g" }, { "key": "d" }],
+      "action": "start_review_diff",
+      "when": "mode:vi-normal"
+    }
+  ],
   "orchestrator_mode": false,
   "plugins": {
     "orchestrator": {
