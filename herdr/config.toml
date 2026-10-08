@@ -25,8 +25,6 @@
 # prefix+f: open nvim file picker
 # prefix+r: toggle reviewr pane
 # prefix+Shift+O: append OpenCode and Vim project tabs
-# prefix+b: toggle file and Git sidebar
-# prefix+Shift+E/F/S/P: sidebar Explorer / Search / Source Control / quick-open
 
 onboarding = false
 
@@ -118,36 +116,6 @@ key = "prefix+f"
 type = "plugin_action"
 command = "chmarax.herdr-nvim.pick-file"
 description = "open file from agent output"
-
-[[keys.command]]
-key = "prefix+b"
-type = "plugin_action"
-command = "herdr-sidebar.open-sidebar"
-description = "toggle file and Git sidebar"
-
-[[keys.command]]
-key = "prefix+shift+e"
-type = "plugin_action"
-command = "herdr-sidebar.show-explorer"
-description = "show sidebar Explorer"
-
-[[keys.command]]
-key = "prefix+shift+f"
-type = "plugin_action"
-command = "herdr-sidebar.show-search"
-description = "show sidebar Search"
-
-[[keys.command]]
-key = "prefix+shift+s"
-type = "plugin_action"
-command = "herdr-sidebar.show-git"
-description = "show sidebar Source Control"
-
-[[keys.command]]
-key = "prefix+shift+p"
-type = "plugin_action"
-command = "herdr-sidebar.quick-open"
-description = "quick-open sidebar file"
 
 # persiyanov.reviewr: code-review pane for agent-written diffs.
 [[keys.command]]

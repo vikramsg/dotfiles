@@ -90,28 +90,6 @@ herdr:
             ln -s "$CONFIG_FILE" "$TARGET"; \
         fi; \
         echo "Herdr config symlink created at $TARGET -> $CONFIG_FILE"
-    @STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/herdr/plugins/herdr-sidebar"; \
-        mkdir -p "$STATE_DIR"; \
-        for FILE in state.json editor-command.txt; do \
-            case "$FILE" in \
-                state.json) SOURCE="{{justfile_directory()}}/herdr/sidebar-settings.json" ;; \
-                editor-command.txt) SOURCE="{{justfile_directory()}}/herdr/sidebar-editor.txt" ;; \
-            esac; \
-            TARGET="$STATE_DIR/$FILE"; \
-            if [ -L "$TARGET" ]; then \
-                if [ "$(readlink "$TARGET")" != "$SOURCE" ]; then \
-                    echo "ERROR: $TARGET links to a different configuration."; \
-                    exit 1; \
-                fi; \
-            else \
-                if [ -e "$TARGET" ]; then \
-                    BACKUP="$(mktemp "$TARGET.backup.XXXXXX")"; \
-                    mv "$TARGET" "$BACKUP" || exit 1; \
-                    echo "Preserved existing sidebar settings at $BACKUP"; \
-                fi; \
-                ln -s "$SOURCE" "$TARGET" || exit 1; \
-            fi; \
-        done
     just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
     just --justfile "{{justfile_directory()}}/herdr/justfile" install
 

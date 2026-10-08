@@ -34,8 +34,6 @@ The prefix is `Ctrl+Space`.
 | `prefix+Shift+T` | Open the terminal popup |
 | `prefix+Shift+G` | Review the current PR in a new tab |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
-| `prefix+b` | Open/focus/hide the file and Git sidebar |
-| `prefix+Shift+E/F/S/P` | Sidebar Explorer / Search / Source Control / quick-open |
 
 ## Setup
 
@@ -53,25 +51,6 @@ directory and outside this repository. The plugin's `navigate.sh` and the
 repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
 linking `nvim/`. Interactive
 Zsh panes publish a compact ` branch` label for the Spaces sidebar.
-
-## File and Git sidebar
-
-`just herdr` installs Herdr Sidebar and symlinks `sidebar-settings.json` and
-`sidebar-editor.txt` to the plugin's settings files. Existing regular settings
-files are backed up before linking. The sidebar docks on the right;
-clicking a file opens it in Neovim in an editor tab, while Enter uses a reusable
-built-in preview pane in the current tab. The plugin's custom-editor action
-creates editor tabs independently of the preview placement setting.
-Auto-open is disabled: use `prefix+b` to open the sidebar when needed.
-
-Edit those repository files directly, or use the sidebar's settings UI, which
-writes to the same files. UI changes therefore appear as dotfiles changes.
-Close and reopen an existing sidebar to apply docking changes.
-
-Within the sidebar, `1/2/3` selects Explorer/Search/Source Control, `j/k` moves,
-`h/l` folds/unfolds folders, `Ctrl+P` opens the file picker, `Ctrl+F` searches,
-`s` opens settings, and `b` hides the sidebar. In previews, `q` or Escape closes
-and `w` toggles wrapping.
 
 ## Remote attach
 

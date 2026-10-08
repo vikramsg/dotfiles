@@ -11,11 +11,11 @@ install:
     set -euo pipefail
 
     plugins_file="{{justfile_directory()}}/plugins.json"
-    installed="$(herdr plugin list --json | jq -r '.result.plugins[] | select(.source.kind == "github") | .plugin_id')"
+    installed="$(herdr plugin list --json | jq -r '.result.plugins[] | select(.source.kind == "github") | "\(.source.owner)/\(.source.repo)"')"
 
-    while IFS="$(printf '\t')" read -r id source ref; do
+    while IFS="$(printf '\t')" read -r source ref; do
         [ -n "$source" ] || continue
-        if printf '%s\n' "$installed" | grep -Fxq "$id"; then
+        if printf '%s\n' "$installed" | grep -Fxqi "$source"; then
             echo "already installed: $source"
             continue
         fi
@@ -25,7 +25,7 @@ install:
         else
             herdr plugin install "$source" -y
         fi
-    done < <(jq -r '.plugins[] | [.id, .source, (.ref // "")] | @tsv' "$plugins_file")
+    done < <(jq -r '.plugins[] | [.source, (.ref // "")] | @tsv' "$plugins_file")
 
 # Reinstall every declared plugin to refresh its managed checkout.
 update:
