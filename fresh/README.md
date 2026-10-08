@@ -47,6 +47,11 @@ opening another diff view. In standalone side-by-side diffs, it opens the
 working file even when the cursor is on the historical side. File-filter
 prompts retain Enter to accept the filter.
 
+Opening a review shows its changed-files sidebar and hides the project file
+explorer. Returning to a file or closing the review restores the project
+explorer if it was visible before entering the review. This applies to both
+the command palette and `Space g d`.
+
 ## Installation
 
 The root `just fresh` recipe delegates installation to `bin/fresh_sidebar`:
