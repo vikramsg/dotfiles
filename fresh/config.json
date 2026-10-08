@@ -1,4 +1,8 @@
 {
+  "theme": "builtin://tokyo-night",
+  "file_explorer": {
+    "side": "right"
+  },
   "orchestrator_mode": false,
   "plugins": {
     "orchestrator": {

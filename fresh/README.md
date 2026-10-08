@@ -5,7 +5,7 @@ and installs Fresh. These links point directly into this repository, so saving
 settings through Fresh changes the tracked file here. Run `just herdr` to register
 the sidebar launcher, then reload Herdr with `prefix+q`.
 
-The managed config enables vi mode at startup and disables Orchestrator mode
+The managed config uses Tokyo Night, enables vi mode at startup, and disables Orchestrator mode
 and its bundled workspace dock.
 With Orchestrator mode disabled, running `fresh` without arguments opens a
 regular editor in the current directory instead of attaching to the background
@@ -19,7 +19,7 @@ takes 40% of the tab width, starts in the invoking pane's directory, and does
 not open automatically on tab or workspace changes. Quit Fresh with `Ctrl+Q`
 to remove the sidebar and restore the available width.
 
-`init.ts` focuses the built-in file explorer when Fresh is launched by this
+Fresh's file explorer is on the right of its editor. `init.ts` focuses it when Fresh is launched by this
 sidebar, without changing ordinary Fresh launches. Single-click reuses an
 internal preview tab; double-click, Enter, or editing keeps it permanently.
 These are Fresh tabs, not Herdr tabs.
