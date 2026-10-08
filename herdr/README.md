@@ -56,15 +56,15 @@ Zsh panes publish a compact ` branch` label for the Spaces sidebar.
 
 ## File and Git sidebar
 
-`just herdr` installs Herdr Sidebar and applies `sidebar-settings.json` and
-`sidebar-editor.txt` to its runtime settings. The sidebar docks on the right;
+`just herdr` installs Herdr Sidebar and symlinks `sidebar-settings.json` and
+`sidebar-editor.txt` to the plugin's settings files. Existing regular settings
+files are backed up before linking. The sidebar docks on the right;
 clicking a file opens it in Neovim, while Enter uses the built-in preview.
 Auto-open is disabled: use `prefix+b` to open the sidebar when needed.
 
-Change the managed preferences in those repository files, then run `just herdr`.
-Other preferences changed in the sidebar's settings are preserved. Managed
-preferences are reapplied during setup or plugin updates. Close and reopen an
-existing sidebar to apply docking changes.
+Edit those repository files directly, or use the sidebar's settings UI, which
+writes to the same files. UI changes therefore appear as dotfiles changes.
+Close and reopen an existing sidebar to apply docking changes.
 
 Within the sidebar, `1/2/3` selects Explorer/Search/Source Control, `j/k` moves,
 `h/l` folds/unfolds folders, `Ctrl+P` opens the file picker, `Ctrl+F` searches,

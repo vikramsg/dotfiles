@@ -6,7 +6,7 @@
 # only holds the declaration.
 
 # Install declared plugins that are missing.
-install: configure-sidebar
+install:
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -27,26 +27,8 @@ install: configure-sidebar
         fi
     done < <(jq -r '.plugins[] | [.id, .source, (.ref // "")] | @tsv' "$plugins_file")
 
-# Apply managed preferences before installation can trigger auto-open hooks.
-configure-sidebar:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/herdr/plugins/herdr-sidebar"
-    mkdir -p "$state_dir"
-    state_file="$state_dir/state.json"
-    temporary_file="$(mktemp "$state_dir/state.json.XXXXXX")"
-    trap 'rm -f "$temporary_file"' EXIT
-    if [ -f "$state_file" ]; then
-        jq -s '.[0] * .[1]' "$state_file" "{{justfile_directory()}}/sidebar-settings.json" > "$temporary_file"
-    else
-        cp "{{justfile_directory()}}/sidebar-settings.json" "$temporary_file"
-    fi
-    mv "$temporary_file" "$state_file"
-    cp "{{justfile_directory()}}/sidebar-editor.txt" "$state_dir/editor-command.txt"
-
 # Reinstall every declared plugin to refresh its managed checkout.
-update: configure-sidebar
+update:
     #!/usr/bin/env bash
     set -euo pipefail
 
