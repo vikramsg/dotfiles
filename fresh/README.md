@@ -56,6 +56,9 @@ the command palette and `Space g d`.
 
 The root `just fresh` recipe delegates installation to `bin/fresh_sidebar`:
 
+The Herdr launcher requires `uv` on `PATH` and uses the repository's uv
+workspace to run Python. It does not use the invoking project's environment.
+
 - macOS: `brew install fresh-editor`.
 - Linux: Fresh's official universal tarball installer, installed under
   `~/.local/share/fresh-editor` with a `~/.local/bin/fresh` link. Desktop-menu

@@ -5,6 +5,10 @@ It opens one Fresh sidebar per invoking tab, or focuses that tab's existing
 sidebar. Its project root comes from the invoking terminal's foreground working
 directory. The sidebar occupies the right 40% of the full tab.
 
+Both Herdr entrypoints use `uv run --project` with the launcher's absolute
+project path. uv selects the workspace's Python environment without changing
+the editor's project directory. The launcher has no third-party dependencies.
+
 The launcher exports the existing split tree, holds all but its first terminal
 in unfocused temporary tabs, opens Fresh beside the remaining terminal, and
 rebuilds the original tree on the left using live terminal moves. Holding tabs
@@ -19,5 +23,5 @@ hooks open editors or follow directory changes automatically.
 Run launcher behavior tests with:
 
 ```sh
-python3 -m unittest discover -s bin/fresh_sidebar/tests -v
+just --justfile bin/fresh_sidebar/justfile test
 ```

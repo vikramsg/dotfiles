@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["router-battery-check", "bin/ghostty_workspace", "bin/screenshot", "bin/lch", "bin/opener_tunnel", "bin/ocint", "bin/gh_stats", "bin/ocost"]
+members = ["router-battery-check", "bin/ghostty_workspace", "bin/screenshot", "bin/lch", "bin/opener_tunnel", "bin/ocint", "bin/gh_stats", "bin/ocost", "bin/fresh_sidebar"]
 
 [tool.uv]
 package = false

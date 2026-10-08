@@ -14,4 +14,4 @@ link:
     herdr plugin link "$HOME/.config/herdr-fresh-sidebar"
 
 test:
-    python3 -m unittest discover -s "{{package_root}}/tests" -v
+    uv run --project "{{package_root}}" python -m unittest discover -s "{{package_root}}/tests" -v

@@ -9,10 +9,10 @@ description = "Open Fresh at the right edge of the current tab"
 id = "open"
 title = "Open or focus Fresh sidebar"
 contexts = ["pane"]
-command = ["python3", "sidebar.py", "open"]
+command = ["sh", "-c", "exec uv run --project \"$HERDR_PLUGIN_ROOT\" python \"$HERDR_PLUGIN_ROOT/sidebar.py\" open"]
 
 [[panes]]
 id = "editor"
 title = "Fresh"
 placement = "split"
-command = ["sh", "-c", "exec python3 \"$HERDR_PLUGIN_ROOT/sidebar.py\" run"]
+command = ["sh", "-c", "exec uv run --project \"$HERDR_PLUGIN_ROOT\" python \"$HERDR_PLUGIN_ROOT/sidebar.py\" run"]
