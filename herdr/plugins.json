@@ -1,6 +1,7 @@
 {
   "plugins": [
-    { "source": "ChmaraX/herdr-nvim" },
-    { "source": "persiyanov/herdr-reviewr", "ref": "v0.38.0" }
+    { "id": "chmarax.herdr-nvim", "source": "ChmaraX/herdr-nvim" },
+    { "id": "persiyanov.reviewr", "source": "persiyanov/herdr-reviewr", "ref": "v0.38.0" },
+    { "id": "herdr-sidebar", "source": "alexarthurs/herdr-sidebar/plugins/herdr-sidebar", "ref": "v0.15.0" }
   ]
 }
