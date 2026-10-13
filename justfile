@@ -91,6 +91,7 @@ herdr:
         fi; \
         echo "Herdr config symlink created at $TARGET -> $CONFIG_FILE"
     just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
+    just --justfile "{{justfile_directory()}}/bin/fresh_sidebar/justfile" link
     just --justfile "{{justfile_directory()}}/herdr/justfile" install
 
 # Set up tuicr config symlink
@@ -200,6 +201,36 @@ zed:
     ln -sfn {{justfile_directory()}}/zed/keymap.json ~/.config/zed/keymap.json
     @echo "Zed settings symlink created at ~/.config/zed/settings.json -> {{justfile_directory()}}/zed/settings.json"
     @echo "Zed keymap symlink created at ~/.config/zed/keymap.json -> {{justfile_directory()}}/zed/keymap.json"
+
+# Link Fresh config without replacing an existing symlink or non-file, then install Fresh.
+fresh:
+    @set -eu; \
+        CONFIG_DIR="$HOME/.config/fresh"; \
+        mkdir -p "$CONFIG_DIR"; \
+        for FILE in config.json init.ts; do \
+        SOURCE="{{justfile_directory()}}/fresh/$FILE"; \
+        TARGET="$CONFIG_DIR/$FILE"; \
+        if [ -L "$TARGET" ]; then \
+            CURRENT_TARGET="$(readlink "$TARGET")"; \
+            if [ "$CURRENT_TARGET" != "$SOURCE" ]; then \
+                echo "ERROR: $TARGET is a symlink to $CURRENT_TARGET, not the managed config."; \
+                exit 1; \
+            fi; \
+        elif [ -e "$TARGET" ]; then \
+            if [ ! -f "$TARGET" ]; then \
+                echo "ERROR: $TARGET exists and is not a regular file."; \
+                exit 1; \
+            fi; \
+            BACKUP="$(mktemp "$TARGET.backup.XXXXXX")"; \
+            mv "$TARGET" "$BACKUP"; \
+            ln -s "$SOURCE" "$TARGET"; \
+            echo "Existing Fresh config preserved at $BACKUP"; \
+        else \
+            ln -s "$SOURCE" "$TARGET"; \
+        fi; \
+        echo "Fresh config symlink: $TARGET -> $SOURCE"; \
+        done
+    just --justfile "{{justfile_directory()}}/bin/fresh_sidebar/justfile" install
 
 # Install ZWM locally and, from macOS, on the configured VM.
 zwm:

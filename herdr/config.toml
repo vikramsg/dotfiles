@@ -25,6 +25,7 @@
 # prefix+f: open nvim file picker
 # prefix+r: toggle reviewr pane
 # prefix+Shift+O: append OpenCode and Vim project tabs
+# prefix+b: open or focus full-height Fresh sidebar
 
 onboarding = false
 
@@ -116,6 +117,12 @@ key = "prefix+f"
 type = "plugin_action"
 command = "chmarax.herdr-nvim.pick-file"
 description = "open file from agent output"
+
+[[keys.command]]
+key = "prefix+b"
+type = "plugin_action"
+command = "dotfiles.fresh-sidebar.open"
+description = "open or focus Fresh sidebar"
 
 # persiyanov.reviewr: code-review pane for agent-written diffs.
 [[keys.command]]
