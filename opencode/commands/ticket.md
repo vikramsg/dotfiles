@@ -15,6 +15,8 @@ Draft a ticket for the work we discussed. Do not publish it yet.
 - Include only requirements and constraints we have agreed on.
 - Follow the repository's issue template if one exists, without inventing content for its sections.
 - Keep it as short as the work allows. Do not add sections just to fill a template.
+- Use a `<details>` section for things like stack traces and other things that require adding more details
+- Add `Reference` section if the ticket is required to note down research output with all relevant links. NOTE: A local `/tmp` file is NOT a reference
 
 ## Restrictions
 
