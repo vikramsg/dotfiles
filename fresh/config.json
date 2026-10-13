@@ -1,7 +1,8 @@
 {
   "theme": "builtin://tokyo-night",
   "file_explorer": {
-    "side": "right"
+    "side": "right",
+    "follow_active_buffer": true
   },
   "keybindings": [
     {
