@@ -97,7 +97,8 @@ Summarize merged pull requests by week, repository, or both using the authentica
 Run `just opener-tunnel` on the Mac to install the config-driven listener and
 LCH service. The service uses the existing private `vm` SSH alias and keeps the
 live SSH process inspectable in tmux. The VM-side `xdg-open` wrapper continues
-to send one newline-terminated URL to `~/.opener.sock`.
+to send one newline-terminated URL to `~/.opener.sock` and requires the Mac's
+success acknowledgement before returning success.
 
 See `bin/opener_tunnel/README.md` and `opener_tunnel/config.toml`.
 

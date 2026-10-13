@@ -16,6 +16,20 @@ Ghostty may attach as an optional tmux client, but no Ghostty tab must remain
 open. Service lifecycle events go to the LCH-managed stdout/stderr logs. SSH
 verbose output remains only in tmux pane history.
 
+## Request delivery
+
+The VM wrapper sends one newline-terminated HTTP or HTTPS URL and waits up to
+10 seconds for a response. `OK` means the Mac browser command completed
+successfully, not that the browser finished loading the page. Rejected requests
+and browser-command failures receive an `ERROR: <reason>` response. Missing
+acknowledgement is also a failure on the VM; install both the updated Mac
+listener and VM wrapper together.
+
+The listener allows 5 seconds to receive the URL, separately from its 250 ms
+shutdown polling interval. SSH connects the Mac socket before completing its
+channel-opening handshake with the VM, so URL delivery after socket acceptance
+requires another network round trip. Browser dispatch is limited to 5 seconds.
+
 ## Setup
 
 ```bash

@@ -15,9 +15,14 @@ fi
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     if [ -S "$SOCKET" ]; then
         # Forward the URL to the configured Mac-side opener service.
-        if ! printf '%s\n' "$URL" | nc -U "$SOCKET"; then
+        # A successful socket write alone cannot confirm Mac browser dispatch.
+        if ! RESPONSE=$(printf '%s\n' "$URL" | nc -w 10 -U "$SOCKET"); then
             printf '%s\n' "Error: browser tunnel failed; URL: $URL" >&2
             printf '%s\n' "On the Mac, run: just opener-tunnel" >&2
+            exit 1
+        fi
+        if [[ "$RESPONSE" != "OK" ]]; then
+            printf '%s\n' "Error: browser tunnel did not confirm opening; ${RESPONSE:-no response}; URL: $URL" >&2
             exit 1
         fi
     else
