@@ -2,6 +2,7 @@ import logging
 import socket
 import stat
 import subprocess
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -22,10 +23,12 @@ class UnixSocketServer:
         browser_command: Sequence[str],
         *,
         run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+        request_timeout: float = 5,
     ) -> None:
         self.socket_path = socket_path
         self.browser_command = list(browser_command)
         self.run_command = run_command
+        self.request_timeout = request_timeout
         self._listener: socket.socket | None = None
         self._owned_identity: tuple[int, int] | None = None
 
@@ -55,17 +58,29 @@ class UnixSocketServer:
             return False
 
         with connection:
-            connection.settimeout(timeout)
-            try:
-                url = _read_url(connection)
-                self.run_command([*self.browser_command, url], check=True)
-            except (InvalidRequest, OSError) as exc:
-                LOGGER.warning("browser request rejected: %s", exc)
-            except subprocess.SubprocessError:
-                LOGGER.error("browser request rejected: browser command failed")
-            else:
-                LOGGER.info("browser request accepted")
+            self._handle_request(connection)
         return True
+
+    def _handle_request(self, connection: socket.socket) -> None:
+        # SSH connects this socket before its channel confirmation reaches the VM.
+        # Forwarded URL bytes can therefore arrive a full network round trip later.
+        try:
+            url = _read_url(connection, timeout=self.request_timeout)
+            self.run_command([*self.browser_command, url], check=True, timeout=5)
+        except (InvalidRequest, OSError) as exc:
+            LOGGER.warning("browser request rejected: %s", exc)
+            response = f"ERROR: {exc}\n".encode()
+        except subprocess.SubprocessError:
+            LOGGER.error("browser request rejected: browser command failed")
+            response = b"ERROR: browser command failed\n"
+        else:
+            LOGGER.info("browser request accepted")
+            response = b"OK\n"
+        try:
+            connection.settimeout(self.request_timeout)
+            connection.sendall(response)
+        except OSError as exc:
+            LOGGER.warning("browser response delivery failed: %s", exc)
 
     def close(self) -> None:
         if self._listener is not None:
@@ -87,9 +102,14 @@ class UnixSocketServer:
             self.socket_path.unlink()
 
 
-def _read_url(connection: socket.socket) -> str:
+def _read_url(connection: socket.socket, *, timeout: float) -> str:
+    deadline = time.monotonic() + timeout
     payload = bytearray()
     while b"\n" not in payload and len(payload) <= MAX_REQUEST_BYTES:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("timed out")
+        connection.settimeout(remaining)
         chunk = connection.recv(min(4096, MAX_REQUEST_BYTES + 1 - len(payload)))
         if not chunk:
             break
