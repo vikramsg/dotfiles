@@ -41,6 +41,9 @@ in Insert mode or using the file explorer and prompts.
 | `Space s f` | Find a project file |
 | `Space s g` | Live project search |
 | `Space g d` | Review working-tree Git diff |
+| `Space c p` | Copy the active file's absolute path |
+
+Unnamed buffers have no path to copy and leave the clipboard unchanged.
 
 In Git diff review, Enter opens the editable working-tree file instead of
 opening another diff view. In standalone side-by-side diffs, it opens the

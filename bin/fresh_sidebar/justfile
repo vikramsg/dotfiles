@@ -15,3 +15,4 @@ link:
 
 test:
     uv run --project "{{package_root}}" python -m unittest discover -s "{{package_root}}/tests" -v
+    node --test "{{package_root}}/tests/fresh_init.test.mjs"

@@ -78,3 +78,15 @@ editor.on("post_command", (args) => {
     scheduleReviewLayout();
   }
 });
+
+function dotfiles_copy_file_path() {
+  const path = editor.getBufferPath(editor.getActiveBufferId());
+  if (!path) {
+    editor.setStatus("This buffer has no file path to copy");
+    return;
+  }
+  editor.setClipboard(path);
+  editor.setStatus(`Copied ${path}`);
+}
+registerHandler("dotfiles_copy_file_path", dotfiles_copy_file_path);
+editor.registerCommand("Copy current file path", "Copy the current file's absolute path", "dotfiles_copy_file_path", "vi-normal");

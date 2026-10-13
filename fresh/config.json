@@ -5,6 +5,11 @@
   },
   "keybindings": [
     {
+      "keys": [{ "key": "space" }, { "key": "c" }, { "key": "p" }],
+      "action": "dotfiles_copy_file_path",
+      "when": "mode:vi-normal"
+    },
+    {
       "key": "enter",
       "action": "review_open_working_file",
       "when": "mode:review-diff"

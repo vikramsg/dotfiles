@@ -22,6 +22,9 @@ hooks open editors or follow directory changes automatically.
 
 Run launcher behavior tests with:
 
+The test recipe requires Node.js 22.13 or newer for the Fresh customization
+tests, in addition to uv for the Python launcher tests.
+
 ```sh
 just --justfile bin/fresh_sidebar/justfile test
 ```
