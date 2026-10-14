@@ -90,5 +90,6 @@ Some things of special interested in from the review
     - Make the reviewer really try to come up with simplifications, since you are prone to just add instead of reuse and refactor.
 - Are we following the correct layer rules
 - Do the documentation and code comments are at appropriate places. Do they sound like a human and not an agent.
+- Is the implementation follow existing patterns or is it inventing new ones without agreeing to in the plan
 
 
