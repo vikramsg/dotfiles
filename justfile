@@ -103,10 +103,7 @@ tuicr:
 # Set up Opencode symlink
 opencode: npm-global-bin
     @echo "Setting up Opencode symlink..."
-    @if [ ! -x "$HOME/.local/bin/opencode" ]; then \
-        echo "OpenCode not found. Installing with npm..."; \
-        NPM_CONFIG_PREFIX="$HOME/.local" npm i -g opencode-ai; \
-    fi
+    NPM_CONFIG_PREFIX="$HOME/.local" npm i -g @opencode/cli
     mkdir -p ~/.config
     mkdir -p ~/.config/opencode
     mkdir -p ~/.config/opencode/skills
