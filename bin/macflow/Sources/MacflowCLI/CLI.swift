@@ -12,12 +12,23 @@ struct HTTPRequestPlan {
     let method: String
     let path: String
     let body: [String: Any]?
+    let rawBody: Data?
+    let contentType: String?
     let authenticated: Bool
 
-    init(method: String, path: String, body: [String: Any]? = nil, authenticated: Bool = true) {
+    init(
+        method: String,
+        path: String,
+        body: [String: Any]? = nil,
+        rawBody: Data? = nil,
+        contentType: String? = nil,
+        authenticated: Bool = true
+    ) {
         self.method = method
         self.path = path
         self.body = body
+        self.rawBody = rawBody
+        self.contentType = contentType
         self.authenticated = authenticated
     }
 }
@@ -40,7 +51,10 @@ struct MacflowHTTPClient {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        if let body = plan.body {
+        if let rawBody = plan.rawBody {
+            request.httpBody = rawBody
+            request.setValue(plan.contentType ?? "application/a2ui+json", forHTTPHeaderField: "Content-Type")
+        } else if let body = plan.body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
@@ -113,7 +127,7 @@ struct MacflowCommand: ParsableCommand {
         abstract: "Control the Macflow automation application.",
         subcommands: [
             App.self, Window.self, Screen.self, Input.self,
-            ScreenshotCommands.self, UI.self, System.self,
+            ScreenshotCommands.self, UI.self, OverlayCommands.self, Files.self, System.self,
         ]
     )
 
@@ -156,8 +170,8 @@ struct MacflowCommand: ParsableCommand {
     struct UI: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "ui",
-            abstract: "Show and dismiss Macflow-owned UI.",
-            subcommands: [OverlayCommands.self, ShelfCommands.self]
+            abstract: "Create, inspect, and dismiss A2UI surfaces.",
+            subcommands: [UIShow.self, UIList.self, UIDismiss.self]
         )
     }
 
@@ -169,12 +183,72 @@ struct MacflowCommand: ParsableCommand {
         )
     }
 
-    struct ShelfCommands: ParsableCommand {
+    struct Files: ParsableCommand {
         static let configuration = CommandConfiguration(
-            commandName: "shelf",
-            abstract: "Show, inspect, and close file shelves.",
-            subcommands: [Shelf.self, Shelves.self, CloseShelf.self]
+            commandName: "files",
+            abstract: "List files for building a UI.",
+            subcommands: [FilesList.self]
         )
+    }
+
+    struct UIShow: HTTPCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "show",
+            abstract: "Render a UI from an A2UI payload."
+        )
+
+        @Option(name: .customLong("file"), help: "Path to an A2UI JSON file, or - to read from stdin.")
+        var file: String
+
+        func requestPlan() throws -> HTTPRequestPlan {
+            let data: Data
+            if file == "-" {
+                data = FileHandle.standardInput.readDataToEndOfFile()
+            } else {
+                data = try Data(contentsOf: URL(fileURLWithPath: NSString(string: file).expandingTildeInPath))
+            }
+            guard !data.isEmpty else { throw CLIError(message: "Empty A2UI payload") }
+            return HTTPRequestPlan(method: "POST", path: "/v1/ui", rawBody: data)
+        }
+    }
+
+    struct UIList: HTTPCommand {
+        static let configuration = CommandConfiguration(commandName: "list", abstract: "List A2UI surfaces.")
+
+        func requestPlan() throws -> HTTPRequestPlan {
+            HTTPRequestPlan(method: "GET", path: "/v1/ui")
+        }
+    }
+
+    struct UIDismiss: HTTPCommand {
+        static let configuration = CommandConfiguration(commandName: "dismiss", abstract: "Dismiss an A2UI surface.")
+
+        @Argument(help: "Surface identifier.")
+        var surfaceID: String
+
+        func requestPlan() throws -> HTTPRequestPlan {
+            HTTPRequestPlan(method: "DELETE", path: "/v1/ui/\(encoded(surfaceID))")
+        }
+    }
+
+    struct FilesList: HTTPCommand {
+        static let configuration = CommandConfiguration(commandName: "list", abstract: "List supported files in a directory.")
+
+        @Argument(help: "Directory to list.")
+        var directory: String
+
+        @Option(help: "Comma-separated file extensions.")
+        var extensions: String = "png,jpg,jpeg,webp"
+
+        @Option(help: "Maximum number of files.")
+        var limit: Int = 5
+
+        func requestPlan() throws -> HTTPRequestPlan {
+            HTTPRequestPlan(
+                method: "GET",
+                path: "/v1/files?directory=\(encoded(directory))&extensions=\(encoded(extensions))&limit=\(limit)"
+            )
+        }
     }
 
     struct System: ParsableCommand {
@@ -399,34 +473,6 @@ struct MacflowCommand: ParsableCommand {
                     "duration": duration ?? 0.5,
                 ]
             )
-        }
-    }
-
-    struct Shelves: HTTPCommand {
-        static let configuration = CommandConfiguration(commandName: "list", abstract: "List native file shelves.")
-
-        func requestPlan() throws -> HTTPRequestPlan {
-            HTTPRequestPlan(method: "GET", path: "/v1/file-shelves")
-        }
-    }
-
-    struct Shelf: HTTPCommand {
-        static let configuration = CommandConfiguration(commandName: "show", abstract: "Show a file shelf for a directory.")
-
-        @Argument(help: "Directory containing files for the shelf.") var directory: String
-
-        func requestPlan() throws -> HTTPRequestPlan {
-            HTTPRequestPlan(method: "POST", path: "/v1/file-shelves", body: ["directory": directory])
-        }
-    }
-
-    struct CloseShelf: HTTPCommand {
-        static let configuration = CommandConfiguration(commandName: "close", abstract: "Close a file shelf.")
-
-        @Argument(help: "File shelf identifier.") var id: String
-
-        func requestPlan() throws -> HTTPRequestPlan {
-            HTTPRequestPlan(method: "DELETE", path: "/v1/file-shelves/\(encoded(id))")
         }
     }
 

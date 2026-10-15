@@ -1,8 +1,8 @@
 # Macflow
 
 Macflow is a configuration-driven macOS app for window layouts, screenshots,
-and file shelves. Its CLI is an HTTP client for the running signed app; it
-never falls back to controlling macOS itself.
+file listing, and JSON-described UI. Its CLI is an HTTP client for the running
+signed app; it never falls back to controlling macOS itself.
 
 ## Start here
 
@@ -21,12 +21,14 @@ never falls back to controlling macOS itself.
 | `screen` | Inspect displays and their usable frames |
 | `input` | Send keyboard shortcuts, clicks, and drags |
 | `screenshot` | Capture displays to PNG files |
-| `ui` | Show, inspect, and dismiss Macflow-owned overlays and shelves |
+| `files` | List files for building a UI |
+| `ui` | Create, inspect, and dismiss JSON-described UI surfaces |
+| `overlay` | Show, inspect, and hide image overlays |
 | `system` | Inspect service health, permissions, and global shortcuts |
 
-Actions on macOS do not require Macflow UI. Capture is an action;
-`--preview` additionally presents the result. See [action workflows](docs/actions.md)
-and [UI workflows](docs/ui.md).
+`macflow ui show --file <payload.json>` sends an A2UI payload and Macflow renders
+it natively. See [UI workflows](docs/ui.md) and the
+[HTTP and UI API index](docs/api.md).
 
 ## Install versus update
 
@@ -74,7 +76,7 @@ Recording approval belong to the signed app, not the terminal or CLI.
 
 ## References
 
-- [HTTP and WebKit API index](docs/api.md)
+- [HTTP and UI API index](docs/api.md)
 - [HTTP reference](docs/http-api.md): authentication, routes, and payloads
-- [WebKit bridge](docs/ui-api.md): `window.macflow` contract
+- [UI workflows](docs/ui.md): A2UI payloads and commands
 - [Roadmap](ROADMAP.md): ideas, not a description of available commands
