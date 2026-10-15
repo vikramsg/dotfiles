@@ -1,12 +1,8 @@
 local M = {}
 
 local specs = {
-	-- Verifies Differ's comparison selection and source navigation with real Git/plugin views.
-	"tests.git_review_spec",
-	-- Real PR UI with an intercepted sidecar boundary; never writes to GitHub.
-	"tests.pr_review_spec",
-	-- Verifies persistent local-review ownership, schema, and atomic writes.
-	"tests.differ_local_review_spec",
+	-- Exercises CodeDiff's working-tree default and review-mode toggle in a real Git repository.
+	"tests.codediff_review_spec",
 	-- Verifies the ty LSP configuration and startup command for Python files.
 	"tests.lsp_ty_spec",
 	-- Verifies Snacks Explorer reveals hidden and ignored files with the required options.
