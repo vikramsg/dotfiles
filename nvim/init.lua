@@ -1415,6 +1415,8 @@ require("lazy").setup({
 	-- when Neovim is launched directly with `nvim -u /path/to/init.lua`.
 }, { performance = { rtp = { paths = { config_dir } } } })
 
+require("config.editor_wrapping").setup()
+
 require("noice").setup({
 	presets = {
 		inc_rename = true,

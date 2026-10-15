@@ -1,6 +1,7 @@
 local M = {}
 
 local specs = {
+	"tests.editor_wrapping_spec",
 	-- Exercises CodeDiff's working-tree default and review-mode toggle in a real Git repository.
 	"tests.codediff_review_spec",
 	-- Verifies the ty LSP configuration and startup command for Python files.
