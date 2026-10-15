@@ -336,6 +336,7 @@ bin:
     @echo "Setting up custom bin symlinks..."
     mkdir -p ~/.local/bin
     ln -sfn {{justfile_directory()}}/bin/lc ~/.local/bin/lc
+    ln -sfn {{justfile_directory()}}/bin/pbcopy ~/.local/bin/pbcopy
     ln -sfn {{justfile_directory()}}/bin/xdg-open ~/.local/bin/xdg-open
     @echo "bin symlinks created at ~/.local/bin"
 

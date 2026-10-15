@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Bridge stdin clipboard writes to the terminal via OSC 52.
+#
+# Tools like herdr-reviewr probe pbcopy before wl-copy, xclip, and xsel. On a
+# headless Linux VM, /usr/bin/xclip fails because no X11 display exists; placing
+# pbcopy in ~/.local/bin makes herdr-reviewr select it first and write OSC 52 to
+# the pane PTY so Herdr forwards the copy to the attached client.
+
+if [[ "${OSTYPE:-}" == darwin* && "${HERDR_ENV:-}" != "1" && -z "${SSH_CONNECTION:-}" ]]; then
+    exec /usr/bin/pbcopy "$@"
+fi
+
+# Strip line wraps because GNU base64 wraps at 76 columns by default and
+# Herdr's libghostty parser rejects OSC 52 payloads containing newlines.
+base64_payload="$(base64 | tr -d '\r\n')"
+
+if [ -t 1 ]; then
+    printf '\033]52;c;%s\a' "$base64_payload"
+elif { true >/dev/tty; } 2>/dev/null; then
+    printf '\033]52;c;%s\a' "$base64_payload" >/dev/tty
+else
+    exit 1
+fi

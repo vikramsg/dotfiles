@@ -40,6 +40,7 @@ The prefix is `Ctrl+Space`.
 
 ```sh
 just brew
+just bin
 just tuicr
 just herdr
 herdr
@@ -48,7 +49,7 @@ herdr
 `just herdr` links `config.toml`, links `herdr/plugin/nav_wrap/` to the
 `~/.config/herdr-nav-wrap` anchor, and registers it with Herdr. Herdr's logs,
 sockets, and persistent session data remain in the normal `~/.config/herdr`
-directory and outside this repository. The plugin's `navigate.sh` and the
+directory and outside this repository. `just bin` links `~/.local/bin/pbcopy` so `persiyanov.reviewr` forwards clipboard copies over OSC 52 through Herdr instead of invoking `xclip` on headless Linux VMs. The plugin's `navigate.sh` and the
 repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
 linking `nvim/`. Interactive
 Zsh panes publish a compact ` branch` label for the Spaces sidebar.
