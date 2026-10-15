@@ -36,6 +36,7 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 ### Git diffs
 
 - `Space + gd`: Open CodeDiff's working-tree review. If there are no uncommitted changes, CodeDiff reports that there is nothing to show; it does not switch to branch review automatically.
+- `Space + gD`: Open CodeDiff against `main` (`:CodeDiff main`).
 - `Enter` in the file tree: Open the selected file and focus its diff.
 - `B` in the review explorer or diff: Toggle between the working-tree review (`:CodeDiff`) and the `main`-to-working-tree comparison (`:CodeDiff main`).
 - `gf`: Open the real file at the diff cursor in the previous tab; old-side lines are mapped to the working file and the destination is unfolded.

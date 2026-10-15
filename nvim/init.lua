@@ -24,6 +24,7 @@
 --   <leader>gb : Show Git blame / line history (with clean diff preview)
 --   <leader>gf : Show Git file history (all commits affecting current file)
 --   <leader>gd : Open CodeDiff working-tree review
+--   <leader>gD : Open CodeDiff against main
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
 --   In CodeDiff review: B toggles working-tree/branch, X discards a hunk, gf edits
@@ -744,6 +745,11 @@ require("lazy").setup({
 				"<leader>gd",
 				"<cmd>CodeDiff<cr>",
 				desc = "Git working-tree review",
+			},
+			{
+				"<leader>gD",
+				"<cmd>CodeDiff main<cr>",
+				desc = "Git review against main",
 			},
 		},
 		opts = {
