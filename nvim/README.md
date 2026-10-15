@@ -18,6 +18,7 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 ### Snacks Explorer
 
+- The file tree opens on the right.
 - `Space + e`: Toggle the file tree.
 - `Space + E`: Reveal the current file in the file tree.
 - `Enter` or `l`: Open the selected file and focus its editor window.
@@ -34,57 +35,20 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 ### Git diffs
 
-- `Space + gd`: Open Differ with uncommitted changes, or automatically compare against `main` when the working tree is clean.
+- `Space + gd`: Open CodeDiff's working-tree review. If there are no uncommitted changes, CodeDiff reports that there is nothing to show; it does not switch to branch review automatically.
+- `Space + gD`: Open CodeDiff against `main` (`:CodeDiff main`).
 - `Enter` in the file tree: Open the selected file and focus its diff.
-- `gf`: Open the real file in an existing editor split in the previous tab at the mapped source line, keeping the review open.
-- `B` in local reviews: Toggle uncommitted changes since `HEAD` and all changes since branching from `main`.
-- `g?`: Show context-aware local/PR review shortcuts.
-- `q`: Close Differ and return to the editor.
-- `[` / `]`: Move to the previous/next changed hunk.
-- `[f` / `]f`: Move to the previous/next changed file.
+- `B` in the review explorer or diff: Toggle between the working-tree review (`:CodeDiff`) and the `main`-to-working-tree comparison (`:CodeDiff main`).
+- `gf`: Open the real file at the diff cursor in the previous tab; old-side lines are mapped to the working file and the destination is unfolded.
+- `q`: Close the review and return to the editor.
+- `]` / `[`: Move to the next/previous changed hunk; `Space jf` / `Space jF` moves between files.
+- `X`: Discard the hunk under the cursor in a working-tree file diff, after confirmation.
+- Reviews start in compact mode, showing changed hunks with three context lines. `gc` toggles compact mode; `t` toggles side-by-side and inline layouts.
+- Double-click a file in the explorer or press `Enter` to open its diff.
+- Pressing `Enter` focuses the diff pane rather than leaving focus in the explorer.
+- The CodeDiff file explorer is on the right.
 
-- `t`: Toggle stacked and side-by-side layouts. Stacked is an inline diff of one file, not a multi-file view.
-- `T`: Toggle compact/full context from the diff or tree. Reviews start compact, with three lines of context around changes; the choice persists across files, layouts, refreshes, and `B` comparisons.
-- `X`: Discard the current hunk after confirmation. **In the tree this discards the whole file's changes.** Available in the uncommitted view; this modifies actual files, not just the display.
-Requires Neovim 0.12+. GitHub review requires Go and make to build the sidecar (handled by Lazy's build hook), plus GitHub authentication. Local diffs do not need the sidecar.
-
-#### Local review comments
-
-Open with `Space gd`, then use these keys inside the diff:
-
-- `c`: Add a comment on the current line or visual selection.
-- `ge`: Edit a comment under the cursor.
-- `gx`: Delete a comment under the cursor.
-- `Space cr`: Copy the absolute path of the saved branch-review JSON. If the branch
-  has not been saved yet, Differ reports that instead. The ordinary `Space cp`
-  current-file mapping is unchanged.
-- `Space cR`: Reset all local notes for the current branch after confirmation.
-- In the comment editor, `Ctrl+S` in insert mode or `Esc` then `Enter` saves.
-  If a visual comment opens in normal mode, press `i` to type first.
-- `q` in the comment editor's normal mode cancels only that comment editor.
-- `g?`: Show the destination, workflow hints, and all described buffer-local shortcuts;
-  scroll with `j`/`k`. In the file tree, `c` collapses a directory.
-
-Comments save automatically under `.agents/reviews/` and resume per branch, including
-after restarting Neovim. Committing or pushing keeps the same review; `HEAD` and `main`
-comments stay separate. Local comments never upload to GitHub.
-
-Find the saved file under **Review output** in the sidebar. `Enter` opens read-only JSON;
-`q` closes that split. Stacked diffs show comments inline; split diffs show `LOCAL`
-markers—use `ge` to read/edit them. Comments whose source has changed are marked outdated.
-
-File format: [review JSON Schema](schemas/differ-review.schema.json).
-
-#### GitHub reviews (Differ buffers only)
-
-- `Space pl`: List/open PRs, landing in the selected PR's diff.
-- `Space pr`: Start/resume the current PR's review; from a local diff, ask for a PR number.
-- `Space ps`: Submit the pending review through the verdict picker and summary editor. Only bound in PR diff/tree buffers.
-- `c` (or native `ga`) in a PR diff: Comment on the current line or visual selection.
-- `gp` in a PR diff: Reply to a thread.
-- In the comment editor, `Ctrl+S` in insert mode or `Esc` then `Enter` saves; `q` in normal mode cancels only the composer. Visual comments may open in normal mode: press `i` to type first.
-
-Start a review with `Space pr` before commenting to save GitHub drafts. Without a pending review, comments may post immediately. `Space ps` publishes the review after choosing a verdict and submitting its summary with `Esc` then `Enter`. These shortcuts are not installed in ordinary editor buffers.
+CodeDiff also provides PR review via `:CodeDiff pr <number>`. The previous Differ-specific persistent local review comments and custom PR-review mappings are removed; CodeDiff's native PR workflow is available, but those local notes are not migrated.
 
 ### Lazygit
 

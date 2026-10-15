@@ -23,12 +23,13 @@
 -- Git & Files:
 --   <leader>gb : Show Git blame / line history (with clean diff preview)
 --   <leader>gf : Show Git file history (all commits affecting current file)
---   <leader>gd : Open Differ review
+--   <leader>gd : Open CodeDiff working-tree review
+--   <leader>gD : Open CodeDiff against main
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
---   In Differ diff: c local/GitHub comment, gf edit, B toggle HEAD/main, [/] hunks, g? help, q close
---   t toggles stacked/split layout; T toggles compact/full context
---   Differ only: <leader>pl list PRs, <leader>pr start/resume GitHub review, <leader>ps submit
+--   In CodeDiff review: B toggles working-tree/branch, X discards a hunk, gf edits
+--   CodeDiff: [/] navigate hunks; Space jf/jF navigate files; t layout; gc compact
+--   CodeDiff PR review: :CodeDiff pr <number>
 --
 -- Search (Snacks Picker):
 --   <leader>sf : Search Files
@@ -72,6 +73,7 @@ local vim = vim
 local config_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
 vim.o.number = true
+vim.o.mouse = "a"
 vim.o.relativenumber = false
 vim.o.cursorline = true
 vim.o.expandtab = true
@@ -516,6 +518,7 @@ require("lazy").setup({
 						},
 					},
 					explorer = {
+						layout = { layout = { position = "right" } },
 						win = {
 							list = {
 								keys = {
@@ -734,37 +737,37 @@ require("lazy").setup({
 		},
 	},
 	{
-		"undont/differ.nvim",
-		build = "make go-build",
-		cmd = "Differ",
+		"esmuellert/codediff.nvim",
+		version = "v4.0.6",
+		cmd = "CodeDiff",
 		keys = {
 			{
 				"<leader>gd",
-				function()
-					require("config.git_review").open_differ()
-				end,
-				desc = "Git Differ Review",
+				"<cmd>CodeDiff<cr>",
+				desc = "Git working-tree review",
+			},
+			{
+				"<leader>gD",
+				"<cmd>CodeDiff main<cr>",
+				desc = "Git review against main",
 			},
 		},
 		opts = {
-			base = "main",
-			layout = "stacked",
-			context = 3,
-			panel = { position = "left", listing = "tree" },
+			explorer = { position = "left", view_mode = "tree", auto_refresh = true, focus_on_select = true, width = 40 },
+			diff = { compact = true, compact_context_lines = 3 },
 			keymaps = {
-				next_hunk = "]",
-				prev_hunk = "[",
-				close = "q",
-				toggle_layout = "t",
-				discard = "X",
-				review_submit = "<leader>ps",
-				goto_file = false,
-				scroll_down = false,
-				scroll_up = false,
+				view = {
+					next_hunk = "]",
+					prev_hunk = "[",
+					next_file = "<leader>jf",
+					prev_file = "<leader>jF",
+					discard_hunk = "X",
+				},
 			},
 		},
 		config = function(_, opts)
-			require("config.git_review").setup_differ(opts)
+			require("codediff").setup(opts)
+			require("config.codediff_review").setup()
 		end,
 	},
 	{
