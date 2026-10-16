@@ -107,3 +107,9 @@ See `bin/opener_tunnel/README.md` and `opener_tunnel/config.toml`.
 ## lc
 
 A wrapper for `ls`/`eza` and `cat`/`bat` that provides a consistent file/directory preview experience.
+
+## pbcopy
+
+Writes `stdin` as an OSC 52 clipboard sequence to the active terminal (`stdout` when it is a TTY, or `/dev/tty` otherwise), and exits non-zero when no terminal is attached. On local macOS sessions outside Herdr and SSH, it delegates to `/usr/bin/pbcopy`.
+
+Install into `~/.local/bin/pbcopy` with `just bin` so tools like `herdr-reviewr` that probe `pbcopy` before `xclip` forward clipboard copies through Herdr's terminal clipboard on headless Linux VMs.
