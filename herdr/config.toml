@@ -55,6 +55,8 @@ previous_tab = "prefix+p"
 next_tab = "prefix+n"
 goto = "prefix+s"
 edit_scrollback = ""
+# Leave prefix+r to reviewr; GPUI otherwise claims it for Resize Mode.
+resize_mode = ""
 rename_tab = "prefix+$"
 close_pane = "prefix+x"
 zoom = "prefix+z"
