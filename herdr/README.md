@@ -64,6 +64,12 @@ open -a Herdr
 
 The GUI connects to the separately installed Herdr daemon. Closing the GUI leaves daemon sessions running. Update the GUI with `brew upgrade --cask herdr-gpui`.
 
+On macOS, `just herdr` links `config-gpui.local.toml` into `~/.config/herdr/`. Move or migrate an existing unmanaged override file before linking. Edit the repository file for persistent GUI settings; the app reloads saved changes automatically. The managed `config-gpui.toml` defaults are owned by the app and must not be edited.
+
+The GUI uses `TokyoNight Storm`. For faster discrete mouse-wheel scrollback, set `mouse_scroll_lines` under `[ui]` in `herdr/config.toml` (default `3`). This does not change precise trackpad movement or scrolling inside applications that consume mouse events themselves.
+
+`Cmd+Shift+B` opens a new browser tab in the GUI.
+
 ## Remote attach
 
 Use the remote server's keybindings when attaching directly from another

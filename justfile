@@ -90,6 +90,18 @@ herdr:
             ln -s "$CONFIG_FILE" "$TARGET"; \
         fi; \
         echo "Herdr config symlink created at $TARGET -> $CONFIG_FILE"
+    @if [ "$(uname)" = "Darwin" ]; then \
+        SOURCE="{{justfile_directory()}}/herdr/config-gpui.local.toml"; \
+        TARGET="$HOME/.config/herdr/config-gpui.local.toml"; \
+        if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
+            :; \
+        elif [ -e "$TARGET" ] || [ -L "$TARGET" ]; then \
+            echo "ERROR: $TARGET exists and is not the managed symlink. Move or migrate it manually first."; \
+            exit 1; \
+        else \
+            ln -s "$SOURCE" "$TARGET"; \
+        fi; \
+    fi
     just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
     just --justfile "{{justfile_directory()}}/bin/fresh_sidebar/justfile" link
     just --justfile "{{justfile_directory()}}/herdr/justfile" install
