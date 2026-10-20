@@ -35,6 +35,12 @@ brew "tmux"
 # Persistent terminal multiplexer alternative to tmux.
 brew "herdr"
 
+# Native Herdr client for macOS; the daemon remains available on both hosts.
+if OS.mac?
+  tap "penso/tap"
+  cask "herdr-gpui"
+end
+
 # `cat` replacement used in terminal workflows for readable file previews.
 brew "mcat"
 
