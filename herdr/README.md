@@ -54,6 +54,16 @@ repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
 linking `nvim/`. Interactive
 Zsh panes publish a compact ` branch` label for the Spaces sidebar.
 
+## macOS GUI
+
+On macOS 14.2 or newer, `just brew` also installs the signed, notarized Herdr GUI from `penso/tap`. Linux installs only the Herdr daemon, not the GUI or its Homebrew tap.
+
+```sh
+open -a Herdr
+```
+
+The GUI connects to the separately installed Herdr daemon. Closing the GUI leaves daemon sessions running. Update the GUI with `brew upgrade --cask herdr-gpui`.
+
 ## Remote attach
 
 Use the remote server's keybindings when attaching directly from another
