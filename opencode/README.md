@@ -349,6 +349,33 @@ Inside the login dropdown, select `OpenAI - ChatGPT Plus (browser)` and then log
 
 Once you have the login finished, open `~/.local/share/opencode/auth.json` and copy the `openai` section to the same file on your VM.
 
+### Claude Code
+
+The [`@openchamber/opencode-claude`](https://github.com/openchamber/opencode-claude) plugin adds a **Claude Code** provider that runs through the local `claude` CLI login. It uses your Claude Pro, Max or Team subscription, not an Anthropic API key, so usage counts against the plan's limits.
+
+The plugin is already listed under `plugins` in `opencode.json`; OpenCode installs the package itself. On each machine (Mac and `vm-us`), sign in to the CLI:
+
+```bash
+claude update
+# Pick the Claude subscription account, not Anthropic Console
+claude auth login
+# Should report "authMethod": "claude.ai"
+claude auth status
+```
+
+Then pick up the plugin and check that it loaded:
+
+```bash
+# Or restart the service. Reloading cancels pending permission prompts in every session.
+opencode reload
+opencode plugin list   # openchamber.claude-code should be active
+```
+
+Select a model under **Claude Code** in the TUI.
+
+- `claude auth login --claudeai` failing with `unknown option` means the CLI is outdated; run `claude update`.
+- `claude update` may warn about multiple installations in `~/.local/bin`. Check `type -a claude` if the version does not change after updating.
+
 ## Ref
 
 - [OpenCode Github](https://github.com/anomalyco/opencode)
