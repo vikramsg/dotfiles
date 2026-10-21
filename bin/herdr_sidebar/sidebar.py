@@ -1,15 +1,19 @@
+"""Toggle reviewr as a full-height sidebar on the right of the current Herdr tab.
+
+Herdr has no API that splits a tab at its root, so this composes public Herdr
+socket APIs instead; README.md walks through the sequence. Moves keep the live
+PTYs, whereas `layout.apply` would restart them.
+"""
+
 import fcntl
 import json
 import os
-from pathlib import Path
-import shutil
 import socket
-import subprocess
 import sys
+from pathlib import Path
 
-
-PLUGIN_ID = "dotfiles.fresh-sidebar"
-TOKEN = "dotfiles-fresh-sidebar"
+TOKEN = "dotfiles-herdr-sidebar"
+SIDEBAR_RATIO = 0.4
 
 
 class Herdr:
@@ -19,7 +23,7 @@ class Herdr:
             connection.sendall(
                 (
                     json.dumps(
-                        {"id": "fresh-sidebar", "method": method, "params": params}
+                        {"id": "herdr-sidebar", "method": method, "params": params}
                     )
                     + "\n"
                 ).encode()
@@ -61,47 +65,50 @@ def hold_terminal(host, pane_id, workspace_id):
         pane_id=pane_id,
         destination={
             "type": "new_tab",
-            "label": "Fresh docking",
+            "label": "sidebar docking",
             "workspace_id": workspace_id,
         },
         focus=False,
     )
 
 
-def open_sidebar(host, caller_id):
+def toggle_sidebar(host, caller_id):
+    """Close the caller tab's sidebar if it has one, otherwise dock a new one.
+
+    Returns the new sidebar's pane id, or None when the sidebar was closed.
+    Closing needs no layout work: Herdr gives the closed column's width back
+    to the untouched tree on the left.
+    """
     panes = host.call("pane.list")["panes"]
     caller = next(pane for pane in panes if pane["pane_id"] == caller_id)
     tab_id = caller["tab_id"]
     for pane in panes:
         if pane["tab_id"] == tab_id and TOKEN in pane.get("tokens", {}):
-            host.call("plugin.pane.focus", pane_id=pane["pane_id"])
-            return pane["pane_id"]
+            host.call("pane.close", pane_id=pane["pane_id"])
+            return None
 
-    if shutil.which("fresh") is None:
-        raise RuntimeError("Fresh is not installed; run just fresh")
     directory = caller.get("foreground_cwd") or caller["cwd"]
     tree = host.call("layout.export", tab_id=tab_id)["layout"]["root"]
     original_ids = pane_ids(tree)
     anchor = original_ids[0]
 
-    # Herdr moves preserve live PTYs, unlike layout.apply. Holding each other
-    # terminal in an unfocused tab lets us wrap the original tree at its root.
-    # Each holding tab disappears when its terminal moves back.
     sidebar_id = None
     try:
         for pane_id in original_ids[1:]:
             hold_terminal(host, pane_id, caller["workspace_id"])
         sidebar = host.call(
             "plugin.pane.open",
-            plugin_id=PLUGIN_ID,
-            entrypoint="editor",
+            # Reviewr's own pane entrypoint, so reviewr's plugin keeps owning
+            # its binary path and config.
+            plugin_id="persiyanov.reviewr",
+            entrypoint="pane",
             target_pane_id=anchor,
             direction="right",
             cwd=directory,
-            env={"FRESH_SIDEBAR_WAIT": "1", "FRESH_HERDR_SIDEBAR": "1"},
             focus=False,
         )
         sidebar_id = sidebar["plugin_pane"]["pane"]["pane_id"]
+        # The token is how the next toggle finds this tab's sidebar.
         host.call(
             "pane.report_metadata",
             pane_id=sidebar_id,
@@ -109,8 +116,9 @@ def open_sidebar(host, caller_id):
             tokens={TOKEN: "1"},
         )
         restore_split_tree(host, tree, tab_id)
-        host.call("layout.set_split_ratio", tab_id=tab_id, path=[], ratio=0.6)
-        host.call("pane.send_text", pane_id=sidebar_id, text="start\n")
+        host.call(
+            "layout.set_split_ratio", tab_id=tab_id, path=[], ratio=1 - SIDEBAR_RATIO
+        )
         host.call("plugin.pane.focus", pane_id=sidebar_id)
         return sidebar_id
     except Exception:
@@ -126,33 +134,18 @@ def open_sidebar(host, caller_id):
         raise
 
 
-def run_editor():
-    host = Herdr()
-    pane_id = os.environ["HERDR_PANE_ID"]
-    if os.environ.get("FRESH_SIDEBAR_WAIT") == "1":
-        if sys.stdin.readline().strip() != "start":
-            return
-    host.call(
-        "pane.report_metadata", pane_id=pane_id, source=TOKEN, tokens={TOKEN: "1"}
-    )
-    try:
-        subprocess.run(["fresh", "--no-restore"], check=False)
-    finally:
-        host.call("pane.close", pane_id=pane_id)
-
-
 def main():
     if os.environ.get("HERDR_ENV") != "1":
-        raise RuntimeError("Fresh sidebar must run inside Herdr")
-    if sys.argv[1] == "run":
-        run_editor()
-        return
+        raise RuntimeError("herdr sidebar must run inside Herdr")
+    if sys.argv[1] != "toggle":
+        raise RuntimeError(f"unknown command {sys.argv[1]!r}")
     state_directory = Path(os.environ["HERDR_PLUGIN_STATE_DIR"])
     state_directory.mkdir(parents=True, exist_ok=True)
-    with (state_directory / "open.lock").open("a") as lock:
+    # Two quick key presses must not dock twice or interleave pane moves.
+    with (state_directory / "toggle.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         context = json.loads(os.environ["HERDR_PLUGIN_CONTEXT_JSON"])
-        open_sidebar(Herdr(), context["focused_pane_id"])
+        toggle_sidebar(Herdr(), context["focused_pane_id"])
 
 
 if __name__ == "__main__":

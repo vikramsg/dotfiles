@@ -1,0 +1,9 @@
+[project]
+name = "herdr-sidebar"
+version = "0.1.0"
+description = "Dock reviewr as a full-height sidebar in the current Herdr tab"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+package = false

@@ -23,9 +23,8 @@
 # prefix+Shift+T: open terminal popup
 # prefix+Shift+G: open PR review tab
 # prefix+f: open nvim file picker
-# prefix+r: toggle reviewr pane
+# prefix+r: toggle full-height reviewr sidebar
 # prefix+Shift+O: append OpenCode and Vim project tabs
-# prefix+b: open or focus full-height Fresh sidebar
 
 onboarding = false
 
@@ -120,18 +119,13 @@ type = "plugin_action"
 command = "chmarax.herdr-nvim.pick-file"
 description = "open file from agent output"
 
-[[keys.command]]
-key = "prefix+b"
-type = "plugin_action"
-command = "dotfiles.fresh-sidebar.open"
-description = "open or focus Fresh sidebar"
-
-# persiyanov.reviewr: code-review pane for agent-written diffs.
+# dotfiles.herdr-sidebar docks persiyanov.reviewr full height on the right;
+# reviewr's own toggle only splits the focused pane.
 [[keys.command]]
 key = "prefix+r"
 type = "plugin_action"
-command = "persiyanov.reviewr.toggle"
-description = "toggle reviewr pane"
+command = "dotfiles.herdr-sidebar.toggle-reviewr"
+description = "toggle reviewr sidebar"
 
 [[keys.command]]
 key = "prefix+h"

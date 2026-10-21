@@ -1,9 +1,7 @@
 import copy
 import importlib.util
-from pathlib import Path
 import unittest
-from unittest.mock import patch
-
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location(
     "sidebar", Path(__file__).parents[1] / "sidebar.py"
@@ -102,10 +100,10 @@ class FakeHerdr:
         elif method == "plugin.pane.open":
             self.launch_directory = params["cwd"]
             self.tabs["t1"] = insert(
-                self.tabs["t1"], params["target_pane_id"], pane("fresh"), "right", 0.5
+                self.tabs["t1"], params["target_pane_id"], pane("reviewr"), "right", 0.5
             )
-            self.panes["fresh"] = {"pane_id": "fresh", "tab_id": "t1"}
-            return {"plugin_pane": {"pane": {"pane_id": "fresh"}}}
+            self.panes["reviewr"] = {"pane_id": "reviewr", "tab_id": "t1"}
+            return {"plugin_pane": {"pane": {"pane_id": "reviewr"}}}
         elif method == "pane.report_metadata":
             self.panes[params["pane_id"]]["tokens"] = params["tokens"]
         elif method == "layout.set_split_ratio":
@@ -122,8 +120,7 @@ class FakeHerdr:
 
 
 class SidebarTests(unittest.TestCase):
-    @patch.object(sidebar.shutil, "which", return_value="/bin/fresh")
-    def test_docking_wraps_existing_tree_and_quit_restores_it(self, _which):
+    def test_docking_wraps_existing_tree_and_quit_restores_it(self):
         layouts = [
             pane("a"),
             split(pane("a"), pane("b"), ratio=0.7),
@@ -138,48 +135,41 @@ class SidebarTests(unittest.TestCase):
         for tree in layouts:
             with self.subTest(tree=tree):
                 host = FakeHerdr(tree)
-                sidebar.open_sidebar(host, sidebar.pane_ids(tree)[-1])
-                self.assertEqual(host.tabs["t1"], split(tree, pane("fresh"), ratio=0.6))
-                self.assertEqual(remove(host.tabs["t1"], "fresh"), tree)
+                sidebar.toggle_sidebar(host, sidebar.pane_ids(tree)[-1])
+                self.assertEqual(
+                    host.tabs["t1"],
+                    split(tree, pane("reviewr"), ratio=1 - sidebar.SIDEBAR_RATIO),
+                )
+                self.assertEqual(remove(host.tabs["t1"], "reviewr"), tree)
                 self.assertEqual(set(host.tabs), {"t1", "t2"})
                 self.assertEqual(host.tabs["t2"], pane("other"))
                 self.assertEqual(host.launch_directory, "/project with spaces")
 
-    @patch.object(sidebar.shutil, "which", return_value="/bin/fresh")
-    def test_repeated_open_focuses_existing_sidebar_in_callers_tab(self, _which):
-        host = FakeHerdr(split(pane("a"), pane("b")))
-        sidebar.open_sidebar(host, "b")
-        tree = copy.deepcopy(host.tabs["t1"])
-        self.assertEqual(sidebar.open_sidebar(host, "a"), "fresh")
-        self.assertEqual(host.focused, "fresh")
-        self.assertEqual(host.tabs["t1"], tree)
-
-    @patch.object(sidebar.shutil, "which", return_value=None)
-    def test_missing_editor_does_not_move_running_terminals(self, _which):
-        tree = split(pane("a"), pane("b"))
+    def test_second_toggle_closes_only_the_callers_sidebar(self):
+        tree = split(pane("a"), pane("b"), ratio=0.3)
         host = FakeHerdr(tree)
-        with self.assertRaisesRegex(RuntimeError, "just fresh"):
-            sidebar.open_sidebar(host, "a")
+        sidebar.toggle_sidebar(host, "b")
+        self.assertEqual(host.focused, "reviewr")
+        self.assertIsNone(sidebar.toggle_sidebar(host, "a"))
         self.assertEqual(host.tabs["t1"], tree)
+        self.assertEqual(host.tabs["t2"], pane("other"))
 
-    @patch.object(sidebar.shutil, "which", return_value="/bin/fresh")
-    def test_failed_editor_start_returns_live_terminals_from_holding_tabs(self, _which):
+    def test_failed_reviewr_start_returns_live_terminals_from_holding_tabs(self):
         class FailedStart(FakeHerdr):
             def call(self, method, **params):
                 if method == "pane.report_metadata":
                     super().call("pane.close", pane_id=params["pane_id"])
-                    raise RuntimeError("editor process exited during startup")
+                    raise RuntimeError("reviewr exited during startup")
                 return super().call(method, **params)
 
         tree = split(split(pane("a"), pane("b"), ratio=0.3), pane("c"), "down", 0.7)
         host = FailedStart(tree)
-        with self.assertRaisesRegex(RuntimeError, "exited during startup"):
-            sidebar.open_sidebar(host, "a")
+        with self.assertRaisesRegex(RuntimeError, "reviewr exited during startup"):
+            sidebar.toggle_sidebar(host, "a")
         self.assertEqual(set(host.tabs), {"t1", "t2"})
         self.assertEqual(host.tabs["t1"], tree)
 
-    @patch.object(sidebar.shutil, "which", return_value="/bin/fresh")
-    def test_mid_reconstruction_failure_restores_original_ratios(self, _which):
+    def test_mid_reconstruction_failure_restores_original_ratios(self):
         class FailedMove(FakeHerdr):
             failed = False
 
@@ -197,7 +187,7 @@ class SidebarTests(unittest.TestCase):
         tree = split(split(pane("a"), pane("b"), ratio=0.3), pane("c"), "down", 0.7)
         host = FailedMove(tree)
         with self.assertRaisesRegex(RuntimeError, "move interrupted"):
-            sidebar.open_sidebar(host, "a")
+            sidebar.toggle_sidebar(host, "a")
         self.assertEqual(host.tabs["t1"], tree)
         self.assertEqual(set(host.tabs), {"t1", "t2"})
 

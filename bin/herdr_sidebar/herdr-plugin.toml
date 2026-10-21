@@ -1,0 +1,13 @@
+id = "dotfiles.herdr-sidebar"
+name = "Herdr sidebar"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+platforms = ["linux", "macos"]
+description = "Toggle reviewr as a full-height sidebar on the right of the current tab"
+
+[[actions]]
+id = "toggle-reviewr"
+title = "Toggle reviewr sidebar"
+contexts = ["pane"]
+command = ["sh", "-c", "exec uv run --project \"$HERDR_PLUGIN_ROOT\" python \"$HERDR_PLUGIN_ROOT/sidebar.py\" toggle"]
+
