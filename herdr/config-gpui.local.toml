@@ -1,10 +1,13 @@
 # GUI overrides; omitted settings inherit Herdr UI's managed defaults.
 theme = "TokyoNight"
-layout = "compact"
+layout = "compact-rounded"
 confirm_close_pane = false
 
 [keybindings]
 new_browser_tab = "cmd-shift-b"
+
+[sidebar]
+activity_bar = false
 
 [code]
 license_accepted = true

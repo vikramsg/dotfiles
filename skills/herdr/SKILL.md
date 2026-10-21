@@ -1,6 +1,6 @@
 ---
 name: herdr
-description: "Control Herdr, a terminal multiplexer for coding agents and terminal usage. Requires HERDR_ENV=1. Use herdr for manual terminal testing of CLI and TUI behavior. Use when validating real TTY rendering, ANSI styling, wrapping at different widths, interactive output, progress displays, or long-running terminal commands. Use also when using background agents."
+description: "Control Herdr, a terminal multiplexer for coding agents and terminal usage. Requires HERDR_ENV=1. Use herdr for manual terminal testing of CLI and TUI behavior. Use when validating real TTY rendering, ANSI styling, wrapping at different widths, interactive output, progress displays, or long-running terminal commands."
 ---
 
 # Herdr
