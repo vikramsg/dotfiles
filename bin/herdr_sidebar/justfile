@@ -1,0 +1,13 @@
+package_root := justfile_directory()
+
+default:
+    @just --justfile "{{justfile()}}" --list
+
+# Register the sidebar launcher through its stable config anchor.
+link:
+    mkdir -p "$HOME/.config"
+    ln -sfn "{{package_root}}" "$HOME/.config/herdr-sidebar"
+    herdr plugin link "$HOME/.config/herdr-sidebar"
+
+test:
+    uv run --project "{{package_root}}" python -m unittest discover -s "{{package_root}}/tests" -v

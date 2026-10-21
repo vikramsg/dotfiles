@@ -28,13 +28,12 @@ The prefix is `Ctrl+Space`.
 | `prefix+Shift+C` | Create a workspace |
 | `prefix+q` / `prefix+?` / `prefix+d` | Reload config / help / detach |
 | `prefix+e` / `prefix+f` | Toggle the nvim sidebar / open the nvim file picker |
-| `prefix+r` | Toggle the reviewr pane |
+| `prefix+r` | Toggle the full-height reviewr sidebar on the right |
 | `prefix+v` | Pick and watch a Markdown file in a popup |
 | `prefix+g` | Open the LazyGit popup |
 | `prefix+Shift+T` | Open the terminal popup |
 | `prefix+Shift+G` | Review the current PR in a new tab |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
-| `prefix+b` | Open or focus the full-height Fresh sidebar on the right |
 
 ## Setup
 
@@ -47,7 +46,7 @@ herdr
 ```
 
 `just herdr` links `config.toml`, links `herdr/plugin/nav_wrap/` to the
-`~/.config/herdr-nav-wrap` anchor, and registers it with Herdr. Herdr's logs,
+`~/.config/herdr-nav-wrap` anchor, and registers it with Herdr. It does the same for `bin/herdr_sidebar/`, which backs `prefix+r`: it docks reviewr full height on the right, so keep `persiyanov.reviewr` in `plugins.json`. Reviewr still reads its own `config.toml` from `herdr plugin config-dir persiyanov.reviewr`. Herdr's logs,
 sockets, and persistent session data remain in the normal `~/.config/herdr`
 directory and outside this repository. `just bin` links `~/.local/bin/pbcopy` so `persiyanov.reviewr` forwards clipboard copies over OSC 52 through Herdr instead of invoking `xclip` on headless Linux VMs. The plugin's `navigate.sh` and the
 repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
