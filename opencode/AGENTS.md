@@ -42,7 +42,30 @@ Maintain implementation notes in a markdown file and at the end add a section fo
 - Write every decision you took that we did not already agree on
     - Separate out each decision as a separate list item with sublist on decision, why and where in code you took it
 - Write every single decision that requires a review. 
-- At the end of the notes write what should be specifically reviewed by me 
+- Also write every change made because of reviewer guidance or because I asked for it during implementation and it is not in the agreed plan
+- Tag every decision with its source:
+    - `agent`: you decided it on your own
+    - `reviewer`: you accepted a suggestion from the reviewer agent
+    - `user`: I asked for it during implementation
+- At the end of the notes write what should be specifically reviewed by me, and list the reviewer-driven changes separately
+
+Use this template:
+
+```markdown
+## Decisions
+
+- <Short title of the decision>
+    - Decision: <what was done>
+    - Why: <reason>
+    - Where: <file:line or module>
+    - Source: agent | reviewer | user
+    - Origin: <only for reviewer/user: one line on what was suggested or asked>
+
+## Review focus
+
+- <what I should look at specifically>
+- Reviewer-driven changes: <list, or "none">
+```
 
 NOTE: If we have agreed to a plan, make sure its present in .agents/plans/ and in it note that once we start implementation the plan file itself should not be touched and any changes should be only noted through implementation notes
 
