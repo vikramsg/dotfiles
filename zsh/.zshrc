@@ -9,9 +9,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 fi
 
 #########################################
-# Environment variables
-export EDITOR="nvim"
-export VISUAL="nvim"
+# Interactive shell settings
 bindkey -e
 # Default options for fzf. Opens preview on right and uses Tokyo Night
 export FZF_DEFAULT_OPTS="--style full \
@@ -129,7 +127,3 @@ alias gs="gcloud storage"
 #########################################
 # Init zoxide
 eval "$(zoxide init zsh)"
-
-#########################################
-
-[[ -f ~/.zshenv ]] && source ~/.zshenv

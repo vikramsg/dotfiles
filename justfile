@@ -360,10 +360,22 @@ macflow: validate-screenshot-directories link-macflow-config
 zsh:
     @echo "Setting up zsh and prompt configuration symlinks..."
     mkdir -p ~/.config
+    @SOURCE="{{justfile_directory()}}/zsh/.zshenv"; TARGET="$HOME/.zshenv"; \
+        if [ -L "$TARGET" ]; then \
+            if [ "$(readlink "$TARGET")" != "$SOURCE" ]; then \
+                echo "ERROR: $TARGET points to another file; migrate it before running just zsh."; \
+                exit 1; \
+            fi; \
+        elif [ -e "$TARGET" ]; then \
+            echo "ERROR: $TARGET is unmanaged; migrate it before running just zsh."; \
+            exit 1; \
+        fi; \
+        ln -sfn "$SOURCE" "$TARGET"
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
     ln -sfn {{justfile_directory()}}/zsh/.zsh_script ~/.zsh_script
     ln -sfn {{justfile_directory()}}/zsh/starship.toml ~/.config/starship.toml
     @echo ".zshrc symlink created at ~/.zshrc -> {{justfile_directory()}}/zsh/.zshrc"
+    @echo ".zshenv symlink created at ~/.zshenv -> {{justfile_directory()}}/zsh/.zshenv"
     @echo ".zsh_script symlink created at ~/.zsh_script -> {{justfile_directory()}}/zsh/.zsh_script"
     @echo "starship.toml symlink created at ~/.config/starship.toml -> {{justfile_directory()}}/zsh/starship.toml"
     @if [ "$(uname)" = "Linux" ]; then \
