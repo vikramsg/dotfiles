@@ -60,6 +60,8 @@ Use this template:
     - Where: <file:line or module>
     - Source: agent | reviewer | user
     - Origin: <only for reviewer/user: one line on what was suggested or asked>
+<newline>
+- <Next decision>
 
 ## Review focus
 
