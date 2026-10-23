@@ -17,12 +17,6 @@ export FZF_DEFAULT_OPTS="--style full \
 --preview 'fzf-preview.sh {}' \
 --bind 'focus:transform-header:file --brief {}'"
 
-if [[ ${HERDR_START_TUICR:-} == 1 ]]; then
-    unset HERDR_START_TUICR
-    config_file=$(readlink "$HOME/.config/herdr/config.toml")
-    exec zsh "$(dirname "$config_file")/tuicr.zsh"
-fi
-
 if [[ ${HERDR_ENV:-} == 1 ]]; then
     config_file=$(readlink "$HOME/.config/herdr/config.toml")
     source "$(dirname "$config_file")/branch-metadata.zsh"

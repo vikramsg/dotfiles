@@ -32,7 +32,6 @@ The prefix is `Ctrl+Space`.
 | `prefix+v` | Pick and watch a Markdown file in a popup |
 | `prefix+g` | Open the LazyGit popup |
 | `prefix+Shift+T` | Open the terminal popup |
-| `prefix+Shift+G` | Review the current PR in a new tab |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
 
 ## Setup
@@ -40,7 +39,6 @@ The prefix is `Ctrl+Space`.
 ```sh
 just brew
 just bin
-just tuicr
 just herdr
 herdr
 ```

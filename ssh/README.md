@@ -124,20 +124,18 @@ Without lingering, user processes can be cleaned up when SSH disconnects.
 
 ---
 
-## VM + Ghostty Example
+## VM Terminal Connections
 
-This repo's workspace file is `ghostty/workspaces/vm.toml`.
+- Forwarding owner connection (`vm.dotfiles`):
 
-- Forwarding owner tab (`vm.dotfiles`):
-
-```toml
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 vm.dotfiles"
+```sh
+env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 vm.dotfiles
 ```
 
-- Non-owner tabs (clear inherited forwards):
+- Non-owner connections (clear inherited forwards):
 
-```toml
-command = "env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 -o ClearAllForwardings=yes vm.kunda"
+```sh
+env AUTOSSH_POLL=30 AUTOSSH_GATETIME=0 autossh -M 0 -o ClearAllForwardings=yes vm.kunda
 ```
 
 Shared alias behavior is defined in `ssh/config.vm.shared`.

@@ -20,7 +20,7 @@ __pycache__
 harlequin/config.toml
 
 # Daemon tokens are local; keep the documented example.
-bin/ocint/config/daemon.env
+.archive/bin/ocint/config/daemon.env
 
 # Vite
 .vite

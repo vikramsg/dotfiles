@@ -6,11 +6,6 @@ namespace = "com.vikramsg.dotfiles"
 # The command inherits launchd lifecycle and stdout/stderr directly.
 command = ["opener-tunnel", "run"]
 
-[services.lch-zwm]
-# Command services replace `lch run` with the configured foreground command.
-# The command inherits launchd lifecycle and stdout/stderr directly.
-command = ["zwm", "daemon"]
-
 # macOS application services launch through LaunchServices so the signed bundle
 # keeps its TCC identity. LCH waits for the app, routes its stdout/stderr to the
 # normal service logs, and terminates the app when the service stops.
