@@ -517,7 +517,7 @@ def test_validate_pr_treats_weak_ordinary_changes_as_not_applicable(
     )
 
 
-def test_validate_pr_rejects_non_main_base_ref(release_workspace: ReleaseWorkspace) -> None:
+def test_validate_pr_allows_non_main_base_ref_for_ordinary_pr(release_workspace: ReleaseWorkspace) -> None:
     # GIVEN an ordinary clean PR checkout
     root = release_workspace.root
 
@@ -542,7 +542,39 @@ def test_validate_pr_rejects_non_main_base_ref(release_workspace: ReleaseWorkspa
         capture_output=True,
     )
 
-    # THEN base policy fails even though release validation would be inapplicable
+    # THEN release validation remains inapplicable to a stacked ordinary PR
+    assert result.returncode == 0, result.stderr
+    assert "not applicable" in result.stdout
+
+
+def test_validate_pr_rejects_non_main_base_ref_for_release_candidate(
+    release_workspace: ReleaseWorkspace,
+) -> None:
+    # GIVEN a release candidate checkout
+    root = release_workspace.root
+
+    # WHEN validation is pointed at a non-main base ref
+    result = subprocess.run(
+        [
+            "python",
+            "bin/ocint/scripts/ocint_release.py",
+            "validate-pr",
+            "--base",
+            release_workspace.baseline_remote_head,
+            "--base-ref",
+            "develop",
+            "--title",
+            "ocint: release v0.2.0",
+            "--branch",
+            "ocint-release/v0.2.0",
+        ],
+        cwd=root,
+        env=release_workspace.environment,
+        text=True,
+        capture_output=True,
+    )
+
+    # THEN release base policy still requires main
     assert result.returncode == 1
     assert "base ref main" in result.stderr
 

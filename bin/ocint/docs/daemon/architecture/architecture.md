@@ -33,6 +33,7 @@ between provider-neutral task coordination and platform adapters.
 | `github/` | Issue observation, authorization, replies, and pull requests |
 | `slack/` | Private-channel polling, authorization, durable cursors/replies, reopen, and rate deferral |
 | `tasks/` | Provider-neutral thread, message, task, and retry coordination |
+| `coordinator/` | Provider-neutral chat authorization, durable conversation turns, OpenCode correlation, and delivery recovery |
 | `lch/` | Linux user-systemd setup and local operator commands |
 | `db/` | SQLite policy, schema, and Alembic migrations |
 
@@ -86,7 +87,7 @@ The complete execution path remains visible in one diagram:
     |    isolated branch + worktree
     |       |
     |       v
-    +--> OpenCode 1.17.20 session
+    +--> OpenCode 1.18.16 session
     |       |
     |       v
     |    prompt + HTTP/SSE idle confirmation
@@ -135,6 +136,12 @@ The daemon database is independent from OpenCode's database. The daemon never
 reads or migrates OpenCode's SQLite schema. SQLite connections enable foreign
 keys, WAL mode, and a busy timeout.
 
+Coordinator prompts rely on the exact OpenCode 1.18.16 HTTP contract. ocint
+supplies `messageID` to `prompt_async`, observes the returned user message with
+that ID, and accepts only a completed assistant message whose `parentID` points
+to that user message. The sanitized contract fixture records the request body
+and returned message-list shape without credentials or conversation content.
+
 ```text
  provider mapping -> thread -> thread_message
                      |
@@ -169,6 +176,15 @@ The migration chain remains explicit:
         |
         v
 20260724_add_job_title
+        |
+        v
+20260724_add_slack
+        |
+        v
+20260807_add_coordinator
+        |
+        v
+20260810_complete_coordinator_message_identity
 ```
 
 ## Jobs And Checkpoints

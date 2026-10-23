@@ -344,8 +344,6 @@ def validate_pr(
 ) -> None:
     paths = ReleasePaths(root, policy)
     validate_root(paths)
-    if base_ref != "main":
-        raise ReleaseError("Release PR validation requires base ref main")
     git(root, "cat-file", "-e", f"{base}^{{commit}}")
     files = set(git(root, "diff", "--name-only", f"{base}...HEAD").splitlines())
     base_version = project_version(git(root, "show", f"{base}:{policy.files[0]}"))
@@ -360,6 +358,8 @@ def validate_pr(
     ):
         print("Not an ocint release PR; validation is not applicable")
         return
+    if base_ref != "main":
+        raise ReleaseError("Release PR validation requires base ref main")
     version = parse_pr_title(title)
     if title != policy.title(version):
         raise ReleaseError(f"Release PR title must be exactly: {policy.title(version)}")

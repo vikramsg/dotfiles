@@ -53,7 +53,7 @@ class DiscoveryRunner:
     identities: tuple[Path, ...]
     known_hosts: Path
     repository: str = "example-org/project"
-    version: str = "1.17.20"
+    version: str = "1.18.15"
     push_urls: tuple[str, ...] = ("git@github.com:example-org/project.git",)
     core_ssh_command: str = ""
     isolated_calls: list[tuple[tuple[str, ...], Mapping[str, str]]] = field(default_factory=list)
@@ -210,8 +210,8 @@ def test_discovery_resolves_checkout_github_git_ssh_and_opencode(discovery_fixtu
     assert result.ssh.identity_file.name == "project-key"
     assert result.opencode.model == "example-provider/example-model"
     assert result.github_token == "github-secret"
-    assert result.opencode.version == "1.17.20"
-    assert 'expected_version = "1.17.20"' in daemon_toml(
+    assert result.opencode.version == "1.18.15"
+    assert 'expected_version = "1.18.15"' in daemon_toml(
         discovered_daemon_config(result, (LifecycleConfig(), LoggingConfig()))
     )
     gh_commands = [command for command, _environment in discovery_fixture.runner.isolated_calls if command[0] == "gh"]
@@ -354,7 +354,7 @@ def test_discovery_rejects_wrong_opencode_version_before_writes(discovery_fixtur
     discovery_fixture.runner.version = "2.0.0"
 
     # WHEN / THEN
-    with pytest.raises(click.ClickException, match=r"1\.17\.20 is required; found 2\.0\.0"):
+    with pytest.raises(click.ClickException, match=r"1\.18\.15 is required; found 2\.0\.0"):
         discover(
             discovery_fixture.runner,
             discovery_fixture.lifecycle,
@@ -388,7 +388,7 @@ def test_setup_uses_only_the_validated_policy_and_provider_snapshot(
     assert effective == discovered.effective_opencode_payload
     assert "changed-provider" not in effective
     assert "late-secret" not in effective
-    assert 'expected_version = "1.17.20"' in discovered.paths.configuration.read_text()
+    assert 'expected_version = "1.18.15"' in discovered.paths.configuration.read_text()
 
 
 def test_setup_losslessly_refreshes_managed_tokens(discovery_fixture: DiscoveryFixture) -> None:

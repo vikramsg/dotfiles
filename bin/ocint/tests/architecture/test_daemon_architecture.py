@@ -69,6 +69,35 @@ def test_github_facade_exports_only_supported_api() -> None:
     assert not (github / "integration.py").exists()
 
 
+def test_coordinator_facade_does_not_initialize_runtime_modules() -> None:
+    # GIVEN
+    package = Path(__file__).parents[2]
+    script = """
+import json
+import sys
+import ocint.daemon.coordinator
+names = [
+    "ocint.daemon.coordinator.opencode",
+    "ocint.daemon.coordinator.repository",
+    "ocint.daemon.coordinator.run",
+    "ocint.daemon.coordinator.workspace",
+]
+print(json.dumps([name for name in names if name in sys.modules]))
+"""
+
+    # WHEN
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=package,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    # THEN
+    assert json.loads(result.stdout) == []
+
+
 def test_thread_core_contains_only_provider_neutral_identity_and_title() -> None:
     # GIVEN
     models = Path(__file__).parents[2] / "ocint" / "daemon" / "tasks" / "models.py"
@@ -134,6 +163,45 @@ def test_policy_resource_is_one_canonical_symlinked_source() -> None:
     assert resource.is_symlink()
     assert resource.resolve() == source.resolve()
     assert resource.read_bytes() == source.read_bytes()
+
+
+def test_coordinator_policy_resource_is_one_canonical_restrictive_packaged_source() -> None:
+    # GIVEN
+    package = Path(__file__).parents[2]
+    source = package / "config" / "opencode.coordinator.json"
+    resource = package / "ocint" / "daemon" / "opencode.coordinator.json"
+    pyproject = tomllib.loads((package / "pyproject.toml").read_text())
+
+    # WHEN
+    policy = json.loads(source.read_text())
+
+    # THEN
+    assert resource.is_symlink()
+    assert resource.resolve() == source.resolve()
+    assert resource.read_bytes() == source.read_bytes()
+    assert policy["$schema"] == "https://opencode.ai/config.json"
+    assert policy["share"] == "disabled"
+    assert policy["plugin"] == []
+    assert policy["mcp"] == {}
+    assert policy["lsp"] is False
+    assert policy["formatter"] is False
+    assert policy["permission"] == {
+        "*": "deny",
+        "read": "allow",
+        "list": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "edit": "deny",
+        "write": "deny",
+        "patch": "deny",
+        "bash": "deny",
+        "shell": "deny",
+        "external_directory": {"*": "deny"},
+        "question": "deny",
+    }
+    assert "config/opencode.coordinator.json" in pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
 
 
 def test_root_daemon_cli_uses_only_the_lch_facade() -> None:
