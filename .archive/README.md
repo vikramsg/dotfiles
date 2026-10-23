@@ -7,5 +7,6 @@ These tools are retained as inactive source snapshots. They are not installed or
 - `bin/ghostty_workspace/` and `ghostty/workspaces/`: Ghostty Workspace implementation and workspace definitions.
 - `bin/lc`: archived launcher.
 - `router-battery-check/`: router battery monitor.
+- `opencode/`: legacy OpenCode configuration, sandbox harnesses, package manifests, MCP configuration, and plugin tests.
 
 Paths in archived tool documentation and build files describe their former active layout. Review them before reactivating a tool; do not run archived installation recipes against the current configuration.

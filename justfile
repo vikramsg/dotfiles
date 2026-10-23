@@ -114,65 +114,21 @@ opencode: npm-global-bin
     mkdir -p ~/.config/opencode
     mkdir -p ~/.config/opencode/skills
     ln -sfn {{justfile_directory()}}/opencode/opencode.json ~/.config/opencode/opencode.json
-    ln -sfn {{justfile_directory()}}/opencode/tui.json ~/.config/opencode/tui.json
     ln -sfn {{justfile_directory()}}/opencode/cli.json ~/.config/opencode/cli.json
-    ln -sfn {{justfile_directory()}}/opencode/rules.md ~/.config/opencode/rules.md
     ln -sfn {{justfile_directory()}}/opencode/AGENTS.md ~/.config/opencode/AGENTS.md
     ln -sfn {{justfile_directory()}}/opencode/agents ~/.config/opencode/agents
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
-    ln -sfn {{justfile_directory()}}/opencode/prompts ~/.config/opencode/prompts
     ln -sfn {{justfile_directory()}}/skills/show-me ~/.config/opencode/skills/show-me
     ln -sfn {{justfile_directory()}}/skills/herdr ~/.config/opencode/skills/herdr
-    @if [  -d {{justfile_directory()}}/opencode/plugins ]; then ln -sfn {{justfile_directory()}}/opencode/plugins ~/.config/opencode/plugins; \
-    fi
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
     @echo "OpenCode 2 CLI config symlinked to ~/.config/opencode/cli.json"
-    @echo "Opencode rules file symlinked to ~/.config/opencode/rules.md"
     @echo "OpenCode instructions symlinked to ~/.config/opencode/AGENTS.md"
     @echo "Opencode agent directory symlinked to ~/.config/opencode/agents"
     @echo "Opencode commands directory symlinked to ~/.config/opencode/commands"
     @echo "OpenCode show-me skill symlinked to ~/.config/opencode/skills/show-me"
     @echo "OpenCode Herdr skill symlinked to ~/.config/opencode/skills/herdr"
-    @echo "Opencode plugins directory symlinked to ~/.config/opencode/plugins"
     @echo "OpenCode plugin/config changes only apply to newly started OpenCode processes."
     @echo "If you have an already-running OpenCode session, restart it after running 'just opencode'."
-    @echo "Run 'just opencode-doctor' to smoke-test persistence from an arbitrary worktree"
-
-# Verify installed Opencode persistence from a non-repo worktree
-opencode-doctor:
-    @CONFIG_DIR="$HOME/.config/opencode"; \
-        PLUGIN_FILE="$CONFIG_DIR/plugins/orchestration-state.js"; \
-        if [ ! -e "$PLUGIN_FILE" ]; then \
-            echo "ERROR: Missing installed OpenCode plugin at $PLUGIN_FILE"; \
-            echo "Run 'just opencode' from {{justfile_directory()}} to refresh ~/.config/opencode."; \
-            echo "This is an install/symlink problem, not an orchestration hook problem."; \
-            exit 1; \
-        fi; \
-        TMPDIR=$(mktemp -d); \
-        LOGFILE=$(mktemp); \
-        timeout 60s opencode run --print-logs --command orchestrate --format json --dir "$TMPDIR" "Persistent-state smoke test only. Do not edit files; just acknowledge the request." >"$LOGFILE" 2>&1; \
-        RUN_STATUS=$?; \
-        node --input-type=module -e 'import fs from "node:fs"; import path from "node:path"; const root=process.argv[1]; const tasks=path.join(root, ".agents", "tasks"); const runs=fs.existsSync(tasks) ? fs.readdirSync(tasks).filter((entry) => entry !== "index.json") : []; if (!fs.existsSync(path.join(tasks, "index.json"))) { console.error(`Missing ${path.join(tasks, "index.json")}`); process.exit(1); } if (runs.length !== 1) { console.error(`Expected 1 persisted run, found ${runs.length}`); process.exit(1); } if (!fs.existsSync(path.join(tasks, runs[0], "state.json"))) { console.error(`Missing ${path.join(tasks, runs[0], "state.json")}`); process.exit(1); }' "$TMPDIR" || { \
-            echo "ERROR: OpenCode orchestration persistence smoke check failed."; \
-            echo "opencode run exit status: $RUN_STATUS"; \
-            echo "See logs: $LOGFILE"; \
-            exit 1; \
-        }; \
-        if [ $RUN_STATUS -eq 0 ]; then \
-            echo "OpenCode CLI exited cleanly during smoke check."; \
-        elif [ $RUN_STATUS -eq 124 ]; then \
-            echo "OpenCode persistence smoke check passed after artifact verification, and opencode run timed out with status 124."; \
-            echo "See logs for timeout diagnostics: $LOGFILE"; \
-        else \
-            echo "ERROR: OpenCode persistence smoke check passed artifact verification, but opencode run exit status was $RUN_STATUS."; \
-            echo "See logs for CLI-exit diagnostics: $LOGFILE"; \
-            exit 1; \
-        fi; \
-        echo "OpenCode persistence smoke check passed in $TMPDIR"
-
-# Run OpenCode sandbox CLI
-opencode-sandbox +args:
-    @npm --prefix "{{justfile_directory()}}/opencode" run --silent sandbox -- "$@"
 
 # Install GitHub pull request statistics tool
 gh-stats:

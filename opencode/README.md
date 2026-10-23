@@ -66,48 +66,6 @@ primary agent named `discuss`. `discuss` is the default agent and has Plan-like
 read-only permissions, with one exception: it may write plans under
 `.agents/plans/`.
 
-The repo keeps active prompt files under `opencode/prompts/` and composes them
-from reusable layers:
-
-```text
-Build   = build.txt + base-gpt.txt + shared.txt
-Discuss = base-gpt.txt + shared.txt + discuss.txt
-```
-
-The agent configuration uses multiple file substitutions in composition order:
-
-```json
-{
-  "agent": {
-    "build": {
-      "prompt": "{file:./prompts/build.txt}\n\n{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}"
-    },
-    "plan": {
-      "disable": true
-    },
-    "discuss": {
-      "mode": "primary",
-      "prompt": "{file:./prompts/base-gpt.txt}\n\n{file:./prompts/shared.txt}\n\n{file:./prompts/discuss.txt}"
-    }
-  }
-}
-```
-
-`base-gpt.txt` is the active copy of OpenCode's GPT provider prompt. It pins
-Build and Discuss to the same known base instead of making active configuration
-depend on the reference material under `docs/prompts/`. `build.txt` identifies
-Build mode before the shared instructions and records new implementation
-decisions. `shared.txt` contains cross-agent engineering preferences, while
-`discuss.txt` contains the strict read-only constraint and discussion behavior.
-
-Prompt files are plain text and do not need YAML frontmatter. Frontmatter is only
-needed when defining an agent as a Markdown file under `agents/` or
-`.opencode/agents/`.
-
-OpenCode injects its synthetic Plan reminders only when the active agent is the
-built-in `plan` agent. Disabling that agent avoids conflicting reminders;
-`discuss.txt` defines the complete Discuss workflow instead.
-
 ## State
 
 Opencode stores files under
@@ -171,8 +129,7 @@ with one Herdr pane. Do not run `herdr integration install opencode` without
 checking whether Herdr has added native OpenCode V2 support; until then,
 `herdr integration status` reports this custom integration as `not installed`.
 
-The previous V1 implementations remain under `plugins-v1/` for reference and
-tests. They are outside OpenCode 2's automatic plugin discovery path.
+The previous V1 implementations are archived under `.archive/opencode/v1/plugins-v1/`, with plugin tests under `.archive/opencode/tests/`. These paths are relative to the repository root and are outside OpenCode 2's automatic plugin discovery path.
 
 ## Favorite Models
 
