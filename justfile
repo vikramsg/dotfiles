@@ -106,13 +106,6 @@ herdr:
     just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
     just --justfile "{{justfile_directory()}}/herdr/justfile" install
 
-# Set up tuicr config symlink
-tuicr:
-    @echo "Setting up tuicr config symlink..."
-    mkdir -p ~/.config/tuicr
-    ln -sfn {{justfile_directory()}}/tuicr/config.toml ~/.config/tuicr/config.toml
-    @echo "tuicr config symlink created at ~/.config/tuicr/config.toml -> {{justfile_directory()}}/tuicr/config.toml"
-
 # Set up Opencode symlink
 opencode: npm-global-bin
     @echo "Setting up Opencode symlink..."
@@ -181,10 +174,6 @@ opencode-doctor:
 opencode-sandbox +args:
     @npm --prefix "{{justfile_directory()}}/opencode" run --silent sandbox -- "$@"
 
-# Install the read-only OpenCode SQLite intelligence tool
-ocint:
-    uv tool install "{{justfile_directory()}}/bin/ocint" --force --no-cache
-
 # Install GitHub pull request statistics tool
 gh-stats:
     uv tool install "{{justfile_directory()}}/bin/gh_stats" --force --no-cache
@@ -198,9 +187,7 @@ ghostty:
     @echo "Setting up Ghostty symlink..."
     mkdir -p ~/.config/ghostty
     ln -sfn {{justfile_directory()}}/ghostty/config ~/.config/ghostty/config
-    ln -sfn {{justfile_directory()}}/ghostty/workspaces ~/.config/ghostty/workspaces
     @echo "Ghostty symlink created at ~/.config/ghostty/config -> {{justfile_directory()}}/ghostty/config"
-    @echo "Ghostty workspaces symlink created at ~/.config/ghostty/workspaces -> {{justfile_directory()}}/ghostty/workspaces"
 
 # Set up Zed symlink
 zed:
@@ -210,25 +197,6 @@ zed:
     ln -sfn {{justfile_directory()}}/zed/keymap.json ~/.config/zed/keymap.json
     @echo "Zed settings symlink created at ~/.config/zed/settings.json -> {{justfile_directory()}}/zed/settings.json"
     @echo "Zed keymap symlink created at ~/.config/zed/keymap.json -> {{justfile_directory()}}/zed/keymap.json"
-
-# Install ZWM locally and, from macOS, on the configured VM.
-zwm:
-    @SOURCE="{{justfile_directory()}}/zwm/config.json"; \
-    TARGET="$HOME/.config/zwm/config.json"; \
-    mkdir -p "$HOME/.config/zwm"; \
-    if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
-        :; \
-    elif [ -e "$TARGET" ] && [ ! -L "$TARGET" ]; then \
-        echo "ERROR: $TARGET exists and is not a symlink."; \
-        exit 1; \
-    else \
-        TEMP_DIR="$(mktemp -d "$HOME/.config/zwm/.link.XXXXXX")"; \
-        trap 'rm -f "$TEMP_DIR/config.json"; rmdir "$TEMP_DIR" 2>/dev/null || true' EXIT; \
-        ln -s "$SOURCE" "$TEMP_DIR/config.json"; \
-        mv -f "$TEMP_DIR/config.json" "$TARGET"; \
-    fi
-    just --justfile "{{justfile_directory()}}/bin/zwm/justfile" install
-
 
 # Verify independently owned screenshot paths before installing either tool.
 [private]
@@ -282,7 +250,6 @@ lch:
                 "$watch_path" \
                 "$SCREENSHOT" sync run "$source_id"; \
         done; \
-        "$HOME/.local/bin/lch" install lch-zwm; \
     elif [ "$(uname)" = "Linux" ]; then \
         "$HOME/.local/bin/lch" install lch-screenshot-clipboard; \
     fi
@@ -317,7 +284,6 @@ opener-tunnel-if-supported:
 bin:
     @echo "Setting up custom bin symlinks..."
     mkdir -p ~/.local/bin
-    ln -sfn {{justfile_directory()}}/bin/lc ~/.local/bin/lc
     ln -sfn {{justfile_directory()}}/bin/pbcopy ~/.local/bin/pbcopy
     ln -sfn {{justfile_directory()}}/bin/xdg-open ~/.local/bin/xdg-open
     @echo "bin symlinks created at ~/.local/bin"
@@ -490,7 +456,7 @@ harlequin-if-configured:
     fi
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr tuicr opencode ghostty zed screenshot zwm lch macflow opener-tunnel-if-supported ocint gh-stats ocost bin zsh lazygit television harlequin-if-configured
+all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit television harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

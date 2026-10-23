@@ -53,6 +53,18 @@ repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
 linking `nvim/`. Interactive
 Zsh panes publish a compact ` branch` label for the Spaces sidebar.
 
+## Updates
+
+The Herdr application is managed by Homebrew through the root `Brewfile`. Update it with `brew upgrade herdr`, not `herdr update`, to keep Homebrew as the owner of the executable. Avoid a separate `~/.local/bin/herdr`, which can shadow the Homebrew binary.
+
+Update GitHub plugins separately:
+
+```sh
+just --justfile herdr/justfile update
+```
+
+Plugins declared without a `ref` in `herdr/plugins.json` follow their upstream default branch. `just herdr` installs missing plugins but does not update existing ones. Upgrading the executable does not restart running Herdr sessions.
+
 ## macOS GUI
 
 On macOS 14.2 or newer, `just brew` also installs the signed, notarized Herdr GUI from `penso/tap`. Linux installs only the Herdr daemon, not the GUI or its Homebrew tap.
