@@ -7,7 +7,15 @@ from ocint.presentation import Presentation, Text, data_table, document, key_val
 
 
 def render_status(status: LifecycleStatus, config: DaemonConfig) -> Presentation:
-    healthy = status.installed and status.timer_state == "active" and status.last_result in {"success", "unknown"}
+    coordinator_ready = status.coordinator_unit_state != "enabled" or status.coordinator_state == "active"
+    ngrok_ready = status.ngrok_unit_state != "enabled" or status.ngrok_state == "active"
+    healthy = (
+        status.installed
+        and status.timer_state == "active"
+        and status.last_result in {"success", "unknown"}
+        and coordinator_ready
+        and ngrok_ready
+    )
     return document(
         "Daemon lifecycle status",
         key_value_section(
@@ -33,6 +41,20 @@ def render_status(status: LifecycleStatus, config: DaemonConfig) -> Presentation
                 ("Exit status", status.last_exit_status),
                 ("Started", status.last_started),
                 ("Completed", status.last_completed),
+            ],
+        ),
+        key_value_section(
+            "Coordinator",
+            [
+                ("State", _state(status.coordinator_state, status.coordinator_substate)),
+                ("Unit", status.coordinator_unit_state),
+            ],
+        ),
+        key_value_section(
+            "Coordinator ngrok",
+            [
+                ("State", _state(status.ngrok_state, status.ngrok_substate)),
+                ("Unit", status.ngrok_unit_state),
             ],
         ),
         key_value_section(

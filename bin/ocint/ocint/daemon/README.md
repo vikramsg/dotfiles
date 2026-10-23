@@ -4,12 +4,21 @@
 daemon package -> concise index -> focused references -> lch operations
 ```
 
-The daemon is a FastAPI application served directly by Uvicorn. It persists
-jobs before scheduling them, runs OpenCode work behind a process-local capacity
-semaphore, validates the result, and owns commit, SSH push, and idempotent
-GitHub issue polling, exact-title pull-request creation, follow-ups, and bounded
-two-server shutdown. Its application-owned rotating log records human-readable
-lifecycle and job events under XDG state without relying on journald access.
+The daemon package contains two application processes over one durable database.
+The bounded timer process polls GitHub, runs repository work through OpenCode,
+validates it, and owns commit, SSH push, and pull-request publication. The
+always-on coordinator process accepts signed Slack Events, runs a restricted
+OpenCode conversation in a generated context workspace, and replies only in the
+originating Slack thread.
+
+```text
+GitHub poll -> task/job repository --------\
+                                           -> daemon.sqlite + one migration chain
+Slack event -> coordinator repository -----/
+```
+
+Each domain repository owns its transitions. Shared `db/` code owns physical
+schema, WAL/foreign-key/busy-timeout policy, and serialized migrations.
 
 Documentation:
 
@@ -20,11 +29,13 @@ Documentation:
 - [Security and attach authentication](../../docs/daemon/security.md)
 - [systemd lifecycle surface](lch/README.md)
 
-`pull_request_job/` owns the durable end-to-end workflow. `git/` and
-`opencode/` are independent sibling adapters, while `api.py` remains the single
-inbound FastAPI adapter and `cli.py` composes their narrow facades.
+`pull_request_job/` owns the durable GitHub execution workflow.
+`coordinator/` owns normalized conversations, turns, delivery state, workspace,
+and recovery. `slack/` owns Events/Web API protocol details. `git/` and
+`opencode/` remain independent sibling adapters, and `cli.py` composes both
+processes through narrow facades.
 
-The package intentionally contains no custom HTTP server, scheduler polling
-loop, Slack integration, distributed worker protocol, generic lifecycle
-framework, or compatibility credential fallback. `lch/` owns the concrete
-Linux user-systemd implementation.
+The package intentionally contains no distributed coordinator worker protocol,
+generic lifecycle framework, or compatibility credential fallback. Phase 1 has
+one coordinator runtime lock and no repository execution route from Slack.
+`lch/` owns the concrete Linux user-systemd implementation.

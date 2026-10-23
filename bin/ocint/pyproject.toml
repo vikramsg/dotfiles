@@ -40,8 +40,9 @@ packages = ["ocint"]
 include = ["ocint", "config/opencode.daemon.json", "config/opencode.coordinator.json", "README.md", "pyproject.toml"]
 
 [tool.pytest.ini_options]
-addopts = ["--import-mode=importlib"]
+addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not live"]
 testpaths = ["tests"]
+markers = ["live: exercises explicitly configured external services"]
 
 [tool.ruff]
 target-version = "py314"

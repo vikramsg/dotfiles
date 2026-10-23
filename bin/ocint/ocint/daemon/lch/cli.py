@@ -8,10 +8,26 @@ import click
 from sqlalchemy.exc import NoResultFound
 
 from ocint.daemon.config import DaemonConfig, DaemonContext
+from ocint.daemon.lch.opencode import (
+    PrivateFilePurpose,
+    PrivateFileRequirement,
+    ensure_private_directory,
+    provision_configured_coordinator_runtime,
+    upsert_private_environment,
+    validate_opencode_source_file,
+    validate_private_file,
+)
 from ocint.daemon.lch.render import render_job, render_jobs, render_status
 from ocint.daemon.lch.service import attach_to_job
-from ocint.daemon.lch.setup import discover, ensure_private_directory, setup, upsert_private_environment
-from ocint.daemon.lch.systemd import SubprocessRunner, SystemdLifecycle, SystemdPaths, installed_ocint
+from ocint.daemon.lch.setup import discover, setup
+from ocint.daemon.lch.systemd import (
+    CoordinatorUnitEnablement,
+    SubprocessRunner,
+    SystemdLifecycle,
+    SystemdPaths,
+    discover_ngrok,
+    installed_ocint,
+)
 from ocint.daemon.logging import daemon_log_settings
 from ocint.daemon.models import OpenCodeAttachment
 from ocint.daemon.pull_request_job import open_pull_request_job_store
@@ -45,16 +61,20 @@ def setup_command(context: DaemonContext) -> None:
     """Create initial configuration and install the daemon."""
     managed_lifecycle = lifecycle(context)
     executable = installed_ocint()
-    if context.config_path.exists():
+    if context.config_path.exists() or context.config_path.is_symlink():
+        _validate_configuration_inputs(context)
         config = context.config()
-        managed_lifecycle.install(executable, config.lifecycle)
-        _report_install(context, managed_lifecycle, config, executable, "reused", modified=False)
+        provision_configured_coordinator_runtime(context, config)
+        ngrok = discover_ngrok(managed_lifecycle.runner, managed_lifecycle.paths.environment_file)
+        enablement = managed_lifecycle.install(executable, config.lifecycle, config.coordinator.ingress.port, ngrok)
+        _report_install(context, managed_lifecycle, config, executable, enablement, "reused", modified=False)
         context.output.write(
             f"Environment: reused; path={managed_lifecycle.paths.environment_file}; modified=no",
             nl=True,
         )
         context.output.write(
-            f"OpenCode configuration: reused; path={config.opencode.config_file}; modified=no",
+            f"OpenCode configuration: reused; path={config.opencode.config_file}; modified=no; "
+            f"coordinator={config.coordinator.opencode.config_file}; coordinator_modified=yes",
             nl=True,
         )
         return
@@ -63,9 +83,9 @@ def setup_command(context: DaemonContext) -> None:
     discovered = discover(managed_lifecycle.runner, managed_lifecycle, Path.cwd(), context)
     environment_existed = managed_lifecycle.paths.environment_file.exists()
     opencode_config_existed = discovered.paths.effective_opencode_config.exists()
-    setup(discovered, managed_lifecycle)
+    enablement = setup(discovered, managed_lifecycle)
     config = context.config()
-    _report_install(context, managed_lifecycle, config, executable, "created", modified=True)
+    _report_install(context, managed_lifecycle, config, executable, enablement, "created", modified=True)
     context.output.write(
         f"Environment: {'updated' if environment_existed else 'created'}; "
         f"path={managed_lifecycle.paths.environment_file}; secrets=redacted",
@@ -83,10 +103,18 @@ def setup_command(context: DaemonContext) -> None:
 def apply_command(context: DaemonContext) -> None:
     """Apply existing configuration to systemd units."""
     managed_lifecycle = lifecycle(context)
+    _validate_configuration_inputs(context)
     config = context.config()
     executable = installed_ocint()
-    managed_lifecycle.install(executable, config.lifecycle)
-    _report_install(context, managed_lifecycle, config, executable, "loaded", modified=False)
+    provision_configured_coordinator_runtime(context, config)
+    ngrok = discover_ngrok(managed_lifecycle.runner, managed_lifecycle.paths.environment_file)
+    enablement = managed_lifecycle.install(executable, config.lifecycle, config.coordinator.ingress.port, ngrok)
+    _report_install(context, managed_lifecycle, config, executable, enablement, "loaded", modified=False)
+
+
+def _validate_configuration_inputs(context: DaemonContext) -> None:
+    validate_private_file(PrivateFileRequirement(path=context.config_path, purpose=PrivateFilePurpose.DAEMON_CONFIG))
+    validate_opencode_source_file(context.config_home / "opencode" / "opencode.json")
 
 
 @lch.command("slack-token")
@@ -134,7 +162,9 @@ def uninstall_command(context: DaemonContext) -> None:
     managed_lifecycle = lifecycle(context)
     managed_lifecycle.uninstall()
     context.output.write(
-        f"Systemd units: removed; service={managed_lifecycle.paths.service}; timer={managed_lifecycle.paths.timer}",
+        f"Systemd units: removed; service={managed_lifecycle.paths.service}; timer={managed_lifecycle.paths.timer}; "
+        f"coordinator={managed_lifecycle.paths.coordinator_service}; "
+        f"ngrok={managed_lifecycle.paths.coordinator_ngrok_service}",
         nl=True,
     )
     context.output.write(
@@ -257,6 +287,7 @@ def _report_install(
     managed: SystemdLifecycle,
     config: DaemonConfig,
     executable: Path,
+    enablement: CoordinatorUnitEnablement,
     configuration_outcome: str,
     *,
     modified: bool,
@@ -267,6 +298,12 @@ def _report_install(
     )
     context.output.write(
         f"Systemd service: regenerated; path={managed.paths.service}; executable={executable.resolve()}",
+        nl=True,
+    )
+    context.output.write(
+        f"Systemd coordinator services: regenerated; coordinator={managed.paths.coordinator_service}; "
+        f"coordinator_state={enablement.coordinator}; ngrok={managed.paths.coordinator_ngrok_service}; "
+        f"ngrok_state={enablement.ngrok}",
         nl=True,
     )
     context.output.write(

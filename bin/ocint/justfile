@@ -23,9 +23,10 @@ tach:
 
 # Run ocint static checks
 check:
-    {{uv_ocint}} ruff check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
-    {{uv_ocint}} ruff format --check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
-    {{uv_ocint}} ty check "{{justfile_directory()}}/ocint" "{{justfile_directory()}}/scripts" "{{justfile_directory()}}/tests"
+    @set -e; ROOTS="{{justfile_directory()}}/ocint {{justfile_directory()}}/scripts {{justfile_directory()}}/tests"; \
+        {{uv_ocint}} ruff check $ROOTS; \
+        {{uv_ocint}} ruff format --check $ROOTS; \
+        {{uv_ocint}} ty check $ROOTS
     @just --justfile "{{justfile()}}" tach
 
 # Install the OpenCode intelligence CLI

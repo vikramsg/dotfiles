@@ -1,23 +1,80 @@
 # Daemon Interactions
 
-## GitHub Pull-Request Work
+ocint accepts repository work from configured GitHub issues and conversations
+from configured Slack public channels. These are separate workflows that share
+database infrastructure, not one shared execution lifecycle.
 
-An open issue with the configured label starts work. Its body and authorized
-comments become prompt input. The daemon creates or updates the owned pull
-request and replies on the issue. A later authorized comment reuses the existing
-OpenCode session, worktree, branch, and pull request. Closing the issue or
-removing the label makes it ineligible; closed or merged owned pull requests are
-not replaced.
+## GitHub Execution Lifecycle
 
-## Slack Coordinator
+```text
+initial request -> work -> pull request -> completion reply
+      ^                                      |
+      `------------- follow-up --------------'
+```
 
-The Slack coordinator is independent of GitHub pull-request jobs. Slack sends a
-signed `message.channels` callback for each public-channel root or reply. After
-signature, workspace, channel, actor, and payload validation, ocint stores the
-event before returning success. The worker serializes turns per thread, reuses
-the thread's OpenCode session, and posts chunked responses back to that thread.
+An authorized initial request starts work. When the work completes, ocint
+creates or updates the thread's pull request and posts a completion reply.
 
-Only configured public `channel` messages from configured human actors are
-executable in Phase 1. Bot, xoxp-originated, changed, empty, unconfigured,
-unauthorized, and private `group` messages are durably ignored. Duplicate
-callbacks and response retries do not create duplicate turns or replies.
+An eligible follow-up reuses the existing OpenCode session, worktree, branch,
+and pull request.
+
+ocint's own GitHub replies do not schedule work. Unauthorized messages do not
+become prompt input.
+
+If the owned pull request is closed or merged, ocint does not create a
+replacement.
+
+## GitHub
+
+An open issue with the configured label starts work.
+
+- The issue title is the work title.
+- The issue body and authorized comments become prompt input.
+- A later authorized comment starts follow-up work.
+- ocint replies using issue comments.
+- Closing the issue or removing its configured label makes it ineligible.
+
+After completing work, ocint replies:
+
+```text
+Issue addressed: <pull-request-url>
+
+To make further changes, add a comment.
+```
+
+## Slack Coordinator Conversation
+
+An ordinary authorized human root in a configured public channel starts one
+coordinator conversation:
+
+- The complete message becomes a coordinator turn.
+- Authorized thread replies become later turns in source-message order.
+- One Slack root maps to one coordinator OpenCode session.
+- Coordinator output is posted inside the original Slack thread.
+- Only the coordinator talks to Slack.
+- Bot-authored and unauthorized messages are durably ignored and receive no
+  coordinator execution.
+
+```text
+root message ---------------------> one coordinator session
+    |                                          |
+    +-- authorized reply ----------------------+
+    |                                          v
+    `-- coordinator numbered replies <---- full persisted response
+```
+
+A reply delivered before the root waits durably for that root; it does not run
+OpenCode by itself. Edits, deletions, file-only messages, unsupported subtypes,
+and unconfigured channels are also ignored. Slack retries are deduplicated by
+provider event and message identity.
+
+Long answers are preserved rather than truncated. The full OpenCode response
+is stored, then split into ordered `[N/M]` chunks of at most 3,500 characters.
+Posting observes the configured per-channel interval and durable `Retry-After`.
+After an uncertain network result, recovery searches the thread for the
+deterministic `client_msg_id` before posting again.
+
+Phase 1 has no Slack reopening command because coordinator conversations do not
+close into repository work. It also has no repository sandbox: the coordinator
+can explain and research, but cannot create jobs, worktrees, commits, pushes, or
+pull requests.
