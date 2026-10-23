@@ -32,7 +32,6 @@ The prefix is `Ctrl+Space`.
 | `prefix+v` | Pick and watch a Markdown file in a popup |
 | `prefix+g` | Open the LazyGit popup |
 | `prefix+Shift+T` | Open the terminal popup |
-| `prefix+Shift+G` | Review the current PR in a new tab |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
 
 ## Setup
@@ -40,7 +39,6 @@ The prefix is `Ctrl+Space`.
 ```sh
 just brew
 just bin
-just tuicr
 just herdr
 herdr
 ```
@@ -52,6 +50,18 @@ directory and outside this repository. `just bin` links `~/.local/bin/pbcopy` so
 repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
 linking `nvim/`. Interactive
 Zsh panes publish a compact ` branch` label for the Spaces sidebar.
+
+## Updates
+
+The Herdr application is managed by Homebrew through the root `Brewfile`. Update it with `brew upgrade herdr`, not `herdr update`, to keep Homebrew as the owner of the executable. Avoid a separate `~/.local/bin/herdr`, which can shadow the Homebrew binary.
+
+Update GitHub plugins separately:
+
+```sh
+just --justfile herdr/justfile update
+```
+
+Plugins declared without a `ref` in `herdr/plugins.json` follow their upstream default branch. `just herdr` installs missing plugins but does not update existing ones. Upgrading the executable does not restart running Herdr sessions.
 
 ## macOS GUI
 

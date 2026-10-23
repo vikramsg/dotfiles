@@ -1,7 +1,7 @@
 # ocost implementation
 
 A standalone Python client for the existing local OpenCode V2 HTTP service.
-There is no dependency on ocint and no shared presentation package.
+HTTP transport and terminal presentation are owned by this package.
 
 ```text
 CLI: resolve registration path, capture time, construct dependencies
@@ -41,4 +41,3 @@ without printing a report.
 ```sh
 ocost --exclude-project /work/archive --exclude-project experiments
 ```
-

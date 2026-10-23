@@ -27,7 +27,6 @@
       "enable_thinking": true,
       "effort": "high"
     },
-    "terminal_init_command": "eval \"$(zwm terminal-init-command-session)\"",
   },
   "ssh_connections": [
     {

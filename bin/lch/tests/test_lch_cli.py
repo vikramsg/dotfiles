@@ -53,10 +53,10 @@ def test_list_shows_known_jobs_with_install_and_load_status(monkeypatch):
                 label="com.vikramsg.dotfiles.lch-screenshot-clipboard",
             ),
             SimpleNamespace(
-                job_id="lch-zwm",
+                job_id="lch-example",
                 installed=True,
                 loaded=True,
-                label="com.vikramsg.dotfiles.lch-zwm",
+                label="com.vikramsg.dotfiles.lch-example",
             )
         ],
     )
@@ -67,10 +67,10 @@ def test_list_shows_known_jobs_with_install_and_load_status(monkeypatch):
     assert result.exit_code == 0
     assert "JOB" in result.output
     assert "lch-screenshot-clipboard" in result.output
-    assert "lch-zwm" in result.output
+    assert "lch-example" in result.output
     assert "yes" in result.output
     assert "com.vikramsg.dotfiles.lch-screenshot-clipboard" in result.output
-    assert "com.vikramsg.dotfiles.lch-zwm" in result.output
+    assert "com.vikramsg.dotfiles.lch-example" in result.output
 
 
 def test_config_reports_effective_paths_and_namespace_format(monkeypatch):

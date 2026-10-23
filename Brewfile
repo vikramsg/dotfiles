@@ -17,11 +17,8 @@ brew "eza"
 # Lazygit
 brew "lazygit"
 
-# GitHub CLI used by the tuicr Herdr popup.
+# GitHub CLI used by repository and pull-request workflows.
 brew "gh"
-
-# Terminal code review UI.
-brew "tuicr"
 
 # Parse Herdr API responses in shell scripts.
 brew "jq"
@@ -68,4 +65,3 @@ brew "duckdb"
 
 # For runnin Terraform format
 brew "terraform"
-

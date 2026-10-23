@@ -47,7 +47,5 @@ last_created_entry_kind = Terminal
 Zed creates a new Terminal Thread when its Agent Panel activates. This works
 even when `last_active_terminal_id` is null or its old metadata is missing.
 
-The new terminal uses the worktree working directory and runs
-`agent.terminal_init_command`. A command that derives its tmux session name
-from the working directory attaches the new Zed frontend to the persistent
-session for that worktree.
+The new terminal starts in the worktree working directory. This configuration
+does not automatically attach Agent Panel terminals to tmux sessions.
