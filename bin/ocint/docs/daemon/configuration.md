@@ -58,33 +58,35 @@ Setup never starts OAuth or device login. It discovers the GitHub token with
 and installs the systemd units. A later setup reuses the existing TOML without
 running discovery again.
 
-## Optional Private Slack Source
+## Slack Coordinator
 
-Slack polling is enabled only when `[slack]` is present. Every configured
-channel is a private channel mapped to one configured repository:
+Slack coordinator settings live under `[coordinator.slack]`; obsolete root
+`[slack]` configuration is rejected. Phase 1 accepts executable messages only
+from configured public channels:
 
 ```toml
-[slack]
+[coordinator.slack]
 workspace_id = "T01234567"
-completion_reaction = "white_check_mark"
 
-[[slack.channels]]
+[[coordinator.slack.channels]]
 channel_id = "C01234567"
-repository = "repository"
 authorized_users = ["U01234567"]
-initial_oldest = "1753380000.123456"
 ```
 
 `authorized_users` contains Slack member IDs, not display names. Channel IDs
-must be unique. `initial_oldest` is an inclusive first-run boundary; set it to
-the timestamp of the prepared first root so older channel history cannot become
-work. Only configured channels are polled.
+must be unique. Signed callbacks for unconfigured channels, unauthorized actors,
+bots, changed messages, and private `group` messages are durably ignored. The
+payload model parses both Slack `channel` and `group` variants, but extra token
+scope never makes a private callback executable in Phase 1.
 
 Create the Slack app from
 [`../../config/slack-app-manifest.yaml`](../../config/slack-app-manifest.yaml).
-It requests exactly `groups:history`, `chat:write`, and `reactions:write`.
-Socket Mode, Events API subscriptions, slash commands, and public-channel
-history are not used.
+Set its callback placeholder to the public HTTPS domain that forwards to
+`/slack/events`. It subscribes only to `message.channels`, disables Socket Mode,
+and requests exactly `channels:history` and `chat:write`. It does not request
+`channels:read` or any groups scope. Startup validates configured channels with
+the available history API; deployments where Slack requires `channels:read` for
+that validation are not supported by the Phase 1 least-privilege manifest.
 
 Install or rotate the bot token without putting it in argv:
 
@@ -94,8 +96,10 @@ ocint daemon lch slack-token
 printf '%s\n' "$SLACK_TOKEN" | ocint daemon lch slack-token
 ```
 
-The hidden prompt validates `auth.test`, required scopes, and the configured
-workspace before atomically updating `daemon.env`.
+The hidden prompt validates `auth.test`, required scopes, configured public
+channels, and the workspace before atomically updating `daemon.env`. The
+coordinator also requires `OCINT_DAEMON_SLACK_SIGNING_SECRET` for callback
+signature verification.
 
 ## Root Settings
 
@@ -160,7 +164,8 @@ Logs are written to `$XDG_STATE_HOME/ocint/daemon.log`. Rotation defaults to
 | `OCINT_DAEMON_CONFIG` | Explicit TOML path |
 | `OCINT_DAEMON_API_TOKEN` | Bearer authentication for the control API |
 | `OCINT_DAEMON_GITHUB_TOKEN` | GitHub REST authentication |
-| `OCINT_DAEMON_SLACK_BOT_TOKEN` | Optional private-channel Slack bot authentication |
+| `OCINT_DAEMON_SLACK_BOT_TOKEN` | Slack coordinator delivery authentication |
+| `OCINT_DAEMON_SLACK_SIGNING_SECRET` | Slack Events API signature verification |
 | `PATH` | Executable discovery for managed commands |
 | `LANG` or `LC_ALL` | Managed command locale |
 
@@ -176,7 +181,7 @@ bin/ocint/docs/daemon.md              -> concise daemon index
 bin/ocint/docs/daemon/workflow.md     -> minimal operator workflow
 ocint/daemon/lch/setup.py             -> initial discovery + writes
 ocint/daemon/lch/doctor.py            -> redacted diagnostics
-bin/ocint/config/slack-app-manifest.yaml -> least-privilege private Slack app
+bin/ocint/config/slack-app-manifest.yaml -> least-privilege public-channel Events API app
 ```
 
 Uninstall removes only generated user units. Configuration, credentials,

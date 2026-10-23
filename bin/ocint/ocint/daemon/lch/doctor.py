@@ -89,7 +89,7 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
     diagnostics.append(_private_file_diagnostic("env.path", environment))
     names = (
         ("OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN", "OCINT_DAEMON_SLACK_BOT_TOKEN")
-        if config is not None and config.slack is not None
+        if config is not None and config.coordinator is not None
         else ("OCINT_DAEMON_API_TOKEN", "OCINT_DAEMON_GITHUB_TOKEN")
     )
     present = _environment_presence(environment, names)
@@ -158,10 +158,10 @@ def diagnose(context: DaemonContext, runner: CommandRunner, lifecycle: SystemdLi
             )
         )
         diagnostics.append(_port_diagnostic("ports.api", config.api.port, occupied_allowed=service_active))
-        if config.slack is not None:
+        if config.coordinator is not None:
             token = _environment_value(environment, "OCINT_DAEMON_SLACK_BOT_TOKEN")
             try:
-                value = asyncio.run(check_slack_access(config.slack, token)) if token else "token missing"
+                value = asyncio.run(check_slack_access(config.coordinator.slack, token)) if token else "token missing"
                 diagnostics.append(Diagnostic(name="slack.access", required=True, ok=bool(token), value=value))
             except Exception as error:
                 diagnostics.append(

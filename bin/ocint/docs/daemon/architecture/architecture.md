@@ -8,7 +8,7 @@ See [Provider Interactions](provider-interactions.md) for the target call stack
 between provider-neutral task coordination and platform adapters.
 
 ```text
- labelled GitHub issue or configured private Slack root
+ labelled GitHub issue
           |
           v
  GitHub observation -> durable thread/task -> durable job
@@ -31,7 +31,7 @@ between provider-neutral task coordination and platform adapters.
 | `opencode/` | OpenCode-owned config plus the independent process, session, prompt, status, and SSE adapter |
 | `git/` | Git-owned config plus the independent mirror, worktree, validation, commit, and SSH push adapter |
 | `github/` | Issue observation, authorization, replies, and pull requests |
-| `slack/` | Private-channel polling, authorization, durable cursors/replies, reopen, and rate deferral |
+| `slack/` | Signed Events API ingress, public-channel translation, actor classification, and delivery |
 | `tasks/` | Provider-neutral thread, message, task, and retry coordination |
 | `coordinator/` | Provider-neutral chat authorization, durable conversation turns, OpenCode correlation, and delivery recovery |
 | `lch/` | Linux user-systemd setup and local operator commands |
@@ -51,7 +51,7 @@ engines internally; callers never pass an engine through a feature API.
    |
    +--> Git facade factory
    +--> OpenCode facade factory
-   +--> GitHub publisher/source and optional Slack source factories
+   +--> GitHub publisher/source factory
    +--> pull-request-job store lifecycle
    `--> task coordinator lifecycle
 
@@ -125,7 +125,7 @@ Before Uvicorn reports ready, the daemon:
 3. Migrates the daemon database.
 4. Starts a private OpenCode server and verifies its exact version.
 5. Returns interrupted `running` jobs to `queued` without resetting stages.
-6. Polls GitHub and configured private Slack channels, then reconciles durable tasks.
+6. Polls GitHub, then reconciles durable tasks.
 7. Schedules persisted queued jobs.
 
 A startup failure prevents the API from becoming ready.
@@ -153,9 +153,11 @@ Messages are `actionable`, `unauthorized`, or `agent_response`. Task creation
 atomically claims all pending actionable messages. Agent responses are retained
 for idempotency but excluded from prompts.
 
-Slack channel watermarks begin at the configured inclusive `initial_oldest`
-boundary. Reply intent, completion closure, reopen aliases, and rate-limit defer
-deadlines are durable. Slack is a task source only; publication remains GitHub-owned.
+Legacy Slack polling tables remain in place so upgrades preserve existing data,
+but no polling runtime is composed or exported. The separate coordinator stores
+provider-neutral events, conversations, turns, and delivery intents. Its Slack
+adapter verifies and translates callbacks, while private `group` messages remain
+durable unsupported events.
 
 The migration chain remains explicit:
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from ipaddress import ip_address
 from pathlib import Path
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
@@ -13,17 +14,49 @@ from ocint.daemon.git import GitConfig
 from ocint.daemon.github import GitHubConfig
 from ocint.daemon.models import GitHubLogin, GitRepository
 from ocint.daemon.opencode import OpenCodeConfig
-from ocint.daemon.slack import SlackConfig
+from ocint.daemon.slack import CoordinatorSlackConfig, SlackEventsConfig
+
+
+class CoordinatorConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    workspace_root: Path
+    turn_timeout_seconds: int = Field(gt=0)
+    shutdown_timeout_seconds: int = Field(gt=0)
+    orphan_retention_seconds: int = Field(gt=0)
+    retry_seconds: int = Field(gt=0)
+    max_turn_retries: int = Field(default=3, gt=0)
+    response_chunk_characters: int = Field(gt=16, le=3_500)
+    slack_post_interval_seconds: float = Field(gt=0)
+    safe_failure_text: str = Field(
+        default="The coordinator could not complete this request. Please try again.", min_length=1
+    )
+    ingress: SlackEventsConfig
+    slack: CoordinatorSlackConfig
+    opencode: OpenCodeConfig
+
+    @field_validator("workspace_root")
+    @classmethod
+    def expand_path(cls, value: Path) -> Path:
+        return value.expanduser().absolute()
 
 
 class RepositoryConfig(GitRepository):
     model_config = ConfigDict(frozen=True)
 
     github_repository: str
+    description: str = Field(default="Repository available for daemon-managed changes.", min_length=1)
     author_name: str
     author_email: str
     actors: frozenset[GitHubLogin] = frozenset()
     checks: tuple[tuple[str, ...], ...] = Field(default_factory=tuple)
+
+    @field_validator("name", "description", "github_repository", "default_branch")
+    @classmethod
+    def reject_blank_metadata(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("repository metadata must not be blank")
+        return value
 
 
 class SchedulerConfig(BaseModel):
@@ -56,9 +89,20 @@ class ApiConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = Field(default=8732, ge=1, le=65535)
 
+    @field_validator("host")
+    @classmethod
+    def require_loopback(cls, value: str) -> str:
+        try:
+            loopback = ip_address(value).is_loopback
+        except ValueError:
+            loopback = False
+        if not loopback:
+            raise ValueError("daemon API host must be a loopback IP address")
+        return value
+
 
 class DaemonConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     database_path: Path
     mirror_root: Path
@@ -70,7 +114,7 @@ class DaemonConfig(BaseModel):
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     github: GitHubConfig = Field(default_factory=GitHubConfig)
-    slack: SlackConfig | None = None
+    coordinator: CoordinatorConfig | None = None
     git: GitConfig
     idle_timeout_seconds: int = Field(default=60, ge=1)
 
@@ -84,12 +128,38 @@ class DaemonConfig(BaseModel):
         names = [item.name for item in self.repositories]
         if len(names) != len(set(names)):
             raise ValueError("repository names must be unique")
-        if self.mirror_root.resolve() == self.worktree_root.resolve():
-            raise ValueError("mirror_root and worktree_root must differ")
-        if self.slack is not None:
-            unknown = {channel.repository for channel in self.slack.channels} - set(names)
-            if unknown:
-                raise ValueError(f"Slack channels reference unconfigured repositories: {', '.join(sorted(unknown))}")
+        if self.coordinator is None:
+            if self.mirror_root == self.worktree_root:
+                raise ValueError("mirror_root and worktree_root must differ")
+            return self
+        roots = (self.coordinator.workspace_root, self.mirror_root, self.worktree_root)
+        for index, left in enumerate(roots):
+            for right in roots[index + 1 :]:
+                if left == right or left.is_relative_to(right) or right.is_relative_to(left):
+                    raise ValueError("coordinator workspace_root, mirror_root, and worktree_root must be disjoint")
+        opencode_paths = (
+            (self.opencode.config_file, self.coordinator.opencode.config_file),
+            (self.opencode.xdg_config_home, self.coordinator.opencode.xdg_config_home),
+            (self.opencode.xdg_data_home, self.coordinator.opencode.xdg_data_home),
+        )
+        if any(job_path.resolve() == coordinator_path.resolve() for job_path, coordinator_path in opencode_paths):
+            raise ValueError("coordinator OpenCode config and data paths must be isolated from the job runtime")
+        opencode_hosts = (self.opencode.server_url.host, self.coordinator.opencode.server_url.host)
+        for host in opencode_hosts:
+            try:
+                loopback = host is not None and ip_address(host).is_loopback
+            except ValueError:
+                loopback = False
+            if not loopback:
+                raise ValueError("OpenCode servers must use loopback IP addresses")
+        ports = (
+            self.api.port,
+            self.coordinator.ingress.port,
+            self.opencode.server_url.port,
+            self.coordinator.opencode.server_url.port,
+        )
+        if any(port is None for port in ports) or len(set(ports)) != len(ports):
+            raise ValueError("daemon API, coordinator ingress, and OpenCode ports must be distinct")
         return self
 
     def repository(self, name: str) -> RepositoryConfig:
@@ -106,6 +176,7 @@ class DaemonSettings(BaseSettings):
     api_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_API_TOKEN")
     github_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_GITHUB_TOKEN")
     slack_bot_token: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_SLACK_BOT_TOKEN")
+    slack_signing_secret: SecretStr = Field(default=SecretStr(""), validation_alias="OCINT_DAEMON_SLACK_SIGNING_SECRET")
     xdg_config_home: Path | None = Field(
         default=None, validation_alias=AliasChoices("XDG_CONFIG_HOME", "OCINT_DAEMON_XDG_CONFIG_HOME")
     )

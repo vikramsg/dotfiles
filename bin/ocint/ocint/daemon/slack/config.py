@@ -1,29 +1,77 @@
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from ipaddress import ip_address
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class SlackChannelConfig(BaseModel):
+class CoordinatorSlackChannelConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     channel_id: str = Field(min_length=1)
-    repository: str = Field(min_length=1)
     authorized_users: frozenset[str] = Field(min_length=1)
-    initial_oldest: str = Field(min_length=1, pattern=r"^[0-9]+\.[0-9]+$")
+
+    @field_validator("channel_id")
+    @classmethod
+    def reject_blank_channel(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Slack channel ID must not be blank")
+        return value
+
+    @field_validator("authorized_users")
+    @classmethod
+    def reject_blank_users(cls, value: frozenset[str]) -> frozenset[str]:
+        if any(not user.strip() for user in value):
+            raise ValueError("Slack authorized user IDs must not be blank")
+        return value
 
 
-class SlackConfig(BaseModel):
+class CoordinatorSlackConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     workspace_id: str = Field(min_length=1)
-    completion_reaction: str = Field(default="white_check_mark", min_length=1)
-    channels: tuple[SlackChannelConfig, ...] = Field(min_length=1)
+    channels: tuple[CoordinatorSlackChannelConfig, ...] = Field(min_length=1)
+
+    @field_validator("workspace_id")
+    @classmethod
+    def reject_blank_workspace(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Slack workspace ID must not be blank")
+        return value
 
     @model_validator(mode="after")
-    def unique_channels(self) -> SlackConfig:
+    def unique_channels(self) -> CoordinatorSlackConfig:
         identifiers = [channel.channel_id for channel in self.channels]
         if len(identifiers) != len(set(identifiers)):
-            raise ValueError("Slack channel IDs must be unique")
+            raise ValueError("coordinator Slack channel IDs must be unique")
         return self
 
     @property
     def required_scopes(self) -> frozenset[str]:
-        return frozenset(("groups:history", "chat:write", "reactions:write"))
+        return frozenset(("channels:history", "chat:write"))
+
+
+class SlackEventsConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    host: str = "127.0.0.1"
+    port: int = Field(default=8_733, ge=1, le=65_535)
+    max_request_bytes: int = Field(default=65_536, gt=0)
+    timestamp_tolerance_seconds: int = Field(default=300, gt=0)
+    processing_timeout_seconds: float = Field(default=2.5, gt=0, lt=3)
+    database_busy_timeout_ms: int = Field(default=2_000, gt=0)
+
+    @field_validator("host")
+    @classmethod
+    def require_loopback(cls, value: str) -> str:
+        try:
+            loopback = ip_address(value).is_loopback
+        except ValueError:
+            loopback = False
+        if not loopback:
+            raise ValueError("Slack Events API host must be a loopback IP address")
+        return value
+
+    @model_validator(mode="after")
+    def require_database_timeout_within_processing_budget(self) -> SlackEventsConfig:
+        if self.database_busy_timeout_ms > self.processing_timeout_seconds * 1_000:
+            raise ValueError("database busy timeout must not exceed the ingress processing timeout")
+        return self

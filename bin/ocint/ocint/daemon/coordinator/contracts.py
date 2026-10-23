@@ -1,18 +1,25 @@
 import asyncio
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from typing import Protocol
 
 from ocint.daemon.coordinator.models import (
+    ActorKind,
     Conversation,
     ConversationIdentity,
+    ConversationMessage,
     Delivery,
     DeliveryLookup,
     DeliveryReceipt,
     DeliveryRequest,
+    IngestResult,
+    MessageKind,
     OpenCodeCompletion,
     OpenCodePromptObservation,
     OpenCodePromptRequest,
     OpenCodeSessionId,
     OpenCodeSessionRequest,
+    PreparedMessage,
     ResponseChunk,
     Turn,
 )
@@ -31,6 +38,7 @@ class CoordinatorDelivery(Protocol):
 
 
 class CoordinatorPersistence(Protocol):
+    def ingest(self, prepared: PreparedMessage) -> IngestResult: ...
     def expire_orphans(self, created_before: str) -> int: ...
     def claim_turn(self, ready_at: str) -> Turn | None: ...
     def conversation(self, conversation_id: int) -> Conversation: ...
@@ -53,6 +61,7 @@ class CoordinatorPersistence(Protocol):
 class CoordinatorOperations(Protocol):
     safe_failure_text: str
 
+    def prepare(self, message: ConversationMessage, kind: MessageKind, actor_kind: ActorKind) -> PreparedMessage: ...
     def session_identity(self, identity: ConversationIdentity) -> str: ...
     def chunks(self, response: str) -> tuple[ResponseChunk, ...]: ...
 
@@ -61,6 +70,20 @@ class CoordinatorWorker(Protocol):
     def wake(self) -> None: ...
     async def run_once(self) -> bool: ...
     async def run(self, stop: asyncio.Event) -> None: ...
+
+
+class CoordinatorProcess(Protocol):
+    async def start(self) -> None: ...
+    async def close(self) -> None: ...
+    async def wait_exited(self) -> int: ...
+
+
+class CoordinatorIngress(Protocol):
+    async def __call__(self, shutdown: asyncio.Event, /) -> None: ...
+
+
+class ShutdownSignalRegistrar(Protocol):
+    def register(self, request_shutdown: Callable[[], None]) -> AbstractContextManager[None]: ...
 
 
 class RetryableCoordinatorError(Exception):

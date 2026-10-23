@@ -1,301 +1,157 @@
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import pytest
-from ocint.daemon.db import create_daemon_engine
-from ocint.daemon.db.schema import metadata
-from ocint.daemon.models import MessageClassification, ReplyOutcome, ReplyRequest
-from ocint.daemon.slack.client import SlackRateLimited
-from ocint.daemon.slack.config import SlackChannelConfig, SlackConfig
-from ocint.daemon.slack.models import (
-    SlackAuth,
-    SlackHistory,
-    SlackMessage,
-    SlackMessages,
-    SlackPostedMessage,
-    StoredSlackThread,
+from ocint.daemon.coordinator import (
+    ActorKind,
+    ConversationIdentity,
+    DeliveryMissing,
+    DeliveryReceipt,
+    DeliveryRequest,
+    MessageKind,
+    RetryableCoordinatorError,
 )
-from ocint.daemon.slack.repository import SlackRepository
-from ocint.daemon.slack.service import SlackContext, SlackService
-from sqlalchemy import Engine
+from ocint.daemon.slack.client import SlackRateLimited
+from ocint.daemon.slack.models import SlackEventCallback, SlackEventPayload, SlackMessage, SlackPostedMessage
+from ocint.daemon.slack.service import (
+    ProductionSlackActorClassifier,
+    SlackCoordinatorDelivery,
+    translate_slack_event,
+)
+
+
+def test_root_and_reply_translate_to_exact_transport_neutral_identity_and_order() -> None:
+    # GIVEN
+    classifier = ProductionSlackActorClassifier()
+    root = SlackEventCallback(
+        team_id="T1",
+        event_id="Ev-root",
+        event_time=1_754_000_000,
+        event=SlackEventPayload(
+            type="message",
+            channel="C1",
+            channel_type="channel",
+            user="U1",
+            text="root",
+            ts="1754000000.123456",
+        ),
+    )
+    reply = SlackEventCallback(
+        team_id="T1",
+        event_id="Ev-reply",
+        event_time=1_754_000_001,
+        event=SlackEventPayload(
+            type="message",
+            channel="C1",
+            channel_type="channel",
+            user="U1",
+            text="reply",
+            ts="1754000001.000001",
+            thread_ts="1754000000.123456",
+        ),
+    )
+
+    # WHEN
+    translated_root = translate_slack_event(root, classifier)
+    translated_reply = translate_slack_event(reply, classifier)
+
+    # THEN
+    assert translated_root.kind is MessageKind.ROOT
+    assert translated_reply.kind is MessageKind.REPLY
+    assert translated_root.actor_kind is ActorKind.HUMAN
+    assert translated_reply.message.conversation_identity == translated_root.message.conversation_identity
+    assert translated_reply.message.message_id == "1754000001.000001"
+    assert translated_reply.message.source_order_at == 1_754_000_001_000_001
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected_kind", "expected_actor"),
+    [
+        ({"subtype": "message_changed"}, MessageKind.UNSUPPORTED, ActorKind.HUMAN),
+        ({"subtype": "message_deleted"}, MessageKind.UNSUPPORTED, ActorKind.HUMAN),
+        ({"text": "", "files": ({"id": "F1"},)}, MessageKind.UNSUPPORTED, ActorKind.HUMAN),
+        ({"channel_type": "group"}, MessageKind.UNSUPPORTED, ActorKind.HUMAN),
+        ({"bot_id": "BBOT", "subtype": "bot_message", "user": "UBOT"}, MessageKind.ROOT, ActorKind.BOT),
+        ({"user": ""}, MessageKind.UNSUPPORTED, ActorKind.BOT),
+    ],
+)
+def test_unsupported_message_shapes_are_marked_for_durable_ignore(
+    changes: dict[str, str | tuple[dict[str, str], ...]], expected_kind: MessageKind, expected_actor: ActorKind
+) -> None:
+    # GIVEN
+    payload: dict[str, str | tuple[dict[str, str], ...]] = {
+        "type": "message",
+        "channel": "C1",
+        "channel_type": "channel",
+        "user": "U1",
+        "text": "work",
+        "ts": "1754000000.123456",
+    }
+    payload.update(changes)
+    callback = SlackEventCallback.model_validate(
+        {"team_id": "T1", "event_id": "Ev1", "event_time": 1_754_000_000, "event": payload}
+    )
+
+    # WHEN
+    translated = translate_slack_event(callback, ProductionSlackActorClassifier())
+
+    # THEN
+    assert translated.kind is expected_kind
+    assert translated.actor_kind is expected_actor
 
 
 @dataclass
-class FakeSlackTransport:
-    roots: list[SlackMessage]
-    thread_messages: list[SlackMessage]
-    posted: list[str] = field(default_factory=list)
-    reactions: list[str] = field(default_factory=list)
-    history_oldest: list[str] = field(default_factory=list)
-    client_message_ids: list[str] = field(default_factory=list)
-    fail_after_post: bool = False
+class FakeDeliveryTransport:
+    found: SlackMessage | None = None
     rate_limited: bool = False
+    lookups: list[tuple[str, str, str]] = field(default_factory=list)
+    posts: list[tuple[str, str, str, str]] = field(default_factory=list)
 
-    async def auth_test(self) -> SlackAuth:
-        return SlackAuth(user_id="UBOT", bot_id="BBOT", team_id="T1")
-
-    async def history(self, channel: str, oldest: str = "", cursor: str = "") -> SlackHistory:
-        del channel, cursor
-        self.history_oldest.append(oldest)
-        if self.rate_limited:
-            raise SlackRateLimited(60)
-        return SlackHistory(messages=SlackMessages(root=self.roots))
-
-    async def replies(self, channel: str, root_ts: str, cursor: str = "") -> SlackHistory:
-        del channel, root_ts, cursor
-        return SlackHistory(messages=SlackMessages(root=self.thread_messages))
+    async def find_reply(self, channel: str, root_ts: str, client_msg_id: str) -> SlackMessage | None:
+        self.lookups.append((channel, root_ts, client_msg_id))
+        return self.found
 
     async def post_message(self, channel: str, thread_ts: str, text: str, client_msg_id: str) -> SlackPostedMessage:
-        del channel, thread_ts
-        self.posted.append(text)
-        self.client_message_ids.append(client_msg_id)
-        self.thread_messages.append(
-            SlackMessage(ts="3.000", text=text, user="UBOT", bot_id="BBOT", client_msg_id=client_msg_id)
-        )
-        if self.fail_after_post:
-            raise RuntimeError("crash after remote post")
-        return SlackPostedMessage(ts="3.000")
-
-    async def add_reaction(self, channel: str, timestamp: str, name: str) -> None:
-        del channel, timestamp
-        if name not in self.reactions:
-            self.reactions.append(name)
-
-
-@pytest.fixture
-def engine(tmp_path: Path) -> Engine:
-    value = create_daemon_engine(tmp_path / "control.sqlite")
-    metadata.create_all(value)
-    return value
+        self.posts.append((channel, thread_ts, text, client_msg_id))
+        if self.rate_limited:
+            raise SlackRateLimited(11)
+        return SlackPostedMessage(ts="1754000001.000001")
 
 
 @pytest.mark.asyncio
-async def test_authorized_private_channel_thread_and_completion_are_durable(engine: Engine) -> None:
+async def test_coordinator_delivery_uses_identity_thread_for_lookup_and_post() -> None:
     # GIVEN
-    old = SlackMessage(ts="0.999", text="Old request", user="U1")
-    root = SlackMessage(ts="1.000", thread_ts="1.000", text="Change the config\nKeep compatibility", user="U1")
-    transport = FakeSlackTransport(roots=[old, root], thread_messages=[root])
-    repository = SlackRepository(engine)
-    service = SlackService(
-        context=SlackContext(
-            config=SlackConfig(
-                workspace_id="T1",
-                channels=(
-                    SlackChannelConfig(
-                        channel_id="C1",
-                        repository="dotfiles",
-                        authorized_users=frozenset(("U1",)),
-                        initial_oldest="1.000",
-                    ),
-                ),
-            ),
-            auth=SlackAuth(user_id="UBOT", bot_id="BBOT", team_id="T1"),
-            client=transport,
-            repository=repository,
-        )
+    transport = FakeDeliveryTransport()
+    adapter = SlackCoordinatorDelivery(transport)
+    request = DeliveryRequest(
+        identity=ConversationIdentity(provider="slack", workspace="T1", channel="C1", thread="1754000000.123456"),
+        client_message_id="exact-uuid",
+        text="answer",
     )
 
     # WHEN
-    observations = await service.observe()
-    thread = observations.root[0]
-    await service.reply(
-        ReplyRequest(
-            source_thread_id=thread.source_id,
-            source_anchor_id=thread.messages.root[0].source_id,
-            outcome=ReplyOutcome.ADDRESSED,
-            text="Issue addressed: https://example.test/pr/1",
-        )
-    )
-    await service.reply(
-        ReplyRequest(
-            source_thread_id=thread.source_id,
-            source_anchor_id=thread.messages.root[0].source_id,
-            outcome=ReplyOutcome.ADDRESSED,
-            text="Issue addressed: https://example.test/pr/1",
-        )
-    )
+    missing = await adapter.find_delivery(request)
+    receipt = await adapter.post(request)
 
     # THEN
-    assert thread.title == "Change the config"
-    assert thread.messages.root[0].body == root.text
-    assert thread.messages.root[0].classification is MessageClassification.ACTIONABLE
-    assert transport.posted == ["Issue addressed: https://example.test/pr/1"]
-    assert transport.reactions == ["white_check_mark"]
-    assert transport.history_oldest == ["1.000"]
-    assert repository.open_threads("C1") == ()
+    assert isinstance(missing, DeliveryMissing)
+    assert receipt == DeliveryReceipt(provider_message_id="1754000001.000001")
+    assert transport.lookups == [("C1", "1754000000.123456", "exact-uuid")]
+    assert transport.posts == [("C1", "1754000000.123456", "answer", "exact-uuid")]
 
 
 @pytest.mark.asyncio
-async def test_unauthorized_human_is_classified_for_reply_without_work(engine: Engine) -> None:
+async def test_coordinator_delivery_maps_slack_rate_limit_to_retryable_error() -> None:
     # GIVEN
-    root = SlackMessage(ts="1.000", text="Do something", user="U2")
-    transport = FakeSlackTransport(roots=[root], thread_messages=[root])
-    service = SlackService(
-        context=SlackContext(
-            config=SlackConfig(
-                workspace_id="T1",
-                channels=(
-                    SlackChannelConfig(
-                        channel_id="C1",
-                        repository="dotfiles",
-                        authorized_users=frozenset(("U1",)),
-                        initial_oldest="1.000",
-                    ),
-                ),
-            ),
-            auth=SlackAuth(user_id="UBOT", bot_id="BBOT", team_id="T1"),
-            client=transport,
-            repository=SlackRepository(engine),
-        )
+    adapter = SlackCoordinatorDelivery(FakeDeliveryTransport(rate_limited=True))
+    request = DeliveryRequest(
+        identity=ConversationIdentity(provider="slack", workspace="T1", channel="C1", thread="1754000000.123456"),
+        client_message_id="exact-uuid",
+        text="answer",
     )
 
     # WHEN
-    thread = (await service.observe()).root[0]
+    with pytest.raises(RetryableCoordinatorError) as raised:
+        await adapter.post(request)
 
     # THEN
-    assert not thread.eligible
-    assert thread.messages.root[0].classification is MessageClassification.UNAUTHORIZED
-
-
-@pytest.mark.asyncio
-async def test_pending_reply_recovers_remote_message_before_reaction_and_close(engine: Engine) -> None:
-    # GIVEN
-    root = SlackMessage(ts="1.000", text="Change", user="U1")
-    transport = FakeSlackTransport(roots=[root], thread_messages=[root], fail_after_post=True)
-    repository = SlackRepository(engine)
-    service = SlackService(
-        context=SlackContext(
-            config=SlackConfig(
-                workspace_id="T1",
-                channels=(
-                    SlackChannelConfig(
-                        channel_id="C1",
-                        repository="dotfiles",
-                        authorized_users=frozenset(("U1",)),
-                        initial_oldest="1.000",
-                    ),
-                ),
-            ),
-            auth=SlackAuth(user_id="UBOT", bot_id="BBOT", team_id="T1"),
-            client=transport,
-            repository=repository,
-        )
-    )
-    thread = (await service.observe()).root[0]
-    request = ReplyRequest(
-        source_thread_id=thread.source_id,
-        source_anchor_id=thread.messages.root[0].source_id,
-        outcome=ReplyOutcome.CLOSED_PULL_REQUEST,
-        text="The owned pull request is closed.",
-    )
-    with pytest.raises(RuntimeError, match="crash after remote post"):
-        await service.reply(request)
-
-    # WHEN
-    transport.fail_after_post = False
-    await service.reply(request)
-
-    # THEN
-    assert transport.posted == ["The owned pull request is closed."]
-    assert transport.reactions == ["white_check_mark"]
-    assert repository.open_threads("C1") == ()
-
-
-def test_canonical_permalink_parser_accepts_copied_and_mrkdwn_links() -> None:
-    # GIVEN / WHEN
-    direct = SlackService._reopen_target("reopen https://workspace.slack.com/archives/C123/p1753380000123456")
-    wrapped = SlackService._reopen_target("reopen <https://workspace.slack.com/archives/C123/p1753380000123456>")
-
-    # THEN
-    assert direct is not None
-    assert direct.channel_id == "C123"
-    assert direct.root_ts == "1753380000.123456"
-    assert wrapped == direct
-
-
-@pytest.mark.asyncio
-async def test_unauthorized_reopen_cannot_alias_closed_thread(engine: Engine) -> None:
-    # GIVEN
-    repository = SlackRepository(engine)
-    original = repository.upsert_thread(
-        StoredSlackThread(
-            channel_id="C1",
-            root_ts="1753380000.123456",
-            workspace_id="T1",
-            logical_source_id="slack:T1:C1:1753380000.123456",
-            root_identity="slack:T1:C1:1753380000.123456",
-            configured_repository="dotfiles",
-            title="Original",
-            authorized=True,
-            closed=True,
-        )
-    )
-    command = SlackMessage(
-        ts="1753380001.123456",
-        text="reopen https://workspace.slack.com/archives/C1/p1753380000123456",
-        user="U2",
-    )
-    transport = FakeSlackTransport(roots=[command], thread_messages=[command])
-    service = SlackService(
-        context=SlackContext(
-            config=SlackConfig(
-                workspace_id="T1",
-                channels=(
-                    SlackChannelConfig(
-                        channel_id="C1",
-                        repository="dotfiles",
-                        authorized_users=frozenset(("U1",)),
-                        initial_oldest=command.ts,
-                    ),
-                ),
-            ),
-            auth=SlackAuth(user_id="UBOT", bot_id="BBOT", team_id="T1"),
-            client=transport,
-            repository=repository,
-        )
-    )
-
-    # WHEN
-    observed = (await service.observe()).root[0]
-
-    # THEN
-    assert observed.source_id != original.logical_source_id
-    assert not observed.eligible
-    target = repository.by_root("T1", "C1", original.root_ts)
-    assert target is not None
-    assert target.closed
-
-
-@pytest.mark.asyncio
-async def test_rate_limit_defer_survives_service_restart_without_sleep_or_calls(engine: Engine) -> None:
-    # GIVEN
-    transport = FakeSlackTransport(roots=[], thread_messages=[], rate_limited=True)
-    repository = SlackRepository(engine)
-    context = SlackContext(
-        config=SlackConfig(
-            workspace_id="T1",
-            channels=(
-                SlackChannelConfig(
-                    channel_id="C1",
-                    repository="dotfiles",
-                    authorized_users=frozenset(("U1",)),
-                    initial_oldest="1753380000.123456",
-                ),
-            ),
-        ),
-        auth=SlackAuth(user_id="UBOT", bot_id="BBOT", team_id="T1"),
-        client=transport,
-        repository=repository,
-    )
-    first = SlackService(context=context)
-    assert (await first.observe()).root == []
-
-    # WHEN
-    transport.rate_limited = False
-    restarted = SlackService(context=context)
-    observations = await restarted.observe()
-
-    # THEN
-    assert observations.root == []
-    assert transport.history_oldest == ["1753380000.123456"]
-    assert repository.deferred("C1")
+    assert raised.value.retry_after_seconds == 11

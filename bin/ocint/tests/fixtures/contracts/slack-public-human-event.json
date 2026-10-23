@@ -1,0 +1,15 @@
+{
+  "type": "event_callback",
+  "team_id": "T021N0EQ3JQ",
+  "event_id": "Ev_SANITIZED_PUBLIC_HUMAN",
+  "event_time": 1786070000,
+  "event": {
+    "type": "message",
+    "channel": "C0955FD2FK4",
+    "channel_type": "channel",
+    "user": "U067EG8278R",
+    "text": "[sanitized public human callback fixture]",
+    "ts": "1786070000.000001",
+    "event_ts": "1786070000.000001"
+  }
+}

@@ -12,29 +12,37 @@ code as the daemon user.
 | Ephemeral OpenCode password | client | server | no | no | no | no | live attach |
 | SSH identity file | no | no | no | network only | no | no | no |
 | GitHub token | no | no | no | no | yes | no | no |
-| Slack bot token | no | no | no | no | no | private polling/replies | hidden install |
+| Slack bot token | no | no | no | no | no | public-thread replies | hidden install |
+| Slack signing secret | no | no | no | no | no | inbound signature verification | provisioned secret |
 
 ```text
  daemon.env: API token --------> FastAPI and LCH attach authentication
  daemon.env: GitHub token -----> GitHub HTTP client only
  daemon.env: Slack token ------> Slack HTTP client only
+ daemon.env: signing secret ---> Slack Events API verifier only
  auth.json symlink ------------> isolated OpenCode only
  SSH identity + known_hosts ---> network Git only
  ephemeral password -----------> daemon <-> OpenCode child
                                       `----> live attach process
 ```
 
-The API, GitHub, and optional Slack tokens are persisted in
+The API, GitHub, Slack bot token, and Slack signing secret are persisted in
 `$XDG_CONFIG_HOME/ocint/daemon.env`. Setup creates that file as a
 regular, user-owned mode-0600 file. It is sensitive, but it is not public and is
 never committed to the repository.
 
 `ocint daemon lch slack-token` reads a token from a hidden prompt (or piped
 stdin), validates it, and atomically updates only its environment assignment.
-It prints workspace and bot identity but never the token. Slack uses HTTPS
-polling for configured private channels with exactly `groups:history`,
-`chat:write`, and `reactions:write`; there is no Socket Mode or inbound event
-endpoint.
+It prints workspace and bot identity but never the token. Slack uses signed
+Events API callbacks for configured public channels and requests exactly
+`channels:history` and `chat:write`. The ingress verifies the timestamp and HMAC
+signature over the unmodified body before parsing, rejects stale callbacks, and
+commits accepted or ignored events durably before acknowledging them. Request
+bodies, message text, signatures, signing secrets, and tokens are not logged.
+
+Private `group` payloads may parse as their typed Slack variant, but they are
+always recorded as unsupported and never become coordinator work in Phase 1.
+No groups scope or `channels:read` scope is requested.
 
 ## Live Attachment Authentication
 
