@@ -16,27 +16,6 @@ import Testing
               "focus": "first"
             }
           },
-          "shelves": {
-            "images": {
-              "sources": [
-                {
-                  "id": "local",
-                  "label": "Local",
-                  "icon": "folder",
-                  "directory": "/Users/Shared/Screenshots"
-                }
-              ],
-              "extensions": ["png"],
-              "width": 800,
-              "height": 300,
-              "thumbnail_width": 200,
-              "spacing": 10,
-              "margin": 20,
-              "close_after_drag": true,
-              "close_delay": 0.2,
-              "restore_focus": true
-            }
-          },
           "hotkeys": [
             {
               "modifiers": ["cmd", "shift"],
@@ -72,7 +51,6 @@ import Testing
         #expect(configuration.applications["first"]?.bundleID == "example.first")
         #expect(configuration.server.host == "127.0.0.1")
         #expect(configuration.appearance.theme == "tokyo-night")
-        #expect(configuration.shelves["images"]?.sources.first?.directory == "/Users/Shared/Screenshots")
         #expect(configuration.screenshots.directory == "/Users/Shared/Screenshots")
         #expect(configuration.hotkeys.first?.action.layout == "full")
         #expect(configuration.hotkeys.first?.scope == .global)
@@ -80,124 +58,6 @@ import Testing
 
     @Test func testValidConfigurationPassesValidation() throws {
         try decode(validConfigurationJSON).validate()
-    }
-
-    @Test func testSurfaceConfigurationIsOpaqueAndShowActionResolvesIt() throws {
-        var object = try #require(
-            JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
-        )
-        object["surfaces"] = [
-            "example": [
-                "document": "ui/example/index.html",
-                "width": 640,
-                "height": 320,
-                "margin": 12,
-                "activates": true,
-                "close_after_drag": false,
-                "close_delay": 0.2,
-                "restore_focus": true,
-                "configuration": ["domain_value": "unchanged"],
-            ],
-        ]
-        object["hotkeys"] = [[
-            "modifiers": ["cmd", "shift"],
-            "key": "j",
-            "scope": "global",
-            "action": ["type": "show_surface", "surface": "example"],
-        ]]
-
-        let configuration = try JSONDecoder().decode(
-            WorkflowConfiguration.self,
-            from: JSONSerialization.data(withJSONObject: object)
-        )
-
-        try configuration.validate()
-        #expect(configuration.surfaces["example"]?.document == "ui/example/index.html")
-        #expect(configuration.surfaces["example"]?.configuration["domain_value"] == .string("unchanged"))
-        #expect(configuration.hotkeys.first?.action.surface == "example")
-    }
-
-    @Test func testConfigurationRejectsUnsafeSurfaceDocument() throws {
-        for document in ["/tmp/index.html", "../index.html"] {
-            var object = try #require(
-                JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
-            )
-            object["surfaces"] = [
-                "unsafe": [
-                    "document": document,
-                    "width": 640,
-                    "height": 320,
-                    "margin": 12,
-                    "activates": false,
-                    "close_after_drag": false,
-                    "close_delay": 0,
-                    "restore_focus": true,
-                    "configuration": [:],
-                ],
-            ]
-            let configuration = try JSONDecoder().decode(
-                WorkflowConfiguration.self,
-                from: JSONSerialization.data(withJSONObject: object)
-            )
-            do {
-                try configuration.validate()
-                Issue.record("Expected unsafe surface document to fail validation")
-            } catch {
-                #expect(error as? WorkflowValidationError == .invalidSurface("unsafe"))
-            }
-        }
-    }
-
-    @Test func testConfigurationRejectsUnknownSurfaceAction() throws {
-        var object = try #require(
-            JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
-        )
-        object["hotkeys"] = [[
-            "modifiers": ["cmd", "shift"],
-            "key": "j",
-            "scope": "global",
-            "action": ["type": "show_surface", "surface": "missing"],
-        ]]
-        let configuration = try JSONDecoder().decode(
-            WorkflowConfiguration.self,
-            from: JSONSerialization.data(withJSONObject: object)
-        )
-
-        do {
-            try configuration.validate()
-            Issue.record("Expected unknown surface action to fail validation")
-        } catch {
-            #expect(error as? WorkflowValidationError == .invalidAction(0))
-        }
-    }
-
-    @Test func testShelfDefaultsToFiveItemsWhenLimitIsOmitted() throws {
-        let configuration = try decode(validConfigurationJSON)
-        #expect(configuration.shelves["images"]?.maxItems == 5)
-    }
-
-    @Test func testShelfUsesConfiguredItemLimit() throws {
-        let text = validConfigurationJSON.replacingOccurrences(
-            of: "\"extensions\": [\"png\"]",
-            with: "\"extensions\": [\"png\"], \"max_items\": 3"
-        )
-        let configuration = try decode(text)
-        #expect(configuration.shelves["images"]?.maxItems == 3)
-    }
-
-    @Test func testConfigurationRejectsNonpositiveShelfItemLimit() throws {
-        for limit in [0, -1] {
-            let text = validConfigurationJSON.replacingOccurrences(
-                of: "\"extensions\": [\"png\"]",
-                with: "\"extensions\": [\"png\"], \"max_items\": \(limit)"
-            )
-            do {
-                try decode(text).validate()
-                Issue.record("Expected nonpositive shelf item limit to fail validation")
-            } catch {
-                #expect(error as? WorkflowValidationError == .invalidShelf("images"))
-            }
-        }
     }
 
     @Test func testConfigurationDefaultsToSystemThemeWhenAppearanceIsOmitted() throws {
@@ -215,27 +75,6 @@ import Testing
             Issue.record("Expected empty theme name to fail validation")
         } catch {
             #expect(error as? WorkflowValidationError == .invalidTheme)
-        }
-    }
-
-    @Test func testConfigurationRejectsDuplicateShelfSourceIdentifiers() throws {
-        var object = try #require(
-            JSONSerialization.jsonObject(with: Data(validConfigurationJSON.utf8)) as? [String: Any]
-        )
-        var shelves = try #require(object["shelves"] as? [String: Any])
-        var images = try #require(shelves["images"] as? [String: Any])
-        var sources = try #require(images["sources"] as? [[String: Any]])
-        sources.append(sources[0])
-        images["sources"] = sources
-        shelves["images"] = images
-        object["shelves"] = shelves
-        let data = try JSONSerialization.data(withJSONObject: object)
-
-        do {
-            try JSONDecoder().decode(WorkflowConfiguration.self, from: data).validate()
-            Issue.record("Expected duplicate shelf source identifiers to fail validation")
-        } catch {
-            #expect(error as? WorkflowValidationError == .invalidShelf("images"))
         }
     }
 

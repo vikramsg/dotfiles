@@ -37,7 +37,7 @@ Each tool keeps its own package-local tests under `bin/<tool>/tests`.
 ## macflow
 
 Native macOS automation host and HTTP CLI for configured layouts, screenshot
-capture, overlays, and the draggable screenshot shelf.
+capture, overlays, file listing, and JSON-described native UI.
 
 - Install: `just macflow`
 - Test: `just --justfile bin/macflow/justfile test`
