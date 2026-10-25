@@ -74,7 +74,7 @@ Open Navigator with `prefix+s`, from Herdr's plugin actions, or run:
 herdr plugin action invoke herdr-navigator.open
 ```
 
-Navigate to another local workspace through the picker before using Jump Back. The previous workspace stays pinned at the top only while the picker is unfiltered. Navigator replaces Herdr's native goto binding on `prefix+s`; `prefix+w` still opens Herdr's workspace picker, whose switches do not populate Navigator history.
+Navigate to another local workspace through the picker before using Jump Back. The previous workspace stays pinned at the top only while the picker is unfiltered. Navigator replaces Herdr's native goto and Settings bindings on `prefix+s`; the GUI's `Cmd+,` Settings shortcut remains available. `prefix+w` still opens Herdr's workspace picker, whose switches do not populate Navigator history.
 
 Edit `herdr/navigator.toml` for persistent Navigator settings. `just herdr` links it to `~/.config/herdr/plugins/config/herdr-navigator/config.toml` before installing the plugin. Move or migrate an existing unmanaged config before linking. Only the Jump Back settings are overridden; other settings use Navigator's defaults. Installation builds the plugin with Rust and Cargo; it does not require Bun. Reload Herdr with `prefix+q` after setup to activate the shortcut.
 
