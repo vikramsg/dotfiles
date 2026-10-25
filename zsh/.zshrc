@@ -115,10 +115,9 @@ fi
 # alias python3="echo 'Do not use python3\nUse uv for all Python related usage.'"
 
 #########################################
-# gcloud commands
-alias gcloud-auth="gcloud auth login"
-alias gs="gcloud storage"
-
-#########################################
 # Init zoxide
 eval "$(zoxide init zsh)"
+
+if [[ -f "$HOME/.zshrc.local" ]]; then
+    source "$HOME/.zshrc.local"
+fi

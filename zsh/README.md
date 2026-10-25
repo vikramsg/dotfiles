@@ -4,7 +4,24 @@ Run `just zsh` to link the shell and prompt configuration. If `~/.zshenv` alread
 
 `.zshenv` exports `EDITOR=nvim` and `VISUAL=nvim` for interactive and non-interactive Zsh processes. Keep it POSIX-compatible and free of terminal output and interactive setup: the OS Login VM also sources it from Bash.
 
-## Herdr shortcut
+## Local settings
+
+Keep machine-specific aliases and interactive shell settings in `~/.zshrc.local`. This is a regular host-local file, not a repository file or symlink. The managed `.zshrc` sources it last, so local settings can override shared defaults. `just zsh` does not create, replace, or link it.
+
+When migrating an unmanaged `~/.zshenv`, move its interactive settings into `~/.zshrc.local` and preserve the original as a backup before running `just zsh`. The linked `.zshenv` then supplies the shared editor variables on every Zsh startup.
+
+New interactive shells load both files automatically. To refresh an existing interactive Zsh shell without reinitializing all plugins:
+
+```zsh
+source ~/.zshenv
+if [[ -f "$HOME/.zshrc.local" ]]; then
+    source "$HOME/.zshrc.local"
+fi
+```
+
+This refreshes that shell and its future child processes, not an already-running GUI, server, or reviewr process. Do not save an old editor buffer for `~/.zshenv` after migration; reopen it to load the managed contents.
+
+## Herdr shortcuts
 
 Run `herdr-dot` to attach to the `dot` session with a separate saved-machine list. The shortcut sets `XDG_STATE_HOME` to `$HOME/.local/state/herdr-session-dot` for that Herdr client only; other clients keep their existing machine list. It uses the same Herdr configuration and `dot` server.
 
@@ -12,6 +29,21 @@ New interactive shells load the shortcut automatically. In an existing shell, ru
 
 ```sh
 alias herdr-dot='XDG_STATE_HOME="$HOME/.local/state/herdr-session-dot" herdr session attach dot'
+```
+
+On macOS, with the Herdr GUI already running, use `herdr-gpui <session>` to open another window for a local session:
+
+```sh
+herdr-gpui dot
+herdr-gpui default
+```
+
+This function takes exactly one session name, not native GUI CLI subcommands. It runs the installed app bundle's `window new --session` command and leaves existing windows unchanged. Unlike `herdr-dot`, it does not isolate the saved-machine list or apply a device filter. See [separate GUI windows](../herdr/README.md#separate-windows-per-session) for the underlying command and Local sidebar filter.
+
+New interactive shells load the function automatically. To load it in an existing shell:
+
+```sh
+source ~/.zsh_script
 ```
 
 ## Login shell

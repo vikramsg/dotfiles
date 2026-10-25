@@ -79,6 +79,24 @@ The GUI uses `TokyoNight Storm`. For faster discrete mouse-wheel scrollback, set
 
 `Cmd+Shift+B` opens a new browser tab in the GUI.
 
+### Separate windows per session
+
+With the GUI already running, use the [Zsh helper](../zsh/README.md#herdr-shortcuts) to open another window attached to `dot` without switching the existing `default` window:
+
+```sh
+herdr-gpui dot
+```
+
+The helper runs the installed app bundle's command:
+
+```sh
+"/Applications/Herdr.app/Contents/MacOS/Herdr" window new --session dot
+```
+
+Replace `dot` with another local session name as needed. This uses the running app's native multi-window support; it does not require another app instance or restarting an existing session. See the upstream [window commands](https://github.com/penso/herdr-gpui/blob/main/docs/cli.md#app-and-windows).
+
+A separate GUI window still loads the shared saved-machine list; it does not use the isolated client state from the `herdr-dot` shell shortcut. Choose **Local** in the bottom-left device picker to filter remote workspaces and agents out of that window's sidebar without removing or disabling `vm-us`. This filter is window-local, not a separate machine catalog. See the upstream [GUI documentation](https://github.com/penso/herdr-gpui/blob/main/crates/herdr-gpui/README.md).
+
 ## Remote attach
 
 Use the remote server's keybindings when attaching directly from another
