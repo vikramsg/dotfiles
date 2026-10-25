@@ -4,6 +4,16 @@ Run `just zsh` to link the shell and prompt configuration. If `~/.zshenv` alread
 
 `.zshenv` exports `EDITOR=nvim` and `VISUAL=nvim` for interactive and non-interactive Zsh processes. Keep it POSIX-compatible and free of terminal output and interactive setup: the OS Login VM also sources it from Bash.
 
+## Herdr shortcut
+
+Run `herdr-dot` to attach to the `dot` session with a separate saved-machine list. The shortcut sets `XDG_STATE_HOME` to `$HOME/.local/state/herdr-session-dot` for that Herdr client only; other clients keep their existing machine list. It uses the same Herdr configuration and `dot` server.
+
+New interactive shells load the shortcut automatically. In an existing shell, run:
+
+```sh
+alias herdr-dot='XDG_STATE_HOME="$HOME/.local/state/herdr-session-dot" herdr session attach dot'
+```
+
 ## Login shell
 
 Use Zsh as the account's login shell so remote SSH commands, including Herdr server startup, inherit these settings. Setting Herdr's `terminal.default_shell` only selects the shell inside panes; it does not change the account's login shell.
