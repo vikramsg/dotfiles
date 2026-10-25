@@ -99,6 +99,7 @@ setopt HIST_REDUCE_BLANKS    # Remove extra blanks from commands
 #########################################
 # Common aliases
 alias vi="nvim"
+alias herdr-dot='XDG_STATE_HOME="$HOME/.local/state/herdr-session-dot" herdr session attach dot'
 
 [[ -f ~/.zsh_script ]] && source ~/.zsh_script
 
