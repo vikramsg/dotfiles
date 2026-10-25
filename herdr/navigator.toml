@@ -1,0 +1,5 @@
+[jump_back]
+# Record Navigator-driven local workspace transitions and enable the action.
+enabled = true
+# Pin the previous workspace only while the picker is unfiltered.
+pin_previous = true

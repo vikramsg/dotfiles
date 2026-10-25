@@ -23,6 +23,12 @@ NOTE: DO NOT jump to implementation if the current conversation is discussion. Y
 - When planning, explain how the approach applies `Tidy, First` principles and prefer a dedicated section when useful.
 - When recording implementation notes for out-of-plan work, include how `Tidy, First` principles informed the implementation.
 
+## OpenCode hygiene
+
+NEVER switch to a different worktree unless asked.
+I am launching you from a workspace because I want to follow code changes.
+By changing to a worktree in a different location you are making it harder to work.
+
 ## Plans
 
 If the user asks for a plan as a file, always put in `.agents/plans/`.

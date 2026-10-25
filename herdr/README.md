@@ -16,6 +16,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+Shift+H/J/K/L` | Swap pane left / down / up / right |
 | `prefix+x` / `prefix+z` | Close / zoom pane |
 | `prefix+;` | Focus the last pane |
+| `prefix+Tab` | Jump back to the previous workspace visited through Navigator |
 | `prefix+[` | Enter copy mode |
 | `prefix+c` | Create a tab |
 | `prefix+1..9` | Switch tabs |
@@ -23,7 +24,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+$` | Rename the current tab |
 | `prefix+"` / `prefix+%` | Stacked / side-by-side split |
 | `prefix+Shift+1..9` | Focus agent 1–9 |
-| `prefix+s` | Session navigator (goto) |
+| `prefix+s` | Open Herdr Navigator |
 | `prefix+w` | Workspace navigation |
 | `prefix+Shift+C` | Create a workspace |
 | `prefix+q` / `prefix+?` / `prefix+d` | Reload config / help / detach |
@@ -62,6 +63,20 @@ just --justfile herdr/justfile update
 ```
 
 Plugins declared without a `ref` in `herdr/plugins.json` follow their upstream default branch. `just herdr` installs missing plugins but does not update existing ones. Upgrading the executable does not restart running Herdr sessions.
+
+## Navigator Jump Back
+
+`prefix+Tab` invokes `herdr-navigator.jump-back`, toggling between the current workspace and the previous workspace remembered by [Herdr Navigator](https://github.com/thanhdat77/herdr-navigator). It records local workspace changes made through Navigator, not clicks in Herdr's sidebar or switches through other tools. The native `prefix+;` last-pane shortcut is unchanged.
+
+Open Navigator with `prefix+s`, from Herdr's plugin actions, or run:
+
+```sh
+herdr plugin action invoke herdr-navigator.open
+```
+
+Navigate to another local workspace through the picker before using Jump Back. The previous workspace stays pinned at the top only while the picker is unfiltered. Navigator replaces Herdr's native goto and Settings bindings on `prefix+s`; the GUI's `Cmd+,` Settings shortcut remains available. `prefix+w` still opens Herdr's workspace picker, whose switches do not populate Navigator history.
+
+Edit `herdr/navigator.toml` for persistent Navigator settings. `just herdr` links it to `~/.config/herdr/plugins/config/herdr-navigator/config.toml` before installing the plugin. Move or migrate an existing unmanaged config before linking. Only the Jump Back settings are overridden; other settings use Navigator's defaults. Installation builds the plugin with Rust and Cargo; it does not require Bun. Reload Herdr with `prefix+q` after setup to activate the shortcut.
 
 ## macOS GUI
 
