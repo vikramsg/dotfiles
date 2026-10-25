@@ -102,6 +102,18 @@ herdr:
             ln -s "$SOURCE" "$TARGET"; \
         fi; \
     fi
+    @SOURCE="{{justfile_directory()}}/herdr/navigator.toml"; \
+        CONFIG_DIR="$HOME/.config/herdr/plugins/config/herdr-navigator"; \
+        TARGET="$CONFIG_DIR/config.toml"; \
+        mkdir -p "$CONFIG_DIR"; \
+        if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
+            :; \
+        elif [ -e "$TARGET" ] || [ -L "$TARGET" ]; then \
+            echo "ERROR: $TARGET exists and is not the managed symlink. Move or migrate it manually first."; \
+            exit 1; \
+        else \
+            ln -s "$SOURCE" "$TARGET"; \
+        fi
     just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
     just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
     just --justfile "{{justfile_directory()}}/herdr/justfile" install

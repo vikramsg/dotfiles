@@ -12,6 +12,7 @@
 # prefix+" / prefix+%: stacked / side-by-side split
 # prefix+x / prefix+z: close / zoom pane
 # prefix+;: focus the last pane
+# prefix+Tab: jump back to the previous Navigator workspace
 # prefix+Shift+C: create a workspace
 # prefix+h / prefix+l / prefix+k / prefix+j: resize left / right / down / up
 # prefix+Left / prefix+Down / prefix+Up / prefix+Right: focus left / down / up / right
@@ -20,6 +21,7 @@
 # prefix+e: toggle nvim sidebar
 # prefix+v: pick and watch a Markdown file
 # prefix+w: Open workspace picker
+# prefix+s: open Navigator
 # prefix+Shift+T: open terminal popup
 # prefix+f: open nvim file picker
 # prefix+r: toggle full-height reviewr sidebar
@@ -51,7 +53,8 @@ switch_tab = "prefix+1..9"
 focus_agent = "prefix+shift+1..9"
 previous_tab = "prefix+p"
 next_tab = "prefix+n"
-goto = "prefix+s"
+# Navigator owns prefix+s instead of the native goto picker.
+goto = ""
 edit_scrollback = ""
 # Leave prefix+r to reviewr; GPUI otherwise claims it for Resize Mode.
 resize_mode = ""
@@ -79,6 +82,18 @@ swap_pane_left = "prefix+shift+h"
 swap_pane_down = "prefix+shift+j"
 swap_pane_up = "prefix+shift+k"
 swap_pane_right = "prefix+shift+l"
+
+[[keys.command]]
+key = "prefix+s"
+type = "plugin_action"
+command = "herdr-navigator.open"
+description = "open Navigator"
+
+[[keys.command]]
+key = "prefix+tab"
+type = "plugin_action"
+command = "herdr-navigator.jump-back"
+description = "jump back to previous Navigator workspace"
 
 [[keys.command]]
 key = "ctrl+h"
