@@ -1,3 +1,14 @@
+herdr-gpui() {
+    emulate -L zsh
+
+    if [[ $# -ne 1 || -z "$1" ]]; then
+        print "usage: herdr-gpui <session>" >&2
+        return 1
+    fi
+
+    "/Applications/Herdr.app/Contents/MacOS/Herdr" window new --session "$1"
+}
+
 ss() {
     if [[ $# -eq 0 ]]; then
         print "usage: ss <index|ls|cp <dest>>" >&2
