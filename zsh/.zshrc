@@ -1,11 +1,7 @@
 #########################################
-# Setup PATH to use locally installed binaries
-export PATH="$HOME/.local/bin:$PATH"
+# Prefer Homebrew's Rustup installation on macOS.
 if [[ -d /opt/homebrew/opt/rustup/bin ]]; then
     export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
-fi
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 fi
 
 #########################################
