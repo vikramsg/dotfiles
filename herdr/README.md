@@ -49,8 +49,7 @@ herdr
 sockets, and persistent session data remain in the normal `~/.config/herdr`
 directory and outside this repository. `just bin` links `~/.local/bin/pbcopy` so `persiyanov.reviewr` forwards clipboard copies over OSC 52 through Herdr instead of invoking `xclip` on headless Linux VMs. The plugin's `navigate.sh` and the
 repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
-linking `nvim/`. Interactive
-Zsh panes publish a compact ` branch` label for the Spaces sidebar.
+linking `nvim/`.
 
 ## Updates
 
@@ -90,7 +89,9 @@ The GUI connects to the separately installed Herdr daemon. Closing the GUI leave
 
 On macOS, `just herdr` links `config-gpui.local.toml` into `~/.config/herdr/`. Move or migrate an existing unmanaged override file before linking. Edit the repository file for persistent GUI settings; the app reloads saved changes automatically. The managed `config-gpui.toml` defaults are owned by the app and must not be edited.
 
-The GUI uses `TokyoNight Storm`. For faster discrete mouse-wheel scrollback, set `mouse_scroll_lines` under `[ui]` in `herdr/config.toml` (default `3`). This does not change precise trackpad movement or scrolling inside applications that consume mouse events themselves.
+The GUI uses `TokyoNight Storm` and the `comfortable-rounded` sidebar layout, which shows branches for workspaces and linked worktrees. Herdr's default sidebar rows request branch updates from the daemon; reload the daemon configuration with `prefix+q` after changing it. For faster discrete mouse-wheel scrollback, set `mouse_scroll_lines` under `[ui]` in `herdr/config.toml` (default `3`). This does not change precise trackpad movement or scrolling inside applications that consume mouse events themselves.
+
+Existing Zsh panes that loaded the former branch reporter continue publishing unused metadata until their shells restart. Native sidebar rows do not use that metadata.
 
 `Cmd+Shift+B` opens a new browser tab in the GUI.
 

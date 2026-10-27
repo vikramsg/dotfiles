@@ -1,6 +1,6 @@
 # GUI overrides; omitted settings inherit Herdr UI's managed defaults.
 theme = "TokyoNight"
-layout = "compact-rounded"
+layout = "comfortable"
 confirm_close_pane = false
 
 [keybindings]
