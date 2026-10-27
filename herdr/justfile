@@ -4,6 +4,7 @@
 # reinstalls every declared plugin to refresh its managed checkout. Herdr
 # stores the plugin source under its own runtime directory, so this repository
 # only holds the declaration.
+# Some plugins, such as herdr-navigator, need Cargo from `just brew` to build.
 
 # Install declared plugins that are missing.
 install:
