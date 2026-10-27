@@ -32,6 +32,9 @@ brew "tmux"
 # Persistent terminal multiplexer alternative to tmux.
 brew "herdr"
 
+# Build Rust-based Herdr plugins, such as herdr-navigator.
+brew "rust"
+
 # Native Herdr client for macOS; the daemon remains available on both hosts.
 if OS.mac?
   tap "penso/tap"
