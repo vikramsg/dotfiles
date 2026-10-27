@@ -17,11 +17,6 @@ export FZF_DEFAULT_OPTS="--style full \
 --preview 'fzf-preview.sh {}' \
 --bind 'focus:transform-header:file --brief {}'"
 
-if [[ ${HERDR_ENV:-} == 1 ]]; then
-    config_file=$(readlink "$HOME/.config/herdr/config.toml")
-    source "$(dirname "$config_file")/branch-metadata.zsh"
-fi
-
 ##################################################################################
 # The settings above are ones we need for fast setup
 # They run before the plugins below load (e.g. Herdr-launched tabs).

@@ -217,12 +217,6 @@ copy_on_select = true
 confirm_close = true
 prompt_new_tab_name = false
 
-[ui.sidebar.spaces]
-rows = [
-  ["state_icon", { token = "workspace", fg = "#7aa2f7", bold = true }],
-  [{ token = "$branch_label", fg = "#9ece6a", dim = true }],
-]
-
 [ui.sound]
 enabled = false
 
