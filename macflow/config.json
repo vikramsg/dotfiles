@@ -42,67 +42,6 @@
       "gap": 8
     }
   },
-  "shelves": {
-    "screenshots": {
-      "sources": [
-        {
-          "id": "local",
-          "label": "Local VM",
-          "icon": "desktopcomputer",
-          "directory": "/Users/Shared/Screenshots"
-        },
-        {
-          "id": "remote",
-          "label": "Remote VM",
-          "icon": "network",
-          "directory": "/Users/Shared/Screenshots"
-        }
-      ],
-      "extensions": ["png", "jpg", "jpeg", "webp"],
-      "max_items": 5,
-      "width": 1255,
-      "height": 250,
-      "thumbnail_width": 220,
-      "spacing": 8,
-      "margin": 12,
-      "close_after_drag": true,
-      "close_delay": 0.2,
-      "restore_focus": true
-    }
-  },
-  "surfaces": {
-    "screenshots-web": {
-      "document": "ui/screenshot-shelf/index.html",
-      "width": 1255,
-      "height": 250,
-      "margin": 12,
-      "activates": false,
-      "close_after_drag": true,
-      "close_delay": 0.2,
-      "restore_focus": true,
-      "configuration": {
-        "sources": [
-          {
-            "id": "local",
-            "label": "Local VM",
-            "icon": "desktop",
-            "directory": "/Users/Shared/Screenshots"
-          },
-          {
-            "id": "remote",
-            "label": "Remote VM",
-            "icon": "network",
-            "directory": "/Users/Shared/Screenshots"
-          }
-        ],
-        "extensions": ["png", "jpg", "jpeg", "webp"],
-        "max_items": 5,
-        "thumbnail_width": 220,
-        "spacing": 8,
-        "margin": 12
-      }
-    }
-  },
   "hotkeys": [
     {
       "modifiers": ["cmd", "shift"],
@@ -127,18 +66,6 @@
       "key": "4",
       "scope": "global",
       "action": { "type": "apply_layout", "layout": "zed_ghostty" }
-    },
-    {
-      "modifiers": ["cmd", "shift"],
-      "key": "h",
-      "scope": "global",
-      "action": { "type": "show_file_shelf", "shelf": "screenshots" }
-    },
-    {
-      "modifiers": ["cmd", "shift"],
-      "key": "j",
-      "scope": "global",
-      "action": { "type": "show_surface", "surface": "screenshots-web" }
     }
   ],
   "screenshots": {

@@ -3,15 +3,12 @@ import AppKit
 final class SurfaceSession {
     private let windows: WindowService
     private let screens: ScreenService
-    private let hotKeys: HotKeyService
     private var panel: NSPanel?
-    private var escapeHotKey: UInt32?
     private var focusSnapshot: FocusSnapshot?
 
-    init(windows: WindowService, screens: ScreenService, hotKeys: HotKeyService) {
+    init(windows: WindowService, screens: ScreenService) {
         self.windows = windows
         self.screens = screens
-        self.hotKeys = hotKeys
     }
 
     var frame: NSRect? { panel?.frame }
@@ -22,7 +19,6 @@ final class SurfaceSession {
         height: Double,
         margin: Double,
         activates: Bool,
-        onEscape: @escaping () -> Void,
         makePanel: (NSRect) throws -> NSPanel
     ) throws -> NSPanel? {
         if focusSnapshot == nil {
@@ -68,17 +64,10 @@ final class SurfaceSession {
         } else {
             panel.orderFrontRegardless()
         }
-        do {
-            escapeHotKey = try hotKeys.register(modifiers: [], key: "escape", callback: onEscape)
-        } catch {
-            NSLog("Could not register surface Escape shortcut: \(error.localizedDescription)")
-        }
         return panel
     }
 
     func hide(restoreFocus: Bool, preserveFocus: Bool = false) {
-        if let escapeHotKey { hotKeys.unregister(escapeHotKey) }
-        escapeHotKey = nil
         panel?.orderOut(nil)
         panel?.close()
         panel = nil

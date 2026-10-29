@@ -1,6 +1,6 @@
 ---
 name: macflow
-description: Use Macflow on macOS to inspect and arrange windows, capture screenshots, send keyboard or mouse input, present image overlays and file shelves, and diagnose its service and permissions. Use for Macflow CLI workflows and configuration, including native and WebKit UI.
+description: Use Macflow on macOS to inspect and arrange windows, capture screenshots, send keyboard or mouse input, present image overlays, render JSON-described native UI, list files, and diagnose its service and permissions. Use for Macflow CLI workflows and configuration.
 ---
 
 # Macflow
@@ -34,7 +34,9 @@ window       inspect, position, focus, or unminimize windows
 screen       inspect display geometry
 input        send keystrokes, clicks, or drags
 screenshot   capture a display
-ui           show, inspect, or dismiss Macflow-owned UI
+files        list files for building a UI
+ui           create, inspect, or dismiss JSON-described UI surfaces
+overlay      show, inspect, or hide image overlays
 system       health, doctor, permissions
 ```
 
@@ -57,17 +59,17 @@ wants a visible surface. `screenshot capture --preview` is an explicit opt-in.
   changes or the user is working in the same desktop. A success response
   acknowledges input dispatch; it does not prove
   the target reacted or a drag finished. Verify the visible or file outcome.
-- **Overlay:** `ui overlay show <image-path> [timeout-seconds]`, then
-  `ui overlay list`; `ui overlay hide` dismisses it without capturing anything.
-- **Shelf:** `ui shelf show <directory>` currently opens the native shelf.
-  It does not accept a configured shelf name. Use `ui shelf list` to inspect
-  paths and the ID; close with `ui shelf close <id>` or Escape. Shelf frame
-  coordinates use AppKit's bottom-origin, unlike top-origin input coordinates.
-  Verify real file delivery after a drag, not just the HTTP response.
+- **Overlay:** `overlay show <image-path> [timeout-seconds]`, then
+  `overlay list`; `overlay hide` dismisses it without capturing anything.
+- **UI:** build an A2UI payload and `ui show --file <payload.json>` (or `-` for
+  stdin); `ui list` reports surfaces. Render it, then verify visually with
+  `screenshot capture` and dismiss with `ui dismiss <surface-id>` or Escape.
+  Payloads are one message or an array; see `docs/ui.md`.
+- **Files:** `files list <directory>` returns newest-first `name`, `path`, `url`,
+  and `modifiedAt`. Use it to fill a surface's data model.
 - **Configured workflows:** inspect the user's config before sending a hotkey.
-  Native shelves, WebKit surfaces, and layouts can be bound there. Do not assume
-  a shortcut, invent `layout apply`, or claim the CLI can select a WebKit
-  renderer. Confirm dismissal and focus restoration visually when relevant.
+  Layouts can be bound there. Do not assume a shortcut or invent `layout apply`.
+  Confirm dismissal and focus restoration visually when relevant.
 
 ## Configuration and installation
 
