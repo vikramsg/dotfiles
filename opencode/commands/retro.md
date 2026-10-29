@@ -1,6 +1,35 @@
 ---
 description: Conduct a retrospective on a coding session
 subagent: false
+metadata:
+  provenance:
+    author: Matt Pocock
+    repository: https://github.com/mattpocock/skills
+    revision: a496f5513d4a4cf889bc48e189e579f4b0bdf6aa
+    obtained_on: "2026-10-29"
+    acquisition: >-
+      Read the upstream GitHub source directly over HTTPS; did not run npx skills,
+      install a plugin, or generate a replacement from a summary.
+    license: MIT
+    copyright: Copyright (c) 2026 Matt Pocock
+    sources:
+      - upstream: https://github.com/mattpocock/skills/blob/a496f5513d4a4cf889bc48e189e579f4b0bdf6aa/skills/engineering/retro/SKILL.md
+        local: retro.md
+        use: Adapted as an OpenCode command
+      - upstream: https://github.com/mattpocock/skills/blob/a496f5513d4a4cf889bc48e189e579f4b0bdf6aa/skills/productivity/writing-for-agents/SKILL.md
+        local: references/retro-writing-for-agents.txt
+        use: Bundled writing guide without a separate skill installation
+      - upstream: https://github.com/mattpocock/skills/blob/a496f5513d4a4cf889bc48e189e579f4b0bdf6aa/LICENSE
+        local: references/retro-LICENSE.txt
+        use: Upstream MIT license notice
+    explanation: https://www.aihero.dev/skills-retro
+    adaptations:
+      - Replaced skill-only frontmatter with OpenCode command metadata and subagent false to retain the current conversation.
+      - Added argument substitution for a session or focus.
+      - Replaced the writing-for-agents Skill-tool call with an instruction to read the bundled guide.
+      - Made proposal-only behavior explicit, required session evidence, and handled unavailable history and sessions without findings.
+      - Retained upstream categories and implementation/review guidance; pointed the final writing-guide reference to the bundled guide.
+      - Removed the writing guide's skill frontmatter and pinned its skill-mechanics links to upstream URLs.
 ---
 
 The user has asked for a **retrospective**. You are suggesting improvements to the coding agent's **environment** to improve future runs. Propose changes only; wait for the user to choose a candidate before editing files, installing checks, or changing configuration.

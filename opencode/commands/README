@@ -6,27 +6,8 @@ The root `just opencode` recipe links this directory to `~/.config/opencode/comm
 
 Run `/retro` to review the current coding session, or `/retro <session log or focus>` to specify another session or a focus. It proposes improvements to the agent's environment, ordered by severity, and waits for your selection before changing anything. It runs in the current session so it can use the conversation history.
 
-### Source and acquisition
-
-`retro.md` is adapted from Matt Pocock's [mattpocock/skills](https://github.com/mattpocock/skills) repository, pinned to commit `a496f5513d4a4cf889bc48e189e579f4b0bdf6aa`.
-
-The files were obtained on 2026-10-29 by reading the upstream GitHub source over HTTPS, not by running `npx skills`, installing a plugin, or generating a replacement from a summary:
-
-- [Original retro/SKILL.md](https://github.com/mattpocock/skills/blob/a496f5513d4a4cf889bc48e189e579f4b0bdf6aa/skills/engineering/retro/SKILL.md): source for `retro.md`.
-- [Original writing-for-agents/SKILL.md](https://github.com/mattpocock/skills/blob/a496f5513d4a4cf889bc48e189e579f4b0bdf6aa/skills/productivity/writing-for-agents/SKILL.md): bundled as `references/retro-writing-for-agents.txt`, so the writing guide is available without installing another skill.
-- [Original LICENSE](https://github.com/mattpocock/skills/blob/a496f5513d4a4cf889bc48e189e579f4b0bdf6aa/LICENSE): copied into `references/retro-LICENSE.txt`; the upstream material is MIT-licensed, copyright 2026 Matt Pocock.
-
-The command's explicit approval boundary also reflects Matt's [official retro explanation](https://www.aihero.dev/skills-retro).
-
-### Adaptations
-
-- Replaced skill-only frontmatter with OpenCode command metadata and `subagent: false` to retain the current conversation.
-- Added `$ARGUMENTS` for a session or focus.
-- Replaced the `writing-for-agents` Skill-tool call with an instruction to read the bundled guide.
-- Made the proposal-only behavior explicit, required session evidence for each finding, and added instructions for unavailable history and sessions with no findings.
-- Retained the upstream categories and implementation/review guidance; changed the final writing-guide reference to point to the bundled guide.
-- Removed the writing guide's skill frontmatter and changed its relative `SKILL-MECHANICS.md` link to a pinned upstream URL. That skill-authoring reference is only needed when writing a skill, not to run `/retro`.
+Source attribution, acquisition details, pinned upstream links, and adaptations are recorded in `retro.md` under the YAML frontmatter's `metadata.provenance` field.
 
 ### Updating the upstream copy
 
-Choose an upstream commit, read the three source files above at that revision, and compare them with the local copies. Preserve the documented OpenCode adaptations and license notice. Update the revision, acquisition date, and adaptation list here when refreshing the copy.
+Choose an upstream commit, read the source files listed in `metadata.provenance.sources` at that revision, and compare them with the local copies. Preserve the documented OpenCode adaptations and license notice. Update the provenance metadata when refreshing the copy.
