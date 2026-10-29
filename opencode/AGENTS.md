@@ -47,6 +47,9 @@ If the user asks for a plan as a file, always put in `.agents/plans/`.
 - When implementing/building make sure to follow [Implementation Notes](#implementation-notes).
 - Prefer launching shell commands in parallel where feasible.
     - Prefer running shell commands in background so that the user can continue interacting with you while you are waiting for commands to complete.
+- Resist the urge to write everything as if they are implementation notes.
+    - This is very common in PR description where you write things like verifications done etc. 
+    - Also very common when writing docs and code comments. Which end up sounding like a part of the chat conversation that we had rather than following best practices for documentation and code comments.
 
 ### Implementation Notes
 
