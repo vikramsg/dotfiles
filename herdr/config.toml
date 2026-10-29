@@ -19,7 +19,8 @@
 # prefix+Shift+H/J/K/L: swap left / down / up / right
 # prefix+g: open LazyGit popup
 # prefix+e: toggle nvim sidebar
-# prefix+v: pick and watch a Markdown file
+# prefix+v: pick and watch a Markdown file in a new tab
+# prefix+Shift+V: pick and watch a Markdown file in a popup
 # prefix+w: Open workspace picker
 # prefix+s: open Navigator
 # prefix+Shift+T: open terminal popup
@@ -178,9 +179,15 @@ height = "90%"
 
 [[keys.command]]
 key = "prefix+v"
+type = "shell"
+command = 'response=$("$HERDR_BIN_PATH" tab create --workspace "$HERDR_ACTIVE_WORKSPACE_ID" --cwd "$HERDR_ACTIVE_PANE_CWD" --label Leaf --no-focus) && markdown_tab=$(printf "%s\n" "$response" | jq -r ".result.tab.tab_id") && markdown_pane=$(printf "%s\n" "$response" | jq -r ".result.root_pane.pane_id") && "$HERDR_BIN_PATH" pane run "$markdown_pane" "exec leaf --watch" && "$HERDR_BIN_PATH" tab focus "$markdown_tab"'
+description = "open Markdown preview in a new tab"
+
+[[keys.command]]
+key = "prefix+shift+v"
 type = "popup"
 command = "leaf --watch"
-description = "open Markdown preview"
+description = "open Markdown preview popup"
 width = "90%"
 height = "90%"
 
