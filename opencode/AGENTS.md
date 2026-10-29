@@ -33,7 +33,8 @@ By changing to a worktree in a different location you are making it harder to wo
 
 - When I ask you to create a PR, include all current staged and unstaged changes, including changes you did not author, unless I explicitly limit the scope.
 - Do not silently exclude changes because they appear unrelated or user-authored. If you have a concrete concern about including something, ask before proceeding.
-- In the PR description and your final response, identify included changes you did not author by file and briefly describe them. If there are none, say so.
+- In your final response, identify included changes you did not author by file and briefly describe them. If there are none, say so.
+- PR description should never have things like Verification done on local machine unless explicitly asked. 
 
 ## Plans
 
