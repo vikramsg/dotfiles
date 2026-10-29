@@ -29,6 +29,13 @@ NEVER switch to a different worktree unless asked.
 I am launching you from a workspace because I want to follow code changes.
 By changing to a worktree in a different location you are making it harder to work.
 
+## PR scope
+
+- When I ask you to create a PR, include all current staged and unstaged changes, including changes you did not author, unless I explicitly limit the scope.
+- Do not silently exclude changes because they appear unrelated or user-authored. If you have a concrete concern about including something, ask before proceeding.
+- In your final response, identify included changes you did not author by file and briefly describe them. If there are none, say so.
+- PR description should never have things like Verification done on local machine unless explicitly asked. 
+
 ## Plans
 
 If the user asks for a plan as a file, always put in `.agents/plans/`.
@@ -122,5 +129,4 @@ Some things of special interested in from the review
 - Are we following the correct layer rules
 - Do the documentation and code comments are at appropriate places. Do they sound like a human and not an agent.
 - Is the implementation follow existing patterns or is it inventing new ones without agreeing to in the plan
-
 
