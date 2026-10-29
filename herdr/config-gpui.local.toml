@@ -2,6 +2,7 @@
 theme = "TokyoNight"
 layout = "comfortable"
 confirm_close_pane = false
+tab_layout = "cards"
 
 [keybindings]
 new_browser_tab = "cmd-shift-b"
