@@ -50,6 +50,7 @@ If the user asks for a plan as a file, always put in `.agents/plans/`.
 - Resist the urge to write everything as if they are implementation notes.
     - This is very common in PR description where you write things like verifications done etc. 
     - Also very common when writing docs and code comments. Which end up sounding like a part of the chat conversation that we had rather than following best practices for documentation and code comments.
+    - Use implementation notes which are earmarked for those.
 
 ### Implementation Notes
 
