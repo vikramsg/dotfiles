@@ -1,7 +1,5 @@
 ---
 description: Ignore the other things and just answer 
-agent: build 
-subtask: false
 ---
 $ARGUMENTS
 
