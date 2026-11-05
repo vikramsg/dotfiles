@@ -1,6 +1,5 @@
 ---
 description: Conduct a retrospective on a coding session
-subagent: false
 metadata:
   provenance:
     author: Matt Pocock

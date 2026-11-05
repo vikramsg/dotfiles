@@ -1,7 +1,5 @@
 ---
 description: Tell me next steps 
-agent: build 
-subtask: false
 ---
 $ARGUMENTS
 
