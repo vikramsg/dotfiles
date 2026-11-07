@@ -1,6 +1,17 @@
 ---
 name: browse
-description: Use the user's existing Chromium-family browser through browse, with deterministic Playwright. Use when asked to inspect, automate, test, or interact with a visible browser tab; continue an authenticated browser workflow; handle 2FA, passkeys, CAPTCHAs, or payment confirmation; record browser behavior; or capture an authenticated network flow.
+description: Use the user's existing Chromium-family browser through browse, with deterministic Playwright. Use when asked to inspect, automate, test, or interact with a visible browser tab; continue an authenticated browser workflow; handle 2FA, passkeys, CAPTCHAs, or payment confirmation; record browser behavior; or capture an authenticated network flow. Strictly only use when the user specifically asks to use this skill
+metadata:
+  provenance:
+    author: Anomaly (opencode)
+    tool: browse
+    version: 0.0.14
+    obtained_on: "2026-11-07"
+    acquisition: >-
+      Installed browse with `curl -fsSL https://opencode.ai/browse/install | bash`,
+      then saved the output of `browse skill` to this file.
+    adaptations:
+      - Restricted the description so agents load the skill only when the user explicitly asks for it.
 ---
 
 # browse
