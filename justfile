@@ -132,6 +132,7 @@ opencode: npm-global-bin
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
     ln -sfn {{justfile_directory()}}/skills/show-me ~/.config/opencode/skills/show-me
     ln -sfn {{justfile_directory()}}/skills/herdr ~/.config/opencode/skills/herdr
+    ln -sfn {{justfile_directory()}}/skills/browse ~/.config/opencode/skills/browse
     @echo "Opencode symlink created at ~/.config/opencode/opencode.json -> {{justfile_directory()}}/opencode/opencode.json"
     @echo "OpenCode 2 CLI config symlinked to ~/.config/opencode/cli.json"
     @echo "OpenCode instructions symlinked to ~/.config/opencode/AGENTS.md"
@@ -139,6 +140,7 @@ opencode: npm-global-bin
     @echo "Opencode commands directory symlinked to ~/.config/opencode/commands"
     @echo "OpenCode show-me skill symlinked to ~/.config/opencode/skills/show-me"
     @echo "OpenCode Herdr skill symlinked to ~/.config/opencode/skills/herdr"
+    @echo "OpenCode browse skill symlinked to ~/.config/opencode/skills/browse"
     @echo "OpenCode plugin/config changes only apply to newly started OpenCode processes."
     @echo "If you have an already-running OpenCode session, restart it after running 'just opencode'."
 
