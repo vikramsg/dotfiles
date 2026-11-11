@@ -1,3 +1,5 @@
+theme = "catppuccin"
+
 # On the headless VM, system xdg-open cannot reach the Mac browser. Reviewr's
 # default opener prioritizes system directories over ~/.local/bin; an explicit
 # opener respects PATH and uses our xdg-open wrapper's SSH browser tunnel.
