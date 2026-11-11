@@ -1,9 +1,9 @@
-# Herdr plugins declared in plugins.json and installed from GitHub.
+# Herdr plugin configuration and GitHub installations declared in plugins.json.
 #
 # `install` adds declared plugins that are not installed yet; `update`
 # reinstalls every declared plugin to refresh its managed checkout. Herdr
 # stores the plugin source under its own runtime directory, so this repository
-# only holds the declaration.
+# only holds declarations and user-editable configuration.
 # Some plugins, such as herdr-navigator, need Cargo from `just brew` to build.
 
 # Install declared plugins that are missing.
@@ -43,3 +43,18 @@ update:
             herdr plugin install "$source" -y
         fi
     done < <(jq -r '.plugins[] | [.source, (.ref // "")] | @tsv' "$plugins_file")
+
+# Link managed Reviewr settings without replacing an unmanaged config.
+link-reviewr-config:
+    @SOURCE="{{justfile_directory()}}/reviewr.toml"; \
+        CONFIG_DIR="$HOME/.config/herdr/plugins/config/persiyanov.reviewr"; \
+        TARGET="$CONFIG_DIR/config.toml"; \
+        mkdir -p "$CONFIG_DIR"; \
+        if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
+            :; \
+        elif [ -e "$TARGET" ] || [ -L "$TARGET" ]; then \
+            echo "ERROR: $TARGET exists and is not the managed symlink. Move or migrate it manually first."; \
+            exit 1; \
+        else \
+            ln -s "$SOURCE" "$TARGET"; \
+        fi

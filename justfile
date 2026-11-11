@@ -116,7 +116,7 @@ herdr:
         fi
     just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
     just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
-    just --justfile "{{justfile_directory()}}/herdr/justfile" install
+    just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install
 
 # Set up Opencode symlink
 opencode: npm-global-bin
