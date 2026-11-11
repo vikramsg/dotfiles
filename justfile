@@ -114,21 +114,9 @@ herdr:
         else \
             ln -s "$SOURCE" "$TARGET"; \
         fi
-    @SOURCE="{{justfile_directory()}}/herdr/reviewr.toml"; \
-        CONFIG_DIR="$HOME/.config/herdr/plugins/config/persiyanov.reviewr"; \
-        TARGET="$CONFIG_DIR/config.toml"; \
-        mkdir -p "$CONFIG_DIR"; \
-        if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
-            :; \
-        elif [ -e "$TARGET" ] || [ -L "$TARGET" ]; then \
-            echo "ERROR: $TARGET exists and is not the managed symlink. Move or migrate it manually first."; \
-            exit 1; \
-        else \
-            ln -s "$SOURCE" "$TARGET"; \
-        fi
     just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
     just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
-    just --justfile "{{justfile_directory()}}/herdr/justfile" install
+    just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install
 
 # Set up Opencode symlink
 opencode: npm-global-bin
