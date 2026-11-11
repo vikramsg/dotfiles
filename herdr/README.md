@@ -47,12 +47,31 @@ just herdr
 herdr
 ```
 
-`just herdr` links `config.toml`, links `herdr/plugin/nav_wrap/` to the
-`~/.config/herdr-nav-wrap` anchor, and registers it with Herdr. It does the same for `bin/herdr_sidebar/`, which backs `prefix+r`: it docks reviewr full height on the right, so keep `persiyanov.reviewr` in `plugins.json`. Reviewr still reads its own `config.toml` from `herdr plugin config-dir persiyanov.reviewr`. Herdr's logs,
-sockets, and persistent session data remain in the normal `~/.config/herdr`
-directory and outside this repository. `just bin` links `~/.local/bin/pbcopy` so `persiyanov.reviewr` forwards clipboard copies over OSC 52 through Herdr instead of invoking `xclip` on headless Linux VMs. The plugin's `navigate.sh` and the
-repository's `nvim/` adapter share `focus-wrap.sh`, so start Neovim once after
-linking `nvim/`.
+### Linked configuration and plugins
+
+`just herdr` sets up:
+
+- **Herdr settings:** links `herdr/config.toml` to `~/.config/herdr/config.toml`.
+- **Pane navigation:** links `herdr/plugin/nav_wrap/` to `~/.config/herdr-nav-wrap` and registers the plugin with Herdr.
+- **Reviewr sidebar:** links and registers `bin/herdr_sidebar/`. This makes `prefix+r` toggle a full-height Reviewr sidebar on the right.
+- **Reviewr settings:** links `herdr/reviewr.toml` to the plugin's `config.toml`. Run `herdr plugin config-dir persiyanov.reviewr` to find that directory.
+
+### Reviewr settings
+
+- Keep `persiyanov.reviewr` in `herdr/plugins.json`; the sidebar needs it.
+- Move or migrate an existing unmanaged Reviewr config before running `just herdr`.
+- Edit `herdr/reviewr.toml` for persistent settings. Reviewr reloads saved changes automatically.
+
+### VM browser and clipboard
+
+`just bin` installs two wrappers in `~/.local/bin`:
+
+- **`xdg-open`:** forwards URLs through the SSH tunnel to the Mac browser. Reviewr's explicit `url_opener` setting selects this wrapper instead of the VM's system opener.
+- **`pbcopy`:** forwards Reviewr clipboard copies through Herdr using OSC 52, rather than invoking `xclip` on the headless VM.
+
+Herdr's logs, sockets, and persistent session data stay in `~/.config/herdr`, outside this repository.
+
+After linking `nvim/`, start Neovim once to load its navigation adapter. It shares `focus-wrap.sh` with the navigation plugin's `navigate.sh`.
 
 ## Updates
 
