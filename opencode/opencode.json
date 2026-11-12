@@ -1,7 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "update": "notify",
-  "model": "azure/gpt-6.1-sol",
+  "model": "claude-code/claude-opus-5-5[1m]",
   "plugins": ["@openchamber/opencode-claude"],
   "permissions": [
     {
@@ -41,18 +41,11 @@
     }
   ],
   "agents": {
-    "build": {
-      "request": {
-        "body": {
-          "serviceTier": "priority"
-        }
-      }
-    },
     "explore": {
-      "model": "azure/gpt-6-luna#high"
+      "model": "claude-code/claude-sonnet-5-5#high"
     },
     "general": {
-      "model": "azure/gpt-6.1-sol#medium"
+      "model": "claude-code/claude-sonnet-5-5#high"
     }
   },
   "lsp": false,
