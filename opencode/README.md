@@ -308,9 +308,9 @@ Once you have the login finished, open `~/.local/share/opencode/auth.json` and c
 
 ### Claude Code
 
-The [`@openchamber/opencode-claude`](https://github.com/openchamber/opencode-claude) plugin adds a **Claude Code** provider that runs through the local `claude` CLI login. It uses your Claude Pro, Max or Team subscription, not an Anthropic API key, so usage counts against the plan's limits.
+OpenCode's built-in **Claude Agent** provider (`claude-agent`) runs through the local `claude` CLI login. It uses your Claude Pro, Max or Team subscription, not an Anthropic API key, so usage counts against the plan's limits.
 
-The plugin is already listed under `plugins` in `opencode.json`; OpenCode installs the package itself. On each machine (Mac and `vm-us`), sign in to the CLI:
+`opencode.json` selects `claude-agent/opus` and `claude-agent/sonnet`. These are aliases for the latest model of each family, so they move forward when Claude Code ships a new version. On each machine (Mac and `vm-us`), sign in to the CLI:
 
 ```bash
 claude update
@@ -320,18 +320,11 @@ claude auth login
 claude auth status
 ```
 
-Then pick up the plugin and check that it loaded:
-
-```bash
-# Or restart the service. Reloading cancels pending permission prompts in every session.
-opencode reload
-opencode plugin list   # openchamber.claude-code should be active
-```
-
-Select a model under **Claude Code** in the TUI.
+Then run `/connect` in the TUI, select **Claude Agent** and choose **Claude Code login**.
 
 - `claude auth login --claudeai` failing with `unknown option` means the CLI is outdated; run `claude update`.
 - `claude update` may warn about multiple installations in `~/.local/bin`. Check `type -a claude` if the version does not change after updating.
+- **Claude Agent** showing "Sign in required" while `claude auth status` reports a valid login usually means the OpenCode service is running an older `claude` that rejects its flags, such as `unknown option '--thinking=adaptive'`. The service uses its own `PATH`, where `/usr/local/bin` comes before `~/.local/bin`. Remove the stale install, then run `opencode service restart`. The exact error is in the connection status from `opencode api get /api/integration/claude-agent`.
 
 ## Ref
 
