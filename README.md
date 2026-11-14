@@ -31,6 +31,22 @@ Custom tools use a split layout:
 - `lch/config.toml` declares persistent service lifecycle.
 - The root `justfile` only links tool configuration and delegates build and installation to `bin/<tool>/justfile`.
 
+## Opening VM links in the Mac browser
+
+Links opened on the remote VM, such as PR links from Reviewr, open in the Mac's browser:
+
+```text
+VM: program opens a URL
+  -> bin/xdg-open wrapper (installed by `just bin`) writes it to ~/.opener.sock
+  -> SSH reverse tunnel carries the socket to the Mac
+  -> Mac: opener-tunnel listener checks it is http(s) and runs `open <url>`
+  -> replies OK or ERROR, which xdg-open returns as its exit status
+```
+
+- Mac: `just opener-tunnel` installs the listener and the `lch-opener-tunnel` service that keeps the SSH tunnel up.
+- VM: `just bin` installs the `xdg-open` wrapper; `herdr/reviewr.toml` points Reviewr's `url_opener` at it.
+- Details: `bin/opener_tunnel/README.md` (listener), `bin/README.md` (wrapper), `ssh/README.md` (SSH side), `opener_tunnel/config.toml` (settings).
+
 ## Troubleshooting
 
 1. When initially installing on a machine, prefer first installing
