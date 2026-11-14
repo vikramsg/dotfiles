@@ -84,21 +84,34 @@ def run(command, **kwargs):
 def stack_parent_branch(directory):
     """Return the gh stack parent of the branch checked out in directory, or None.
 
-    The parent is the nearest unmerged branch below the current one, or the
-    stack's trunk when every branch below is merged: a merged branch's commits
-    are already in the trunk. `gh stack view` exits non-zero outside a stack,
-    which means "no parent"; a missing gh is an error, not "no stack".
+    The parent is the branch below the current one in its stack, or the
+    stack's trunk for the bottom branch. Returns None outside a git checkout,
+    when no stack is recorded, or when the current branch is in no stack.
+
+    Caveat: this reads `<git common dir>/gh-stack`, the gh-stack extension's
+    internal state file (`schemaVersion` 1), not a documented interface.
+    `gh stack view --json` is the supported equivalent, but it makes three
+    GitHub API calls and adds about 1.2 s to every key press. If the extension
+    changes the file's layout, this lookup breaks and needs updating. The file
+    does not record whether a branch is merged, so a merged parent is still
+    used until `gh stack sync` rewrites the stack.
     """
-    result = run(["gh", "stack", "view", "--json"], cwd=directory)
-    if result.returncode != 0:
+    git = run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir", "--abbrev-ref", "HEAD"],
+        cwd=directory,
+    )
+    if git.returncode != 0:
         return None
-    stack = json.loads(result.stdout)
-    names = [branch["name"] for branch in stack["branches"]]
-    if stack["currentBranch"] not in names:
+    common_dir, branch = git.stdout.split()
+    state_file = Path(common_dir) / "gh-stack"
+    if not state_file.is_file():
         return None
-    below = stack["branches"][: names.index(stack["currentBranch"])]
-    unmerged = [branch["name"] for branch in below if not branch["isMerged"]]
-    return unmerged[-1] if unmerged else stack["trunk"]
+    for stack in json.loads(state_file.read_text())["stacks"]:
+        names = [entry["branch"] for entry in stack["branches"]]
+        if branch in names:
+            position = names.index(branch)
+            return names[position - 1] if position > 0 else stack["trunk"]["branch"]
+    return None
 
 
 def reviewr_pane_request(host, base):

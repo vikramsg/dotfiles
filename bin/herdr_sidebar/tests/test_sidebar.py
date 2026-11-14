@@ -2,6 +2,7 @@ import copy
 import importlib.util
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -203,14 +204,6 @@ class SidebarTests(unittest.TestCase):
         self.assertEqual(set(host.tabs), {"t1", "t2"})
 
 
-def stack(current, names, trunk="main", merged=()):
-    return {
-        "trunk": trunk,
-        "currentBranch": current,
-        "branches": [{"name": name, "isMerged": name in merged} for name in names],
-    }
-
-
 def fake_program(directory, name, output, exit_code=0):
     """Write an executable that prints output and exits with exit_code."""
     output_file = Path(directory) / f"{name}.out"
@@ -222,32 +215,62 @@ def fake_program(directory, name, output, exit_code=0):
 
 
 class StackParentTests(unittest.TestCase):
-    def parent_of(self, stack_json, exit_code=0):
-        """Run stack_parent_branch against a fake `gh` that prints stack_json."""
-        with tempfile.TemporaryDirectory() as bin_dir:
-            fake_program(bin_dir, "gh", json.dumps(stack_json), exit_code)
-            path = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
-            with mock.patch.dict(os.environ, {"PATH": path}):
-                return sidebar.stack_parent_branch(bin_dir)
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.repo = Path(temporary.name) / "repo"
+        git = lambda *args, cwd=self.repo: subprocess.run(
+            ["git", *args], cwd=cwd, check=True, capture_output=True
+        )
+        self.repo.mkdir()
+        git("init", "-q", "-b", "main")
+        git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "root")
+        for name in ["a", "b", "c", "lone"]:
+            git("branch", name)
+        self.git = git
+
+    def record_stacks(self, *stacks):
+        """Write gh-stack's state file with stacks given as (trunk, [branch, ...])."""
+        state = {
+            "schemaVersion": 1,
+            "stacks": [
+                {"trunk": {"branch": trunk}, "branches": [{"branch": name} for name in names]}
+                for trunk, names in stacks
+            ],
+        }
+        (self.repo / ".git" / "gh-stack").write_text(json.dumps(state))
+
+    def parent_on(self, branch, directory=None):
+        self.git("switch", "-q", branch)
+        return sidebar.stack_parent_branch(directory or self.repo)
 
     def test_parent_is_the_branch_below_the_current_one(self):
-        self.assertEqual(self.parent_of(stack("c", ["a", "b", "c"])), "b")
+        self.record_stacks(("main", ["a", "b", "c"]))
+        self.assertEqual(self.parent_on("c"), "b")
 
-    def test_merged_branches_below_are_skipped(self):
-        self.assertEqual(self.parent_of(stack("c", ["a", "b", "c"], merged={"b"})), "a")
+    def test_bottom_branch_uses_the_stack_trunk(self):
+        self.record_stacks(("develop", ["a", "b"]))
+        self.assertEqual(self.parent_on("a"), "develop")
 
-    def test_bottom_branch_or_all_merged_below_uses_the_trunk(self):
-        self.assertEqual(self.parent_of(stack("a", ["a", "b"], "develop")), "develop")
-        self.assertEqual(self.parent_of(stack("b", ["a", "b"], merged={"a"})), "main")
+    def test_the_stack_holding_the_branch_is_used(self):
+        self.record_stacks(("main", ["lone"]), ("main", ["a", "b"]))
+        self.assertEqual(self.parent_on("b"), "a")
 
-    def test_outside_a_stack_there_is_no_parent(self):
-        self.assertIsNone(self.parent_of({}, exit_code=1))
+    def test_branch_outside_every_stack_has_no_parent(self):
+        self.record_stacks(("main", ["a", "b"]))
+        self.assertIsNone(self.parent_on("lone"))
 
-    def test_missing_gh_is_an_error_not_an_empty_stack(self):
-        with tempfile.TemporaryDirectory() as empty_dir:
-            with mock.patch.dict(os.environ, {"PATH": empty_dir}):
-                with self.assertRaisesRegex(RuntimeError, "gh is not installed"):
-                    sidebar.stack_parent_branch(empty_dir)
+    def test_repository_without_stacks_has_no_parent(self):
+        self.assertIsNone(self.parent_on("a"))
+
+    def test_linked_worktree_reads_the_shared_state_file(self):
+        self.record_stacks(("main", ["a", "b"]))
+        worktree = self.repo.parent / "worktree"
+        self.git("worktree", "add", "-q", str(worktree), "b")
+        self.assertEqual(sidebar.stack_parent_branch(worktree), "a")
+
+    def test_outside_a_git_checkout_there_is_no_parent(self):
+        self.assertIsNone(sidebar.stack_parent_branch(self.repo.parent))
 
 
 class StackToggleTests(unittest.TestCase):

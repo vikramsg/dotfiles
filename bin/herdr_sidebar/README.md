@@ -6,11 +6,11 @@
 
 | Stack position | Base |
 | --- | --- |
-| Above an unmerged branch | That branch |
-| Above only merged branches, or at the bottom | The stack's trunk |
+| Above another branch | That branch |
+| At the bottom | The stack's trunk |
 | Not in a stack | Reviewr's usual base (`origin/HEAD` or its `B` pick) |
 
-The parent comes from `gh stack view --json`. `gh` with the `github/gh-stack` extension must be on `PATH`; if it is missing the action fails with an error in `herdr plugin log list`. Reviewr's documentation states that `--base` overrides and disables its `B` picker, so pick the base with the key, not `B`, in that pane.
+The parent comes from `.git/gh-stack`, the state file the `gh stack` extension keeps in the repository's shared git directory, so the lookup needs no network. It is the extension's internal file, and it does not record merges: after a parent PR merges, run `gh stack sync` so the stack no longer lists it. Reviewr's documentation states that `--base` overrides and disables its `B` picker, so pick the base with the key, not `B`, in that pane.
 
 ### Switching between `prefix+r` and `prefix+Shift+R`
 
