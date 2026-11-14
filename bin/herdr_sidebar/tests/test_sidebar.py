@@ -203,23 +203,28 @@ class SidebarTests(unittest.TestCase):
         self.assertEqual(set(host.tabs), {"t1", "t2"})
 
 
-def stack(current, names, trunk="main"):
+def stack(current, names, trunk="main", merged=()):
     return {
         "trunk": trunk,
         "currentBranch": current,
-        "branches": [{"name": name} for name in names],
+        "branches": [{"name": name, "isMerged": name in merged} for name in names],
     }
 
 
-class StackBaseTests(unittest.TestCase):
+def fake_program(directory, name, output, exit_code=0):
+    """Write an executable that prints output and exits with exit_code."""
+    output_file = Path(directory) / f"{name}.out"
+    output_file.write_text(output)
+    program = Path(directory) / name
+    program.write_text(f'#!/bin/sh\ncat "{output_file}"\nexit {exit_code}\n')
+    program.chmod(0o755)
+    return program
+
+
+class StackParentTests(unittest.TestCase):
     def parent_of(self, stack_json, exit_code=0):
-        """Run stack_parent_branch against a fake `gh` that prints stack_json."""
         with tempfile.TemporaryDirectory() as bin_dir:
-            gh = Path(bin_dir) / "gh"
-            output = Path(bin_dir) / "stack.json"
-            output.write_text(json.dumps(stack_json))
-            gh.write_text(f'#!/bin/sh\ncat "{output}"\nexit {exit_code}\n')
-            gh.chmod(0o755)
+            fake_program(bin_dir, "gh", json.dumps(stack_json), exit_code)
             path = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
             with mock.patch.dict(os.environ, {"PATH": path}):
                 return sidebar.stack_parent_branch(bin_dir)
@@ -227,32 +232,44 @@ class StackBaseTests(unittest.TestCase):
     def test_parent_is_the_branch_below_the_current_one(self):
         self.assertEqual(self.parent_of(stack("c", ["a", "b", "c"])), "b")
 
-    def test_bottom_branch_uses_the_stack_trunk(self):
+    def test_merged_branches_below_are_skipped(self):
+        self.assertEqual(self.parent_of(stack("c", ["a", "b", "c"], merged={"b"})), "a")
+
+    def test_bottom_branch_or_all_merged_below_uses_the_trunk(self):
         self.assertEqual(self.parent_of(stack("a", ["a", "b"], "develop")), "develop")
+        self.assertEqual(self.parent_of(stack("b", ["a", "b"], merged={"a"})), "main")
 
     def test_outside_a_stack_there_is_no_parent(self):
         self.assertIsNone(self.parent_of({}, exit_code=1))
 
+    def test_missing_gh_is_an_error_not_an_empty_stack(self):
+        with tempfile.TemporaryDirectory() as empty_dir:
+            with mock.patch.dict(os.environ, {"PATH": empty_dir}):
+                with self.assertRaisesRegex(RuntimeError, "gh is not installed"):
+                    sidebar.stack_parent_branch(empty_dir)
+
+
+class StackToggleTests(unittest.TestCase):
+    def setUp(self):
+        self.bin_dir = tempfile.TemporaryDirectory()
+        herdr = fake_program(self.bin_dir.name, "herdr", "/config/persiyanov.reviewr\n")
+        env = {"HERDR_PLUGIN_ID": "dotfiles.herdr-sidebar", "HERDR_BIN_PATH": str(herdr)}
+        patcher = mock.patch.dict(os.environ, env)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.bin_dir.cleanup)
+
     def test_stack_toggle_pins_reviewr_to_the_parent(self):
         tree = split(pane("a"), pane("b"))
         host = FakeHerdr(tree)
-        env = {
-            "HERDR_PLUGIN_ID": "dotfiles.herdr-sidebar",
-            "HERDR_PLUGIN_CONFIG_DIR": "/config/dotfiles.herdr-sidebar",
-        }
-        with (
-            mock.patch.dict(os.environ, env),
-            mock.patch.object(sidebar, "stack_parent_branch", return_value="feature/base"),
-        ):
-            sidebar.toggle_sidebar(host, "a", use_stack_base=True)
+        sidebar.toggle_sidebar(host, "a", base_for=lambda directory: "feature/base")
         self.assertEqual(host.pane_request["entrypoint"], "reviewr-base")
         self.assertEqual(
             host.pane_request["env"],
             {
                 "REVIEWR_BIN": "/plugins/reviewr/bin/herdr-reviewr",
                 "REVIEWR_BASE": "feature/base",
-                "HERDR_PLUGIN_ID": "persiyanov.reviewr",
-                "HERDR_PLUGIN_CONFIG_DIR": "/config/persiyanov.reviewr",
+                "REVIEWR_CONFIG_DIR": "/config/persiyanov.reviewr",
             },
         )
         self.assertEqual(
@@ -261,12 +278,24 @@ class StackBaseTests(unittest.TestCase):
 
     def test_stack_toggle_outside_a_stack_opens_reviewrs_own_pane(self):
         host = FakeHerdr(pane("a"))
-        with mock.patch.object(sidebar, "stack_parent_branch", return_value=None):
-            sidebar.toggle_sidebar(host, "a", use_stack_base=True)
+        sidebar.toggle_sidebar(host, "a", base_for=lambda directory: None)
         self.assertEqual(
             (host.pane_request["plugin_id"], host.pane_request["entrypoint"]),
             ("persiyanov.reviewr", "pane"),
         )
+
+    def test_missing_reviewr_fails_before_the_layout_changes(self):
+        class NoReviewr(FakeHerdr):
+            def call(self, method, **params):
+                if method == "plugin.list":
+                    return {"plugins": []}
+                return super().call(method, **params)
+
+        tree = split(pane("a"), pane("b"))
+        host = NoReviewr(tree)
+        with self.assertRaisesRegex(RuntimeError, "persiyanov.reviewr is not installed"):
+            sidebar.toggle_sidebar(host, "a", base_for=lambda directory: "feature/base")
+        self.assertEqual(host.tabs["t1"], tree)
 
 
 if __name__ == "__main__":

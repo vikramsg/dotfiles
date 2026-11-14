@@ -2,9 +2,17 @@
 
 `prefix+r` runs the `dotfiles.herdr-sidebar.toggle-reviewr` action. It opens reviewr as a full-height sidebar on the right 40% of the current tab, or closes that tab's sidebar if one is open. Reviewr starts in the invoking terminal's foreground working directory.
 
-`prefix+Shift+R` runs `toggle-reviewr-stack`. It docks the same sidebar but starts reviewr with `--base <parent>`, so the **branch** scope diffs against the branch below the current one in its [gh stack](https://gh.io/stacks) rather than `main`. The parent comes from `gh stack view --json` filtered with `jq`; the bottom branch of a stack uses the stack's trunk. Outside a stack it opens reviewr with its usual base. Because `--base` pins the base, reviewr's `B` picker is disabled in that pane.
+`prefix+Shift+R` runs `toggle-reviewr-stack`. It docks the same sidebar but starts reviewr with `--base <parent>`, so the **branch** scope diffs against the current branch's parent in its [gh stack](https://gh.io/stacks) rather than `main`:
 
-Reviewr's own `pane` entrypoint takes no arguments, so the pinned launch goes through this plugin's `reviewr-base` pane entrypoint. It runs reviewr's installed binary with `HERDR_PLUGIN_ID` and `HERDR_PLUGIN_CONFIG_DIR` set to reviewr's, so reviewr still reads its own `config.toml`.
+| Stack position | Base |
+| --- | --- |
+| Above an unmerged branch | That branch |
+| Above only merged branches, or at the bottom | The stack's trunk |
+| Not in a stack | Reviewr's usual base (`origin/HEAD` or its `B` pick) |
+
+The parent comes from `gh stack view --json` filtered with `jq`; both must be on `PATH`, and the action fails with an error in `herdr plugin log list` if either is missing. Reviewr's documentation states that `--base` overrides and disables its `B` picker, so pick the base with the key, not `B`, in that pane.
+
+Reviewr's own `pane` entrypoint takes no arguments, so the pinned launch goes through this plugin's `reviewr-base` pane entrypoint. Herdr gives that pane this plugin's `HERDR_PLUGIN_ID` and `HERDR_PLUGIN_CONFIG_DIR`, and ignores overrides passed when opening it, so the entrypoint's command sets both back to reviewr's (the directory from `herdr plugin config-dir`) before running reviewr's installed `bin/herdr-reviewr`. Reviewr then reads its own `config.toml`.
 
 ## Why this exists
 
@@ -22,7 +30,7 @@ Moves keep the running terminals; nothing is restarted. Closing the sidebar is a
 
 ## Setup and tests
 
-`just herdr` links this directory to `~/.config/herdr-sidebar` and registers it with Herdr. The sidebar opens the `pane` entrypoint of the `persiyanov.reviewr` plugin. Opening is serialized through `toggle.lock` in the plugin state directory.
+`just herdr` links this directory to `~/.config/herdr-sidebar` and registers it with Herdr. `prefix+r` opens the `pane` entrypoint of the `persiyanov.reviewr` plugin; `prefix+Shift+R` with a stack parent opens this plugin's `reviewr-base` entrypoint. Opening is serialized through `toggle.lock` in the plugin state directory.
 
 ```sh
 just --justfile bin/herdr_sidebar/justfile test
