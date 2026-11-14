@@ -49,7 +49,6 @@ Pull request titles must use `scope: summary` with one of these explicit scopes:
 - `lch`
 - `macflow`
 - `nvim`
-- `ocint`
 - `opencode`
 - `screenshot`
 - `terraform`

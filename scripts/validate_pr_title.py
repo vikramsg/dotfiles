@@ -11,7 +11,6 @@ SCOPES = (
     "lch",
     "macflow",
     "nvim",
-    "ocint",
     "opencode",
     "screenshot",
     "terraform",
