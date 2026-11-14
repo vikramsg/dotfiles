@@ -1,5 +1,7 @@
 # opener-tunnel
 
+Opens URLs from the remote VM in the Mac's browser; see "Opening VM links in the Mac browser" in the root README for how the pieces fit together.
+
 `opener-tunnel` owns the Mac-side browser socket and the tmux-visible SSH
 process. LCH owns only the native LaunchAgent lifecycle.
 
