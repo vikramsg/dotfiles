@@ -30,6 +30,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+q` / `prefix+?` / `prefix+d` | Reload config / help / detach |
 | `prefix+e` / `prefix+f` | Toggle the nvim sidebar / open the nvim file picker |
 | `prefix+r` | Toggle the full-height reviewr sidebar on the right |
+| `prefix+a` | Toggle Sheprd's activity bar (macOS) |
 | `prefix+v` | Pick and watch a Markdown file in a new Leaf tab |
 | `prefix+Shift+V` | Pick and watch a Markdown file in a popup |
 | `prefix+g` | Open the LazyGit popup |
@@ -78,7 +79,7 @@ After linking `nvim/`, start Neovim once to load its navigation adapter. It shar
 
 The Herdr CLI is pinned in `mise/config.toml`. `just mise` bootstraps mise, links that file as the global configuration, and installs its tools. `just herdr` also runs this setup before configuring plugins. Run `just zsh` to enable mise in new shells; see [Zsh setup](../zsh/README.md) when migrating an unmanaged shell configuration.
 
-To update the CLI, change its version in `mise/config.toml` and run `just mise`. Do not use `herdr update`, which bypasses mise's version ownership. The macOS GUI remains managed by Homebrew with `brew upgrade --cask herdr-gpui`.
+To update the CLI, change its version in `mise/config.toml` and run `just mise`. Do not use `herdr update`, which bypasses mise's version ownership. The macOS GUI, Sheprd, is installed separately; see [macOS GUI](#macos-gui).
 
 When migrating from Homebrew, let any active `brew upgrade herdr` finish, then run `brew unlink herdr`. Mise supplies the CLI through its shell activation and shims. Avoid a separate `~/.local/bin/herdr`, which can shadow the selected version.
 
@@ -106,17 +107,21 @@ Edit `herdr/navigator.toml` for persistent Navigator settings. `just herdr` link
 
 ## macOS GUI
 
-On macOS 14.2 or newer, `just brew` also installs the signed, notarized Herdr GUI from `penso/tap`. Linux installs only the Herdr daemon, not the GUI or its Homebrew tap.
+[Sheprd](https://sheprd.org) is the native macOS client for Herdr and needs macOS 14 or newer. It is not in the `Brewfile`; install and update it by hand:
 
 ```sh
-open -a Herdr
+brew install --cask sheprd-labs/tap/sheprd
+brew upgrade --cask sheprd
+open -a Sheprd
 ```
 
-The GUI connects to the separately installed Herdr daemon. Closing the GUI leaves daemon sessions running. Update the GUI with `brew upgrade --cask herdr-gpui`.
+Sheprd connects to the separately installed Herdr daemon. Closing it leaves daemon sessions running. The cask links its CLI as `sheprd`; run `sheprd --help` for window, sidebar, keybinding, and settings commands.
 
-On macOS, `just herdr` links `config-gpui.local.toml` into `~/.config/herdr/`. Move or migrate an existing unmanaged override file before linking. Edit the repository file for persistent GUI settings; the app reloads saved changes automatically. The managed `config-gpui.toml` defaults are owned by the app and must not be edited.
+On macOS, `just herdr` links `config-gpui.local.toml` into `~/.config/herdr/`. A fresh Sheprd install creates its own regular file at that path; move it aside and rerun `just herdr`. Edit the repository file for persistent GUI settings; the app reloads saved changes automatically. Sheprd also saves choices made in its Settings window or with `sheprd config set` into that file, so they show up as changes to the repository copy; commit the ones you want to keep. The managed `config-gpui.toml` defaults are owned by the app and must not be edited.
 
-The GUI uses `TokyoNight Storm` and the `comfortable-rounded` sidebar layout, which shows branches for workspaces and linked worktrees. Herdr's default sidebar rows request branch updates from the daemon; reload the daemon configuration with `prefix+q` after changing it. For faster discrete mouse-wheel scrollback, set `mouse_scroll_lines` under `[ui]` in `herdr/config.toml` (default `3`). This does not change precise trackpad movement or scrolling inside applications that consume mouse events themselves.
+`prefix+a` toggles Sheprd's activity bar, the icon column at the window's left edge. Sheprd has no command for it, so the binding flips `sidebar.activity_bar`. The repository keeps it `false`, so the file shows a one-line change while the bar is visible. `Cmd+B` toggles the workspace sidebar next to it.
+
+The GUI uses the `TokyoNight` theme and the `comfortable` sidebar layout, which shows branches for workspaces and linked worktrees. Herdr's default sidebar rows request branch updates from the daemon; reload the daemon configuration with `prefix+q` after changing it. For faster discrete mouse-wheel scrollback, set `mouse_scroll_lines` under `[ui]` in `herdr/config.toml` (default `3`). This does not change precise trackpad movement or scrolling inside applications that consume mouse events themselves.
 
 Existing Zsh panes that loaded the former branch reporter continue publishing unused metadata until their shells restart. Native sidebar rows do not use that metadata.
 
@@ -124,21 +129,21 @@ Existing Zsh panes that loaded the former branch reporter continue publishing un
 
 ### Separate windows per session
 
-With the GUI already running, use the [Zsh helper](../zsh/README.md#herdr-shortcuts) to open another window attached to `dot` without switching the existing `default` window:
+With Sheprd already running, use the [Zsh helper](../zsh/README.md#herdr-shortcuts) to open another window attached to `dot` without switching the existing `default` window:
 
 ```sh
-herdr-gpui dot
+sheprd-window dot
 ```
 
 The helper runs the installed app bundle's command:
 
 ```sh
-"/Applications/Herdr.app/Contents/MacOS/Herdr" window new --session dot
+sheprd window new --session dot
 ```
 
-Replace `dot` with another local session name as needed. This uses the running app's native multi-window support; it does not require another app instance or restarting an existing session. See the upstream [window commands](https://github.com/penso/herdr-gpui/blob/main/docs/cli.md#app-and-windows).
+Replace `dot` with another local session name as needed. This uses the running app's native multi-window support; it does not require another app instance or restarting an existing session.
 
-A separate GUI window still loads the shared saved-machine list; it does not use the isolated client state from the `herdr-dot` shell shortcut. Choose **Local** in the bottom-left device picker to filter remote workspaces and agents out of that window's sidebar without removing or disabling `vm-us`. This filter is window-local, not a separate machine catalog. See the upstream [GUI documentation](https://github.com/penso/herdr-gpui/blob/main/crates/herdr-gpui/README.md).
+A separate GUI window still loads the shared saved-machine list; it does not use the isolated client state from the `herdr-dot` shell shortcut. Choose **Local** in the bottom-left device picker to filter remote workspaces and agents out of that window's sidebar without removing or disabling `vm-us`. This filter is window-local, not a separate machine catalog.
 
 ## Remote attach
 

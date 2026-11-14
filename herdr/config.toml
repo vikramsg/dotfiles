@@ -26,6 +26,7 @@
 # prefix+Shift+T: open terminal popup
 # prefix+f: open nvim file picker
 # prefix+r: toggle full-height reviewr sidebar
+# prefix+a: toggle Sheprd activity bar
 # prefix+Shift+O: append OpenCode and Vim project tabs
 
 onboarding = false
@@ -56,10 +57,10 @@ previous_tab = "prefix+p"
 next_tab = "prefix+n"
 # Navigator owns prefix+s instead of the native goto picker.
 goto = ""
-# GPUI's Settings action otherwise claims prefix+s before custom commands.
+# Sheprd's Settings action otherwise claims prefix+s before custom commands.
 settings = ""
 edit_scrollback = ""
-# Leave prefix+r to reviewr; GPUI otherwise claims it for Resize Mode.
+# Leave prefix+r to reviewr; Sheprd otherwise claims it for Resize Mode.
 resize_mode = ""
 rename_tab = "prefix+$"
 close_pane = "prefix+x"
@@ -143,6 +144,14 @@ key = "prefix+r"
 type = "plugin_action"
 command = "dotfiles.herdr-sidebar.toggle-reviewr"
 description = "toggle reviewr sidebar"
+
+# Sheprd has no activity bar toggle; see "macOS GUI" in README.md. The full
+# path is used because the daemon may run without /usr/local/bin on PATH.
+[[keys.command]]
+key = "prefix+a"
+type = "shell"
+command = 's=/Applications/Sheprd.app/Contents/MacOS/sheprd; v=true; [ "$("$s" config get sidebar.activity_bar)" = true ] && v=false; "$s" config set sidebar.activity_bar "$v"'
+description = "toggle Sheprd activity bar"
 
 [[keys.command]]
 key = "prefix+h"
