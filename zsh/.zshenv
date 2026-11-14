@@ -8,6 +8,8 @@ if [ -d "$HOME/.cargo/bin" ]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
 export PATH="$HOME/.local/bin:$PATH"
+# Mise shims make pinned tools available to SSH commands and non-interactive shells.
+export PATH="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims:$PATH"
 
 export EDITOR="nvim"
 export VISUAL="nvim"

@@ -60,8 +60,30 @@ tmux:
         echo "TPM is already installed."; \
     fi
 
+# Install mise and link the shared global tool configuration.
+mise:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PATH="$HOME/.local/bin:$PATH"
+    if ! command -v mise >/dev/null; then
+        curl -fsSL https://mise.run | sh
+    fi
+    SOURCE="{{justfile_directory()}}/mise/config.toml"
+    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/mise"
+    TARGET="$CONFIG_DIR/config.toml"
+    mkdir -p "$CONFIG_DIR"
+    if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then
+        :
+    elif [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
+        echo "ERROR: $TARGET is unmanaged; migrate it before running just mise."
+        exit 1
+    else
+        ln -s "$SOURCE" "$TARGET"
+    fi
+    mise install
+
 # Set up Herdr config symlink while preserving its runtime directory
-herdr:
+herdr: mise
     @CONFIG_FILE="{{justfile_directory()}}/herdr/config.toml"; \
         CONFIG_DIR="$HOME/.config/herdr"; \
         TARGET="$CONFIG_DIR/config.toml"; \
@@ -114,9 +136,9 @@ herdr:
         else \
             ln -s "$SOURCE" "$TARGET"; \
         fi
-    just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
-    just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
-    just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install
+    PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
+    PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
+    PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install
 
 # Set up Opencode symlink
 opencode: npm-global-bin
