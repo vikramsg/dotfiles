@@ -11,3 +11,18 @@ title = "Toggle reviewr sidebar"
 contexts = ["pane"]
 command = ["sh", "-c", "exec uv run --project \"$HERDR_PLUGIN_ROOT\" python \"$HERDR_PLUGIN_ROOT/sidebar.py\" toggle"]
 
+[[actions]]
+id = "toggle-reviewr-stack"
+title = "Toggle reviewr sidebar (stack base)"
+contexts = ["pane"]
+command = ["sh", "-c", "exec uv run --project \"$HERDR_PLUGIN_ROOT\" python \"$HERDR_PLUGIN_ROOT/sidebar.py\" toggle-stack"]
+
+# Opened by toggle-reviewr-stack with REVIEWR_BIN, REVIEWR_BASE and
+# REVIEWR_CONFIG_DIR in its env; reviewr's own pane entrypoint cannot pass
+# --base. Herdr sets HERDR_PLUGIN_ID and HERDR_PLUGIN_CONFIG_DIR to this
+# plugin's, so they are re-exported here for reviewr to find its config.
+[[panes]]
+id = "reviewr-base"
+title = "reviewr"
+placement = "split"
+command = ["sh", "-c", "HERDR_PLUGIN_ID=persiyanov.reviewr HERDR_PLUGIN_CONFIG_DIR=\"${REVIEWR_CONFIG_DIR:?opened only by toggle-reviewr-stack}\" exec \"${REVIEWR_BIN:?opened only by toggle-reviewr-stack}\" --base \"${REVIEWR_BASE:?opened only by toggle-reviewr-stack}\""]

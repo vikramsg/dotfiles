@@ -2,6 +2,30 @@
 
 `prefix+r` runs the `dotfiles.herdr-sidebar.toggle-reviewr` action. It opens reviewr as a full-height sidebar on the right 40% of the current tab, or closes that tab's sidebar if one is open. Reviewr starts in the invoking terminal's foreground working directory.
 
+`prefix+Shift+R` runs `toggle-reviewr-stack`. It docks the same sidebar but starts reviewr with `--base <parent>`, so the **branch** scope diffs against the current branch's parent in its [gh stack](https://gh.io/stacks) rather than `main`:
+
+| Stack position | Base |
+| --- | --- |
+| Above another branch | That branch |
+| At the bottom | The stack's trunk |
+| Not in a stack | Reviewr's usual base (`origin/HEAD` or its `B` pick) |
+
+The parent comes from `.git/gh-stack`, the state file the `gh stack` extension keeps in the repository's shared git directory, so the lookup needs no network. It is the extension's internal file, and it does not record merges: after a parent PR merges, run `gh stack sync` so the stack no longer lists it. Reviewr's documentation states that `--base` overrides and disables its `B` picker, so pick the base with the key, not `B`, in that pane.
+
+### Switching between `prefix+r` and `prefix+Shift+R`
+
+Each sidebar remembers which key opened it, so a tab has at most one sidebar:
+
+| Open sidebar | Key pressed | Result |
+| --- | --- | --- |
+| None | either | Dock a sidebar of that kind |
+| Same kind | same key | Close it |
+| Other kind | other key | Close it and dock the other kind in its place |
+
+Swapping restarts reviewr, so its current file, scroll position, and unsent comments are lost. The kind is stored as a Herdr pane token on the sidebar pane; see the comment above `tag_sidebar` in `sidebar.py`.
+
+Reviewr's own `pane` entrypoint takes no arguments, so the pinned launch goes through this plugin's `reviewr-base` pane entrypoint. Herdr gives that pane this plugin's `HERDR_PLUGIN_ID` and `HERDR_PLUGIN_CONFIG_DIR`, and ignores overrides passed when opening it, so the entrypoint's command sets both back to reviewr's (the directory from `herdr plugin config-dir`) before running reviewr's installed `bin/herdr-reviewr`. Reviewr then reads its own `config.toml`.
+
 ## Why this exists
 
 Reviewr's own toggle splits only the focused pane, and Herdr has no API that splits a tab at its root. `sidebar.py` gets a full-height column purely by composing public Herdr socket APIs, the same approach the `chmarax.herdr-nvim` sidebar uses:
@@ -18,7 +42,7 @@ Moves keep the running terminals; nothing is restarted. Closing the sidebar is a
 
 ## Setup and tests
 
-`just herdr` links this directory to `~/.config/herdr-sidebar` and registers it with Herdr. The sidebar opens the `pane` entrypoint of the `persiyanov.reviewr` plugin. Opening is serialized through `toggle.lock` in the plugin state directory.
+`just herdr` links this directory to `~/.config/herdr-sidebar` and registers it with Herdr. `prefix+r` opens the `pane` entrypoint of the `persiyanov.reviewr` plugin; `prefix+Shift+R` with a stack parent opens this plugin's `reviewr-base` entrypoint. Opening is serialized through `toggle.lock` in the plugin state directory.
 
 ```sh
 just --justfile bin/herdr_sidebar/justfile test

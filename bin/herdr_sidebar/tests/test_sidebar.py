@@ -1,7 +1,12 @@
 import copy
 import importlib.util
+import json
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location(
     "sidebar", Path(__file__).parents[1] / "sidebar.py"
@@ -73,6 +78,12 @@ class FakeHerdr:
     def call(self, method, **params):
         if method == "pane.list":
             return {"panes": list(self.panes.values())}
+        if method == "plugin.list":
+            return {
+                "plugins": [
+                    {"plugin_id": "persiyanov.reviewr", "plugin_root": "/plugins/reviewr"}
+                ]
+            }
         if method == "layout.export":
             return {"layout": {"root": copy.deepcopy(self.tabs[params["tab_id"]])}}
         if method == "plugin.pane.focus":
@@ -99,6 +110,7 @@ class FakeHerdr:
             self.panes[pane_id]["tab_id"] = new_tab
         elif method == "plugin.pane.open":
             self.launch_directory = params["cwd"]
+            self.pane_request = params
             self.tabs["t1"] = insert(
                 self.tabs["t1"], params["target_pane_id"], pane("reviewr"), "right", 0.5
             )
@@ -190,6 +202,153 @@ class SidebarTests(unittest.TestCase):
             sidebar.toggle_sidebar(host, "a")
         self.assertEqual(host.tabs["t1"], tree)
         self.assertEqual(set(host.tabs), {"t1", "t2"})
+
+
+def fake_program(directory, name, output, exit_code=0):
+    """Write an executable that prints output and exits with exit_code."""
+    output_file = Path(directory) / f"{name}.out"
+    output_file.write_text(output)
+    program = Path(directory) / name
+    program.write_text(f'#!/bin/sh\ncat "{output_file}"\nexit {exit_code}\n')
+    program.chmod(0o755)
+    return program
+
+
+class StackParentTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.repo = Path(temporary.name) / "repo"
+        git = lambda *args, cwd=self.repo: subprocess.run(
+            ["git", *args], cwd=cwd, check=True, capture_output=True
+        )
+        self.repo.mkdir()
+        git("init", "-q", "-b", "main")
+        git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "root")
+        for name in ["a", "b", "c", "lone"]:
+            git("branch", name)
+        self.git = git
+
+    def record_stacks(self, *stacks):
+        """Write gh-stack's state file with stacks given as (trunk, [branch, ...])."""
+        state = {
+            "schemaVersion": 1,
+            "stacks": [
+                {"trunk": {"branch": trunk}, "branches": [{"branch": name} for name in names]}
+                for trunk, names in stacks
+            ],
+        }
+        (self.repo / ".git" / "gh-stack").write_text(json.dumps(state))
+
+    def parent_on(self, branch, directory=None):
+        self.git("switch", "-q", branch)
+        return sidebar.stack_parent_branch(directory or self.repo)
+
+    def test_parent_is_the_branch_below_the_current_one(self):
+        self.record_stacks(("main", ["a", "b", "c"]))
+        self.assertEqual(self.parent_on("c"), "b")
+
+    def test_bottom_branch_uses_the_stack_trunk(self):
+        self.record_stacks(("develop", ["a", "b"]))
+        self.assertEqual(self.parent_on("a"), "develop")
+
+    def test_the_stack_holding_the_branch_is_used(self):
+        self.record_stacks(("main", ["lone"]), ("main", ["a", "b"]))
+        self.assertEqual(self.parent_on("b"), "a")
+
+    def test_branch_outside_every_stack_has_no_parent(self):
+        self.record_stacks(("main", ["a", "b"]))
+        self.assertIsNone(self.parent_on("lone"))
+
+    def test_repository_without_stacks_has_no_parent(self):
+        self.assertIsNone(self.parent_on("a"))
+
+    def test_linked_worktree_reads_the_shared_state_file(self):
+        self.record_stacks(("main", ["a", "b"]))
+        worktree = self.repo.parent / "worktree"
+        self.git("worktree", "add", "-q", str(worktree), "b")
+        self.assertEqual(sidebar.stack_parent_branch(worktree), "a")
+
+    def test_outside_a_git_checkout_there_is_no_parent(self):
+        self.assertIsNone(sidebar.stack_parent_branch(self.repo.parent))
+
+
+class StackToggleTests(unittest.TestCase):
+    def setUp(self):
+        self.bin_dir = tempfile.TemporaryDirectory()
+        herdr = fake_program(self.bin_dir.name, "herdr", "/config/persiyanov.reviewr\n")
+        env = {"HERDR_PLUGIN_ID": "dotfiles.herdr-sidebar", "HERDR_BIN_PATH": str(herdr)}
+        patcher = mock.patch.dict(os.environ, env)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.bin_dir.cleanup)
+
+    def test_stack_toggle_pins_reviewr_to_the_parent(self):
+        tree = split(pane("a"), pane("b"))
+        host = FakeHerdr(tree)
+        sidebar.toggle_sidebar(host, "a", "stack", lambda directory: "feature/base")
+        self.assertEqual(host.pane_request["entrypoint"], "reviewr-base")
+        self.assertEqual(
+            host.pane_request["env"],
+            {
+                "REVIEWR_BIN": "/plugins/reviewr/bin/herdr-reviewr",
+                "REVIEWR_BASE": "feature/base",
+                "REVIEWR_CONFIG_DIR": "/config/persiyanov.reviewr",
+            },
+        )
+        self.assertEqual(
+            host.tabs["t1"], split(tree, pane("reviewr"), ratio=1 - sidebar.SIDEBAR_RATIO)
+        )
+
+    def test_stack_toggle_outside_a_stack_opens_reviewrs_own_pane(self):
+        host = FakeHerdr(pane("a"))
+        sidebar.toggle_sidebar(host, "a", "stack", lambda directory: None)
+        self.assertEqual(
+            (host.pane_request["plugin_id"], host.pane_request["entrypoint"]),
+            ("persiyanov.reviewr", "pane"),
+        )
+
+    def test_missing_reviewr_fails_before_the_layout_changes(self):
+        class NoReviewr(FakeHerdr):
+            def call(self, method, **params):
+                if method == "plugin.list":
+                    return {"plugins": []}
+                return super().call(method, **params)
+
+        tree = split(pane("a"), pane("b"))
+        host = NoReviewr(tree)
+        with self.assertRaisesRegex(RuntimeError, "persiyanov.reviewr is not installed"):
+            sidebar.toggle_sidebar(host, "a", "stack", lambda directory: "feature/base")
+        self.assertEqual(host.tabs["t1"], tree)
+
+
+    def test_other_kind_replaces_the_sidebar_and_same_kind_closes_it(self):
+        tree = split(pane("a"), pane("b"), "down", 0.7)
+        docked = split(tree, pane("reviewr"), ratio=1 - sidebar.SIDEBAR_RATIO)
+        host = FakeHerdr(tree)
+        stack_base = lambda directory: "feature/base"
+
+        sidebar.toggle_sidebar(host, "a", "plain")
+        self.assertEqual(host.pane_request["entrypoint"], "pane")
+
+        sidebar.toggle_sidebar(host, "a", "stack", stack_base)
+        self.assertEqual(host.pane_request["env"]["REVIEWR_BASE"], "feature/base")
+        self.assertEqual(host.panes["reviewr"]["tokens"], {sidebar.TOKEN: "stack"})
+        self.assertEqual(host.tabs["t1"], docked)
+
+        self.assertIsNone(sidebar.toggle_sidebar(host, "a", "stack", stack_base))
+        self.assertEqual(host.tabs["t1"], tree)
+        self.assertEqual(host.tabs["t2"], pane("other"))
+
+    def test_swap_pressed_inside_the_sidebar_docks_beside_the_terminals(self):
+        tree = split(pane("a"), pane("b"))
+        host = FakeHerdr(tree)
+        sidebar.toggle_sidebar(host, "a", "plain")
+        sidebar.toggle_sidebar(host, "reviewr", "stack", lambda directory: "feature/base")
+        self.assertEqual(host.pane_request["entrypoint"], "reviewr-base")
+        self.assertEqual(
+            host.tabs["t1"], split(tree, pane("reviewr"), ratio=1 - sidebar.SIDEBAR_RATIO)
+        )
 
 
 if __name__ == "__main__":

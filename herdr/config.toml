@@ -26,6 +26,7 @@
 # prefix+Shift+T: open terminal popup
 # prefix+f: open nvim file picker
 # prefix+r: toggle full-height reviewr sidebar
+# prefix+Shift+R: toggle reviewr sidebar diffing against the gh stack parent
 # prefix+a: toggle Sheprd activity bar
 # prefix+Shift+O: append OpenCode and Vim project tabs
 
@@ -144,6 +145,15 @@ key = "prefix+r"
 type = "plugin_action"
 command = "dotfiles.herdr-sidebar.toggle-reviewr"
 description = "toggle reviewr sidebar"
+
+# Same sidebar, with reviewr's branch scope based on the gh stack parent
+# instead of main. Outside a stack it opens like prefix+r. With a prefix+r
+# sidebar open it swaps that sidebar for this one, and vice versa.
+[[keys.command]]
+key = "prefix+shift+r"
+type = "plugin_action"
+command = "dotfiles.herdr-sidebar.toggle-reviewr-stack"
+description = "toggle reviewr sidebar against gh stack parent"
 
 # Sheprd has no activity bar toggle; see "macOS GUI" in README.md. The full
 # path is used because the daemon may run without /usr/local/bin on PATH.
