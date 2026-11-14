@@ -65,7 +65,7 @@ private final class ScreenshotFixture {
             configuration: configuration.server, token: "test-token", applications: applications,
             windows: windows, screens: screens, preview: preview,
             screenshots: ScreenshotController(capture: camera, preview: preview, watcher: watcher, settleSeconds: 0.01),
-            shelf: FileShelfController(windows: windows, screens: screens, hotKeys: HotKeyService(), theme: BuiltInThemeCatalog.system),
+            ui: A2UISurfaceController(windows: windows, screens: screens, hotKeys: HotKeyService(), theme: BuiltInThemeCatalog.system),
             hotKeyStatus: { HotKeyStatus(eventTapEnabled: false, secureInputEnabled: false) }
         )
         try watcher.start()

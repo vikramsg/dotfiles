@@ -1,12 +1,13 @@
 ## API
 
-1. Remove individual actions from cli and HTTP endpoints for UI
-    - Only have a `macflow ui` that takes JSON input so that we can create instant UI using CLI
-    - Let the agent figure out stuff by doing `macflow ui` and then `macflow screenshot capture`.
-    - Interactive stuff using `macflow input click` and `macflow input keystroke`
-2. Create the JSON UI API
-    - JSON body as a payload
-3. Add a TypeScript plugin so that we can do other stuff like interacting with other CLI's etc
+1. Add a TypeScript plugin so that we can do other stuff like interacting with other CLI's etc
+
+## Done
+
+1. `macflow ui show --file <payload>` takes an A2UI JSON payload and renders it
+   natively with AppKit. `POST /v1/ui` is the underlying route.
+2. `macflow files list` fills the data model, and surfaces are verified with
+   `macflow screenshot capture` plus `macflow input click/keystroke`.
 
 ## Apps
 

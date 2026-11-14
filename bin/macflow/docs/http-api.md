@@ -8,7 +8,8 @@ All routes except `GET /health` require:
 Authorization: Bearer <api-token>
 ```
 
-Requests with a JSON body also require `Content-Type: application/json`.
+Requests with a JSON body use `Content-Type: application/json`. `POST /v1/ui`
+accepts A2UI payloads as `application/a2ui+json` (or any JSON content type).
 
 The token is stored at `~/Library/Application Support/Macflow/api-token`.
 Failures return `{"error":"message"}`.
@@ -72,13 +73,21 @@ Example response:
 | `GET` | `/overlays` | Report the current overlay. | None |
 | `DELETE` | `/overlays` | Hide the current overlay. | None |
 
-## File Shelves
+## UI
 
 | Method | Path | Action | Input |
 | --- | --- | --- | --- |
-| `POST` | `/file-shelves` | Show a shelf for a directory. | `{"directory":"..."}` plus optional sizing and behavior fields |
-| `GET` | `/file-shelves` | Report the current native shelf. | None |
-| `DELETE` | `/file-shelves/<id>` | Close the identified shelf. | None |
+| `POST` | `/ui` | Render or update surfaces from an A2UI payload. | One A2UI message or an array of them |
+| `GET` | `/ui` | List surfaces with visibility, frame, and component count. | None |
+| `DELETE` | `/ui/<surfaceId>` | Remove a surface. | None |
+
+See [UI workflows](ui.md) for the payload shape and update semantics.
+
+## Files
+
+| Method | Path | Action | Input |
+| --- | --- | --- | --- |
+| `GET` | `/files?directory=...&extensions=...&limit=...` | List supported files, newest first. | Directory query parameter; extensions and limit optional |
 
 ## Input
 
