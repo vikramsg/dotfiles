@@ -1,7 +1,11 @@
 import copy
 import importlib.util
+import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location(
     "sidebar", Path(__file__).parents[1] / "sidebar.py"
@@ -73,6 +77,12 @@ class FakeHerdr:
     def call(self, method, **params):
         if method == "pane.list":
             return {"panes": list(self.panes.values())}
+        if method == "plugin.list":
+            return {
+                "plugins": [
+                    {"plugin_id": "persiyanov.reviewr", "plugin_root": "/plugins/reviewr"}
+                ]
+            }
         if method == "layout.export":
             return {"layout": {"root": copy.deepcopy(self.tabs[params["tab_id"]])}}
         if method == "plugin.pane.focus":
@@ -99,6 +109,7 @@ class FakeHerdr:
             self.panes[pane_id]["tab_id"] = new_tab
         elif method == "plugin.pane.open":
             self.launch_directory = params["cwd"]
+            self.pane_request = params
             self.tabs["t1"] = insert(
                 self.tabs["t1"], params["target_pane_id"], pane("reviewr"), "right", 0.5
             )
@@ -190,6 +201,72 @@ class SidebarTests(unittest.TestCase):
             sidebar.toggle_sidebar(host, "a")
         self.assertEqual(host.tabs["t1"], tree)
         self.assertEqual(set(host.tabs), {"t1", "t2"})
+
+
+def stack(current, names, trunk="main"):
+    return {
+        "trunk": trunk,
+        "currentBranch": current,
+        "branches": [{"name": name} for name in names],
+    }
+
+
+class StackBaseTests(unittest.TestCase):
+    def parent_of(self, stack_json, exit_code=0):
+        """Run stack_parent_branch against a fake `gh` that prints stack_json."""
+        with tempfile.TemporaryDirectory() as bin_dir:
+            gh = Path(bin_dir) / "gh"
+            output = Path(bin_dir) / "stack.json"
+            output.write_text(json.dumps(stack_json))
+            gh.write_text(f'#!/bin/sh\ncat "{output}"\nexit {exit_code}\n')
+            gh.chmod(0o755)
+            path = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+            with mock.patch.dict(os.environ, {"PATH": path}):
+                return sidebar.stack_parent_branch(bin_dir)
+
+    def test_parent_is_the_branch_below_the_current_one(self):
+        self.assertEqual(self.parent_of(stack("c", ["a", "b", "c"])), "b")
+
+    def test_bottom_branch_uses_the_stack_trunk(self):
+        self.assertEqual(self.parent_of(stack("a", ["a", "b"], "develop")), "develop")
+
+    def test_outside_a_stack_there_is_no_parent(self):
+        self.assertIsNone(self.parent_of({}, exit_code=1))
+
+    def test_stack_toggle_pins_reviewr_to_the_parent(self):
+        tree = split(pane("a"), pane("b"))
+        host = FakeHerdr(tree)
+        env = {
+            "HERDR_PLUGIN_ID": "dotfiles.herdr-sidebar",
+            "HERDR_PLUGIN_CONFIG_DIR": "/config/dotfiles.herdr-sidebar",
+        }
+        with (
+            mock.patch.dict(os.environ, env),
+            mock.patch.object(sidebar, "stack_parent_branch", return_value="feature/base"),
+        ):
+            sidebar.toggle_sidebar(host, "a", use_stack_base=True)
+        self.assertEqual(host.pane_request["entrypoint"], "reviewr-base")
+        self.assertEqual(
+            host.pane_request["env"],
+            {
+                "REVIEWR_BIN": "/plugins/reviewr/bin/herdr-reviewr",
+                "REVIEWR_BASE": "feature/base",
+                "HERDR_PLUGIN_ID": "persiyanov.reviewr",
+                "HERDR_PLUGIN_CONFIG_DIR": "/config/persiyanov.reviewr",
+            },
+        )
+        self.assertEqual(
+            host.tabs["t1"], split(tree, pane("reviewr"), ratio=1 - sidebar.SIDEBAR_RATIO)
+        )
+
+    def test_stack_toggle_outside_a_stack_opens_reviewrs_own_pane(self):
+        host = FakeHerdr(pane("a"))
+        with mock.patch.object(sidebar, "stack_parent_branch", return_value=None):
+            sidebar.toggle_sidebar(host, "a", use_stack_base=True)
+        self.assertEqual(
+            (host.pane_request["plugin_id"], host.pane_request["entrypoint"]),
+            ("persiyanov.reviewr", "pane"),
+        )
 
 
 if __name__ == "__main__":

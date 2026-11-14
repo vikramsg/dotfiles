@@ -9,11 +9,22 @@ import fcntl
 import json
 import os
 import socket
+import subprocess
 import sys
 from pathlib import Path
 
 TOKEN = "dotfiles-herdr-sidebar"
 SIDEBAR_RATIO = 0.4
+REVIEWR_PLUGIN_ID = "persiyanov.reviewr"
+
+# The branch below the current one in its gh stack, or the stack's trunk for
+# the bottom branch. Prints nothing when the current branch is not in the stack.
+STACK_PARENT_FILTER = """
+(.branches | map(.name) | index($current)) as $i
+| if $i == null then empty
+  elif $i == 0 then .trunk
+  else .branches[$i - 1].name end
+"""
 
 
 class Herdr:
@@ -72,8 +83,62 @@ def hold_terminal(host, pane_id, workspace_id):
     )
 
 
-def toggle_sidebar(host, caller_id):
+def stack_parent_branch(directory):
+    """Return the gh stack parent of the branch checked out in directory, or None.
+
+    `gh stack view` fails outside a stack; that is treated as "no stack".
+    """
+    stack = subprocess.run(
+        ["gh", "stack", "view", "--json"],
+        cwd=directory,
+        capture_output=True,
+        text=True,
+    )
+    if stack.returncode != 0:
+        return None
+    parent = subprocess.run(
+        ["jq", "-r", "--arg", "current", json.loads(stack.stdout)["currentBranch"], STACK_PARENT_FILTER],
+        input=stack.stdout,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return parent or None
+
+
+def reviewr_pane_request(host, base):
+    """plugin.pane.open parameters for reviewr, pinned to base when given.
+
+    Reviewr's own `pane` entrypoint takes no arguments, so a pinned base runs
+    reviewr's binary through this plugin's `reviewr-base` entrypoint instead.
+    HERDR_PLUGIN_ID and HERDR_PLUGIN_CONFIG_DIR are set to reviewr's so it
+    still reads its own config.toml.
+    """
+    if base is None:
+        return {"plugin_id": REVIEWR_PLUGIN_ID, "entrypoint": "pane"}
+    reviewr = next(
+        plugin
+        for plugin in host.call("plugin.list")["plugins"]
+        if plugin["plugin_id"] == REVIEWR_PLUGIN_ID
+    )
+    config_root = Path(os.environ["HERDR_PLUGIN_CONFIG_DIR"]).parent
+    return {
+        "plugin_id": os.environ["HERDR_PLUGIN_ID"],
+        "entrypoint": "reviewr-base",
+        "env": {
+            "REVIEWR_BIN": str(Path(reviewr["plugin_root"]) / "bin" / "herdr-reviewr"),
+            "REVIEWR_BASE": base,
+            "HERDR_PLUGIN_ID": REVIEWR_PLUGIN_ID,
+            "HERDR_PLUGIN_CONFIG_DIR": str(config_root / REVIEWR_PLUGIN_ID),
+        },
+    }
+
+
+def toggle_sidebar(host, caller_id, use_stack_base=False):
     """Close the caller tab's sidebar if it has one, otherwise dock a new one.
+
+    With use_stack_base, a new sidebar diffs the branch scope against the
+    branch's gh stack parent; outside a stack it opens like the plain toggle.
 
     Returns the new sidebar's pane id, or None when the sidebar was closed.
     Closing needs no layout work: Herdr gives the closed column's width back
@@ -88,6 +153,8 @@ def toggle_sidebar(host, caller_id):
             return None
 
     directory = caller.get("foreground_cwd") or caller["cwd"]
+    base = stack_parent_branch(directory) if use_stack_base else None
+    pane_request = reviewr_pane_request(host, base)
     tree = host.call("layout.export", tab_id=tab_id)["layout"]["root"]
     original_ids = pane_ids(tree)
     anchor = original_ids[0]
@@ -98,10 +165,7 @@ def toggle_sidebar(host, caller_id):
             hold_terminal(host, pane_id, caller["workspace_id"])
         sidebar = host.call(
             "plugin.pane.open",
-            # Reviewr's own pane entrypoint, so reviewr's plugin keeps owning
-            # its binary path and config.
-            plugin_id="persiyanov.reviewr",
-            entrypoint="pane",
+            **pane_request,
             target_pane_id=anchor,
             direction="right",
             cwd=directory,
@@ -137,7 +201,8 @@ def toggle_sidebar(host, caller_id):
 def main():
     if os.environ.get("HERDR_ENV") != "1":
         raise RuntimeError("herdr sidebar must run inside Herdr")
-    if sys.argv[1] != "toggle":
+    commands = {"toggle": False, "toggle-stack": True}
+    if sys.argv[1] not in commands:
         raise RuntimeError(f"unknown command {sys.argv[1]!r}")
     state_directory = Path(os.environ["HERDR_PLUGIN_STATE_DIR"])
     state_directory.mkdir(parents=True, exist_ok=True)
@@ -145,7 +210,7 @@ def main():
     with (state_directory / "toggle.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         context = json.loads(os.environ["HERDR_PLUGIN_CONTEXT_JSON"])
-        toggle_sidebar(Herdr(), context["focused_pane_id"])
+        toggle_sidebar(Herdr(), context["focused_pane_id"], commands[sys.argv[1]])
 
 
 if __name__ == "__main__":

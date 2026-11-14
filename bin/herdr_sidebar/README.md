@@ -2,6 +2,10 @@
 
 `prefix+r` runs the `dotfiles.herdr-sidebar.toggle-reviewr` action. It opens reviewr as a full-height sidebar on the right 40% of the current tab, or closes that tab's sidebar if one is open. Reviewr starts in the invoking terminal's foreground working directory.
 
+`prefix+Shift+R` runs `toggle-reviewr-stack`. It docks the same sidebar but starts reviewr with `--base <parent>`, so the **branch** scope diffs against the branch below the current one in its [gh stack](https://gh.io/stacks) rather than `main`. The parent comes from `gh stack view --json` filtered with `jq`; the bottom branch of a stack uses the stack's trunk. Outside a stack it opens reviewr with its usual base. Because `--base` pins the base, reviewr's `B` picker is disabled in that pane.
+
+Reviewr's own `pane` entrypoint takes no arguments, so the pinned launch goes through this plugin's `reviewr-base` pane entrypoint. It runs reviewr's installed binary with `HERDR_PLUGIN_ID` and `HERDR_PLUGIN_CONFIG_DIR` set to reviewr's, so reviewr still reads its own `config.toml`.
+
 ## Why this exists
 
 Reviewr's own toggle splits only the focused pane, and Herdr has no API that splits a tab at its root. `sidebar.py` gets a full-height column purely by composing public Herdr socket APIs, the same approach the `chmarax.herdr-nvim` sidebar uses:

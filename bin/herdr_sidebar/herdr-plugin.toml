@@ -11,3 +11,17 @@ title = "Toggle reviewr sidebar"
 contexts = ["pane"]
 command = ["sh", "-c", "exec uv run --project \"$HERDR_PLUGIN_ROOT\" python \"$HERDR_PLUGIN_ROOT/sidebar.py\" toggle"]
 
+
+[[actions]]
+id = "toggle-reviewr-stack"
+title = "Toggle reviewr sidebar against the gh stack parent"
+contexts = ["pane"]
+command = ["sh", "-c", "exec uv run --project \"$HERDR_PLUGIN_ROOT\" python \"$HERDR_PLUGIN_ROOT/sidebar.py\" toggle-stack"]
+
+# Opened by toggle-reviewr-stack with REVIEWR_BIN and REVIEWR_BASE in its env;
+# reviewr's own pane entrypoint cannot pass --base.
+[[panes]]
+id = "reviewr-base"
+title = "reviewr"
+placement = "split"
+command = ["sh", "-c", "exec \"$REVIEWR_BIN\" --base \"$REVIEWR_BASE\""]

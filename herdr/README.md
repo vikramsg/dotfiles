@@ -30,6 +30,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+q` / `prefix+?` / `prefix+d` | Reload config / help / detach |
 | `prefix+e` / `prefix+f` | Toggle the nvim sidebar / open the nvim file picker |
 | `prefix+r` | Toggle the full-height reviewr sidebar on the right |
+| `prefix+Shift+R` | Same sidebar, with the branch scope based on the current branch's `gh stack` parent |
 | `prefix+a` | Toggle Sheprd's activity bar (macOS) |
 | `prefix+v` | Pick and watch a Markdown file in a new Leaf tab |
 | `prefix+Shift+V` | Pick and watch a Markdown file in a popup |
