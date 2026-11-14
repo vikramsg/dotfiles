@@ -26,6 +26,7 @@
 # prefix+Shift+T: open terminal popup
 # prefix+f: open nvim file picker
 # prefix+r: toggle full-height reviewr sidebar
+# prefix+a: toggle Sheprd activity bar
 # prefix+Shift+O: append OpenCode and Vim project tabs
 
 onboarding = false
@@ -143,6 +144,15 @@ key = "prefix+r"
 type = "plugin_action"
 command = "dotfiles.herdr-sidebar.toggle-reviewr"
 description = "toggle reviewr sidebar"
+
+# Sheprd has no toggle command for its activity bar (the icon column at the
+# window's left edge), so flip the setting. Sheprd writes it into the linked
+# herdr/config-gpui.local.toml, which shows as a repo change while the bar is on.
+[[keys.command]]
+key = "prefix+a"
+type = "shell"
+command = 'sheprd=/Applications/Sheprd.app/Contents/MacOS/sheprd; if [ "$("$sheprd" config get sidebar.activity_bar)" = true ]; then "$sheprd" config set sidebar.activity_bar false; else "$sheprd" config set sidebar.activity_bar true; fi'
+description = "toggle Sheprd activity bar"
 
 [[keys.command]]
 key = "prefix+h"

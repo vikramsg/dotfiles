@@ -30,6 +30,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+q` / `prefix+?` / `prefix+d` | Reload config / help / detach |
 | `prefix+e` / `prefix+f` | Toggle the nvim sidebar / open the nvim file picker |
 | `prefix+r` | Toggle the full-height reviewr sidebar on the right |
+| `prefix+a` | Toggle Sheprd's activity bar (macOS) |
 | `prefix+v` | Pick and watch a Markdown file in a new Leaf tab |
 | `prefix+Shift+V` | Pick and watch a Markdown file in a popup |
 | `prefix+g` | Open the LazyGit popup |
@@ -117,6 +118,10 @@ open -a Sheprd
 Sheprd connects to the separately installed Herdr daemon. Closing it leaves daemon sessions running. Its bundled CLI is `/Applications/Sheprd.app/Contents/MacOS/sheprd`; run it with `--help` for window, sidebar, keybinding, and settings commands.
 
 On macOS, `just herdr` links `config-gpui.local.toml` into `~/.config/herdr/`. Move or migrate an existing unmanaged override file before linking. Edit the repository file for persistent GUI settings; the app reloads saved changes automatically. The managed `config-gpui.toml` defaults are owned by the app and must not be edited.
+
+Sheprd also saves choices made in its Settings window and through `sheprd config set` into that file, so they appear as changes to the repository copy. Commit the ones you want to keep. A fresh Sheprd install creates its own regular file at that path; move it aside and rerun `just herdr` to restore the link.
+
+`prefix+a` toggles Sheprd's activity bar, the icon column at the window's left edge. Sheprd has no command for it, so the binding flips `sidebar.activity_bar`. The repository keeps it `false`; while the bar is shown the file has a one-line change that disappears when you toggle it off. `Cmd+B` toggles the workspace sidebar next to it.
 
 The GUI uses `TokyoNight Storm` and the `comfortable-rounded` sidebar layout, which shows branches for workspaces and linked worktrees. Herdr's default sidebar rows request branch updates from the daemon; reload the daemon configuration with `prefix+q` after changing it. For faster discrete mouse-wheel scrollback, set `mouse_scroll_lines` under `[ui]` in `herdr/config.toml` (default `3`). This does not change precise trackpad movement or scrolling inside applications that consume mouse events themselves.
 
