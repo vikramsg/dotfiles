@@ -33,14 +33,14 @@ New interactive shells load the shortcut automatically. In an existing shell, ru
 alias herdr-dot='XDG_STATE_HOME="$HOME/.local/state/herdr-session-dot" herdr session attach dot'
 ```
 
-On macOS, with the Herdr GUI already running, use `herdr-gpui <session>` to open another window for a local session:
+On macOS, with Sheprd already running, use `sheprd-window <session>` to open another window for a local session:
 
 ```sh
-herdr-gpui dot
-herdr-gpui default
+sheprd-window dot
+sheprd-window default
 ```
 
-This function takes exactly one session name, not native GUI CLI subcommands. It runs the installed app bundle's `window new --session` command and leaves existing windows unchanged. Unlike `herdr-dot`, it does not isolate the saved-machine list or apply a device filter. See [separate GUI windows](../herdr/README.md#separate-windows-per-session) for the underlying command and Local sidebar filter.
+This function takes exactly one session name, not other Sheprd CLI subcommands. It runs the installed app bundle's `window new --session` command and leaves existing windows unchanged. Unlike `herdr-dot`, it does not isolate the saved-machine list or apply a device filter. See [separate GUI windows](../herdr/README.md#separate-windows-per-session) for the underlying command and Local sidebar filter.
 
 New interactive shells load the function automatically. To load it in an existing shell:
 

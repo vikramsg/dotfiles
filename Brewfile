@@ -32,12 +32,6 @@ brew "tmux"
 # Build Rust-based Herdr plugins, such as herdr-navigator.
 brew "rust"
 
-# Native Herdr client for macOS; the daemon remains available on both hosts.
-if OS.mac?
-  tap "penso/tap"
-  cask "herdr-gpui"
-end
-
 # `cat` replacement used in terminal workflows for readable file previews.
 brew "mcat"
 

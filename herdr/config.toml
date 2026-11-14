@@ -56,10 +56,10 @@ previous_tab = "prefix+p"
 next_tab = "prefix+n"
 # Navigator owns prefix+s instead of the native goto picker.
 goto = ""
-# GPUI's Settings action otherwise claims prefix+s before custom commands.
+# Sheprd's Settings action otherwise claims prefix+s before custom commands.
 settings = ""
 edit_scrollback = ""
-# Leave prefix+r to reviewr; GPUI otherwise claims it for Resize Mode.
+# Leave prefix+r to reviewr; Sheprd otherwise claims it for Resize Mode.
 resize_mode = ""
 rename_tab = "prefix+$"
 close_pane = "prefix+x"

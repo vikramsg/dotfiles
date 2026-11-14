@@ -1,12 +1,12 @@
-herdr-gpui() {
+sheprd-window() {
     emulate -L zsh
 
     if [[ $# -ne 1 || -z "$1" ]]; then
-        print "usage: herdr-gpui <session>" >&2
+        print "usage: sheprd-window <session>" >&2
         return 1
     fi
 
-    "/Applications/Herdr.app/Contents/MacOS/Herdr" window new --session "$1"
+    /Applications/Sheprd.app/Contents/MacOS/sheprd window new --session "$1"
 }
 
 ss() {
