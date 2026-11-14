@@ -29,9 +29,6 @@ brew "gitmux"
 # Terminal multiplexer.
 brew "tmux"
 
-# Persistent terminal multiplexer alternative to tmux.
-brew "herdr"
-
 # Build Rust-based Herdr plugins, such as herdr-navigator.
 brew "rust"
 

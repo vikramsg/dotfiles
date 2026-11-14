@@ -1,4 +1,11 @@
 #########################################
+# Load mise before plugins so interactive commands use the selected tool versions.
+export PATH="$HOME/.local/bin:$PATH"
+if command -v mise >/dev/null 2>&1; then
+    eval "$(mise activate zsh)"
+fi
+
+#########################################
 # Prefer Homebrew's Rustup installation on macOS.
 if [[ -d /opt/homebrew/opt/rustup/bin ]]; then
     export PATH="/opt/homebrew/opt/rustup/bin:$PATH"

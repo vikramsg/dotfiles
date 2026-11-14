@@ -4,6 +4,8 @@ Run `just zsh` to link the shell and prompt configuration. If `~/.zshenv` alread
 
 `.zshenv` exports `EDITOR=nvim` and `VISUAL=nvim` for interactive and non-interactive Zsh processes. Keep it POSIX-compatible and free of terminal output and interactive setup: the OS Login VM also sources it from Bash.
 
+Run `just mise` to install tools pinned in `mise/config.toml`. `.zshenv` puts mise shims on `PATH` for SSH and non-interactive commands, while `.zshrc` activates mise for interactive shells. After installation, open a new shell or run `eval "$(~/.local/bin/mise activate zsh)"` in an existing Zsh shell.
+
 ## Local settings
 
 Keep machine-specific aliases and interactive shell settings in `~/.zshrc.local`. This is a regular host-local file, not a repository file or symlink. The managed `.zshrc` sources it last, so local settings can override shared defaults. `just zsh` does not create, replace, or link it.

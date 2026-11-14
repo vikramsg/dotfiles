@@ -42,6 +42,7 @@ The prefix is `Ctrl+Space`.
 
 ```sh
 just brew
+just mise
 just bin
 just herdr
 herdr
@@ -75,7 +76,11 @@ After linking `nvim/`, start Neovim once to load its navigation adapter. It shar
 
 ## Updates
 
-The Herdr application is managed by Homebrew through the root `Brewfile`. Update it with `brew upgrade herdr`, not `herdr update`, to keep Homebrew as the owner of the executable. Avoid a separate `~/.local/bin/herdr`, which can shadow the Homebrew binary.
+The Herdr CLI is pinned in `mise/config.toml`. `just mise` bootstraps mise, links that file as the global configuration, and installs its tools. `just herdr` also runs this setup before configuring plugins. Run `just zsh` to enable mise in new shells; see [Zsh setup](../zsh/README.md) when migrating an unmanaged shell configuration.
+
+To update the CLI, change its version in `mise/config.toml` and run `just mise`. Do not use `herdr update`, which bypasses mise's version ownership. The macOS GUI remains managed by Homebrew with `brew upgrade --cask herdr-gpui`.
+
+When migrating from Homebrew, let any active `brew upgrade herdr` finish, then run `brew unlink herdr`. Mise supplies the CLI through its shell activation and shims. Avoid a separate `~/.local/bin/herdr`, which can shadow the selected version.
 
 Update GitHub plugins separately:
 
@@ -83,7 +88,7 @@ Update GitHub plugins separately:
 just --justfile herdr/justfile update
 ```
 
-Plugins declared without a `ref` in `herdr/plugins.json` follow their upstream default branch. `just herdr` installs missing plugins but does not update existing ones. Upgrading the executable does not restart running Herdr sessions.
+Plugins declared without a `ref` in `herdr/plugins.json` follow their upstream default branch. `just herdr` installs missing plugins but does not update existing ones. Updating the executable does not restart running Herdr sessions.
 
 ## Navigator Jump Back
 
