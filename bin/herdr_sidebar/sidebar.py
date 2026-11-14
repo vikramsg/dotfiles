@@ -1,8 +1,7 @@
 """Toggle reviewr as a full-height sidebar on the right of the current Herdr tab.
 
-Herdr has no API that splits a tab at its root, so this composes public Herdr
-socket APIs instead; README.md walks through the sequence. Moves keep the live
-PTYs, whereas `layout.apply` would restart them.
+- Herdr cannot split a tab at its root, so this composes public socket APIs; README.md lists the steps.
+- Panes are moved, not re-created: `layout.apply` would restart their processes.
 """
 
 import fcntl
@@ -84,17 +83,14 @@ def run(command, **kwargs):
 def stack_parent_branch(directory):
     """Return the gh stack parent of the branch checked out in directory, or None.
 
-    The parent is the branch below the current one in its stack, or the
-    stack's trunk for the bottom branch. Returns None outside a git checkout,
-    when no stack is recorded, or when the current branch is in no stack.
+    - Parent: the branch below in its stack; the stack's trunk for the bottom branch.
+    - None: outside git, no stacks recorded, or the branch is in no stack.
 
-    Caveat: this reads `<git common dir>/gh-stack`, the gh-stack extension's
-    internal state file (`schemaVersion` 1), not a documented interface.
-    `gh stack view --json` is the supported equivalent, but it makes three
-    GitHub API calls and adds about 1.2 s to every key press. If the extension
-    changes the file's layout, this lookup breaks and needs updating. The file
-    does not record whether a branch is merged, so a merged parent is still
-    used until `gh stack sync` rewrites the stack.
+    Caveats:
+    - Reads `<git common dir>/gh-stack`, gh-stack's internal state file (schemaVersion 1).
+      A layout change in the extension breaks this lookup.
+    - Used over the supported `gh stack view --json`, which costs three GitHub API calls (~1.2 s per key press).
+    - Merges are not recorded, so a merged parent stays the base until `gh stack sync`.
     """
     git = run(
         ["git", "rev-parse", "--path-format=absolute", "--git-common-dir", "--abbrev-ref", "HEAD"],
@@ -117,12 +113,10 @@ def stack_parent_branch(directory):
 def reviewr_pane_request(host, base):
     """plugin.pane.open parameters for reviewr, pinned to base when given.
 
-    Reviewr's own `pane` entrypoint takes no arguments, so a pinned base runs
-    reviewr's binary through this plugin's `reviewr-base` entrypoint instead.
-    Herdr sets HERDR_PLUGIN_ID and HERDR_PLUGIN_CONFIG_DIR to this plugin's
-    for that pane and ignores overrides in env, so the entrypoint's command
-    re-exports them from REVIEWR_CONFIG_DIR before starting reviewr; otherwise
-    reviewr would not read its own config.toml.
+    - No base: reviewr's own `pane` entrypoint.
+    - Base: this plugin's `reviewr-base` entrypoint, since reviewr's takes no arguments.
+    - Herdr forces this plugin's HERDR_PLUGIN_ID and HERDR_PLUGIN_CONFIG_DIR on that pane and ignores env overrides.
+      The entrypoint re-exports reviewr's from REVIEWR_CONFIG_DIR so reviewr reads its own config.toml.
     """
     if base is None:
         return {"plugin_id": REVIEWR_PLUGIN_ID, "entrypoint": "pane"}
@@ -147,14 +141,11 @@ def reviewr_pane_request(host, base):
     }
 
 
-# Sidebar tags use Herdr pane tokens. A plugin attaches string key/value pairs
-# to a pane with the `pane.report_metadata` socket call (CLI: `herdr pane
-# report-metadata <pane> --source ID --token NAME=VALUE`). Herdr returns them
-# under `tokens` in `pane.list`, may show them in sidebar rows, and drops them
-# when the pane closes or an optional `ttl_ms` expires. They are not a general
-# store: values are short strings, scoped to one pane. Here the token key marks
-# a pane as this tab's sidebar and its value is the kind of sidebar, so the
-# next key press knows whether to close it or swap it for the other kind.
+# Sidebar tags are Herdr pane tokens:
+# - Set with the `pane.report_metadata` socket call (CLI: `herdr pane report-metadata <pane> --source ID --token NAME=VALUE`).
+# - Read back under `tokens` in `pane.list`; Herdr may also show them in sidebar rows.
+# - Short strings scoped to one pane, dropped when it closes or an optional `ttl_ms` expires; not a general store.
+# - Here the key marks the tab's sidebar and the value is its kind, so the next key press can close or swap it.
 
 
 def tag_sidebar(host, pane_id, kind):
@@ -173,17 +164,11 @@ def tagged_sidebar(panes, tab_id):
 def toggle_sidebar(host, caller_id, kind="plain", base_for=None):
     """Toggle the caller tab's sidebar of the given kind.
 
-    - No sidebar in the tab: dock a new one.
-    - A sidebar of the same kind: close it.
-    - A sidebar of the other kind: replace it with a new one of this kind.
-      Reviewr restarts, so its unsent comments and position are lost.
+    - No sidebar: dock one; returns its pane id.
+    - Same kind open: close it; returns None. Herdr gives its width back to the tree on the left.
+    - Other kind open: replace it; reviewr restarts, losing unsent comments and position.
 
-    base_for(directory) returns the ref a new sidebar's branch scope should
-    diff against, or None for reviewr's own base.
-
-    Returns the new sidebar's pane id, or None when the sidebar was closed.
-    Closing needs no layout work: Herdr gives the closed column's width back
-    to the untouched tree on the left.
+    base_for(directory) returns the base ref for a new sidebar, or None for reviewr's default.
     """
     panes = host.call("pane.list")["panes"]
     caller = next(pane for pane in panes if pane["pane_id"] == caller_id)
