@@ -419,13 +419,6 @@ git-doctor:
         echo "Git identity resolves without printing PII."
 
 
-# Set up television symlink
-television:
-    @echo "Setting up television symlink..."
-    mkdir -p ~/.config/television
-    ln -sfn {{justfile_directory()}}/television/cable ~/.config/television/cable
-    @echo "Television symlink created at ~/.config/television/cable -> {{justfile_directory()}}/television/cable"
-
 # Set up Harlequin symlink
 harlequin:
     @echo "Setting up Harlequin symlink..."
@@ -448,7 +441,7 @@ harlequin-if-configured:
     fi
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit television harlequin-if-configured
+all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

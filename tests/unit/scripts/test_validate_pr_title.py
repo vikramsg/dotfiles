@@ -18,7 +18,6 @@ EXPECTED_SCOPES = (
     "lch",
     "macflow",
     "nvim",
-    "ocint",
     "opencode",
     "screenshot",
     "terraform",
@@ -50,12 +49,12 @@ def test_all_allowed_scopes_are_accepted(scope: str) -> None:
     "title",
     [
         "docs: summary",
-        "OCINT: summary",
-        "ocint:summary",
-        "ocint: ",
-        " ocint: summary",
-        "ocint: summary ",
-        "ocint: first\nsecond",
+        "LCH: summary",
+        "lch:summary",
+        "lch: ",
+        " lch: summary",
+        "lch: summary ",
+        "lch: first\nsecond",
     ],
 )
 def test_invalid_titles_are_rejected(title: str) -> None:
@@ -69,7 +68,7 @@ def test_invalid_titles_are_rejected(title: str) -> None:
 
 def test_shell_syntax_is_inert_title_data() -> None:
     # GIVEN shell syntax in an otherwise valid summary
-    title = "ocint: preserve $(touch /tmp/nope); $HOME"
+    title = "lch: preserve $(touch /tmp/nope); $HOME"
 
     # WHEN the title is validated
     error = validate_pr_title(title)
