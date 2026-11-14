@@ -223,6 +223,7 @@ def fake_program(directory, name, output, exit_code=0):
 
 class StackParentTests(unittest.TestCase):
     def parent_of(self, stack_json, exit_code=0):
+        """Run stack_parent_branch against a fake `gh` that prints stack_json."""
         with tempfile.TemporaryDirectory() as bin_dir:
             fake_program(bin_dir, "gh", json.dumps(stack_json), exit_code)
             path = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"

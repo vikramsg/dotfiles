@@ -10,7 +10,7 @@
 | Above only merged branches, or at the bottom | The stack's trunk |
 | Not in a stack | Reviewr's usual base (`origin/HEAD` or its `B` pick) |
 
-The parent comes from `gh stack view --json` filtered with `jq`; both must be on `PATH`, and the action fails with an error in `herdr plugin log list` if either is missing. Reviewr's documentation states that `--base` overrides and disables its `B` picker, so pick the base with the key, not `B`, in that pane.
+The parent comes from `gh stack view --json`. `gh` with the `github/gh-stack` extension must be on `PATH`; if it is missing the action fails with an error in `herdr plugin log list`. Reviewr's documentation states that `--base` overrides and disables its `B` picker, so pick the base with the key, not `B`, in that pane.
 
 Reviewr's own `pane` entrypoint takes no arguments, so the pinned launch goes through this plugin's `reviewr-base` pane entrypoint. Herdr gives that pane this plugin's `HERDR_PLUGIN_ID` and `HERDR_PLUGIN_CONFIG_DIR`, and ignores overrides passed when opening it, so the entrypoint's command sets both back to reviewr's (the directory from `herdr plugin config-dir`) before running reviewr's installed `bin/herdr-reviewr`. Reviewr then reads its own `config.toml`.
 

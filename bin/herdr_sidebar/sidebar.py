@@ -17,19 +17,6 @@ TOKEN = "dotfiles-herdr-sidebar"
 SIDEBAR_RATIO = 0.4
 REVIEWR_PLUGIN_ID = "persiyanov.reviewr"
 
-# The nearest unmerged branch below the current one in its gh stack, or the
-# stack's trunk when every branch below is merged. A merged parent's commits
-# are already in the trunk, so diffing against it would hide nothing useful.
-# Prints nothing when the current branch is not in the stack.
-STACK_PARENT_FILTER = """
-.currentBranch as $current
-| (.branches | map(.name) | index($current)) as $i
-| if $i == null then empty
-  else ([.branches[:$i][] | select(.isMerged | not) | .name] | last) // .trunk
-  end
-"""
-
-
 class Herdr:
     def call(self, method, **params):
         with socket.socket(socket.AF_UNIX) as connection:
@@ -97,13 +84,21 @@ def run(command, **kwargs):
 def stack_parent_branch(directory):
     """Return the gh stack parent of the branch checked out in directory, or None.
 
-    `gh stack view` exits non-zero outside a stack, which means "no parent".
-    A missing gh or jq is an error, not "no stack".
+    The parent is the nearest unmerged branch below the current one, or the
+    stack's trunk when every branch below is merged: a merged branch's commits
+    are already in the trunk. `gh stack view` exits non-zero outside a stack,
+    which means "no parent"; a missing gh is an error, not "no stack".
     """
-    stack = run(["gh", "stack", "view", "--json"], cwd=directory)
-    if stack.returncode != 0:
+    result = run(["gh", "stack", "view", "--json"], cwd=directory)
+    if result.returncode != 0:
         return None
-    return run(["jq", "-r", STACK_PARENT_FILTER], input=stack.stdout, check=True).stdout.strip() or None
+    stack = json.loads(result.stdout)
+    names = [branch["name"] for branch in stack["branches"]]
+    if stack["currentBranch"] not in names:
+        return None
+    below = stack["branches"][: names.index(stack["currentBranch"])]
+    unmerged = [branch["name"] for branch in below if not branch["isMerged"]]
+    return unmerged[-1] if unmerged else stack["trunk"]
 
 
 def reviewr_pane_request(host, base):
