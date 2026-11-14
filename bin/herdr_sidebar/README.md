@@ -12,6 +12,18 @@
 
 The parent comes from `gh stack view --json`. `gh` with the `github/gh-stack` extension must be on `PATH`; if it is missing the action fails with an error in `herdr plugin log list`. Reviewr's documentation states that `--base` overrides and disables its `B` picker, so pick the base with the key, not `B`, in that pane.
 
+### Switching between `prefix+r` and `prefix+Shift+R`
+
+Each sidebar remembers which key opened it, so a tab has at most one sidebar:
+
+| Open sidebar | Key pressed | Result |
+| --- | --- | --- |
+| None | either | Dock a sidebar of that kind |
+| Same kind | same key | Close it |
+| Other kind | other key | Close it and dock the other kind in its place |
+
+Swapping restarts reviewr, so its current file, scroll position, and unsent comments are lost. The kind is stored as a Herdr pane token on the sidebar pane; see the comment above `tag_sidebar` in `sidebar.py`.
+
 Reviewr's own `pane` entrypoint takes no arguments, so the pinned launch goes through this plugin's `reviewr-base` pane entrypoint. Herdr gives that pane this plugin's `HERDR_PLUGIN_ID` and `HERDR_PLUGIN_CONFIG_DIR`, and ignores overrides passed when opening it, so the entrypoint's command sets both back to reviewr's (the directory from `herdr plugin config-dir`) before running reviewr's installed `bin/herdr-reviewr`. Reviewr then reads its own `config.toml`.
 
 ## Why this exists

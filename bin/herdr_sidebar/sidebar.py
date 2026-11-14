@@ -134,8 +134,36 @@ def reviewr_pane_request(host, base):
     }
 
 
-def toggle_sidebar(host, caller_id, base_for=None):
-    """Close the caller tab's sidebar if it has one, otherwise dock a new one.
+# Sidebar tags use Herdr pane tokens. A plugin attaches string key/value pairs
+# to a pane with the `pane.report_metadata` socket call (CLI: `herdr pane
+# report-metadata <pane> --source ID --token NAME=VALUE`). Herdr returns them
+# under `tokens` in `pane.list`, may show them in sidebar rows, and drops them
+# when the pane closes or an optional `ttl_ms` expires. They are not a general
+# store: values are short strings, scoped to one pane. Here the token key marks
+# a pane as this tab's sidebar and its value is the kind of sidebar, so the
+# next key press knows whether to close it or swap it for the other kind.
+
+
+def tag_sidebar(host, pane_id, kind):
+    host.call("pane.report_metadata", pane_id=pane_id, source=TOKEN, tokens={TOKEN: kind})
+
+
+def tagged_sidebar(panes, tab_id):
+    """Return (pane_id, kind) of the tab's sidebar, or None when it has none."""
+    for pane in panes:
+        kind = pane.get("tokens", {}).get(TOKEN)
+        if pane["tab_id"] == tab_id and kind is not None:
+            return pane["pane_id"], kind
+    return None
+
+
+def toggle_sidebar(host, caller_id, kind="plain", base_for=None):
+    """Toggle the caller tab's sidebar of the given kind.
+
+    - No sidebar in the tab: dock a new one.
+    - A sidebar of the same kind: close it.
+    - A sidebar of the other kind: replace it with a new one of this kind.
+      Reviewr restarts, so its unsent comments and position are lost.
 
     base_for(directory) returns the ref a new sidebar's branch scope should
     diff against, or None for reviewr's own base.
@@ -147,10 +175,17 @@ def toggle_sidebar(host, caller_id, base_for=None):
     panes = host.call("pane.list")["panes"]
     caller = next(pane for pane in panes if pane["pane_id"] == caller_id)
     tab_id = caller["tab_id"]
-    for pane in panes:
-        if pane["tab_id"] == tab_id and TOKEN in pane.get("tokens", {}):
-            host.call("pane.close", pane_id=pane["pane_id"])
+    existing = tagged_sidebar(panes, tab_id)
+    if existing is not None:
+        existing_id, existing_kind = existing
+        host.call("pane.close", pane_id=existing_id)
+        if existing_kind == kind:
             return None
+        if caller_id == existing_id:
+            # Toggled from inside the sidebar: dock beside the remaining tree.
+            caller = next(
+                pane for pane in host.call("pane.list")["panes"] if pane["tab_id"] == tab_id
+            )
 
     directory = caller.get("foreground_cwd") or caller["cwd"]
     base = base_for(directory) if base_for else None
@@ -172,13 +207,7 @@ def toggle_sidebar(host, caller_id, base_for=None):
             focus=False,
         )
         sidebar_id = sidebar["plugin_pane"]["pane"]["pane_id"]
-        # The token is how the next toggle finds this tab's sidebar.
-        host.call(
-            "pane.report_metadata",
-            pane_id=sidebar_id,
-            source=TOKEN,
-            tokens={TOKEN: "1"},
-        )
+        tag_sidebar(host, sidebar_id, kind)
         restore_split_tree(host, tree, tab_id)
         host.call(
             "layout.set_split_ratio", tab_id=tab_id, path=[], ratio=1 - SIDEBAR_RATIO
@@ -201,8 +230,9 @@ def toggle_sidebar(host, caller_id, base_for=None):
 def main():
     if os.environ.get("HERDR_ENV") != "1":
         raise RuntimeError("herdr sidebar must run inside Herdr")
-    base_for = {"toggle": None, "toggle-stack": stack_parent_branch}
-    if sys.argv[1] not in base_for:
+    # command: (sidebar kind, base resolver)
+    commands = {"toggle": ("plain", None), "toggle-stack": ("stack", stack_parent_branch)}
+    if sys.argv[1] not in commands:
         raise RuntimeError(f"unknown command {sys.argv[1]!r}")
     state_directory = Path(os.environ["HERDR_PLUGIN_STATE_DIR"])
     state_directory.mkdir(parents=True, exist_ok=True)
@@ -210,7 +240,7 @@ def main():
     with (state_directory / "toggle.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         context = json.loads(os.environ["HERDR_PLUGIN_CONTEXT_JSON"])
-        toggle_sidebar(Herdr(), context["focused_pane_id"], base_for[sys.argv[1]])
+        toggle_sidebar(Herdr(), context["focused_pane_id"], *commands[sys.argv[1]])
 
 
 if __name__ == "__main__":

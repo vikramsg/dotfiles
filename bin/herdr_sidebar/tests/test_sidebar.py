@@ -263,7 +263,7 @@ class StackToggleTests(unittest.TestCase):
     def test_stack_toggle_pins_reviewr_to_the_parent(self):
         tree = split(pane("a"), pane("b"))
         host = FakeHerdr(tree)
-        sidebar.toggle_sidebar(host, "a", base_for=lambda directory: "feature/base")
+        sidebar.toggle_sidebar(host, "a", "stack", lambda directory: "feature/base")
         self.assertEqual(host.pane_request["entrypoint"], "reviewr-base")
         self.assertEqual(
             host.pane_request["env"],
@@ -279,7 +279,7 @@ class StackToggleTests(unittest.TestCase):
 
     def test_stack_toggle_outside_a_stack_opens_reviewrs_own_pane(self):
         host = FakeHerdr(pane("a"))
-        sidebar.toggle_sidebar(host, "a", base_for=lambda directory: None)
+        sidebar.toggle_sidebar(host, "a", "stack", lambda directory: None)
         self.assertEqual(
             (host.pane_request["plugin_id"], host.pane_request["entrypoint"]),
             ("persiyanov.reviewr", "pane"),
@@ -295,8 +295,37 @@ class StackToggleTests(unittest.TestCase):
         tree = split(pane("a"), pane("b"))
         host = NoReviewr(tree)
         with self.assertRaisesRegex(RuntimeError, "persiyanov.reviewr is not installed"):
-            sidebar.toggle_sidebar(host, "a", base_for=lambda directory: "feature/base")
+            sidebar.toggle_sidebar(host, "a", "stack", lambda directory: "feature/base")
         self.assertEqual(host.tabs["t1"], tree)
+
+
+    def test_other_kind_replaces_the_sidebar_and_same_kind_closes_it(self):
+        tree = split(pane("a"), pane("b"), "down", 0.7)
+        docked = split(tree, pane("reviewr"), ratio=1 - sidebar.SIDEBAR_RATIO)
+        host = FakeHerdr(tree)
+        stack_base = lambda directory: "feature/base"
+
+        sidebar.toggle_sidebar(host, "a", "plain")
+        self.assertEqual(host.pane_request["entrypoint"], "pane")
+
+        sidebar.toggle_sidebar(host, "a", "stack", stack_base)
+        self.assertEqual(host.pane_request["env"]["REVIEWR_BASE"], "feature/base")
+        self.assertEqual(host.panes["reviewr"]["tokens"], {sidebar.TOKEN: "stack"})
+        self.assertEqual(host.tabs["t1"], docked)
+
+        self.assertIsNone(sidebar.toggle_sidebar(host, "a", "stack", stack_base))
+        self.assertEqual(host.tabs["t1"], tree)
+        self.assertEqual(host.tabs["t2"], pane("other"))
+
+    def test_swap_pressed_inside_the_sidebar_docks_beside_the_terminals(self):
+        tree = split(pane("a"), pane("b"))
+        host = FakeHerdr(tree)
+        sidebar.toggle_sidebar(host, "a", "plain")
+        sidebar.toggle_sidebar(host, "reviewr", "stack", lambda directory: "feature/base")
+        self.assertEqual(host.pane_request["entrypoint"], "reviewr-base")
+        self.assertEqual(
+            host.tabs["t1"], split(tree, pane("reviewr"), ratio=1 - sidebar.SIDEBAR_RATIO)
+        )
 
 
 if __name__ == "__main__":

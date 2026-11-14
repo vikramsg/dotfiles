@@ -147,7 +147,8 @@ command = "dotfiles.herdr-sidebar.toggle-reviewr"
 description = "toggle reviewr sidebar"
 
 # Same sidebar, with reviewr's branch scope based on the gh stack parent
-# instead of main. Outside a stack it opens like prefix+r.
+# instead of main. Outside a stack it opens like prefix+r. With a prefix+r
+# sidebar open it swaps that sidebar for this one, and vice versa.
 [[keys.command]]
 key = "prefix+shift+r"
 type = "plugin_action"
