@@ -6,7 +6,7 @@ sheprd-window() {
         return 1
     fi
 
-    /Applications/Sheprd.app/Contents/MacOS/sheprd window new --session "$1"
+    sheprd window new --session "$1"
 }
 
 ss() {

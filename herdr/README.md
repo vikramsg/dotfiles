@@ -107,7 +107,7 @@ Edit `herdr/navigator.toml` for persistent Navigator settings. `just herdr` link
 
 ## macOS GUI
 
-[Sheprd](https://sheprd.org) is the native macOS client for Herdr. It is not in the `Brewfile`; install and update it by hand:
+[Sheprd](https://sheprd.org) is the native macOS client for Herdr and needs macOS 14 or newer. It is not in the `Brewfile`; install and update it by hand:
 
 ```sh
 brew install --cask sheprd-labs/tap/sheprd
@@ -115,15 +115,13 @@ brew upgrade --cask sheprd
 open -a Sheprd
 ```
 
-Sheprd connects to the separately installed Herdr daemon. Closing it leaves daemon sessions running. Its bundled CLI is `/Applications/Sheprd.app/Contents/MacOS/sheprd`; run it with `--help` for window, sidebar, keybinding, and settings commands.
+Sheprd connects to the separately installed Herdr daemon. Closing it leaves daemon sessions running. The cask links its CLI as `sheprd`; run `sheprd --help` for window, sidebar, keybinding, and settings commands.
 
-On macOS, `just herdr` links `config-gpui.local.toml` into `~/.config/herdr/`. Move or migrate an existing unmanaged override file before linking. Edit the repository file for persistent GUI settings; the app reloads saved changes automatically. The managed `config-gpui.toml` defaults are owned by the app and must not be edited.
+On macOS, `just herdr` links `config-gpui.local.toml` into `~/.config/herdr/`. A fresh Sheprd install creates its own regular file at that path; move it aside and rerun `just herdr`. Edit the repository file for persistent GUI settings; the app reloads saved changes automatically. Sheprd also saves choices made in its Settings window or with `sheprd config set` into that file, so they show up as changes to the repository copy; commit the ones you want to keep. The managed `config-gpui.toml` defaults are owned by the app and must not be edited.
 
-Sheprd also saves choices made in its Settings window and through `sheprd config set` into that file, so they appear as changes to the repository copy. Commit the ones you want to keep. A fresh Sheprd install creates its own regular file at that path; move it aside and rerun `just herdr` to restore the link.
+`prefix+a` toggles Sheprd's activity bar, the icon column at the window's left edge. Sheprd has no command for it, so the binding flips `sidebar.activity_bar`. The repository keeps it `false`, so the file shows a one-line change while the bar is visible. `Cmd+B` toggles the workspace sidebar next to it.
 
-`prefix+a` toggles Sheprd's activity bar, the icon column at the window's left edge. Sheprd has no command for it, so the binding flips `sidebar.activity_bar`. The repository keeps it `false`; while the bar is shown the file has a one-line change that disappears when you toggle it off. `Cmd+B` toggles the workspace sidebar next to it.
-
-The GUI uses `TokyoNight Storm` and the `comfortable-rounded` sidebar layout, which shows branches for workspaces and linked worktrees. Herdr's default sidebar rows request branch updates from the daemon; reload the daemon configuration with `prefix+q` after changing it. For faster discrete mouse-wheel scrollback, set `mouse_scroll_lines` under `[ui]` in `herdr/config.toml` (default `3`). This does not change precise trackpad movement or scrolling inside applications that consume mouse events themselves.
+The GUI uses the `TokyoNight` theme and the `comfortable` sidebar layout, which shows branches for workspaces and linked worktrees. Herdr's default sidebar rows request branch updates from the daemon; reload the daemon configuration with `prefix+q` after changing it. For faster discrete mouse-wheel scrollback, set `mouse_scroll_lines` under `[ui]` in `herdr/config.toml` (default `3`). This does not change precise trackpad movement or scrolling inside applications that consume mouse events themselves.
 
 Existing Zsh panes that loaded the former branch reporter continue publishing unused metadata until their shells restart. Native sidebar rows do not use that metadata.
 
@@ -140,7 +138,7 @@ sheprd-window dot
 The helper runs the installed app bundle's command:
 
 ```sh
-/Applications/Sheprd.app/Contents/MacOS/sheprd window new --session dot
+sheprd window new --session dot
 ```
 
 Replace `dot` with another local session name as needed. This uses the running app's native multi-window support; it does not require another app instance or restarting an existing session.
