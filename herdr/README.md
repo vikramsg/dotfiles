@@ -27,6 +27,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+s` | Open Herdr Navigator |
 | `prefix+w` | Workspace navigation |
 | `prefix+Shift+C` | Create a workspace |
+| `prefix+Shift+N` | Create a Git worktree workspace |
 | `prefix+q` / `prefix+?` / `prefix+d` | Reload config / help / detach |
 | `prefix+e` / `prefix+f` | Toggle the nvim sidebar / open the nvim file picker |
 | `prefix+r` | Toggle the full-height reviewr sidebar on the right |
@@ -35,10 +36,11 @@ The prefix is `Ctrl+Space`.
 | `prefix+v` | Pick and watch a Markdown file in a new Leaf tab |
 | `prefix+Shift+V` | Pick and watch a Markdown file in a popup |
 | `prefix+g` | Open the LazyGit popup |
+| `prefix+Shift+G` | Open the Ziggity popup |
 | `prefix+Shift+T` | Open the terminal popup |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
 
-`prefix+?` shows Herdr's shortcut help. Markdown tabs open in the active pane's working directory and leave the session-wide popup available for LazyGit. The popup preview shares that popup slot with LazyGit and the terminal popup.
+`prefix+?` shows Herdr's shortcut help. Markdown tabs open in the active pane's working directory and leave the session-wide popup available for LazyGit. The popup preview shares that popup slot with LazyGit, Ziggity and the terminal popup.
 
 ## Setup
 

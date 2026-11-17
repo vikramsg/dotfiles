@@ -14,10 +14,12 @@
 # prefix+;: focus the last pane
 # prefix+Tab: jump back to the previous Navigator workspace
 # prefix+Shift+C: create a workspace
+# prefix+Shift+N: create a Git worktree workspace
 # prefix+h / prefix+l / prefix+k / prefix+j: resize left / right / down / up
 # prefix+Left / prefix+Down / prefix+Up / prefix+Right: focus left / down / up / right
 # prefix+Shift+H/J/K/L: swap left / down / up / right
 # prefix+g: open LazyGit popup
+# prefix+Shift+G: open Ziggity popup
 # prefix+e: toggle nvim sidebar
 # prefix+v: pick and watch a Markdown file in a new tab
 # prefix+Shift+V: pick and watch a Markdown file in a popup
@@ -70,6 +72,8 @@ last_pane = "prefix+semicolon"
 split_horizontal = 'prefix+"'
 split_vertical = "prefix+%"
 new_workspace = "prefix+shift+c"
+# Herdr's default prefix+shift+g belongs to the Ziggity popup.
+new_worktree = "prefix+shift+n"
 
 # Match vim-tmux-navigator's spatial pane movement.
 cycle_pane_previous = []
@@ -193,6 +197,14 @@ key = "prefix+g"
 type = "popup"
 command = "lazygit"
 description = "open LazyGit popup"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+shift+g"
+type = "popup"
+command = "ziggity"
+description = "open Ziggity popup"
 width = "90%"
 height = "90%"
 
