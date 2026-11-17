@@ -1,6 +1,6 @@
 ---
 name: herdr
-description: "Control Herdr, a terminal multiplexer for coding agents and terminal usage. Requires HERDR_ENV=1. Use herdr for manual terminal testing of CLI and TUI behavior. Use when validating real TTY rendering, ANSI styling, wrapping at different widths, interactive output, progress displays, or long-running terminal commands."
+description: "Reproduce and verify TUI, popup, shortcut and terminal command behavior inside Herdr, the terminal multiplexer agents here run in. Requires HERDR_ENV=1. Use when a user reports that a terminal app, Herdr popup or keybinding misbehaves, when validating real TTY rendering, ANSI styling, wrapping, interactive output or progress displays, or when running long terminal commands or other agents in sibling panes."
 ---
 
 # Herdr
@@ -183,6 +183,27 @@ Use `--format ansi` when colors and terminal styling are evidence. Otherwise use
 `--lines` asks Herdr for more rows from the pane's available screen and host scrollback. If increasing it does not reveal more of a completed response, the pane is probably running the agent on the terminal's alternate screen. Rows that leave the alternate screen do not enter Herdr's host scrollback, so a larger line count cannot recover them.
 
 After that failed read, ask the agent to write its complete response as Markdown in a temporary directory and reply only with the file path, then read the file directly. Use this only as a fallback; do not request file output in the initial prompt.
+
+## Reproduce a TUI bug
+
+When the user reports that an interactive terminal app misbehaves (keys do nothing, a panel is wrong, an action fails), drive it yourself and read the screen instead of asking what they saw:
+
+1. Split a sibling pane in the user's repository with `--no-focus`, as above, and start the app with `herdr pane run <pane-id> "<app>"`.
+2. Send the user's key sequence with `herdr pane send-keys <pane-id> <key>...`, one logical key per argument (`4`, `G`, `tab`, `ctrl+d`).
+3. Read the result with `herdr pane read <pane-id> --source visible`. Status lines, footers and error messages are evidence; repeat steps 2 and 3 until the failure shows or the behavior is confirmed working.
+4. Quit the app and close the pane you created.
+
+When the last step would reach outside the machine (opening a browser through `xdg-open`, pushing, posting), stub that command for the test pane only: start the pane's command with a temporary directory holding a script that logs its arguments, placed first on `PATH`. The log then shows exactly what the app tried to run.
+
+Herdr popups and other custom commands run through `/bin/sh -c` with the Herdr server's environment, not the calling pane's. To reproduce a popup failure, run its command with that environment:
+
+```bash
+server_pid=$(pgrep -f -- "--session ${HERDR_SESSION:-default} server" | head -1)
+server_path=$(tr '\0' '\n' < "/proc/$server_pid/environ" | sed -n 's/^PATH=//p')
+herdr pane run <pane-id> "env PATH='$server_path' /bin/sh -c '<popup command>'"
+```
+
+A command that works in your shell but fails this way points at the server's environment, which only a server restart refreshes. Ask the user before restarting.
 
 ## Safety and coordination rules
 

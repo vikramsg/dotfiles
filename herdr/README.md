@@ -42,6 +42,8 @@ The prefix is `Ctrl+Space`.
 
 `prefix+?` shows Herdr's shortcut help. Markdown tabs open in the active pane's working directory and leave the session-wide popup available for LazyGit. The popup preview shares that popup slot with LazyGit, Ziggity and the terminal popup.
 
+Custom commands, including these popups, run through `/bin/sh -c` with the Herdr server's environment as it was when the server started, not the environment of the pane you pressed the key in. A tool installed later, such as a new mise tool, is only on that `PATH` if its directory already was; otherwise the server needs a restart, which ends its pane processes. `herdr server reload-config` re-reads `config.toml` but does not refresh the environment. Run `just --justfile herdr/justfile env-check` to list servers whose `PATH` is missing entries a fresh SSH login would have.
+
 ## Setup
 
 ```sh

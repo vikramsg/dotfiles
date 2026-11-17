@@ -6,6 +6,51 @@
 # only holds declarations and user-editable configuration.
 # Some plugins, such as herdr-navigator, need Cargo from `just brew` to build.
 
+# List running Herdr servers whose PATH lacks directories that a server started
+# now would get. Servers keep the environment they started with, and popups and
+# custom commands inherit it, so a tool installed afterwards (for example a new
+# mise tool) is missing from popups until that server restarts. The reference
+# PATH is what an SSH-launched Bash gets from ~/.bashrc, which sources ~/.zshenv.
+# Linux only: it reads each server's environment from /proc.
+env-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -d /proc/self ]; then
+        echo "env-check reads /proc and only runs on Linux."
+        exit 0
+    fi
+    expected="$(env -i HOME="$HOME" USER="$USER" bash -c '. "$HOME/.bashrc" >/dev/null 2>&1; printf "%s" "$PATH"')"
+    stale=0
+    found=0
+    for pid in $(pgrep -x herdr || true); do
+        args="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+        case " $args " in
+            *" server "*) ;;
+            *) continue ;;
+        esac
+        found=1
+        server_path="$(tr '\0' '\n' < "/proc/$pid/environ" | sed -n 's/^PATH=//p')"
+        missing=()
+        IFS=: read -ra dirs <<< "$expected"
+        for dir in "${dirs[@]}"; do
+            case ":$server_path:" in
+                *":$dir:"*) ;;
+                *) missing+=("$dir") ;;
+            esac
+        done
+        if [ "${#missing[@]}" -eq 0 ]; then
+            echo "ok     pid $pid: $args"
+        else
+            stale=1
+            echo "stale  pid $pid: $args"
+            printf '         missing %s\n' "${missing[@]}"
+        fi
+    done
+    if [ "$found" -eq 0 ]; then
+        echo "No running Herdr servers."
+    fi
+    exit "$stale"
+
 # Install declared plugins that are missing.
 install:
     #!/usr/bin/env bash

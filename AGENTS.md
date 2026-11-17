@@ -91,6 +91,5 @@ Keep `/Users/Shared/Screenshots` writable on both hosts; see `screenshot/README.
 
 ## Herdr
 
-Usually, while working in this repo, we are working inside `herdr`.
-To interact with it, use the `Herdr` skill.
-**Do Not** make assumptions like `don't create a new session`. Ask the user.
+Agents here run inside Herdr. Reproduce first: when a TUI, popup, shortcut or terminal command misbehaves, drive it in a sibling pane with the `herdr` skill and read the screen before asking the user anything a pane can show.
+Ask before stopping, restarting or creating Herdr servers and sessions.
