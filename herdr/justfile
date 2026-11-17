@@ -44,6 +44,22 @@ update:
         fi
     done < <(jq -r '.plugins[] | [.source, (.ref // "")] | @tsv' "$plugins_file")
 
+# An agent integration is a hook Herdr writes into the agent's own config
+# directory that reports the agent's state and session ID back to Herdr. For
+# OpenCode that is plugins/herdr-agent-state.js, herdr-tui-session.js and a
+# tui.jsonc entry under ~/.config/opencode.
+#
+# Without it, a server restart brings agent panes back as plain shells:
+# `session.resume_agents_on_restore` defaults to true but can only relaunch
+# agents whose integration reported a session ID. Herdr generates the hook
+# files, so this repository only declares which integrations to install.
+# Re-running replaces them with the version bundled in the installed Herdr;
+# check with `herdr integration status`.
+#
+# Install Herdr's agent integrations.
+integrations:
+    herdr integration install opencode
+
 # Link managed Reviewr settings without replacing an unmanaged config.
 link-reviewr-config:
     @SOURCE="{{justfile_directory()}}/reviewr.toml"; \

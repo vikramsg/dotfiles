@@ -138,7 +138,7 @@ herdr: mise
         fi
     PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
     PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
-    PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install
+    PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install integrations
 
 # Set up Opencode symlink
 opencode: npm-global-bin
@@ -314,8 +314,38 @@ macflow: validate-screenshot-directories link-macflow-config
     just --justfile "{{justfile_directory()}}/bin/macflow/justfile" link-skill "$HOME/.config/opencode/skills/macflow"
     just --justfile "{{justfile_directory()}}/bin/macflow/justfile" install
 
+# Load the shared environment from Bash, the account shell on the OS Login VM.
+# Bash reads ~/.bashrc for SSH remote commands, such as starting a Herdr server,
+# so the hook goes at the top, before the file's non-interactive early return.
+# ~/.bashrc stays host-local; only the hook line is managed.
+[private]
+link-bash-env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BASHRC="$HOME/.bashrc"
+    HOOK='. "$HOME/.zshenv"'
+    if [ ! -f "$BASHRC" ]; then
+        echo "No $BASHRC; skipping the Bash environment hook."
+        exit 0
+    fi
+    if grep -qxF "$HOOK" "$BASHRC"; then
+        echo "Bash environment hook already present in $BASHRC"
+        exit 0
+    fi
+    UPDATED="$(mktemp)"
+    trap 'rm -f "$UPDATED"' EXIT
+    {
+        echo '# SSH-launched tools need the managed environment even in non-interactive Bash.'
+        echo "$HOOK"
+        echo
+        cat "$BASHRC"
+    } > "$UPDATED"
+    # Write in place so the file keeps its permissions and any symlink.
+    cat "$UPDATED" > "$BASHRC"
+    echo "Bash environment hook added to the top of $BASHRC"
+
 # Set up zsh and prompt configuration symlinks
-zsh:
+zsh: && link-bash-env
     @echo "Setting up zsh and prompt configuration symlinks..."
     mkdir -p ~/.config
     @SOURCE="{{justfile_directory()}}/zsh/.zshenv"; TARGET="$HOME/.zshenv"; \
