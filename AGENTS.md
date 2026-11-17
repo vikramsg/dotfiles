@@ -91,7 +91,7 @@ Keep `/Users/Shared/Screenshots` writable on both hosts; see `screenshot/README.
 
 ## Herdr
 
-Agents usually run inside Herdr. Reproduce first: when a TUI, popup, shortcut or terminal command misbehaves, drive it in a sibling pane with the `herdr` skill and read the screen before asking the user anything a pane can show.
-Ask before stopping, restarting or creating Herdr servers and sessions.
-
-Investigating and reproducing (reading code, running read-only commands, driving a test pane) is part of that discussion, not implementation.
+- Agents usually run inside Herdr. 
+- Reproduce first: when a TUI, popup, shortcut or terminal command misbehaves, drive it in a sibling tab with the `herdr` skill and read the screen before asking the user anything a pane can show.
+- Investigating and reproducing (reading code, running read-only commands, driving a test pane) is part of that discussion, not implementation.
+- Ask before stopping, restarting or creating Herdr servers and sessions.
