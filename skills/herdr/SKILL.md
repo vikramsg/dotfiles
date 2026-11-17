@@ -188,18 +188,24 @@ After that failed read, ask the agent to write its complete response as Markdown
 
 When the user reports that an interactive terminal app misbehaves (keys do nothing, a panel is wrong, an action fails), drive it yourself and read the screen instead of asking what they saw:
 
-1. Split a sibling pane in the user's repository with `--no-focus`, as above, and start the app with `herdr pane run <pane-id> "<app>"`.
-2. Send the user's key sequence with `herdr pane send-keys <pane-id> <key>...`, one logical key per argument (`4`, `G`, `tab`, `ctrl+d`).
-3. Read the result with `herdr pane read <pane-id> --source visible`. Status lines, footers and error messages are evidence; repeat steps 2 and 3 until the failure shows or the behavior is confirmed working.
-4. Quit the app and close the pane you created.
+1. Create a test tab in the current workspace and the user's repository, without taking focus, and start the app in its root pane. A tab gives the app full width and leaves the user's layout untouched:
+   ```bash
+   response=$(herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label <app>-test --no-focus)
+   test_tab=$(printf '%s\n' "$response" | jq -r '.result.tab.tab_id')
+   test_pane=$(printf '%s\n' "$response" | jq -r '.result.root_pane.pane_id')
+   herdr pane run "$test_pane" "<app>"
+   ```
+2. Send the user's key sequence with `herdr pane send-keys "$test_pane" <key>...`, one logical key per argument (`4`, `G`, `tab`, `ctrl+d`).
+3. Read the result with `herdr pane read "$test_pane" --source visible`. Status lines, footers and error messages are evidence; repeat steps 2 and 3 until the failure shows or the behavior is confirmed working. A footer message can linger from an earlier key, so confirm the action through its effect too.
+4. Quit the app and close the tab with `herdr tab close "$test_tab"`.
 
-When the last step would reach outside the machine (opening a browser through `xdg-open`, pushing, posting), stub that command for the test pane only. The log then shows exactly what the app tried to run:
+When the last step would reach outside the machine (opening a browser through `xdg-open`, pushing, posting), stub that command for the test tab only. The log then shows exactly what the app tried to run:
 
 ```bash
 stub_dir=$(mktemp -d)
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/calls.log"\n' "$stub_dir" > "$stub_dir/xdg-open"
 chmod +x "$stub_dir/xdg-open"
-herdr pane run <pane-id> "PATH=$stub_dir:\$PATH <app>"
+herdr pane run "$test_pane" "PATH=$stub_dir:\$PATH <app>"
 ```
 
 Herdr popups and other custom commands run through `/bin/sh -c` with the Herdr server's environment, not the calling pane's. To reproduce a popup failure, run its command with the server's `PATH`. Write the command from `herdr/config.toml` to a script first, so its own quotes survive:
@@ -211,7 +217,7 @@ popup_script=$(mktemp)
 cat > "$popup_script" <<'EOF'
 <popup command>
 EOF
-herdr pane run <pane-id> "env PATH='$server_path' /bin/sh $popup_script"
+herdr pane run "$test_pane" "env PATH='$server_path' /bin/sh $popup_script"
 ```
 
 A command that works in your shell but fails this way points at the server's environment, which only a server restart refreshes.

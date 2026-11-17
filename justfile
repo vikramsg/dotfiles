@@ -292,6 +292,12 @@ lazygit:
         echo "lazygit symlink created at ~/Library/Application Support/lazygit/config.yml"; \
     fi
 
+# Set up the Ziggity config symlink that ZIGGITY_CONFIG points at
+ziggity:
+    mkdir -p ~/.config/ziggity
+    ln -sfn {{justfile_directory()}}/ziggity/config.ini ~/.config/ziggity/config.ini
+    @echo "ziggity symlink created at ~/.config/ziggity/config.ini"
+
 # Link Macflow configuration without building or restarting the service.
 [private]
 link-macflow-config:
@@ -442,7 +448,7 @@ harlequin-if-configured:
     fi
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit harlequin-if-configured
+all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit ziggity harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
