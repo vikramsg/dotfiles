@@ -35,10 +35,11 @@ The prefix is `Ctrl+Space`.
 | `prefix+v` | Pick and watch a Markdown file in a new Leaf tab |
 | `prefix+Shift+V` | Pick and watch a Markdown file in a popup |
 | `prefix+g` | Open the LazyGit popup |
+| `prefix+Shift+G` | Open the Ziggity popup |
 | `prefix+Shift+T` | Open the terminal popup |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
 
-`prefix+?` shows Herdr's shortcut help. Markdown tabs open in the active pane's working directory and leave the session-wide popup available for LazyGit. The popup preview shares that popup slot with LazyGit and the terminal popup.
+`prefix+?` shows Herdr's shortcut help. Markdown tabs open in the active pane's working directory and leave the session-wide popup available for LazyGit. The popup preview shares that popup slot with LazyGit, Ziggity and the terminal popup.
 
 ## Setup
 

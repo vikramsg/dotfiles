@@ -18,6 +18,7 @@
 # prefix+Left / prefix+Down / prefix+Up / prefix+Right: focus left / down / up / right
 # prefix+Shift+H/J/K/L: swap left / down / up / right
 # prefix+g: open LazyGit popup
+# prefix+Shift+G: open Ziggity popup
 # prefix+e: toggle nvim sidebar
 # prefix+v: pick and watch a Markdown file in a new tab
 # prefix+Shift+V: pick and watch a Markdown file in a popup
@@ -193,6 +194,14 @@ key = "prefix+g"
 type = "popup"
 command = "lazygit"
 description = "open LazyGit popup"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+shift+g"
+type = "popup"
+command = "ziggity"
+description = "open Ziggity popup"
 width = "90%"
 height = "90%"
 
