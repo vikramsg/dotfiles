@@ -35,12 +35,12 @@ The prefix is `Ctrl+Space`.
 | `prefix+a` | Toggle Sheprd's activity bar (macOS) |
 | `prefix+v` | Pick and watch a Markdown file in a new Leaf tab |
 | `prefix+Shift+V` | Pick and watch a Markdown file in a popup |
-| `prefix+g` | Open the LazyGit popup |
-| `prefix+Shift+G` | Open the Ziggity popup |
+| `prefix+g` | Open the Ziggity popup |
+| `prefix+Shift+G` | Open the LazyGit popup |
 | `prefix+Shift+T` | Open the terminal popup |
 | `prefix+Shift+O` | Append OpenCode and nvim project tabs |
 
-`prefix+?` shows Herdr's shortcut help. Markdown tabs open in the active pane's working directory and leave the session-wide popup available for LazyGit. The popup preview shares that popup slot with LazyGit, Ziggity and the terminal popup.
+`prefix+?` shows Herdr's shortcut help. Markdown tabs open in the active pane's working directory and leave the session-wide popup available for Ziggity. The popup preview shares that popup slot with Ziggity, LazyGit and the terminal popup.
 
 ### Custom commands
 
@@ -167,7 +167,7 @@ herdr --remote vm-us --remote-keybindings server
 
 `herdr --remote` otherwise defaults to local keybindings and intentionally does
 not send local custom command bindings to the remote host. As a result, popup
-and shell bindings from this configuration, such as the LazyGit popup, are not
+and shell bindings from this configuration, such as the Ziggity popup, are not
 available. Using `--remote-keybindings server` loads those bindings from
 `vm-us` and makes the session behave like running `herdr` after connecting with
 SSH.
