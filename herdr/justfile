@@ -1,10 +1,58 @@
-# Herdr plugin configuration and GitHub installations declared in plugins.json.
+# Herdr plugin installation from plugins.json, plus Herdr diagnostics.
 #
 # `install` adds declared plugins that are not installed yet; `update`
 # reinstalls every declared plugin to refresh its managed checkout. Herdr
 # stores the plugin source under its own runtime directory, so this repository
-# only holds declarations and user-editable configuration.
+# only holds plugin declarations and user-editable configuration.
 # Some plugins, such as herdr-navigator, need Cargo from `just brew` to build.
+
+# Linux only: reads each server's environment from /proc and compares it with
+# the PATH a fresh SSH-launched Bash gets from ~/.bashrc. See "Custom commands"
+# in README.md.
+#
+# List running Herdr servers whose PATH is missing login entries.
+env-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -d /proc/self ]; then
+        echo "env-check reads /proc and only runs on Linux."
+        exit 0
+    fi
+    expected="$(env -i HOME="$HOME" USER="$USER" bash -c '. "$HOME/.bashrc" >/dev/null 2>&1; printf "%s" "$PATH"')"
+    if [ -z "$expected" ]; then
+        echo "Could not read a reference PATH from ~/.bashrc."
+        exit 1
+    fi
+    stale=0
+    found=0
+    for pid in $(pgrep -x herdr || true); do
+        args="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+        case " $args " in
+            *" server "*) ;;
+            *) continue ;;
+        esac
+        found=1
+        server_path="$(tr '\0' '\n' < "/proc/$pid/environ" | sed -n 's/^PATH=//p')"
+        missing=()
+        IFS=: read -ra dirs <<< "$expected"
+        for dir in "${dirs[@]}"; do
+            case ":$server_path:" in
+                *":$dir:"*) ;;
+                *) missing+=("$dir") ;;
+            esac
+        done
+        if [ "${#missing[@]}" -eq 0 ]; then
+            echo "ok     pid $pid: $args"
+        else
+            stale=1
+            echo "stale  pid $pid: $args"
+            printf '         missing %s\n' "${missing[@]}"
+        fi
+    done
+    if [ "$found" -eq 0 ]; then
+        echo "No running Herdr servers."
+    fi
+    exit "$stale"
 
 # Install declared plugins that are missing.
 install:

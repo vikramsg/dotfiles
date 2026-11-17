@@ -203,8 +203,9 @@ height = "90%"
 [[keys.command]]
 key = "prefix+shift+g"
 type = "popup"
-# Herdr's server PATH lacks mise shims; zsh loads ~/.zshenv, which adds them.
-command = 'exec "${SHELL:-/bin/zsh}" -c "exec ziggity"'
+# ZIGGITY_CONFIG is set here as well as in ~/.zshenv because a running Herdr
+# server keeps the environment it started with.
+command = 'ZIGGITY_CONFIG="$HOME/.config/ziggity/config.ini" exec ziggity'
 description = "open Ziggity popup"
 width = "90%"
 height = "90%"

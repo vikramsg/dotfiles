@@ -11,5 +11,8 @@ export PATH="$HOME/.local/bin:$PATH"
 # Mise shims make pinned tools available to SSH commands and non-interactive shells.
 export PATH="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims:$PATH"
 
+# Ziggity has no global config path of its own; see ziggity/config.ini.
+export ZIGGITY_CONFIG="$HOME/.config/ziggity/config.ini"
+
 export EDITOR="nvim"
 export VISUAL="nvim"
