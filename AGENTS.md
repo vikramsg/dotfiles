@@ -88,3 +88,9 @@ Keep `/Users/Shared/Screenshots` writable on both hosts; see `screenshot/README.
 ### Browser opener tunnel
 
 `lch-opener-tunnel` maintains the Mac-side SSH reverse socket tunnel so processes on `vm-us` can open URLs in the Mac browser. Its implementation is `bin/opener_tunnel/` and its configuration is `opener_tunnel/config.toml`.
+
+## Herdr
+
+Usually, while working in this repo, we are working inside `herdr`.
+To interact with it, use the `Herdr` skill.
+**Do Not** make assumptions like `don't create a new session`. Ask the user.
