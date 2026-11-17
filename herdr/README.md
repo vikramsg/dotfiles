@@ -27,6 +27,7 @@ The prefix is `Ctrl+Space`.
 | `prefix+s` | Open Herdr Navigator |
 | `prefix+w` | Workspace navigation |
 | `prefix+Shift+C` | Create a workspace |
+| `prefix+Shift+N` | Create a Git worktree workspace |
 | `prefix+q` / `prefix+?` / `prefix+d` | Reload config / help / detach |
 | `prefix+e` / `prefix+f` | Toggle the nvim sidebar / open the nvim file picker |
 | `prefix+r` | Toggle the full-height reviewr sidebar on the right |

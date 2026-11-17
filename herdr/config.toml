@@ -14,6 +14,7 @@
 # prefix+;: focus the last pane
 # prefix+Tab: jump back to the previous Navigator workspace
 # prefix+Shift+C: create a workspace
+# prefix+Shift+N: create a Git worktree workspace
 # prefix+h / prefix+l / prefix+k / prefix+j: resize left / right / down / up
 # prefix+Left / prefix+Down / prefix+Up / prefix+Right: focus left / down / up / right
 # prefix+Shift+H/J/K/L: swap left / down / up / right
@@ -71,6 +72,8 @@ last_pane = "prefix+semicolon"
 split_horizontal = 'prefix+"'
 split_vertical = "prefix+%"
 new_workspace = "prefix+shift+c"
+# Herdr's default prefix+shift+g belongs to the Ziggity popup.
+new_worktree = "prefix+shift+n"
 
 # Match vim-tmux-navigator's spatial pane movement.
 cycle_pane_previous = []
