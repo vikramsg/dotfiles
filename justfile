@@ -314,39 +314,8 @@ macflow: validate-screenshot-directories link-macflow-config
     just --justfile "{{justfile_directory()}}/bin/macflow/justfile" link-skill "$HOME/.config/opencode/skills/macflow"
     just --justfile "{{justfile_directory()}}/bin/macflow/justfile" install
 
-# Load the shared environment from Bash, the account shell on the OS Login VM.
-# Bash reads ~/.bashrc for SSH remote commands, such as starting a Herdr server,
-# so the hook goes at the top, before the file's non-interactive early return.
-# ~/.bashrc stays host-local; only the hook line is managed.
-[private]
-link-bash-env:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    BASHRC="$HOME/.bashrc"
-    HOOK='. "$HOME/.zshenv"'
-    if [ ! -f "$BASHRC" ]; then
-        echo "No $BASHRC; skipping the Bash environment hook."
-        exit 0
-    fi
-    if grep -qxF "$HOOK" "$BASHRC"; then
-        echo "Bash environment hook already present in $BASHRC"
-        exit 0
-    fi
-    UPDATED="$(mktemp)"
-    trap 'rm -f "$UPDATED"' EXIT
-    {
-        echo '# SSH-launched tools need the managed environment even in non-interactive Bash.'
-        echo "$HOOK"
-        echo
-        cat "$BASHRC"
-    } > "$UPDATED"
-    # Write in place so the file keeps its permissions and any symlink.
-    cat "$UPDATED" > "$BASHRC"
-    echo "Bash environment hook added to the top of $BASHRC"
-
-# Set up zsh and prompt configuration symlinks. The Bash hook runs afterwards so
-# it is only added once ~/.zshenv is the managed symlink it sources.
-zsh: && link-bash-env
+# Set up zsh and prompt configuration symlinks
+zsh:
     @echo "Setting up zsh and prompt configuration symlinks..."
     mkdir -p ~/.config
     @SOURCE="{{justfile_directory()}}/zsh/.zshenv"; TARGET="$HOME/.zshenv"; \
@@ -360,6 +329,7 @@ zsh: && link-bash-env
             exit 1; \
         fi; \
         ln -sfn "$SOURCE" "$TARGET"
+    just --justfile "{{justfile_directory()}}/zsh/justfile" link-bash-env
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
     ln -sfn {{justfile_directory()}}/zsh/.zsh_script ~/.zsh_script
     ln -sfn {{justfile_directory()}}/zsh/starship.toml ~/.config/starship.toml
