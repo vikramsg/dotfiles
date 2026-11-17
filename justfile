@@ -138,7 +138,7 @@ herdr: mise
         fi
     PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/plugin/nav_wrap/justfile" link
     PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
-    PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install
+    PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install integrations
 
 # Set up Opencode symlink
 opencode: npm-global-bin
@@ -329,6 +329,7 @@ zsh:
             exit 1; \
         fi; \
         ln -sfn "$SOURCE" "$TARGET"
+    just --justfile "{{justfile_directory()}}/zsh/justfile" link-bash-env
     ln -sfn {{justfile_directory()}}/zsh/.zshrc ~/.zshrc
     ln -sfn {{justfile_directory()}}/zsh/.zsh_script ~/.zsh_script
     ln -sfn {{justfile_directory()}}/zsh/starship.toml ~/.config/starship.toml

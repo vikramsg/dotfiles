@@ -65,12 +65,12 @@ New SSH connections use the new shell. Existing shells and Herdr servers retain 
 
 Google OS Login manages the account shell outside `/etc/passwd`, so `chsh` cannot change it. A Google Workspace administrator can update the POSIX shell through the Directory API, but that account-wide change may affect other VMs.
 
-To keep Bash as the VM account shell, run `just zsh` and add this hook to `~/.bashrc` **before** its non-interactive early return:
+Bash therefore stays the VM account shell. `just zsh` adds this hook to the top of an existing `~/.bashrc`, before its non-interactive early return:
 
 ```sh
 . "$HOME/.zshenv"
 ```
 
-Bash reads `.bashrc` for SSH remote commands. The hook makes remote Herdr startup inherit the same editor exports without loading interactive Zsh plugins. This hook is host-local because `.bashrc` is not managed by this repository.
+Bash reads `.bashrc` for SSH remote commands. The hook makes remote Herdr startup inherit the same `PATH` (including mise shims) and editor exports without loading interactive Zsh plugins. The rest of `.bashrc` stays host-local; the recipe leaves the file alone when the hook line is already present anywhere in it, so check that an existing hook sits before the early return.
 
 Processes launched directly by a service manager do not read `.zshenv`; set their editor environment in the service configuration if they need an editor.

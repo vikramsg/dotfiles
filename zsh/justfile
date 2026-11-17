@@ -1,0 +1,33 @@
+# Shell startup hooks that extend host-local files outside this repository.
+#
+# The root `zsh` recipe links the managed Zsh files; recipes here only add the
+# lines other shells need to load them.
+
+# Load the shared environment from Bash, the account shell on the OS Login VM.
+# Bash reads ~/.bashrc for SSH remote commands, such as starting a Herdr server,
+# so the hook goes at the top, before the file's non-interactive early return.
+# ~/.bashrc stays host-local; only the hook line is managed.
+link-bash-env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BASHRC="$HOME/.bashrc"
+    HOOK='. "$HOME/.zshenv"'
+    if [ ! -f "$BASHRC" ]; then
+        echo "No $BASHRC; skipping the Bash environment hook."
+        exit 0
+    fi
+    if grep -qxF "$HOOK" "$BASHRC"; then
+        echo "Bash environment hook already present in $BASHRC"
+        exit 0
+    fi
+    UPDATED="$(mktemp)"
+    trap 'rm -f "$UPDATED"' EXIT
+    {
+        echo '# SSH-launched tools need the managed environment even in non-interactive Bash.'
+        echo "$HOOK"
+        echo
+        cat "$BASHRC"
+    } > "$UPDATED"
+    # Write in place so the file keeps its permissions and any symlink.
+    cat "$UPDATED" > "$BASHRC"
+    echo "Bash environment hook added to the top of $BASHRC"
