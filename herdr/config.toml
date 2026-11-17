@@ -14,7 +14,7 @@
 # prefix+;: focus the last pane
 # prefix+Tab: jump back to the previous Navigator workspace
 # prefix+Shift+C: create a workspace
-# prefix+Shift+N: create a Git worktree workspace
+# prefix+Shift+N: create a Git worktree workspace from origin/main
 # prefix+h / prefix+l / prefix+k / prefix+j: resize left / right / down / up
 # prefix+Left / prefix+Down / prefix+Up / prefix+Right: focus left / down / up / right
 # prefix+Shift+H/J/K/L: swap left / down / up / right
@@ -72,8 +72,10 @@ last_pane = "prefix+semicolon"
 split_horizontal = 'prefix+"'
 split_vertical = "prefix+%"
 new_workspace = "prefix+shift+c"
-# Herdr's default prefix+shift+g belongs to the LazyGit popup.
-new_worktree = "prefix+shift+n"
+# The built-in action branches from the workspace's HEAD; prefix+shift+n runs
+# the custom origin/main command below instead, and the LazyGit popup holds
+# Herdr's default prefix+shift+g.
+new_worktree = ""
 
 # Match vim-tmux-navigator's spatial pane movement.
 cycle_pane_previous = []
@@ -166,6 +168,14 @@ key = "prefix+a"
 type = "shell"
 command = 's=/Applications/Sheprd.app/Contents/MacOS/sheprd; v=true; [ "$("$s" config get sidebar.activity_bar)" = true ] && v=false; "$s" config set sidebar.activity_bar "$v"'
 description = "toggle Sheprd activity bar"
+
+# Herdr names the branch (worktree/<words>) when none is given. The fetch keeps
+# origin/main current; the checkout lands under ~/.herdr/worktrees/<repo>/.
+[[keys.command]]
+key = "prefix+shift+n"
+type = "shell"
+command = 'git -C "$HERDR_ACTIVE_PANE_CWD" fetch --quiet origin main && "$HERDR_BIN_PATH" worktree create --cwd "$HERDR_ACTIVE_PANE_CWD" --base origin/main --focus'
+description = "create a Git worktree from origin/main"
 
 [[keys.command]]
 key = "prefix+h"
