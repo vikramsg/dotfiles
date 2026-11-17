@@ -1,6 +1,6 @@
 ---
 name: herdr
-description: "Reproduce and verify TUI, popup, shortcut and terminal command behavior inside Herdr, the terminal multiplexer agents here run in. Requires HERDR_ENV=1. Use when a user reports that a terminal app, Herdr popup or keybinding misbehaves, when validating real TTY rendering, ANSI styling, wrapping, interactive output or progress displays, or when running long terminal commands or other agents in sibling panes."
+description: "Control Herdr, the terminal multiplexer agents here run in: panes, workspaces, tabs and agents. Requires HERDR_ENV=1. Use when a user reports that a terminal app, Herdr popup or keybinding misbehaves and it needs reproducing; when validating real TTY rendering, ANSI styling, wrapping, interactive output or progress displays; or when running long commands or other agents in sibling panes."
 ---
 
 # Herdr
@@ -193,17 +193,28 @@ When the user reports that an interactive terminal app misbehaves (keys do nothi
 3. Read the result with `herdr pane read <pane-id> --source visible`. Status lines, footers and error messages are evidence; repeat steps 2 and 3 until the failure shows or the behavior is confirmed working.
 4. Quit the app and close the pane you created.
 
-When the last step would reach outside the machine (opening a browser through `xdg-open`, pushing, posting), stub that command for the test pane only: start the pane's command with a temporary directory holding a script that logs its arguments, placed first on `PATH`. The log then shows exactly what the app tried to run.
-
-Herdr popups and other custom commands run through `/bin/sh -c` with the Herdr server's environment, not the calling pane's. To reproduce a popup failure, run its command with that environment:
+When the last step would reach outside the machine (opening a browser through `xdg-open`, pushing, posting), stub that command for the test pane only. The log then shows exactly what the app tried to run:
 
 ```bash
-server_pid=$(pgrep -f -- "--session ${HERDR_SESSION:-default} server" | head -1)
-server_path=$(tr '\0' '\n' < "/proc/$server_pid/environ" | sed -n 's/^PATH=//p')
-herdr pane run <pane-id> "env PATH='$server_path' /bin/sh -c '<popup command>'"
+stub_dir=$(mktemp -d)
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/calls.log"\n' "$stub_dir" > "$stub_dir/xdg-open"
+chmod +x "$stub_dir/xdg-open"
+herdr pane run <pane-id> "PATH=$stub_dir:\$PATH <app>"
 ```
 
-A command that works in your shell but fails this way points at the server's environment, which only a server restart refreshes. Ask the user before restarting.
+Herdr popups and other custom commands run through `/bin/sh -c` with the Herdr server's environment, not the calling pane's. To reproduce a popup failure, run its command with the server's `PATH`. Write the command from `herdr/config.toml` to a script first, so its own quotes survive:
+
+```bash
+server_pid=$(pgrep -xf ".*/herdr --session ${HERDR_SESSION:-default} server" | head -1)
+server_path=$(tr '\0' '\n' < "/proc/$server_pid/environ" | sed -n 's/^PATH=//p')
+popup_script=$(mktemp)
+cat > "$popup_script" <<'EOF'
+<popup command>
+EOF
+herdr pane run <pane-id> "env PATH='$server_path' /bin/sh $popup_script"
+```
+
+A command that works in your shell but fails this way points at the server's environment, which only a server restart refreshes.
 
 ## Safety and coordination rules
 
