@@ -344,7 +344,8 @@ link-bash-env:
     cat "$UPDATED" > "$BASHRC"
     echo "Bash environment hook added to the top of $BASHRC"
 
-# Set up zsh and prompt configuration symlinks
+# Set up zsh and prompt configuration symlinks. The Bash hook runs afterwards so
+# it is only added once ~/.zshenv is the managed symlink it sources.
 zsh: && link-bash-env
     @echo "Setting up zsh and prompt configuration symlinks..."
     mkdir -p ~/.config
