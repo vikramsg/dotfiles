@@ -151,8 +151,12 @@ herdr-app:
         echo "ERROR: $APP_HOME is a symlink; the Herdr app needs a normal home directory."; \
         exit 1; \
     fi; \
-    mkdir -p "$APP_HOME"; \
-    for NAME in settings.json keys.json; do \
+    mkdir -p "$APP_HOME/mods"; \
+    for MOD in "{{justfile_directory()}}"/herdr-app/mods/*/; do \
+        MOD="${MOD%/}"; \
+        set -- "$@" "mods/$(basename "$MOD")"; \
+    done; \
+    for NAME in settings.json keys.json "$@"; do \
         SOURCE="{{justfile_directory()}}/herdr-app/$NAME"; \
         TARGET="$APP_HOME/$NAME"; \
         if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \

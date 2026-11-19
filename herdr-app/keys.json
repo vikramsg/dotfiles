@@ -141,7 +141,8 @@
     "ctrl-space 6": "tab.select:6",
     "ctrl-space 7": "tab.select:7",
     "ctrl-space 8": "tab.select:8",
-    "ctrl-space 9": "tab.select:9"
+    "ctrl-space 9": "tab.select:9",
+    "ctrl-space shift-g": "mod.open:ziggity-popup"
   },
   "terminal": {
     "cmd-f": "terminal.search",

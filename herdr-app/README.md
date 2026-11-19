@@ -11,8 +11,8 @@ own spaces and terminals.
 just herdr-app
 ```
 
-This links `settings.json` and `keys.json` into `~/.config/herdr-app/` (macOS
-only). The app creates both files on its first start, so on a machine where it
+This links `settings.json`, `keys.json` and each folder in `mods/` into
+`~/.config/herdr-app/` (macOS only). The app creates both files on its first start, so on a machine where it
 has already run, move them aside first:
 
 ```sh
@@ -66,6 +66,7 @@ Prefix keys are written as key sequences, such as `"ctrl-space %"`:
 | `prefix+Shift+H/J/K/L` | Swap pane |
 | `prefix+Shift+C` / `prefix+w` | New space / space picker |
 | `prefix+g` / `prefix+Shift+O` / `prefix+v` | LazyGit / OpenCode / Leaf tab |
+| `prefix+Shift+G` | Ziggity popup (`mods/ziggity-popup`); closes when Ziggity quits |
 | `prefix+?` | Help |
 
 Default navigation: `Cmd+T` new tab, `Cmd+1..9` tabs, `Ctrl+1..9` spaces,
