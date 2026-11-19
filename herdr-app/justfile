@@ -12,7 +12,7 @@ herdr_mods_commit := "1abf4870adb4c3f7a71739db1e0c29493f5e3f95"
 app_home := env("HERDR_APP_HOME", env("HOME") / ".config/herdr-app")
 
 # Install or upgrade the pinned mods into the running app; gitview first, as it makes main-copy.
-install: && better-sidebar
+install: && better-sidebar app-sidebar
     curl -fsSL https://raw.githubusercontent.com/ChmaraX/herdr-gitview/{{gitview_version}}/install.sh | sh -s -- --app --version {{gitview_version}}
 
 # Copy Better Sidebar (spaces with branches, PRs and nested worktrees) into the app,
@@ -37,6 +37,26 @@ better-sidebar:
     else
         echo "better-sidebar: no main-copy layout yet; install gitview first, then rerun"
     fi
+
+# Add the app sidebar's block, hidden, between main-copy's panes and its panel,
+# and the floating copy of the mod that takes Cmd+E and follows tab switches.
+app-sidebar:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    layout="{{app_home}}/layouts/main-copy.json"
+    [ -f "$layout" ] || { echo "app-sidebar: no main-copy layout yet; install gitview first, then rerun"; exit 0; }
+    jq '
+      def block: {id: "app-sidebar", type: "block", hidden: true, size: {weight: 0.6667}, min: 320,
+                  radius: 6, border: {width: 1, color: "border"}, content: {mod: "app-sidebar"}};
+      def sync: {id: "app-sidebar-sync", content: {mod: "app-sidebar", props: {role: "sync"}}, edge: "bottom", align: "start"};
+      (if any(.. | objects; .id? == "app-sidebar") then . else
+        walk(if type == "object" and .id? == "work-body"
+             then .children |= (map(select(.id == "main")) + [block] + map(select(.id != "main")))
+             else . end) end)
+      | (if any(.floating[]?; .id == "app-sidebar-sync") then . else .floating = ((.floating // []) + [sync]) end)
+    ' "$layout" > "$layout.tmp"
+    mv "$layout.tmp" "$layout"
+    echo "app-sidebar: block and sync in main-copy"
 
 # Remove it; the stock Changes panel comes back.
 uninstall:
