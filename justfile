@@ -140,6 +140,36 @@ herdr: mise
     PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
     PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install integrations
 
+# Link the Herdr desktop app's settings and keys; the app writes everything else in its home
+herdr-app:
+    @if [ "$(uname)" != "Darwin" ]; then \
+        echo "Skipping Herdr app: it is only used on macOS."; \
+        exit 0; \
+    fi; \
+    APP_HOME="$HOME/.config/herdr-app"; \
+    if [ -L "$APP_HOME" ]; then \
+        echo "ERROR: $APP_HOME is a symlink; the Herdr app needs a normal home directory."; \
+        exit 1; \
+    fi; \
+    mkdir -p "$APP_HOME/mods"; \
+    for MOD in "{{justfile_directory()}}"/herdr-app/mods/*/; do \
+        MOD="${MOD%/}"; \
+        set -- "$@" "mods/$(basename "$MOD")"; \
+    done; \
+    for NAME in settings.json keys.json "$@"; do \
+        SOURCE="{{justfile_directory()}}/herdr-app/$NAME"; \
+        TARGET="$APP_HOME/$NAME"; \
+        if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
+            :; \
+        elif [ -e "$TARGET" ] || [ -L "$TARGET" ]; then \
+            echo "ERROR: $TARGET exists and is not the managed symlink. Move or migrate it manually first."; \
+            exit 1; \
+        else \
+            ln -s "$SOURCE" "$TARGET"; \
+        fi; \
+        echo "Herdr app $NAME symlinked at $TARGET -> $SOURCE"; \
+    done
+
 # Set up Opencode symlink
 opencode: npm-global-bin
     @echo "Setting up Opencode symlink..."
@@ -448,7 +478,7 @@ harlequin-if-configured:
     fi
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit ziggity harlequin-if-configured
+all: npm-global-bin nvim tmux herdr herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit ziggity harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
