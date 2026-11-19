@@ -1,0 +1,6 @@
+# herdr-gitview in the Herdr app; `just herdr-app` links this to
+# ~/.config/herdr/plugins/config/chmarax.gitview/config.toml.
+# Keys and defaults: https://github.com/ChmaraX/herdr-gitview/blob/main/TUI.md#configuration
+
+# gitview's share of the tab when it opens beside your panes (default 50).
+view_width_percent = 35

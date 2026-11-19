@@ -1,0 +1,43 @@
+# Mods for the Herdr app, pinned like the herdr CLI in mise/config.toml.
+#
+# The installer downloads the release's prebuilt bundle, checks it against its
+# SHA-256 and installs its mods into the running app, so run these with the app
+# open. It adds its keys to keys.json only where free; the mods themselves stay
+# in ~/.config/herdr-app/mods, outside this repository. Re-running `install`
+# reinstalls the pinned version; bump it here to upgrade.
+
+gitview_version := "v0.6.0"
+# munza/herdr-mods has no releases; pin a commit.
+herdr_mods_commit := "1abf4870adb4c3f7a71739db1e0c29493f5e3f95"
+app_home := env("HERDR_APP_HOME", env("HOME") / ".config/herdr-app")
+
+# Install or upgrade the pinned mods into the running app; gitview first, as it makes main-copy.
+install: && better-sidebar
+    curl -fsSL https://raw.githubusercontent.com/ChmaraX/herdr-gitview/{{gitview_version}}/install.sh | sh -s -- --app --version {{gitview_version}}
+
+# Copy Better Sidebar (spaces with branches, PRs and nested worktrees) into the app,
+# and show it in place of the spaces list in main-copy, the layout the installers own.
+better-sidebar:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="$(mktemp -d)"
+    trap 'rm -rf "$src"' EXIT
+    git -C "$src" init -q
+    git -C "$src" fetch -q --depth 1 https://github.com/munza/herdr-mods.git "{{herdr_mods_commit}}"
+    git -C "$src" checkout -q FETCH_HEAD
+    # Copied, not linked: Herdr loads a linked mod's code but not its icons.
+    rsync -a --delete --exclude gpui-kit.d.ts --exclude herdr.d.ts --exclude jsconfig.json \
+        "$src/better-sidebar/mods/better-sidebar/" "{{app_home}}/mods/better-sidebar/"
+    herdr-app check "{{app_home}}/mods/better-sidebar"
+    layout="{{app_home}}/layouts/main-copy.json"
+    if [ -f "$layout" ]; then
+        jq '(.. | objects | select(.id? == "spaces") | .content.mod) = "better-sidebar"' "$layout" > "$layout.tmp"
+        mv "$layout.tmp" "$layout"
+        echo "better-sidebar: shown in place of the spaces list in main-copy"
+    else
+        echo "better-sidebar: no main-copy layout yet; install gitview first, then rerun"
+    fi
+
+# Remove it; the stock Changes panel comes back.
+uninstall:
+    curl -fsSL https://raw.githubusercontent.com/ChmaraX/herdr-gitview/{{gitview_version}}/install.sh | sh -s -- --app --uninstall

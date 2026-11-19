@@ -140,7 +140,24 @@ herdr: mise
     PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/bin/herdr_sidebar/justfile" link
     PATH="$HOME/.local/bin:$PATH" mise exec -- just --justfile "{{justfile_directory()}}/herdr/justfile" link-reviewr-config install integrations
 
-# Link the Herdr desktop app's settings and keys; the app writes everything else in its home
+# Link herdr-core's settings; the core runs the Herdr app's terminals on every machine
+herdr-core:
+    @SOURCE="{{justfile_directory()}}/herdr-core/config.toml"; \
+        TARGET="$HOME/.config/herdr-core/config.toml"; \
+        mkdir -p "$(dirname "$TARGET")"; \
+        if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
+            :; \
+        elif [ -f "$TARGET" ] && [ ! -L "$TARGET" ] && cmp -s "$TARGET" "$SOURCE"; then \
+            ln -sfn "$SOURCE" "$TARGET"; \
+        elif [ -e "$TARGET" ] || [ -L "$TARGET" ]; then \
+            echo "ERROR: $TARGET exists and is not the managed symlink. Move or migrate it manually first."; \
+            exit 1; \
+        else \
+            ln -s "$SOURCE" "$TARGET"; \
+        fi; \
+        echo "herdr-core config symlinked at $TARGET -> $SOURCE"
+
+# Link the Herdr desktop app's settings and keys, then install its pinned mods
 herdr-app:
     @if [ "$(uname)" != "Darwin" ]; then \
         echo "Skipping Herdr app: it is only used on macOS."; \
@@ -152,11 +169,11 @@ herdr-app:
         exit 1; \
     fi; \
     mkdir -p "$APP_HOME/mods"; \
+    NAMES="settings.json keys.json"; \
     for MOD in "{{justfile_directory()}}"/herdr-app/mods/*/; do \
-        MOD="${MOD%/}"; \
-        set -- "$@" "mods/$(basename "$MOD")"; \
+        [ -d "$MOD" ] && NAMES="$NAMES mods/$(basename "$MOD")"; \
     done; \
-    for NAME in settings.json keys.json "$@"; do \
+    for NAME in $NAMES; do \
         SOURCE="{{justfile_directory()}}/herdr-app/$NAME"; \
         TARGET="$APP_HOME/$NAME"; \
         if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
@@ -168,7 +185,26 @@ herdr-app:
             ln -s "$SOURCE" "$TARGET"; \
         fi; \
         echo "Herdr app $NAME symlinked at $TARGET -> $SOURCE"; \
-    done
+    done; \
+    SOURCE="{{justfile_directory()}}/herdr-app/gitview.toml"; \
+    TARGET="$HOME/.config/herdr/plugins/config/chmarax.gitview/config.toml"; \
+    mkdir -p "$(dirname "$TARGET")"; \
+    if [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$SOURCE" ]; then \
+        :; \
+    elif [ -e "$TARGET" ] || [ -L "$TARGET" ]; then \
+        echo "ERROR: $TARGET exists and is not the managed symlink. Move or migrate it manually first."; \
+        exit 1; \
+    else \
+        ln -s "$SOURCE" "$TARGET"; \
+    fi; \
+    echo "gitview config symlinked at $TARGET -> $SOURCE"; \
+    just --justfile "{{justfile_directory()}}/herdr-app/justfile" install; \
+    SOURCE="{{justfile_directory()}}/herdr-app/keys.json"; \
+    TARGET="$APP_HOME/keys.json"; \
+    if [ -f "$TARGET" ] && [ ! -L "$TARGET" ]; then \
+        cp "$TARGET" "$SOURCE" && rm "$TARGET" && ln -s "$SOURCE" "$TARGET"; \
+        echo "Herdr app keys.json: kept the installers' keys in $SOURCE and relinked it"; \
+    fi
 
 # Set up Opencode symlink
 opencode: npm-global-bin
@@ -478,7 +514,7 @@ harlequin-if-configured:
     fi
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit ziggity harlequin-if-configured
+all: npm-global-bin nvim tmux herdr herdr-core herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit ziggity harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

@@ -67,15 +67,6 @@
         ]
       }
     },
-    "cmd-g": {
-      "command": "tab.new",
-      "args": {
-        "name": "LazyGit",
-        "argv": [
-          "lazygit"
-        ]
-      }
-    },
     "cmd-shift-m": {
       "command": "tab.new",
       "args": {
@@ -89,7 +80,7 @@
     "ctrl-space \"": "pane.split:down",
     "ctrl-space %": "pane.split:right",
     "ctrl-space c": "tab.new",
-    "ctrl-space n": "tab.next",
+    "ctrl-space n": "mod.open:worktree-new",
     "ctrl-space p": "tab.prev",
     "ctrl-space $": "tab.rename",
     "ctrl-space x": "pane.close",
@@ -103,7 +94,7 @@
     "ctrl-space shift-k": "pane.swap:up",
     "ctrl-space shift-l": "pane.swap:right",
     "ctrl-space shift-c": "space.new",
-    "ctrl-space w": "mod.open:picker",
+    "ctrl-space w": "mod.open:worktree-open",
     "ctrl-space ?": "app.help",
     "ctrl-space g": {
       "command": "tab.new",
@@ -142,7 +133,10 @@
     "ctrl-space 7": "tab.select:7",
     "ctrl-space 8": "tab.select:8",
     "ctrl-space 9": "tab.select:9",
-    "ctrl-space shift-g": "mod.open:ziggity-popup"
+    "cmd-g": "mod.open:gitview-tab",
+    "cmd-shift-g": "mod.open:gitview-sidebar",
+    "cmd-e": "mod.open:nvim-sidebar",
+    "cmd-shift-e": "mod.open:files-panel"
   },
   "terminal": {
     "cmd-f": "terminal.search",
