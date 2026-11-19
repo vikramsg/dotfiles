@@ -43,7 +43,8 @@ commit the ones you want to keep.
 
 ## Keys
 
-`keys.json` is the app's default key map plus three launchers. Because the file
+`keys.json` is the app's default key map plus the `Ctrl+Space` prefix keys from
+`herdr/config.toml` and three launchers. Because the file
 is edited, app upgrades no longer add new default shortcuts to it; compare with
 `herdr-app commands` after an update and add them by hand.
 
@@ -53,6 +54,20 @@ is edited, app upgrades no longer add new default shortcuts to it; compare with
 | `Cmd+G` | New LazyGit tab; it closes when LazyGit quits | `prefix+g` popup |
 | `Cmd+Shift+M` | New tab picking and watching a Markdown file with Leaf | `prefix+v` |
 
+Prefix keys are written as key sequences, such as `"ctrl-space %"`:
+
+| Keys | Action |
+| --- | --- |
+| `prefix+c` / `prefix+1..9` / `prefix+n` / `prefix+p` | New tab / select tab / next / previous |
+| `prefix+$` | Rename the tab |
+| `prefix+"` / `prefix+%` | Split down / right |
+| `prefix+x` / `prefix+z` | Close / zoom pane |
+| `prefix+Arrows` | Focus pane |
+| `prefix+Shift+H/J/K/L` | Swap pane |
+| `prefix+Shift+C` / `prefix+w` | New space / space picker |
+| `prefix+g` / `prefix+Shift+O` / `prefix+v` | LazyGit / OpenCode / Leaf tab |
+| `prefix+?` | Help |
+
 Default navigation: `Cmd+T` new tab, `Cmd+1..9` tabs, `Ctrl+1..9` spaces,
 `Cmd+D` / `Cmd+Shift+D` split right / down, `Cmd+Alt+Arrows` focus pane,
 `Cmd+Alt+Shift+Arrows` swap pane, `Cmd+Shift+Enter` zoom, `Cmd+]` / `Cmd+[`
@@ -60,7 +75,9 @@ next / previous agent, `Cmd+/` help.
 
 ## Not carried over
 
-- The `Ctrl+Space` prefix: the app binds single chords.
+- `prefix+;` (last pane), `prefix+Tab` (Navigator jump back), `prefix+[`
+  (copy mode), `prefix+d` (detach) and `prefix+q` (reload): the app has no
+  equivalent command; it reloads its files by itself.
 - `Ctrl+H/J/K/L` across Neovim splits: `dotfiles.nav-wrap` drives the `herdr`
   CLI. The app's `pane.go` does not know about Neovim, so binding these keys to
   it would break split movement inside Neovim.

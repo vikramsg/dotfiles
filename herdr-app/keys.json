@@ -85,7 +85,63 @@
           "--watch"
         ]
       }
-    }
+    },
+    "ctrl-space \"": "pane.split:down",
+    "ctrl-space %": "pane.split:right",
+    "ctrl-space c": "tab.new",
+    "ctrl-space n": "tab.next",
+    "ctrl-space p": "tab.prev",
+    "ctrl-space $": "tab.rename",
+    "ctrl-space x": "pane.close",
+    "ctrl-space z": "pane.zoom",
+    "ctrl-space left": "pane.go:left",
+    "ctrl-space down": "pane.go:down",
+    "ctrl-space up": "pane.go:up",
+    "ctrl-space right": "pane.go:right",
+    "ctrl-space shift-h": "pane.swap:left",
+    "ctrl-space shift-j": "pane.swap:down",
+    "ctrl-space shift-k": "pane.swap:up",
+    "ctrl-space shift-l": "pane.swap:right",
+    "ctrl-space shift-c": "space.new",
+    "ctrl-space w": "mod.open:picker",
+    "ctrl-space ?": "app.help",
+    "ctrl-space g": {
+      "command": "tab.new",
+      "args": {
+        "name": "LazyGit",
+        "argv": [
+          "lazygit"
+        ]
+      }
+    },
+    "ctrl-space shift-o": {
+      "command": "tab.new",
+      "args": {
+        "name": "OpenCode",
+        "argv": [
+          "opencode2"
+        ]
+      }
+    },
+    "ctrl-space v": {
+      "command": "tab.new",
+      "args": {
+        "name": "Leaf",
+        "argv": [
+          "leaf",
+          "--watch"
+        ]
+      }
+    },
+    "ctrl-space 1": "tab.select:1",
+    "ctrl-space 2": "tab.select:2",
+    "ctrl-space 3": "tab.select:3",
+    "ctrl-space 4": "tab.select:4",
+    "ctrl-space 5": "tab.select:5",
+    "ctrl-space 6": "tab.select:6",
+    "ctrl-space 7": "tab.select:7",
+    "ctrl-space 8": "tab.select:8",
+    "ctrl-space 9": "tab.select:9"
   },
   "terminal": {
     "cmd-f": "terminal.search",
