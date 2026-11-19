@@ -23,10 +23,10 @@
     "cmd-shift-d": "pane.split:down",
     "cmd-shift-w": "pane.close",
     "cmd-shift-enter": "pane.zoom",
-    "cmd-alt-left": "pane.go:left",
-    "cmd-alt-right": "pane.go:right",
-    "cmd-alt-up": "pane.go:up",
-    "cmd-alt-down": "pane.go:down",
+    "cmd-alt-left": "app-sidebar.go:left",
+    "cmd-alt-right": "app-sidebar.go:right",
+    "cmd-alt-up": "app-sidebar.go:up",
+    "cmd-alt-down": "app-sidebar.go:down",
     "cmd-alt-shift-left": "pane.swap:left",
     "cmd-alt-shift-right": "pane.swap:right",
     "cmd-alt-shift-up": "pane.swap:up",
@@ -67,15 +67,6 @@
         ]
       }
     },
-    "cmd-g": {
-      "command": "tab.new",
-      "args": {
-        "name": "LazyGit",
-        "argv": [
-          "lazygit"
-        ]
-      }
-    },
     "cmd-shift-m": {
       "command": "tab.new",
       "args": {
@@ -89,21 +80,21 @@
     "ctrl-space \"": "pane.split:down",
     "ctrl-space %": "pane.split:right",
     "ctrl-space c": "tab.new",
-    "ctrl-space n": "tab.next",
+    "ctrl-space n": "mod.open:worktree-new",
     "ctrl-space p": "tab.prev",
     "ctrl-space $": "tab.rename",
     "ctrl-space x": "pane.close",
     "ctrl-space z": "pane.zoom",
-    "ctrl-space left": "pane.go:left",
-    "ctrl-space down": "pane.go:down",
-    "ctrl-space up": "pane.go:up",
-    "ctrl-space right": "pane.go:right",
+    "ctrl-space left": "app-sidebar.go:left",
+    "ctrl-space down": "app-sidebar.go:down",
+    "ctrl-space up": "app-sidebar.go:up",
+    "ctrl-space right": "app-sidebar.go:right",
     "ctrl-space shift-h": "pane.swap:left",
     "ctrl-space shift-j": "pane.swap:down",
     "ctrl-space shift-k": "pane.swap:up",
     "ctrl-space shift-l": "pane.swap:right",
     "ctrl-space shift-c": "space.new",
-    "ctrl-space w": "mod.open:picker",
+    "ctrl-space w": "mod.open:worktree-open",
     "ctrl-space ?": "app.help",
     "ctrl-space g": {
       "command": "tab.new",
@@ -142,7 +133,11 @@
     "ctrl-space 7": "tab.select:7",
     "ctrl-space 8": "tab.select:8",
     "ctrl-space 9": "tab.select:9",
-    "ctrl-space shift-g": "mod.open:ziggity-popup"
+    "cmd-g": "mod.open:gitview-tab",
+    "cmd-shift-g": "mod.open:gitview-sidebar",
+    "cmd-e": "app-sidebar.toggle:nvim",
+    "cmd-shift-e": "mod.open:files-panel",
+    "ctrl-space r": "app-sidebar.toggle:reviewr"
   },
   "terminal": {
     "cmd-f": "terminal.search",

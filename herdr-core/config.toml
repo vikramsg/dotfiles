@@ -1,0 +1,6 @@
+# herdr-core, which runs the Herdr app's terminals on each machine. `just
+# herdr-core` links this to ~/.config/herdr-core/config.toml; see `hc --help`.
+
+# New terminals and kept terminals' recovery shells start zsh, not the login
+# shell (bash on the VM). Login, so they load the same profile as a terminal.
+shell = ["zsh", "-l"]
