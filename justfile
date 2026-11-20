@@ -249,6 +249,10 @@ gh-stats:
 ocost:
     just --justfile "{{justfile_directory()}}/bin/ocost/justfile" install
 
+# Install opencode-resume and its lch service, which saves each Herdr terminal's OpenCode session
+opencode-resume: lch
+    just --justfile "{{justfile_directory()}}/bin/opencode_resume/justfile" install
+
 # Set up Ghostty symlink
 ghostty:
     @echo "Setting up Ghostty symlink..."
@@ -523,7 +527,7 @@ harlequin-if-configured:
     fi
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr herdr-core herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost bin zsh lazygit ziggity harlequin-if-configured
+all: npm-global-bin nvim tmux herdr herdr-core herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost opencode-resume bin zsh lazygit ziggity harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Rules only OpenCode sessions need, such as how to launch the reviewer agent in agents/.
+  "instructions": [".opencode/rules.md"]
+}

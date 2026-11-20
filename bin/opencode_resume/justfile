@@ -1,0 +1,17 @@
+root := "../.."
+
+default:
+    @just --list
+
+# Install the tool and (re)start its lch service, which watches this machine's terminals.
+install:
+    uv tool install "{{justfile_directory()}}" --force --no-cache
+    "$HOME/.local/bin/lch" install lch-opencode-resume
+
+test:
+    uv run --directory "{{root}}" --package opencode-resume --frozen pytest -c bin/opencode_resume/pyproject.toml bin/opencode_resume/tests
+
+check:
+    uv run --directory "{{root}}" --package opencode-resume --frozen ruff check bin/opencode_resume
+    uv run --directory "{{root}}" --package opencode-resume --frozen ruff format --check bin/opencode_resume
+    uv run --directory "{{root}}" --package opencode-resume --frozen ty check --project bin/opencode_resume

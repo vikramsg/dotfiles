@@ -281,3 +281,38 @@ def test_cli_logs_can_print_journalctl_commands_on_linux(monkeypatch):
         "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.service",
         "journalctl --user -u com.vikramsg.dotfiles.lch-example-watcher.path",
     ]
+
+
+def test_systemd_install_runs_a_configured_command_service_and_keeps_it_running(tmp_path, monkeypatch):
+    config_file = tmp_path / ".config/lch/config.toml"
+    config_file.parent.mkdir(parents=True)
+    config_file.write_text(
+        'namespace = "com.example"\n[services.lch-watcher]\ncommand = ["opencode-resume", "watch"]\n'
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("LCH_CONFIG_FILE", str(config_file))
+
+    import lch.systemd as systemd_module
+
+    monkeypatch.setattr(systemd_module.sys, "platform", "linux")
+    calls: list[list[str]] = []
+
+    def fake_run(command, *, check, text, capture_output=False):
+        calls.append(command)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(systemd_module.subprocess, "run", fake_run)
+
+    unit_path = systemd_module.install_job("lch-watcher")
+
+    assert unit_path == tmp_path / ".config/systemd/user/com.example.lch-watcher.service"
+    unit = unit_path.read_text()
+    assert f"ExecStart={tmp_path}/.local/bin/lch run lch-watcher" in unit
+    assert "Restart=always" in unit
+    assert "WantedBy=default.target" in unit
+    assert ["systemctl", "--user", "enable", "com.example.lch-watcher.service"] in calls
+    assert ["systemctl", "--user", "restart", "com.example.lch-watcher.service"] in calls

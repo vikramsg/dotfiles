@@ -89,6 +89,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
   gitview's Enter opens files in it; on the VM gitview opens its own nvim.
 - `spacer`: draws nothing, for a layout block that only takes up room (the app requires every block to hold content).
 - `files-panel`: the Files panel on a key, as the tab bar's Files button does.
+- `opencode-resume`: after a reboot or a lost herdr-core, reopens the OpenCode session each restored terminal had open, on this Mac and every connected machine, through `opencode-resume resume` (see `bin/opencode_resume/README.md`).
 - `worktree-new`, `worktree-open`: Herdr's New and Open worktree dialogs on a
   key, for the focused space, as its space menu opens them.
 
@@ -96,10 +97,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
 
 - [herdr-gitview](https://github.com/ChmaraX/herdr-gitview): diffs, staging,
   commits and review notes for agents in the Changes panel.
-- [Better Sidebar](https://github.com/munza/herdr-mods/tree/main/better-sidebar):
-  the spaces list with each space's branch, its pull request's state and
-  worktrees nested under their repository. It runs read-only `git`, and
-  `gh pr list` / `gh pr view` with your `gh` login.
+- [Space Ports](https://github.com/teknologist/herdr-space-ports): Herdr's own spaces list (worktrees under their repository, branch and ahead/behind) with each space's listening ports under it, then, faded, the machine's other ports started from a terminal. Clicking a port opens `http://localhost:<port>/`; for a space on the VM it first forwards the port with `ssh -L` (a herdr-core terminal that outlives the window; right-click the port to stop it). Every 5 seconds it runs `ss` (Linux) or `lsof` (macOS) and `ps` on each machine with a space.
 - [filetree](https://github.com/cybertron288/herdr-mods/tree/main/filetree):
   the panel's Files tab, in place of Herdr's own tree. It follows the focused
   terminal's folder, also on the VM, and shows the branch, changed files with
@@ -114,6 +112,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
 | --- | --- |
 | `Cmd+E` / `prefix+r` | Show or hide the tab's nvim / reviewr in the sidebar |
 | `Cmd+Shift+E` | Show or hide the Files panel |
+| `Cmd+Shift+R` | Reopen OpenCode sessions in terminals restored after a restart |
 | `Cmd+Shift+G` / `Cmd+G` | gitview in the Changes panel / in a tab of its own |
 
 ```sh
@@ -126,12 +125,12 @@ just --justfile herdr-app/justfile uninstall  # stock Changes panel again
 to 35% of the tab. The sidebar takes 40% of the width beside the right
 panel (weight 0.6667 against the panes' 1). Showing the sidebar sets both weights again, since the app rewrites them when the panel or sidebar is shown or hidden; a width dragged by hand lasts until the sidebar is next shown.
 
-To upgrade, change `gitview_version`, `herdr_mods_commit`, `filetree_commit` or `usage_limits_commit`
+To upgrade, change `gitview_version`, `space_ports_commit`, `filetree_commit` or `usage_limits_commit`
 in `herdr-app/justfile` and run `just herdr-app`, with the app open. Installed
-mods stay in `~/.config/herdr-app/mods/`, outside this repository. Better
-Sidebar, filetree and usage-limits are copied, not linked, because Herdr loads a linked mod's
+mods stay in `~/.config/herdr-app/mods/`, outside this repository. Space
+Ports, filetree and usage-limits are copied, not linked, because Herdr loads a linked mod's
 code but not its icons, and draws a linked usage-limits blank. gitview's installer clones Herdr's `main` layout as
-`main-copy`, Herdr's own layouts being read-only; Better Sidebar's step then
+`main-copy`, Herdr's own layouts being read-only; Space Ports' step then
 puts it in place of `main-copy`'s spaces list, filetree's puts filetree in the
 Files tab, and the app sidebar's adds its block and the hidden floating copy
 that takes its keys.
@@ -159,7 +158,7 @@ The profile's home gets the main home's setup:
 | Item | In the profile's home |
 | --- | --- |
 | `settings.json`, `keys.json`, `themes/`, the mods in `herdr-app/mods/` | linked to this repository, so edits reach every window |
-| gitview, Better Sidebar, filetree and file-icons | copied from `~/.config/herdr-app/mods/`, as linked mods lose their icons |
+| gitview, Space Ports, filetree, file-icons and usage-limits | copied from `~/.config/herdr-app/mods/`, as linked mods lose their icons |
 | `layouts/main-copy.json` | copied from the main home with the sidebar block hidden and empty, since the sidebar records which terminal it shows in the layout |
 | `shared.json` (mod state and the window's layout), `view.json`, `window.json`, `data/` | the window's own; a new profile starts on `main-copy` |
 | Machines (`hc machine ls` in the profile's session) | the main session's machines, each reached in a session of the profile's name there, so the profile's VM spaces are apart from the main window's |
