@@ -159,7 +159,7 @@ profiles:
     done
 
 # Copy usage-limits (Claude Code and Codex limits, OpenCode's tokens) into the app, and
-# split main-copy's status bar into Herdr's status on the left and the limits on the right.
+# split main-copy's status bar into Herdr's status, the limits and an empty third.
 usage-limits:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -173,12 +173,14 @@ usage-limits:
     herdr-app check "{{app_home}}/mods/usage-limits"
     layout="{{app_home}}/layouts/main-copy.json"
     [ -f "$layout" ] || { echo "usage-limits: no main-copy layout yet; install gitview first, then rerun"; exit 0; }
+    # Thirds: Herdr's status, the limits (drawn against their block's right edge), and the
+    # spacer mod, so the limits end two thirds across rather than at the window's edge.
     jq '
       def row: {id: "status-row", type: "row", size: {px: 28}, resizable: false, children: [
         {id: "status", type: "block", size: {weight: 1}, content: {mod: "workspace-status"}},
-        {id: "usage-limits", type: "block", size: {weight: 2.2}, min: 130, content: {mod: "usage-limits"}}]};
-      if any(.. | objects; .id? == "usage-limits") then .
-      else walk(if type == "object" and .id? == "status" and .content.mod? == "workspace-status" then row else . end) end
+        {id: "usage-limits", type: "block", size: {weight: 1}, min: 130, content: {mod: "usage-limits"}},
+        {id: "status-spacer", type: "block", size: {weight: 1}, content: {mod: "spacer"}}]};
+      walk(if type == "object" and (.id? == "status-row" or (.id? == "status" and .content.mod? == "workspace-status")) then row else . end)
     ' "$layout" > "$layout.tmp"
     mv "$layout.tmp" "$layout"
     echo "usage-limits: in main-copy's status bar"
