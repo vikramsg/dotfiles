@@ -25,6 +25,9 @@
 --   <leader>gf : Show Git file history (all commits affecting current file)
 --   <leader>gd : Open CodeDiff working-tree review
 --   <leader>gD : Open CodeDiff against main
+--   ]c / [c    : Next/previous changed hunk (gitsigns)
+--   <leader>hp : Preview the hunk under the cursor in a popup (gitsigns)
+--   <leader>hi : Preview the hunk under the cursor inline (gitsigns)
 --   <leader>lg : LazyGit (Floating terminal)
 --   <leader>rF : Rename current file with LSP updates
 --   In CodeDiff review: B toggles working-tree/branch, X discards a hunk, gf edits
@@ -772,6 +775,38 @@ require("lazy").setup({
 			require("codediff").setup(opts)
 			require("config.codediff_review").setup()
 		end,
+	},
+	{
+		"lewis6991/gitsigns.nvim",
+		event = { "BufReadPre", "BufNewFile" },
+		opts = {
+			numhl = true,
+			on_attach = function(bufnr)
+				local gitsigns = require("gitsigns")
+
+				local function map(lhs, rhs, desc)
+					vim.keymap.set("n", lhs, rhs, { buffer = bufnr, desc = desc })
+				end
+
+				-- In a `:diffthis` window `]c` / `[c` keep Vim's native diff-change jumps.
+				map("]c", function()
+					if vim.wo.diff then
+						vim.cmd.normal({ vim.v.count1 .. "]c", bang = true })
+					else
+						gitsigns.nav_hunk("next")
+					end
+				end, "Next git hunk")
+				map("[c", function()
+					if vim.wo.diff then
+						vim.cmd.normal({ vim.v.count1 .. "[c", bang = true })
+					else
+						gitsigns.nav_hunk("prev")
+					end
+				end, "Previous git hunk")
+				map("<leader>hp", gitsigns.preview_hunk, "Preview git hunk")
+				map("<leader>hi", gitsigns.preview_hunk_inline, "Preview git hunk inline")
+			end,
+		},
 	},
 	{
 		"folke/noice.nvim",
