@@ -54,6 +54,8 @@ CodeDiff also provides PR review via `:CodeDiff pr <number>`. The previous Diffe
 
 Changed lines are marked in the sign column and their line numbers are coloured: green for added, blue for changed, red for deleted.
 
+Changes are shown relative to the local `main` branch, so lines already committed on the branch stay marked. On `main` itself this means uncommitted changes only. If local `main` has moved ahead of the point the branch forked from, commits on `main` the branch doesn't have also show as changes. Repositories without a local `main` branch show no signs. To compare against something else for the session, use `:Gitsigns change_base <revision> true`.
+
 - `]c` / `[c`: Move to the next/previous changed hunk. In a `:diffthis` window these keep Vim's native diff jumps.
 - `Space + hp`: Show the hunk under the cursor as a diff in a popup.
 - `Space + hi`: Show the hunk under the cursor inline, with the removed lines as virtual text.
