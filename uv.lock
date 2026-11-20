@@ -9,6 +9,7 @@ members = [
     "herdr-sidebar",
     "lch",
     "ocost",
+    "opencode-resume",
     "opener-tunnel",
     "screenshot",
 ]
@@ -216,6 +217,31 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12" },
     { name = "rich", specifier = ">=14" },
 ]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[[package]]
+name = "opencode-resume"
+version = "0.1.0"
+source = { editable = "bin/opencode_resume" }
+dependencies = [
+    { name = "click" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "click", specifier = ">=8.2" }]
 
 [package.metadata.requires-dev]
 dev = [

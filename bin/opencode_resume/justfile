@@ -1,0 +1,15 @@
+root := "../.."
+
+default:
+    @just --list
+
+install:
+    uv tool install "{{justfile_directory()}}" --force --no-cache
+
+test:
+    uv run --directory "{{root}}" --package opencode-resume --frozen pytest -c bin/opencode_resume/pyproject.toml bin/opencode_resume/tests
+
+check:
+    uv run --directory "{{root}}" --package opencode-resume --frozen ruff check bin/opencode_resume
+    uv run --directory "{{root}}" --package opencode-resume --frozen ruff format --check bin/opencode_resume
+    uv run --directory "{{root}}" --package opencode-resume --frozen ty check --project bin/opencode_resume

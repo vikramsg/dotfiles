@@ -139,7 +139,8 @@
     "cmd-shift-g": "mod.open:gitview-sidebar",
     "cmd-e": "app-sidebar.toggle:nvim",
     "cmd-shift-e": "mod.open:files-panel",
-    "ctrl-space r": "app-sidebar.toggle:reviewr"
+    "ctrl-space r": "app-sidebar.toggle:reviewr",
+    "cmd-shift-r": "mod.open:opencode-resume"
   },
   "terminal": {
     "cmd-f": "terminal.search",
