@@ -10,5 +10,12 @@
   "terminal_cell_width": 1.0,
   "terminal_scroll_speed": 1.0,
   "pane_scrollbars": false,
-  "minimum_contrast": 1.0
+  "minimum_contrast": 1.0,
+  "theme": "tokyo-night",
+  "colors": {
+    "accent": "#89b4fa",
+    "chrome": "#20232b",
+    "selected": "#24283b",
+    "selection": "#33467c"
+  }
 }
