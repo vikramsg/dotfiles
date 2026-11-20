@@ -130,6 +130,19 @@ profile name:
     mv "$home/layouts/main-copy.json.tmp" "$home/layouts/main-copy.json"
     # The window's layout is kept in its shared.json; a new profile starts on main-copy.
     [ -f "$home/shared.json" ] || echo '{"layout": "main-copy"}' > "$home/shared.json"
+    # The main session's machines, each reached in a session of the profile's name there, so the
+    # profile's spaces on the VM stay apart too. A machine entry names the session it reaches
+    # (null: that machine's default, the main window's); one pointing elsewhere is re-added, which
+    # only forgets it here and leaves its terminals running.
+    env -u HC_SESSION herdr-core machine ls --json | jq -c '.machines[] | select(.via | not)' | while read -r machine; do
+        machine_name="$(jq -r .name <<< "$machine")"
+        target="$(jq -r .target <<< "$machine")"
+        current="$(HC_SESSION="{{name}}" herdr-core machine ls --json | jq -r --arg n "$machine_name" '.machines[] | select(.name == $n) | .session // "default"')"
+        [ "$current" = "{{name}}" ] && continue
+        [ -n "$current" ] && HC_SESSION="{{name}}" herdr-core machine rm "$machine_name" > /dev/null
+        HC_SESSION="{{name}}" herdr-core machine add "$target" --name "$machine_name" --session "{{name}}" > /dev/null
+        echo "profile {{name}}: $machine_name reached in its {{name}} session"
+    done
     echo "profile {{name}}: $home has the main setup"
 
 # Refresh every profile's home after the main one changed.

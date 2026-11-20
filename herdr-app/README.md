@@ -161,6 +161,7 @@ The profile's home gets the main home's setup:
 | gitview, Better Sidebar, filetree and file-icons | copied from `~/.config/herdr-app/mods/`, as linked mods lose their icons |
 | `layouts/main-copy.json` | copied from the main home with the sidebar block hidden and empty, since the sidebar records which terminal it shows in the layout |
 | `shared.json` (mod state and the window's layout), `view.json`, `window.json`, `data/` | the window's own; a new profile starts on `main-copy` |
+| Machines (`hc machine ls` in the profile's session) | the main session's machines, each reached in a session of the profile's name there, so the profile's VM spaces are apart from the main window's |
 
 `just herdr-app` refreshes every `~/.config/herdr-app-*` home after the main one. A refresh copies `main-copy` again, so a sidebar width dragged in a profile's window goes back to the main window's.
 

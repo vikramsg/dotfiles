@@ -33,6 +33,8 @@ and terminals are apart from the main window's and other profiles'.
 - The window's home is ~/.config/herdr-app-<name>. It has the main window's
   setup: settings, keys, theme and mods linked from the dotfiles repo, and
   third-party mods and the main-copy layout copied from ~/.config/herdr-app.
+- On the VM (each machine of the main window), its spaces and terminals are in
+  that machine's <name> session, apart from the main window's there too.
 - The first run sets the home up (`just herdr-app-profile <name>`), and
   `just herdr-app` refreshes every profile's home.
 - Running it again brings that profile's window to the front.
