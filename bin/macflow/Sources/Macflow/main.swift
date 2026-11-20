@@ -25,17 +25,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: "Macflow")
         let menu = NSMenu()
-        menu.addItem(withTitle: "Show Screenshot Shelf", action: #selector(showShelf), keyEquivalent: "")
         menu.addItem(withTitle: "Request Accessibility", action: #selector(requestAccessibility), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
         menu.items.forEach { $0.target = self }
         item.menu = menu
         statusItem = item
-    }
-
-    @objc private func showShelf() {
-        runtime?.showFirstShelf()
     }
 
     @objc private func requestAccessibility() {

@@ -62,8 +62,13 @@ import Testing
             path: "/v1/windows?bundle_id=com.example.Editor"
         )
         try expectRequest(["screen", "list"], method: "GET", path: "/v1/screens")
-        try expectRequest(["ui", "overlay", "list"], method: "GET", path: "/v1/overlays")
-        try expectRequest(["ui", "shelf", "list"], method: "GET", path: "/v1/file-shelves")
+        try expectRequest(["overlay", "list"], method: "GET", path: "/v1/overlays")
+        try expectRequest(["ui", "list"], method: "GET", path: "/v1/ui")
+        try expectRequest(
+            ["files", "list", "/tmp/shots"],
+            method: "GET",
+            path: "/v1/files?directory=/tmp/shots&extensions=png,jpg,jpeg,webp&limit=5"
+        )
     }
 
     @Test func actionCommandsBuildExpectedRequests() throws {
@@ -91,18 +96,8 @@ import Testing
             method: "POST",
             path: "/v1/windows/window%201/unminimize"
         )
-        try expectRequest(["ui", "overlay", "hide"], method: "DELETE", path: "/v1/overlays")
-        try expectRequest(
-            ["ui", "shelf", "show", "/tmp/screenshots"],
-            method: "POST",
-            path: "/v1/file-shelves",
-            body: ["directory": "/tmp/screenshots"]
-        )
-        try expectRequest(
-            ["ui", "shelf", "close", "shelf 1"],
-            method: "DELETE",
-            path: "/v1/file-shelves/shelf%201"
-        )
+        try expectRequest(["overlay", "hide"], method: "DELETE", path: "/v1/overlays")
+        try expectRequest(["ui", "dismiss", "surface 1"], method: "DELETE", path: "/v1/ui/surface%201")
     }
 
     @Test func inputCommandsPreserveTypedArgumentsAndDefaults() throws {
@@ -113,7 +108,7 @@ import Testing
             body: ["frame": ["x": 1.0, "y": 2.0, "width": 800.0, "height": 600.0]]
         )
         try expectRequest(
-            ["ui", "overlay", "show", "/tmp/image.png", "4.5"],
+            ["overlay", "show", "/tmp/image.png", "4.5"],
             method: "POST",
             path: "/v1/overlays/image",
             body: ["path": "/tmp/image.png", "timeout_seconds": 4.5]
@@ -158,7 +153,7 @@ import Testing
 
     @Test(arguments: [
         ["app"], ["window"], ["screen"], ["input"], ["screenshot"],
-        ["ui"], ["ui", "overlay"], ["ui", "shelf"], ["system"],
+        ["ui"], ["overlay"], ["files"], ["system"],
     ])
     func groupsOfferHelpWithoutPerformingAnAction(arguments: [String]) throws {
         var command = try MacflowCommand.parseAsRoot(arguments)
@@ -173,12 +168,38 @@ import Testing
         }
     }
 
-    @Test(arguments: ["overlay", "shelf", "screenshot"])
+    @Test(arguments: ["overlay", "files", "screenshot"])
     func invalidActionArgumentsPointToTheNestedHelp(group: String) {
-        let arguments = group == "screenshot" ? [group, "capture", "--display", "unknown"] : ["ui", group, "show"]
+        let arguments: [String]
+        let command: String
+        switch group {
+        case "screenshot":
+            arguments = [group, "capture", "--display", "unknown"]
+            command = "screenshot capture"
+        case "files":
+            arguments = [group, "list"]
+            command = "files list"
+        default:
+            arguments = [group, "show"]
+            command = "overlay show"
+        }
         let message = parsingError(arguments)
-        let command = group == "screenshot" ? "screenshot capture" : "ui \(group) show"
         #expect(message.contains("macflow \(command) --help"))
+    }
+
+    @Test func uiShowSendsRawPayloadFromFile() throws {
+        let payload = Data(#"[{"version":"v0.9.1","deleteSurface":{"surfaceId":"x"}}]"#.utf8)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("a2ui-\(UUID().uuidString).json")
+        try payload.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let command = try MacflowCommand.parseAsRoot(["ui", "show", "--file", url.path])
+        let requestCommand = try #require(command as? any HTTPCommand)
+        let request = try requestCommand.requestPlan()
+
+        #expect(request.method == "POST")
+        #expect(request.path == "/v1/ui")
+        #expect(request.rawBody == payload)
     }
 
     private func expectRequest(

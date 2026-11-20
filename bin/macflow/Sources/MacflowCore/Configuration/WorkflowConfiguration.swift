@@ -101,132 +101,9 @@ public struct WorkflowConfiguration: Codable, Equatable {
         }
     }
 
-    public struct Shelf: Codable, Equatable {
-        public static let defaultMaxItems = 5
-
-        public struct Source: Codable, Equatable {
-            public let id: String
-            public let label: String
-            public let icon: String
-            public let directory: String
-
-            public init(id: String, label: String, icon: String, directory: String) {
-                self.id = id
-                self.label = label
-                self.icon = icon
-                self.directory = directory
-            }
-        }
-
-        public let sources: [Source]
-        public let extensions: [String]
-        public let width: Double
-        public let height: Double
-        public let thumbnailWidth: Double
-        public let spacing: Double
-        public let margin: Double
-        public let closeAfterDrag: Bool
-        public let closeDelay: Double
-        public let restoreFocus: Bool
-        public let maxItems: Int
-
-        enum CodingKeys: String, CodingKey {
-            case sources, extensions, width, height, spacing, margin
-            case thumbnailWidth = "thumbnail_width"
-            case closeAfterDrag = "close_after_drag"
-            case closeDelay = "close_delay"
-            case restoreFocus = "restore_focus"
-            case maxItems = "max_items"
-        }
-
-        public init(
-            sources: [Source],
-            extensions: [String],
-            width: Double,
-            height: Double,
-            thumbnailWidth: Double,
-            spacing: Double,
-            margin: Double,
-            closeAfterDrag: Bool,
-            closeDelay: Double,
-            restoreFocus: Bool,
-            maxItems: Int = defaultMaxItems
-        ) {
-            self.sources = sources
-            self.extensions = extensions
-            self.width = width
-            self.height = height
-            self.thumbnailWidth = thumbnailWidth
-            self.spacing = spacing
-            self.margin = margin
-            self.closeAfterDrag = closeAfterDrag
-            self.closeDelay = closeDelay
-            self.restoreFocus = restoreFocus
-            self.maxItems = maxItems
-        }
-
-        public init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            sources = try container.decode([Source].self, forKey: .sources)
-            extensions = try container.decode([String].self, forKey: .extensions)
-            width = try container.decode(Double.self, forKey: .width)
-            height = try container.decode(Double.self, forKey: .height)
-            thumbnailWidth = try container.decode(Double.self, forKey: .thumbnailWidth)
-            spacing = try container.decode(Double.self, forKey: .spacing)
-            margin = try container.decode(Double.self, forKey: .margin)
-            closeAfterDrag = try container.decode(Bool.self, forKey: .closeAfterDrag)
-            closeDelay = try container.decode(Double.self, forKey: .closeDelay)
-            restoreFocus = try container.decode(Bool.self, forKey: .restoreFocus)
-            maxItems = try container.decodeIfPresent(Int.self, forKey: .maxItems) ?? Self.defaultMaxItems
-        }
-    }
-
-    public struct Surface: Codable, Equatable {
-        public let document: String
-        public let width: Double
-        public let height: Double
-        public let margin: Double
-        public let activates: Bool
-        public let closeAfterDrag: Bool
-        public let closeDelay: Double
-        public let restoreFocus: Bool
-        public let configuration: [String: JSONValue]
-
-        enum CodingKeys: String, CodingKey {
-            case document, width, height, margin, activates, configuration
-            case closeAfterDrag = "close_after_drag"
-            case closeDelay = "close_delay"
-            case restoreFocus = "restore_focus"
-        }
-
-        public init(
-            document: String,
-            width: Double,
-            height: Double,
-            margin: Double,
-            activates: Bool,
-            closeAfterDrag: Bool,
-            closeDelay: Double,
-            restoreFocus: Bool,
-            configuration: [String: JSONValue]
-        ) {
-            self.document = document
-            self.width = width
-            self.height = height
-            self.margin = margin
-            self.activates = activates
-            self.closeAfterDrag = closeAfterDrag
-            self.closeDelay = closeDelay
-            self.restoreFocus = restoreFocus
-            self.configuration = configuration
-        }
-    }
-
     public struct Action: Codable, Equatable {
         public let type: AutomationActionType
         public let layout: String?
-        public let shelf: String?
-        public let surface: String?
     }
 
     public struct HotKey: Codable, Equatable {
@@ -271,13 +148,11 @@ public struct WorkflowConfiguration: Codable, Equatable {
     public let appearance: Appearance
     public let applications: [String: Application]
     public let layouts: [String: Layout]
-    public let shelves: [String: Shelf]
-    public let surfaces: [String: Surface]
     public let hotkeys: [HotKey]
     public let screenshots: Screenshots
 
     enum CodingKeys: String, CodingKey {
-        case server, appearance, applications, layouts, shelves, surfaces, hotkeys, screenshots
+        case server, appearance, applications, layouts, hotkeys, screenshots
     }
 
     public init(from decoder: Decoder) throws {
@@ -286,8 +161,6 @@ public struct WorkflowConfiguration: Codable, Equatable {
         appearance = try container.decodeIfPresent(Appearance.self, forKey: .appearance) ?? Appearance()
         applications = try container.decode([String: Application].self, forKey: .applications)
         layouts = try container.decode([String: Layout].self, forKey: .layouts)
-        shelves = try container.decode([String: Shelf].self, forKey: .shelves)
-        surfaces = try container.decodeIfPresent([String: Surface].self, forKey: .surfaces) ?? [:]
         hotkeys = try container.decode([HotKey].self, forKey: .hotkeys)
         screenshots = try container.decode(Screenshots.self, forKey: .screenshots)
     }
@@ -298,8 +171,6 @@ public struct WorkflowConfiguration: Codable, Equatable {
         try container.encode(appearance, forKey: .appearance)
         try container.encode(applications, forKey: .applications)
         try container.encode(layouts, forKey: .layouts)
-        try container.encode(shelves, forKey: .shelves)
-        try container.encode(surfaces, forKey: .surfaces)
         try container.encode(hotkeys, forKey: .hotkeys)
         try container.encode(screenshots, forKey: .screenshots)
     }
@@ -332,15 +203,7 @@ public struct WorkflowConfiguration: Codable, Equatable {
 
         var chords = Set<HotKeyChord>()
         for (index, hotkey) in hotkeys.enumerated() {
-            let valid: Bool
-            switch hotkey.action.type {
-            case .applyLayout:
-                valid = hotkey.action.layout.map { layouts[$0] != nil } == true
-            case .showFileShelf:
-                valid = hotkey.action.shelf.map { shelves[$0] != nil } == true
-            case .showSurface:
-                valid = hotkey.action.surface.map { surfaces[$0] != nil } == true
-            }
+            let valid = hotkey.action.layout.map { layouts[$0] != nil } == true
             let modifiersAreValid = hotkey.modifiers.allSatisfy {
                 KeyCodeResolver.supportedModifiers.contains($0.lowercased())
             }
@@ -355,37 +218,6 @@ public struct WorkflowConfiguration: Codable, Equatable {
             }
         }
 
-        for (name, shelf) in shelves {
-            let identifiers = shelf.sources.map(\.id)
-            let sourcesAreValid = !shelf.sources.isEmpty
-                && Set(identifiers).count == identifiers.count
-                && shelf.sources.allSatisfy {
-                    !$0.id.isEmpty && !$0.label.isEmpty && !$0.icon.isEmpty && !$0.directory.isEmpty
-                }
-            guard sourcesAreValid,
-                  !shelf.extensions.isEmpty,
-                  shelf.width > 0,
-                  shelf.height > 0,
-                  shelf.thumbnailWidth > 0,
-                  shelf.closeDelay >= 0,
-                  shelf.maxItems > 0
-            else {
-                throw WorkflowValidationError.invalidShelf(name)
-            }
-        }
-        for (name, surface) in surfaces {
-            let document = NSString(string: surface.document)
-            guard !surface.document.isEmpty,
-                  !document.isAbsolutePath,
-                  !document.pathComponents.contains(".."),
-                  surface.width > 0,
-                  surface.height > 0,
-                  surface.margin >= 0,
-                  surface.closeDelay >= 0
-            else {
-                throw WorkflowValidationError.invalidSurface(name)
-            }
-        }
         guard !screenshots.directory.isEmpty else {
             throw WorkflowValidationError.invalidScreenshotDirectory
         }

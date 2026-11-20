@@ -166,11 +166,26 @@ Verify the configured workflows after the command checks pass:
 2. Press `cmd + shift + 2` and confirm Zed fills the usable screen.
 3. Press `cmd + shift + 3` and confirm Ghostty is left and Zed is right.
 4. Press `cmd + shift + 4` and confirm Zed is left and Ghostty is right.
-5. Press `cmd + shift + h` and confirm the screenshot shelf opens.
-6. Drag a shelf thumbnail into Finder or another application and confirm the
-   original file remains in the screenshot directory.
-7. Close the shelf with Escape and confirm focus returns to the previously
-   active window.
+5. Render the screenshot shelf from JSON and confirm it appears:
+
+   ```bash
+   DIR=/Users/Shared/Screenshots
+   FILES=$(macflow files list "$DIR" --limit 5 | jq '[.files[] | {url: .path}]')
+   jq -n --argjson shots "$FILES" '[
+     {version:"v0.9.1", createSurface:{surfaceId:"screenshots", surface:{width:1255,height:250}}},
+     {version:"v0.9.1", updateComponents:{surfaceId:"screenshots", components:[
+       {id:"thumb", component:"FileThumbnail", url:{path:"url"}},
+       {id:"root", component:"List", direction:"horizontal",
+        children:{componentId:"thumb", path:"/shots"}}
+     ]}},
+     {version:"v0.9.1", updateDataModel:{surfaceId:"screenshots", path:"/shots", value:$shots}}
+   ]' | macflow ui show --file -
+   ```
+
+6. Drag a thumbnail into Finder or another application and confirm the original
+   file remains in the screenshot directory.
+7. Press Escape and confirm the surface closes and focus returns to the
+   previously active window.
 8. Create a screenshot and confirm the automatic transient preview appears.
 
 ## Preserve the Permission Identity

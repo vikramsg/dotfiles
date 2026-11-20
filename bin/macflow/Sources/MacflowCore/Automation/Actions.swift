@@ -3,8 +3,6 @@ import Foundation
 
 public enum AutomationActionType: String, Codable, Equatable {
     case applyLayout = "apply_layout"
-    case showFileShelf = "show_file_shelf"
-    case showSurface = "show_surface"
 }
 
 public enum LayoutType: String, Codable, Equatable {
@@ -17,8 +15,6 @@ public enum WorkflowValidationError: LocalizedError, Equatable {
     case invalidLayout(String)
     case invalidAction(Int)
     case duplicateHotKey(Int)
-    case invalidShelf(String)
-    case invalidSurface(String)
     case invalidTheme
     case invalidScreenshotDirectory
 
@@ -28,8 +24,6 @@ public enum WorkflowValidationError: LocalizedError, Equatable {
         case let .invalidLayout(name): return "Invalid layout configuration: \(name)"
         case let .invalidAction(index): return "Invalid hotkey action at index \(index)"
         case let .duplicateHotKey(index): return "Duplicate hotkey at index \(index)"
-        case let .invalidShelf(name): return "Invalid shelf configuration: \(name)"
-        case let .invalidSurface(name): return "Invalid surface configuration: \(name)"
         case .invalidTheme: return "Theme name must not be empty"
         case .invalidScreenshotDirectory: return "Screenshot directory must not be empty"
         }
