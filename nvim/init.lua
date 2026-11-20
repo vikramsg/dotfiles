@@ -791,14 +791,14 @@ require("lazy").setup({
 				-- In a `:diffthis` window `]c` / `[c` keep Vim's native diff-change jumps.
 				map("]c", function()
 					if vim.wo.diff then
-						vim.cmd.normal({ "]c", bang = true })
+						vim.cmd.normal({ vim.v.count1 .. "]c", bang = true })
 					else
 						gitsigns.nav_hunk("next")
 					end
 				end, "Next git hunk")
 				map("[c", function()
 					if vim.wo.diff then
-						vim.cmd.normal({ "[c", bang = true })
+						vim.cmd.normal({ vim.v.count1 .. "[c", bang = true })
 					else
 						gitsigns.nav_hunk("prev")
 					end
