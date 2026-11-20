@@ -470,20 +470,6 @@ require("lazy").setup({
 				end,
 			})
 
-			-- Open the explorer on start, as in the Herdr app's nvim sidebar. Not when files were
-			-- given (`nvim file`, `git commit`, gitview's Enter), a directory being replace_netrw's,
-			-- nor for stdin or a headless nvim.
-			vim.api.nvim_create_autocmd("VimEnter", {
-				group = group,
-				once = true,
-				callback = function()
-					local empty = vim.fn.argc() == 0 and vim.fn.line2byte("$") == -1
-					if empty and #vim.api.nvim_list_uis() > 0 then
-						Snacks.explorer()
-					end
-				end,
-			})
-
 			vim.api.nvim_create_autocmd("User", {
 				group = group,
 				pattern = { "NeogitStatusRefresh", "NeogitStatus" },
