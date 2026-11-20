@@ -50,6 +50,14 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 CodeDiff also provides PR review via `:CodeDiff pr <number>`. The previous Differ-specific persistent local review comments and custom PR-review mappings are removed; CodeDiff's native PR workflow is available, but those local notes are not migrated.
 
+### Changed lines (gitsigns)
+
+Changed lines are marked in the sign column and their line numbers are coloured: green for added, blue for changed, red for deleted.
+
+- `]c` / `[c`: Move to the next/previous changed hunk. In a `:diffthis` window these keep Vim's native diff jumps.
+- `Space + hp`: Show the hunk under the cursor as a diff in a popup.
+- `Space + hi`: Show the hunk under the cursor inline, with the removed lines as virtual text.
+
 ### Lazygit
 
 - `Space + lg`: To open lazygit view
