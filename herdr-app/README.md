@@ -89,6 +89,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
   gitview's Enter opens files in it; on the VM gitview opens its own nvim.
 - `spacer`: draws nothing, for a layout block that only takes up room (the app requires every block to hold content).
 - `files-panel`: the Files panel on a key, as the tab bar's Files button does.
+- `fullscreen`: macOS full screen on a key; the app's own commands only maximize the window.
 - `opencode-resume`: after a reboot or a lost herdr-core, reopens the OpenCode session each restored terminal had open, on this Mac and every connected machine, through `opencode-resume resume` (see `bin/opencode_resume/README.md`).
 - `worktree-new`, `worktree-open`: Herdr's New and Open worktree dialogs on a
   key, for the focused space, as its space menu opens them.
@@ -112,6 +113,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
 | --- | --- |
 | `Cmd+E` / `prefix+r` | Show or hide the tab's nvim / reviewr in the sidebar |
 | `Cmd+Shift+E` | Show or hide the Files panel |
+| `Ctrl+Cmd+F` | Enter or leave full screen |
 | `Cmd+Shift+R` | Reopen OpenCode sessions in terminals restored after a restart |
 | `Cmd+Shift+G` / `Cmd+G` | gitview in the Changes panel / in a tab of its own |
 
