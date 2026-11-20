@@ -3,7 +3,8 @@
 // PATH), run on the tab's machine in its focused pane's folder.
 
 export const APPS = {
-  nvim: "exec nvim",
+  // Listens where `app-sidebar.open:<path>` sends files (a stale socket of the tab's is removed).
+  nvim: 'rm -f "$APP_SIDEBAR_SOCK"; exec nvim --listen "$APP_SIDEBAR_SOCK"',
   // The terminal Herdr's reviewr plugin, run on its own with its config. Its
   // install folder comes from `herdr plugin list`: updates install elsewhere.
   reviewr: [

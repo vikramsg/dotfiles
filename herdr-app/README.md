@@ -91,7 +91,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
 - `worktree-new`, `worktree-open`: Herdr's New and Open worktree dialogs on a
   key, for the focused space, as its space menu opens them.
 
-`herdr-app/justfile` installs two others at pinned versions:
+`herdr-app/justfile` installs three others at pinned versions:
 
 - [herdr-gitview](https://github.com/ChmaraX/herdr-gitview): diffs, staging,
   commits and review notes for agents in the Changes panel.
@@ -99,6 +99,15 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
   the spaces list with each space's branch, its pull request's state and
   worktrees nested under their repository. It runs read-only `git`, and
   `gh pr list` / `gh pr view` with your `gh` login.
+- [filetree](https://github.com/cybertron288/herdr-mods/tree/main/filetree):
+  the panel's Files tab, in place of Herdr's own tree. It follows the focused
+  terminal's folder, also on the VM, and shows the branch, changed files with
+  `+N −N`, a filter that searches unopened folders, and a preview. It runs
+  read-only `git`, `ls` and `du`. Its optional Claude Code hook (`bridge.ts`,
+  for the Recent tab) is left off. Enter or a double-click opens the file in
+  the tab's sidebar nvim (`app-sidebar.open:<path>`, set as its config's
+  `open`), starting it if needed; in a space on the VM it shows filetree's own
+  preview instead. `p` still previews.
 
 | Keys | Action |
 | --- | --- |
@@ -114,17 +123,17 @@ just --justfile herdr-app/justfile uninstall  # stock Changes panel again
 `gitview.toml` is gitview's config, linked to
 `~/.config/herdr/plugins/config/chmarax.gitview/config.toml`. It sets gitview
 to 35% of the tab. The sidebar takes 40% of the width beside the right
-panel (weight 2/3 against the panes' 1); drag its edge, and the app remembers
-the width.
+panel (weight 0.6667 against the panes' 1). Showing the sidebar sets both weights again, since the app rewrites them when the panel or sidebar is shown or hidden; a width dragged by hand lasts until the sidebar is next shown.
 
-To upgrade, change `gitview_version` or `herdr_mods_commit` in
-`herdr-app/justfile` and run `just herdr-app`, with the app open. Installed mods
-stay in `~/.config/herdr-app/mods/`, outside this repository. Better Sidebar is
-copied, not linked, because Herdr loads a linked mod's code but not its icons.
-gitview's installer clones Herdr's `main` layout as `main-copy`, Herdr's own
-layouts being read-only; Better Sidebar's step then puts it in place of
-`main-copy`'s spaces list, and the app sidebar's adds its block and the hidden
-floating copy that takes its keys.
+To upgrade, change `gitview_version`, `herdr_mods_commit` or `filetree_commit`
+in `herdr-app/justfile` and run `just herdr-app`, with the app open. Installed
+mods stay in `~/.config/herdr-app/mods/`, outside this repository. Better
+Sidebar and filetree are copied, not linked, because Herdr loads a linked mod's
+code but not its icons. gitview's installer clones Herdr's `main` layout as
+`main-copy`, Herdr's own layouts being read-only; Better Sidebar's step then
+puts it in place of `main-copy`'s spaces list, filetree's puts filetree in the
+Files tab, and the app sidebar's adds its block and the hidden floating copy
+that takes its keys.
 
 gitview's installer adds its keys only where free, and replaces the `keys.json`
 symlink with a file while doing so. `just herdr-app` copies that file back to

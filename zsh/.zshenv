@@ -16,3 +16,17 @@ export ZIGGITY_CONFIG="$HOME/.config/ziggity/config.ini"
 
 export EDITOR="nvim"
 export VISUAL="nvim"
+
+# `herdr_profile work` opens the Herdr app as a separate profile: its own window, settings and
+# layouts (app home ~/.config/herdr-app-work) and its own herdr-core session (HC_SESSION=work),
+# so its spaces and terminals are apart from the default window's. Running it again brings that
+# profile's window to the front. A new profile starts with Herdr's default settings and keys.
+if [ -d /Applications/Herdr.app ]; then
+    herdr_profile() {
+        if [ -z "$1" ]; then
+            echo "usage: herdr_profile <name>" >&2
+            return 2
+        fi
+        open -n -a /Applications/Herdr.app --env HERDR_APP_HOME="$HOME/.config/herdr-app-$1" --env HC_SESSION="$1"
+    }
+fi
