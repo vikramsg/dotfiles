@@ -208,7 +208,12 @@ herdr-app:
     if [ -f "$TARGET" ] && [ ! -L "$TARGET" ]; then \
         cp "$TARGET" "$SOURCE" && rm "$TARGET" && ln -s "$SOURCE" "$TARGET"; \
         echo "Herdr app keys.json: kept the installers' keys in $SOURCE and relinked it"; \
-    fi
+    fi; \
+    just --justfile "{{justfile_directory()}}/herdr-app/justfile" profiles
+
+# Give a Herdr app profile (herdr_profile <name>) the main window's setup
+herdr-app-profile name:
+    @just --justfile "{{justfile_directory()}}/herdr-app/justfile" profile "{{name}}"
 
 # Set up Opencode symlink
 opencode: npm-global-bin

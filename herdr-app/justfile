@@ -11,10 +11,12 @@ gitview_version := "v0.6.0"
 herdr_mods_commit := "1abf4870adb4c3f7a71739db1e0c29493f5e3f95"
 # cybertron288/herdr-mods: only its filetree; no releases either.
 filetree_commit := "34e7c3348e954fd0a1147b846898db8c3e37e526"
+# nozikov/herdr-usage-limits: no releases either.
+usage_limits_commit := "aee21fbdd737c91921e90b4a84cd5abfdd4caeaf"
 app_home := env("HERDR_APP_HOME", env("HOME") / ".config/herdr-app")
 
 # Install or upgrade the pinned mods into the running app; gitview first, as it makes main-copy.
-install: && better-sidebar app-sidebar filetree
+install: && better-sidebar app-sidebar filetree usage-limits
     curl -fsSL https://raw.githubusercontent.com/ChmaraX/herdr-gitview/{{gitview_version}}/install.sh | sh -s -- --app --version {{gitview_version}}
 
 # Copy Better Sidebar (spaces with branches, PRs and nested worktrees) into the app,
@@ -74,6 +76,15 @@ filetree:
         rsync -a --delete "$src/filetree/mods/$mod/" "{{app_home}}/mods/$mod/"
         herdr-app check "{{app_home}}/mods/$mod"
     done
+    # filetree previews files in a VM space instead of running `open`, and runs `open` in the
+    # file's folder, which is on the VM; let it run there too, from the app's own folder.
+    main="{{app_home}}/mods/filetree/main.js"
+    grep -qF 'if (how === "preview" || this.on) {' "$main" && grep -qF '{ cwd: dir });' "$main" \
+        || { echo "filetree: its open code changed; update the patch in herdr-app/justfile" >&2; exit 1; }
+    sed -i.bak -e 's/if (how === "preview" || this\.on) {/if (how === "preview") {/' \
+        -e 's/{ cwd: dir });/this.on ? {} : { cwd: dir });/' "$main"
+    rm "$main.bak"
+    herdr-app check "{{app_home}}/mods/filetree"
     # Enter opens files in the tab's sidebar nvim; the app's PATH has no herdr-app, so its full path.
     config="{{app_home}}/mods/filetree/config.json"
     jq --arg app "$(realpath "$(command -v herdr-app)")" '.open = "\"\($app)\" do app-sidebar.open:{path}"' "$config" > "$config.tmp"
@@ -83,6 +94,81 @@ filetree:
     jq '(.. | objects | select(.id? == "files") | .content.mod) = "filetree"' "$layout" > "$layout.tmp"
     mv "$layout.tmp" "$layout"
     echo "filetree: shown in the panel's Files tab in main-copy"
+
+# Give a profile's home (~/.config/herdr-app-<name>, opened by herdr_profile) the main home's setup.
+profile name:
+    #!/usr/bin/env bash
+    # Spaces, tabs and panes are not in a home but in the profile's herdr-core session, so they stay apart.
+    # - Repo files (settings, keys, themes, own mods) are linked, as in the main home.
+    # - Third-party mods are copied from the main home: there they are neither links nor Herdr's
+    #   shipped mods (installed.json), and a linked mod loses its icons.
+    # - main-copy is copied with the sidebar block hidden and empty: the sidebar writes the address of
+    #   the terminal it shows into the layout, and that terminal is in the main window's session.
+    set -euo pipefail
+    [[ "{{name}}" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "profile: name may use letters, digits, - and _"; exit 1; }
+    main="$HOME/.config/herdr-app"
+    home="$HOME/.config/herdr-app-{{name}}"
+    repo="{{justfile_directory()}}"
+    [ -f "$main/layouts/main-copy.json" ] || { echo "profile: run just herdr-app first"; exit 1; }
+    mkdir -p "$home/mods" "$home/themes" "$home/layouts"
+    link() {
+        if [ -e "$2" ] && [ ! -L "$2" ]; then echo "profile: $2 exists and is not a link; move it first"; exit 1; fi
+        ln -sfn "$1" "$2"
+    }
+    link "$repo/settings.json" "$home/settings.json"
+    link "$repo/keys.json" "$home/keys.json"
+    for theme in "$repo"/themes/*.json; do link "$theme" "$home/themes/$(basename "$theme")"; done
+    for mod in "$repo"/mods/*/; do link "${mod%/}" "$home/mods/$(basename "$mod")"; done
+    for mod in "$main"/mods/*/; do
+        mod="${mod%/}"
+        mod_name="$(basename "$mod")"
+        if [ -L "$mod" ] || jq -e --arg m "$mod_name" 'has($m)' "$main/installed.json" > /dev/null; then continue; fi
+        rsync -a --delete "$mod/" "$home/mods/$mod_name/"
+    done
+    jq '(.. | objects | select(.id? == "app-sidebar")) |= (.content = {mod: "app-sidebar"} | .hidden = true)' \
+        "$main/layouts/main-copy.json" > "$home/layouts/main-copy.json.tmp"
+    mv "$home/layouts/main-copy.json.tmp" "$home/layouts/main-copy.json"
+    # The window's layout is kept in its shared.json; a new profile starts on main-copy.
+    [ -f "$home/shared.json" ] || echo '{"layout": "main-copy"}' > "$home/shared.json"
+    echo "profile {{name}}: $home has the main setup"
+
+# Refresh every profile's home after the main one changed.
+profiles:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for home in "$HOME"/.config/herdr-app-*/; do
+        [ -d "$home" ] || continue
+        home_name="$(basename "$home")"
+        name="${home_name#herdr-app-}"
+        # Not a profile's (a backup, say): profile would refuse the name and stop the refresh.
+        if [[ ! "$name" =~ ^[A-Za-z0-9_-]+$ ]]; then echo "profiles: skipping $home"; continue; fi
+        just --justfile "{{justfile()}}" profile "$name"
+    done
+
+# Copy usage-limits (Claude Code and Codex limits, OpenCode's tokens) into the app, and
+# split main-copy's status bar into Herdr's status on the left and the limits on the right.
+usage-limits:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="$(mktemp -d)"
+    trap 'rm -rf "$src"' EXIT
+    git -C "$src" init -q
+    git -C "$src" fetch -q --depth 1 https://github.com/nozikov/herdr-usage-limits.git "{{usage_limits_commit}}"
+    git -C "$src" checkout -q FETCH_HEAD
+    # Copied: Herdr draws a linked copy of this mod blank.
+    rsync -a --delete --exclude test "$src/mods/usage-limits/" "{{app_home}}/mods/usage-limits/"
+    herdr-app check "{{app_home}}/mods/usage-limits"
+    layout="{{app_home}}/layouts/main-copy.json"
+    [ -f "$layout" ] || { echo "usage-limits: no main-copy layout yet; install gitview first, then rerun"; exit 0; }
+    jq '
+      def row: {id: "status-row", type: "row", size: {px: 28}, resizable: false, children: [
+        {id: "status", type: "block", size: {weight: 1}, content: {mod: "workspace-status"}},
+        {id: "usage-limits", type: "block", size: {weight: 2.2}, min: 130, content: {mod: "usage-limits"}}]};
+      if any(.. | objects; .id? == "usage-limits") then .
+      else walk(if type == "object" and .id? == "status" and .content.mod? == "workspace-status" then row else . end) end
+    ' "$layout" > "$layout.tmp"
+    mv "$layout.tmp" "$layout"
+    echo "usage-limits: in main-copy's status bar"
 
 # Remove it; the stock Changes panel comes back.
 uninstall:

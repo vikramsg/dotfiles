@@ -13,7 +13,7 @@
 // gitview's Enter opens files in an nvim a layout block shows (this computer
 // only), so it uses the sidebar's nvim while it shows. `app-sidebar.open:<path>`
 // (filetree's Enter) opens a file in the tab's sidebar nvim, through the socket
-// each app is given as $APP_SIDEBAR_SOCK.
+// each app is given as $APP_SIDEBAR_SOCK, on the tab's machine.
 
 import { View, div } from "gpui-kit";
 import { checking, exec, focused, hc, layout, nextCommand, notify, panes, props, run, spaces, terminals } from "herdr";
@@ -182,7 +182,7 @@ export default class AppSidebar extends View {
   async openFile(path, cx) {
     const f = focused();
     if (!f?.tab) throw new Error("Open a tab first.");
-    if (spaces().find((s) => s.id === f.space)?.machine) throw new Error("Opening files in the sidebar's nvim works on this computer only.");
+    const machine = spaces().find((s) => s.id === f.space)?.machine ?? null;
     const node = find(layout(), ID);
     const before = instance(f.tab, "nvim");
     if (!before || !node || node.hidden || node.content?.terminal !== before.address) await this.toggle("nvim", cx);
@@ -192,7 +192,7 @@ export default class AppSidebar extends View {
     // A new nvim takes a moment to listen.
     let r;
     for (let i = 0; i < 30; i++) {
-      r = await exec("zsh", ["-lc", 'exec nvim --server "$1" --remote-expr "$2"', "zsh", socketOf(f.tab), expr]);
+      r = await exec("zsh", ["-lc", 'exec nvim --server "$1" --remote-expr "$2"', "zsh", socketOf(f.tab), expr], { on: machine });
       if (r.code === 0 || before) break;
       await cx.sleep(200);
     }

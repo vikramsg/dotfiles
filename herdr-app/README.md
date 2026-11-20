@@ -91,7 +91,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
 - `worktree-new`, `worktree-open`: Herdr's New and Open worktree dialogs on a
   key, for the focused space, as its space menu opens them.
 
-`herdr-app/justfile` installs three others at pinned versions:
+`herdr-app/justfile` installs four others at pinned versions:
 
 - [herdr-gitview](https://github.com/ChmaraX/herdr-gitview): diffs, staging,
   commits and review notes for agents in the Changes panel.
@@ -106,8 +106,8 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
   read-only `git`, `ls` and `du`. Its optional Claude Code hook (`bridge.ts`,
   for the Recent tab) is left off. Enter or a double-click opens the file in
   the tab's sidebar nvim (`app-sidebar.open:<path>`, set as its config's
-  `open`), starting it if needed; in a space on the VM it shows filetree's own
-  preview instead. `p` still previews.
+  `open`), starting it if needed, on this Mac or the VM. Upstream filetree only previews files in a VM space; `just herdr-app` patches that out. `p` still previews.
+- [usage-limits](https://github.com/nozikov/herdr-usage-limits): Claude Code's and Codex's 5-hour and weekly limits at the right of the status bar, which `just herdr-app` splits with Herdr's own status; hover for every limit, the focused agent's session, and OpenCode's tokens today and over 7 days. Every 5 minutes it asks the `claude` and `codex` CLIs for their limits (no prompt, so no tokens), and reads OpenCode's database read-only. ⚙ in the hover panel picks what the bar shows.
 
 | Keys | Action |
 | --- | --- |
@@ -125,11 +125,11 @@ just --justfile herdr-app/justfile uninstall  # stock Changes panel again
 to 35% of the tab. The sidebar takes 40% of the width beside the right
 panel (weight 0.6667 against the panes' 1). Showing the sidebar sets both weights again, since the app rewrites them when the panel or sidebar is shown or hidden; a width dragged by hand lasts until the sidebar is next shown.
 
-To upgrade, change `gitview_version`, `herdr_mods_commit` or `filetree_commit`
+To upgrade, change `gitview_version`, `herdr_mods_commit`, `filetree_commit` or `usage_limits_commit`
 in `herdr-app/justfile` and run `just herdr-app`, with the app open. Installed
 mods stay in `~/.config/herdr-app/mods/`, outside this repository. Better
-Sidebar and filetree are copied, not linked, because Herdr loads a linked mod's
-code but not its icons. gitview's installer clones Herdr's `main` layout as
+Sidebar, filetree and usage-limits are copied, not linked, because Herdr loads a linked mod's
+code but not its icons, and draws a linked usage-limits blank. gitview's installer clones Herdr's `main` layout as
 `main-copy`, Herdr's own layouts being read-only; Better Sidebar's step then
 puts it in place of `main-copy`'s spaces list, filetree's puts filetree in the
 Files tab, and the app sidebar's adds its block and the hidden floating copy
@@ -138,6 +138,31 @@ that takes its keys.
 gitview's installer adds its keys only where free, and replaces the `keys.json`
 symlink with a file while doing so. `just herdr-app` copies that file back to
 `herdr-app/keys.json` and relinks it, so its keys show up as a change to commit.
+
+## Profiles
+
+A profile is a second Herdr window whose spaces, tabs and terminals are kept apart from the main window's, with the same setup:
+
+```sh
+herdr_profile work            # open (or bring forward) the "work" window; --help explains it
+just herdr-app-profile work   # set up or refresh its home without opening it
+```
+
+`herdr_profile` is defined in `zsh/.zshenv`. It starts the app with two variables, as Herdr's own `scripts/sandbox` does to run a second app:
+
+- `HC_SESSION=<name>`: the window's terminals run in a herdr-core session of their own. Spaces, tabs and panes are stored there, so they are per profile.
+- `HERDR_APP_HOME=~/.config/herdr-app-<name>`: the window's own home, which the app allows one window each.
+
+The profile's home gets the main home's setup:
+
+| Item | In the profile's home |
+| --- | --- |
+| `settings.json`, `keys.json`, `themes/`, the mods in `herdr-app/mods/` | linked to this repository, so edits reach every window |
+| gitview, Better Sidebar, filetree and file-icons | copied from `~/.config/herdr-app/mods/`, as linked mods lose their icons |
+| `layouts/main-copy.json` | copied from the main home with the sidebar block hidden and empty, since the sidebar records which terminal it shows in the layout |
+| `shared.json` (mod state and the window's layout), `view.json`, `window.json`, `data/` | the window's own; a new profile starts on `main-copy` |
+
+`just herdr-app` refreshes every `~/.config/herdr-app-*` home after the main one. A refresh copies `main-copy` again, so a sidebar width dragged in a profile's window goes back to the main window's.
 
 ## Not carried over
 
