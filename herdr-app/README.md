@@ -87,6 +87,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
   sidebar. The apps are in `mods/app-sidebar/apps.js`: add one there and bind a
   key to `app-sidebar.toggle:<name>`. While the sidebar shows nvim on this Mac,
   gitview's Enter opens files in it; on the VM gitview opens its own nvim.
+- `spacer`: draws nothing, for a layout block that only takes up room (the app requires every block to hold content).
 - `files-panel`: the Files panel on a key, as the tab bar's Files button does.
 - `worktree-new`, `worktree-open`: Herdr's New and Open worktree dialogs on a
   key, for the focused space, as its space menu opens them.
@@ -107,7 +108,7 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
   for the Recent tab) is left off. Enter or a double-click opens the file in
   the tab's sidebar nvim (`app-sidebar.open:<path>`, set as its config's
   `open`), starting it if needed, on this Mac or the VM. Upstream filetree only previews files in a VM space; `just herdr-app` patches that out. `p` still previews.
-- [usage-limits](https://github.com/nozikov/herdr-usage-limits): Claude Code's and Codex's 5-hour and weekly limits at the right of the status bar, which `just herdr-app` splits with Herdr's own status; hover for every limit, the focused agent's session, and OpenCode's tokens today and over 7 days. Every 5 minutes it asks the `claude` and `codex` CLIs for their limits (no prompt, so no tokens), and reads OpenCode's database read-only. ⚙ in the hover panel picks what the bar shows.
+- [usage-limits](https://github.com/nozikov/herdr-usage-limits): Claude Code's and Codex's 5-hour and weekly limits in the status bar, which `just herdr-app` splits into thirds: Herdr's own status, the limits (ending two thirds across), and the `spacer` mod; hover for every limit, the focused agent's session, and OpenCode's tokens today and over 7 days. Every 5 minutes it asks the `claude` and `codex` CLIs for their limits (no prompt, so no tokens), and reads OpenCode's database read-only. ⚙ in the hover panel picks what the bar shows.
 
 | Keys | Action |
 | --- | --- |
@@ -161,6 +162,7 @@ The profile's home gets the main home's setup:
 | gitview, Better Sidebar, filetree and file-icons | copied from `~/.config/herdr-app/mods/`, as linked mods lose their icons |
 | `layouts/main-copy.json` | copied from the main home with the sidebar block hidden and empty, since the sidebar records which terminal it shows in the layout |
 | `shared.json` (mod state and the window's layout), `view.json`, `window.json`, `data/` | the window's own; a new profile starts on `main-copy` |
+| Machines (`hc machine ls` in the profile's session) | the main session's machines, each reached in a session of the profile's name there, so the profile's VM spaces are apart from the main window's |
 
 `just herdr-app` refreshes every `~/.config/herdr-app-*` home after the main one. A refresh copies `main-copy` again, so a sidebar width dragged in a profile's window goes back to the main window's.
 
