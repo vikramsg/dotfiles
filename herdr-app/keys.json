@@ -99,9 +99,11 @@
     "ctrl-space g": {
       "command": "tab.new",
       "args": {
-        "name": "LazyGit",
+        "name": "Ziggity",
         "argv": [
-          "lazygit"
+          "zsh",
+          "-lc",
+          "exec ziggity"
         ]
       }
     },

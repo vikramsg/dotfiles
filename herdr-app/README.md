@@ -68,7 +68,7 @@ Prefix keys are written as key sequences, such as `"ctrl-space %"`:
 | `prefix+Shift+H/J/K/L` | Swap pane |
 | `prefix+Shift+C` | New space |
 | `prefix+n` / `prefix+w` | New worktree / open a worktree of the space's repo |
-| `prefix+g` / `prefix+Shift+O` / `prefix+v` | LazyGit / OpenCode / Leaf tab |
+| `prefix+g` / `prefix+Shift+O` / `prefix+v` | Ziggity / OpenCode / Leaf tab |
 | `prefix+?` | Help |
 
 Default navigation: `Cmd+T` new tab, `Cmd+1..9` tabs, `Ctrl+1..9` spaces,
