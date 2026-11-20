@@ -11,15 +11,21 @@
 // - none: the block itself before any app is put in it; draws nothing.
 //
 // gitview's Enter opens files in an nvim a layout block shows (this computer
-// only), so it uses the sidebar's nvim while it shows.
+// only), so it uses the sidebar's nvim while it shows. `app-sidebar.open:<path>`
+// (filetree's Enter) opens a file in the tab's sidebar nvim, through the socket
+// each app is given as $APP_SIDEBAR_SOCK, on the tab's machine.
 
 import { View, div } from "gpui-kit";
-import { checking, focused, hc, layout, nextCommand, notify, panes, props, run, spaces, terminals } from "herdr";
+import { checking, exec, focused, hc, layout, nextCommand, notify, panes, props, run, spaces, terminals } from "herdr";
 import { APPS } from "./apps.js";
 
 const ID = "app-sidebar";
 const TAB = "app-sidebar.tab";
 const APP = "app-sidebar.app";
+// The sidebar's weight against the tab's panes at 1: 40% of the row they share.
+// The app rewrites both weights when blocks beside them are shown or hidden, so
+// showing the sidebar sets both again.
+const WEIGHT = 0.6667;
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -30,10 +36,20 @@ function find(node, id) {
   return null;
 }
 
+// The layout block that shows the focused tab's panes.
+function findPanes(node) {
+  if (node?.content?.tab === "active") return node;
+  for (const c of node?.children ?? []) {
+    const hit = findPanes(c);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 // The block, right of the tab's panes, for a layout that lost it or never had
 // it (`just herdr-app` adds it to main-copy). Returns it, added to `tree`.
 function addBlock(tree) {
-  const block = { id: ID, type: "block", size: { weight: 0.6667 }, min: 320, radius: 6, border: { width: 1, color: "border" } };
+  const block = { id: ID, type: "block", size: { weight: WEIGHT }, min: 320, radius: 6, border: { width: 1, color: "border" } };
   const row = (function parentOf(node) {
     if (node.children?.some((c) => c.content?.tab === "active")) return node;
     for (const c of node.children ?? []) {
@@ -48,8 +64,23 @@ function addBlock(tree) {
   return block;
 }
 
+// Run in the sidebar's nvim with the path as _A: picks a window holding a file
+// (not the explorer's, a nofile buffer) and opens the path there.
+const OPEN_LUA = [
+  "(function(p)",
+  "for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do",
+  "local b = vim.api.nvim_win_get_buf(w)",
+  'if vim.bo[b].buftype == "" and vim.api.nvim_win_get_config(w).relative == "" then vim.api.nvim_set_current_win(w) break end',
+  "end",
+  "vim.cmd.drop(vim.fn.fnameescape(p))",
+  "return 1",
+  "end)(_A)",
+].join(" ");
+
 const machineOf = (address) => (address.includes("/") ? address.split("/")[0] : null);
 const live = (address) => terminals().some((t) => t.address === address && t.state === "live");
+// Per tab: the tab's id is in the socket's name, so a restarted nvim takes it over.
+const socketOf = (tab) => `/tmp/herdr-app-sidebar-${tab.replace(/[^A-Za-z0-9]/g, "_")}.sock`;
 const instance = (tab, app) => terminals().find((t) => t.state === "live" && t.labels?.[TAB] === tab && t.labels?.[APP] === app);
 
 export default class AppSidebar extends View {
@@ -61,9 +92,11 @@ export default class AppSidebar extends View {
     this.busy = false;
     cx.spawn(async (cx) => {
       for (;;) {
-        const [verb, arg] = (await nextCommand()).split(":");
+        const [verb, ...rest] = (await nextCommand()).split(":");
+        const arg = rest.join(":");
         if (verb === "toggle") await this.guard(() => this.toggle(arg, cx));
         else if (verb === "go") await this.guard(() => this.go(arg, cx));
+        else if (verb === "open") await this.guard(() => this.openFile(arg, cx));
       }
     });
     cx.timer.every(250, () => {
@@ -144,6 +177,29 @@ export default class AppSidebar extends View {
     this.show(address, true);
   }
 
+  // Opens `path` in the tab's sidebar nvim, showing it (and starting it) first, in
+  // its editor window rather than the explorer's, and focuses it.
+  async openFile(path, cx) {
+    const f = focused();
+    if (!f?.tab) throw new Error("Open a tab first.");
+    const machine = spaces().find((s) => s.id === f.space)?.machine ?? null;
+    const node = find(layout(), ID);
+    const before = instance(f.tab, "nvim");
+    if (!before || !node || node.hidden || node.content?.terminal !== before.address) await this.toggle("nvim", cx);
+    const mine = instance(f.tab, "nvim");
+    if (!mine) throw new Error("The sidebar's nvim did not start.");
+    const expr = `luaeval('${OPEN_LUA.replaceAll("'", "''")}', '${path.replaceAll("'", "''")}')`;
+    // A new nvim takes a moment to listen.
+    let r;
+    for (let i = 0; i < 30; i++) {
+      r = await exec("zsh", ["-lc", 'exec nvim --server "$1" --remote-expr "$2"', "zsh", socketOf(f.tab), expr], { on: machine });
+      if (r.code === 0 || before) break;
+      await cx.sleep(200);
+    }
+    if (r.code !== 0) throw new Error(before ? "This tab's nvim was started before it could take files; quit it and open it again." : r.stderr.trim() || "nvim did not take the file.");
+    this.show(mine.address, true);
+  }
+
   show(address, focus) {
     const root = layout();
     const node = find(root, ID);
@@ -156,6 +212,9 @@ export default class AppSidebar extends View {
       run("layout.set", { layout: tree });
     }
     run("layout.show", { id: ID });
+    const panes = findPanes(layout());
+    if (panes?.id) run("layout.resize", { id: panes.id, weight: 1 });
+    run("layout.resize", { id: ID, weight: WEIGHT });
     if (focus) run("pane.focus", { terminal: address });
   }
 
@@ -172,7 +231,8 @@ export default class AppSidebar extends View {
     const args = ["run", "--json", "--bg", "--no-parent", "--label", `${TAB}=${f.tab}`, "--label", `${APP}=${app}`];
     if (f.cwd) args.push("--cwd", f.cwd);
     if (machine) args.push("--on", machine);
-    args.push("--", "zsh", "-lc", APPS[app]);
+    const sock = socketOf(f.tab);
+    args.push("--", "zsh", "-lc", `export APP_SIDEBAR_SOCK='${sock}'; ${APPS[app]}`);
     const r = await hc(args);
     if (r.code !== 0) throw new Error(r.stderr.trim() || `hc run exited ${r.code}`);
     return JSON.parse(r.stdout).address;
