@@ -2,6 +2,12 @@
   "$schema": "https://opencode.ai/config.json",
   "update": "notify",
   "model": "claude-agent/opus",
+  "compaction": {
+    // Share of each model's input window kept free. Automatic compaction starts once the conversation fills the
+    // rest, so "55%" compacts at 45% full: ~450k on 1M-context Claude models, ~415k on Azure GPT-6.x. The default
+    // (15%) waits until ~850k on 1M models, and answers degrade well before that.
+    "buffer": "55%"
+  },
   "permissions": [
     {
       "action": "shell",
