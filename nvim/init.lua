@@ -759,7 +759,13 @@ require("lazy").setup({
 			},
 		},
 		opts = {
-			explorer = { position = "left", view_mode = "tree", auto_refresh = true, focus_on_select = true, width = 40 },
+			explorer = {
+				position = "left",
+				view_mode = "tree",
+				auto_refresh = true,
+				focus_on_select = true,
+				width = 40,
+			},
 			diff = { compact = true, compact_context_lines = 3 },
 			keymaps = {
 				view = {
@@ -778,8 +784,15 @@ require("lazy").setup({
 	},
 	{
 		"lewis6991/gitsigns.nvim",
-		event = { "BufReadPre", "BufNewFile" },
+		-- gitsigns' plugin/ file calls `setup()` with defaults as soon as it loads. Lazy-loading
+		-- on a buffer event lets that first buffer attach before these opts apply, so its signs
+		-- would compare against the index instead of `base`.
+		lazy = false,
 		opts = {
+			-- Compare against local `main` so the gutter shows the whole branch's changes, committed
+			-- or not. `main...HEAD` (merge base) is not accepted here: gitsigns resolves the base with
+			-- `git ls-tree`, which rejects ranges.
+			base = "main",
 			numhl = true,
 			on_attach = function(bufnr)
 				local gitsigns = require("gitsigns")
