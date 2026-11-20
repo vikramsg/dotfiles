@@ -173,6 +173,10 @@ herdr-app:
     for MOD in "{{justfile_directory()}}"/herdr-app/mods/*/; do \
         [ -d "$MOD" ] && NAMES="$NAMES mods/$(basename "$MOD")"; \
     done; \
+    mkdir -p "$APP_HOME/themes"; \
+    for THEME in "{{justfile_directory()}}"/herdr-app/themes/*.json; do \
+        [ -f "$THEME" ] && NAMES="$NAMES themes/$(basename "$THEME")"; \
+    done; \
     for NAME in $NAMES; do \
         SOURCE="{{justfile_directory()}}/herdr-app/$NAME"; \
         TARGET="$APP_HOME/$NAME"; \

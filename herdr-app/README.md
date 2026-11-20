@@ -11,7 +11,7 @@ own spaces and terminals.
 just herdr-app
 ```
 
-This links `settings.json` and `keys.json` into `~/.config/herdr-app/` and
+This links `settings.json`, `keys.json`, `themes/` and `mods/` into `~/.config/herdr-app/` and
 installs the [mods](#mods) (macOS only, with the app open). The app creates both
 files on its first start, so on a machine where it has already run, move them
 aside first:
@@ -37,6 +37,8 @@ good version running and writes the reason to `settings.error` or `keys.error`.
 | `pane_scrollbars: false` | `[ui] pane_scrollbars = false` |
 | `copy_on_select: true` | `[ui] copy_on_select = true` |
 | `font_size: 12` | Sheprd's `[terminal] size = 12.0` |
+| `theme: "tokyo-night"` | `[theme] name = "tokyo-night"`; the theme is `themes/tokyo-night.json` |
+| `colors` | `[theme.custom]`: `accent`, `sidebar_bg` as `chrome`, `active_row_bg` as `selected`, `selection_bg` as `selection` |
 
 The app saves choices made in its Settings window and zoom keys into this file,
 in its own field order, so they show up as changes to the repository copy;
@@ -139,4 +141,3 @@ symlink with a file while doing so. `just herdr-app` copies that file back to
 - Pane resize keys: the app has no pane resize command; drag the divider.
 - Reviewr and Navigator, and the tab bar's branch and host segments: these
   would need app mods. gitview covers most of Reviewr.
-- The TokyoNight theme: the app needs a `themes/tokyo-night.json`.
