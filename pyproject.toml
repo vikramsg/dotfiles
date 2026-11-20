@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["bin/screenshot", "bin/lch", "bin/opener_tunnel", "bin/gh_stats", "bin/ocost", "bin/herdr_sidebar"]
+members = ["bin/screenshot", "bin/lch", "bin/opener_tunnel", "bin/gh_stats", "bin/ocost", "bin/herdr_sidebar", "bin/opencode_resume"]
 
 [tool.uv]
 package = false
@@ -18,5 +18,5 @@ dev = [
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
-pythonpath = ["bin/screenshot", "bin/lch", "bin/opener_tunnel", "bin/gh_stats", "bin/ocost"]
-testpaths = ["bin/screenshot/tests", "bin/lch/tests", "bin/opener_tunnel/tests", "bin/gh_stats/tests", "bin/ocost/tests", "tests/unit/scripts"]
+pythonpath = ["bin/screenshot", "bin/lch", "bin/opener_tunnel", "bin/gh_stats", "bin/ocost", "bin/opencode_resume", "bin/opencode_resume/tests"]
+testpaths = ["bin/screenshot/tests", "bin/lch/tests", "bin/opener_tunnel/tests", "bin/gh_stats/tests", "bin/ocost/tests", "bin/opencode_resume/tests", "tests/unit/scripts"]
