@@ -18,7 +18,8 @@ Start `nvim` for the first time, and `lazy` should automatically setup.
 
 ### Snacks Explorer
 
-- The file tree opens on the right.
+- The file tree opens on the right, by itself when nvim starts without file
+  arguments, and shows hidden files by default.
 - `Space + e`: Toggle the file tree.
 - `Space + E`: Reveal the current file in the file tree.
 - `Enter` or `l`: Open the selected file and focus its editor window.

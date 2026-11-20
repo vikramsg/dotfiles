@@ -390,7 +390,8 @@ local function reveal_current_file_in_explorer()
 	end
 
 	Snacks.explorer({
-		hidden = reveal_hidden,
+		-- nil keeps the source's default, which already shows hidden files.
+		hidden = reveal_hidden or nil,
 		ignored = reveal_ignored,
 		on_show = function(picker)
 			reveal_file_in_explorer(picker, file)
@@ -469,6 +470,20 @@ require("lazy").setup({
 				end,
 			})
 
+			-- Open the explorer on start, as in the Herdr app's nvim sidebar. Not when files were
+			-- given (`nvim file`, `git commit`, gitview's Enter), a directory being replace_netrw's,
+			-- nor for stdin or a headless nvim.
+			vim.api.nvim_create_autocmd("VimEnter", {
+				group = group,
+				once = true,
+				callback = function()
+					local empty = vim.fn.argc() == 0 and vim.fn.line2byte("$") == -1
+					if empty and #vim.api.nvim_list_uis() > 0 then
+						Snacks.explorer()
+					end
+				end,
+			})
+
 			vim.api.nvim_create_autocmd("User", {
 				group = group,
 				pattern = { "NeogitStatusRefresh", "NeogitStatus" },
@@ -518,6 +533,8 @@ require("lazy").setup({
 						},
 					},
 					explorer = {
+						-- Dotfiles show by default; `.` still toggles hidden and ignored together.
+						hidden = true,
 						layout = { layout = { position = "right" } },
 						win = {
 							list = {

@@ -33,7 +33,8 @@ local function create_temp_repo()
 	write_file(repo .. "/.hidden_ignored/secret.txt", { "hidden ignored" })
 
 	run_command({ "git", "init", "--initial-branch=main" }, repo)
-	return repo
+	-- macOS temp paths go through the /var -> /private/var symlink, which buffer names resolve.
+	return vim.uv.fs_realpath(repo)
 end
 
 local function close_explorer()
@@ -123,7 +124,8 @@ function M.run()
 	assert_reveals(hidden_visible, { hidden = true, ignored = false })
 	close_explorer()
 
-	assert_reveals(ignored_plain, { hidden = false, ignored = true })
+	-- A fresh explorer keeps the default of showing hidden files.
+	assert_reveals(ignored_plain, { hidden = true, ignored = true })
 	close_explorer()
 
 	edit_file(ignored_plain)
