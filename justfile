@@ -252,7 +252,6 @@ ocost:
 # Install opencode-resume and its lch service, which saves each Herdr terminal's OpenCode session
 opencode-resume: lch
     just --justfile "{{justfile_directory()}}/bin/opencode_resume/justfile" install
-    "$HOME/.local/bin/lch" install lch-opencode-resume
 
 # Set up Ghostty symlink
 ghostty:

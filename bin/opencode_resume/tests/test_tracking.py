@@ -6,7 +6,9 @@ def look(saved, *terminals, finished=(), boot="boot-1"):
 
 
 def saved_session(shell_pid=100, session="ses_a", folder="/repo", command="opencode"):
-    return SavedSession(boot="boot-1", shell_pid=shell_pid, session=session, folder=folder, command=command)
+    return SavedSession(
+        boot="boot-1", shell_pid=shell_pid, opencode_pid=shell_pid + 1, session=session, folder=folder, command=command
+    )
 
 
 def test_session_seen_while_working_is_kept_once_opencode_is_idle(opencode):
@@ -90,3 +92,22 @@ def test_saved_sessions_survive_a_round_trip_through_the_state_file(tmp_path):
 
     assert load(state_file) == saved
     assert load(tmp_path / "missing.json") == {}
+
+
+def test_each_herdr_core_session_has_its_own_state_file(monkeypatch, tmp_path):
+    from opencode_resume.sessions import default_state_file
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.delenv("HC_SESSION", raising=False)
+    main_window = default_state_file()
+    monkeypatch.setenv("HC_SESSION", "agent-test")
+
+    assert default_state_file() != main_window
+
+
+def test_new_opencode_started_on_another_session_in_the_same_shell_replaces_the_old_one(opencode):
+    saved = look({}, opencode("t1", 100, reported=["ses_a"]))
+
+    saved = look(saved, opencode("t1", 100, opencode_pid=300, argv=("opencode", "--session", "ses_b")))
+
+    assert saved["t1"].session == "ses_b"

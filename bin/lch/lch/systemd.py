@@ -5,9 +5,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from lch.config import load_config
-from lch.jobs import JobDefinition, JobIdentity, get_job_definition, get_job_identity
-from lch.jobs import list_job_definitions
+from lch.config import CommandService, load_config
+from lch.jobs import JobDefinition, JobIdentity, ServiceDefinition, get_job_identity, get_launchd_job_definition
+from lch.jobs import list_job_definitions, list_service_definitions
+
+# Seconds systemd waits before restarting a command service that exited, as launchd's
+# ThrottleInterval does for the same services on macOS.
+SERVICE_RESTART_SECONDS = 10
 
 
 @dataclass(frozen=True)
@@ -38,7 +42,7 @@ def get_lch_executable_path() -> Path:
     return Path(os.environ.get("LCH_BIN_PATH", str(get_home_directory() / ".local/bin/lch"))).expanduser()
 
 
-def get_job_unit_paths(job: JobDefinition | JobIdentity) -> JobUnitPaths:
+def get_job_unit_paths(job: JobDefinition | JobIdentity | ServiceDefinition) -> JobUnitPaths:
     unit_directory = get_systemd_user_directory()
     return JobUnitPaths(
         path_unit=unit_directory / f"{job.label}.path",
@@ -83,6 +87,28 @@ def build_service_unit(job: JobDefinition, *, executable_path: Path) -> str:
     )
 
 
+def build_command_service_unit(service: ServiceDefinition, *, executable_path: Path) -> str:
+    """A unit that keeps `lch run <service>` running, which execs the configured command."""
+    # User units start with systemd's minimal PATH; tools install into ~/.local/bin.
+    path = f"{get_home_directory() / '.local/bin'}:/usr/local/bin:/usr/bin:/bin"
+    return "\n".join(
+        [
+            "[Unit]",
+            f"Description={service.label}",
+            "",
+            "[Service]",
+            f"ExecStart={executable_path} run {service.job_id}",
+            f"Environment=PATH={path}",
+            "Restart=always",
+            f"RestartSec={SERVICE_RESTART_SECONDS}",
+            "",
+            "[Install]",
+            "WantedBy=default.target",
+            "",
+        ]
+    )
+
+
 def build_watcher_service_unit(job: JobIdentity, *, dispatch_command: list[str]) -> str:
     return "\n".join(
         [
@@ -101,8 +127,19 @@ def install_job(job_id: str) -> Path:
     if not sys.platform.startswith("linux"):
         raise RuntimeError("systemd jobs can only be installed on Linux")
 
-    job = get_job_definition(job_id)
+    job = get_launchd_job_definition(job_id)
     paths = get_job_unit_paths(job)
+    if isinstance(job, ServiceDefinition):
+        if not isinstance(job.service, CommandService):
+            raise RuntimeError(f"{job_id}: only command services can be installed on Linux")
+        paths.service_unit.parent.mkdir(parents=True, exist_ok=True)
+        paths.service_unit.write_text(build_command_service_unit(job, executable_path=get_lch_executable_path()))
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True, text=True)
+        # restart: a reinstall picks up a newly installed version of the command.
+        subprocess.run(["systemctl", "--user", "enable", f"{job.label}.service"], check=True, text=True)
+        subprocess.run(["systemctl", "--user", "restart", f"{job.label}.service"], check=True, text=True)
+        return paths.service_unit
+
     watch_path = resolve_watch_path(job)
     executable_path = get_lch_executable_path()
 
@@ -143,12 +180,13 @@ def uninstall_job(job_id: str) -> Path:
     job = get_job_identity(job_id)
     paths = get_job_unit_paths(job)
 
-    subprocess.run(
-        ["systemctl", "--user", "disable", "--now", f"{job.label}.path"],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
+    for unit in (f"{job.label}.path", f"{job.label}.service"):
+        subprocess.run(
+            ["systemctl", "--user", "disable", "--now", unit],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
     if paths.path_unit.exists():
         paths.path_unit.unlink()
     if paths.service_unit.exists():
@@ -163,13 +201,17 @@ def status_job(job_id: str) -> str:
 
 
 def is_job_loaded(label: str) -> bool:
-    result = subprocess.run(
-        ["systemctl", "--user", "is-active", f"{label}.path"],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    return result.returncode == 0
+    """A path job is loaded when its .path unit is active; a command service, when its .service is."""
+    for unit in (f"{label}.path", f"{label}.service"):
+        result = subprocess.run(
+            ["systemctl", "--user", "is-active", unit],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            return True
+    return False
 
 
 def list_known_jobs() -> list[KnownJobStatus]:
@@ -181,6 +223,14 @@ def list_known_jobs() -> list[KnownJobStatus]:
             label=job.label,
             installed=paths.path_unit.exists(),
             loaded=is_job_loaded(job.label),
+        )
+
+    for service in list_service_definitions():
+        rows[service.job_id] = KnownJobStatus(
+            job_id=service.job_id,
+            label=service.label,
+            installed=get_job_unit_paths(service).service_unit.exists(),
+            loaded=is_job_loaded(service.label),
         )
 
     namespace_prefix = f"{load_config().namespace}."

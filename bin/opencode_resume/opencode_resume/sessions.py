@@ -11,12 +11,14 @@ from opencode_resume.terminals import Terminal
 
 @dataclass(frozen=True)
 class SavedSession:
-    """What a terminal's OpenCode had open, and under which shell process."""
+    """What a terminal's OpenCode had open, under which shell and OpenCode processes."""
 
-    # A shell is identified by its pid and the machine's boot: pids start over after a reboot,
+    # A process is identified by its pid and the machine's boot: pids start over after a reboot,
     # so a restored shell can get the pid the old one had.
     boot: str
     shell_pid: int
+    # Tells a still-running OpenCode from a new one started in the same shell.
+    opencode_pid: int
     session: str
     folder: str
     # The program as OpenCode was started (`opencode`, `opencode2`, a full path).
@@ -40,8 +42,10 @@ def is_restored(saved: SavedSession, terminal: Terminal, boot: str) -> bool:
 
 
 def default_state_file() -> Path:
+    # One file per herdr-core session (HC_SESSION, as `hc` reads it): each Herdr app profile has
+    # its own session, and terminal addresses such as `t3` repeat between sessions.
     state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state")
-    return state / "opencode-resume" / "sessions.json"
+    return state / "opencode-resume" / (os.environ.get("HC_SESSION") or "default") / "sessions.json"
 
 
 def load(path: Path) -> dict[str, SavedSession]:
@@ -84,11 +88,12 @@ def track(
     for address, terminal in live.items():
         previous = saved.get(address)
         if terminal.runs_opencode and terminal.foreground is not None:
-            session = _open_session(terminal, previous, boot)
+            session = open_session(terminal, previous, boot)
             if session:
                 tracked[address] = SavedSession(
                     boot=boot,
                     shell_pid=terminal.shell_pid,
+                    opencode_pid=terminal.foreground.pid,
                     session=session,
                     folder=terminal.foreground.folder,
                     command=terminal.foreground.argv[0] if terminal.foreground.argv else "opencode",
@@ -98,7 +103,10 @@ def track(
     return tracked
 
 
-def _open_session(terminal: Terminal, previous: SavedSession | None, boot: str) -> str | None:
+def open_session(terminal: Terminal, previous: SavedSession | None, boot: str) -> str | None:
+    """The session open in a terminal running OpenCode, or None when it isn't known."""
+    if not terminal.runs_opencode or terminal.foreground is None:
+        return None
     reported = terminal.reported_sessions
     if len(reported) == 1:
         return reported[0]
@@ -106,10 +114,8 @@ def _open_session(terminal: Terminal, previous: SavedSession | None, boot: str) 
     # one already saved if it is among them.
     if previous and previous.session in reported:
         return previous.session
-    # Idle OpenCode reports nothing; the session saved under this same shell is still open. This
+    # Idle OpenCode reports nothing; the session saved for this same OpenCode is still open. This
     # comes before the argv: an OpenCode started with `--session` may since have switched.
-    if previous and not is_restored(previous, terminal, boot):
+    if previous and previous.boot == boot and previous.opencode_pid == terminal.foreground.pid:
         return previous.session
-    if terminal.foreground is not None:
-        return terminal.foreground.session_argument
-    return None
+    return terminal.foreground.session_argument

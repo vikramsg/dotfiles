@@ -1,6 +1,9 @@
 """`watch` keeps the saved sessions current; `status` and `resume` act on them after a restart."""
 
+import _thread
 import json
+import os
+import signal
 import sys
 import threading
 import time
@@ -18,7 +21,7 @@ from opencode_resume import sessions, terminals
     "--state-file",
     type=click.Path(path_type=Path),
     default=sessions.default_state_file,
-    show_default="$XDG_STATE_HOME/opencode-resume/sessions.json",
+    show_default="$XDG_STATE_HOME/opencode-resume/$HC_SESSION/sessions.json",
     help="Where the sessions are saved.",
 )
 @click.pass_context
@@ -41,29 +44,37 @@ def watch(state_file: Path, interval: float) -> None:
         with lock:
             reported[address] = sessions_reported
 
-    def follow() -> None:
-        while True:
-            try:
-                terminals.follow_reported_sessions(remember)
-            except (terminals.HcError, ValueError) as error:
-                print(error, file=sys.stderr, flush=True)
-            time.sleep(interval)
+    def poll() -> None:
+        nonlocal saved
+        try:
+            while True:
+                try:
+                    live, finished = terminals.read_terminals(include=set(saved))
+                except terminals.HcError as error:
+                    # Keep what is saved: herdr-core may not be reachable yet after a reboot.
+                    print(error, file=sys.stderr, flush=True)
+                else:
+                    with lock:
+                        live = terminals.with_reported_sessions(live, reported)
+                        reported.clear()
+                    tracked = sessions.track(saved, live, finished, boot)
+                    if tracked != saved:
+                        sessions.save(state_file, tracked)
+                        saved = tracked
+                time.sleep(interval)
+        except BaseException:
+            # Stop the whole service, so its supervisor restarts it, rather than run without polling.
+            _thread.interrupt_main()
+            raise
 
-    threading.Thread(target=follow, daemon=True).start()
+    # Events are followed on the main thread, where SIGTERM is raised, so `hc events` is stopped.
+    signal.signal(signal.SIGTERM, lambda _signal, _frame: sys.exit(0))
+    threading.Thread(target=poll, daemon=True).start()
     while True:
         try:
-            live, finished = terminals.read_terminals(include=set(saved))
-        except terminals.HcError as error:
-            # Keep what is saved: herdr-core may not be reachable yet after a reboot.
+            terminals.follow_reported_sessions(remember)
+        except (terminals.HcError, ValueError) as error:
             print(error, file=sys.stderr, flush=True)
-        else:
-            with lock:
-                live = terminals.with_reported_sessions(live, reported)
-                reported.clear()
-            tracked = sessions.track(saved, live, finished, boot)
-            if tracked != saved:
-                sessions.save(state_file, tracked)
-                saved = tracked
         time.sleep(interval)
 
 
@@ -97,7 +108,8 @@ def _plan(state_file: Path) -> list[resume_plan.Outcome]:
         live, _finished = terminals.read_terminals(include=set(saved))
     except terminals.HcError as error:
         raise click.ClickException(str(error)) from error
-    return resume_plan.plan(saved, live, sessions.current_boot())
+    existing_folders = {s.folder for s in saved.values() if os.path.isdir(s.folder)}
+    return resume_plan.plan(saved, live, sessions.current_boot(), existing_folders)
 
 
 def _report(outcomes: list[resume_plan.Outcome], as_json: bool, done: str) -> None:

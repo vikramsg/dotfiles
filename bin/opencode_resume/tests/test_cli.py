@@ -43,7 +43,11 @@ def install_fake_hc(tmp_path, monkeypatch, terminals):
 
 
 def restored_shell(address, pid, folder):
-    return {"address": address, "pid": pid, "foreground": {"name": "zsh", "argv": ["zsh", "-l"], "cwd": folder}}
+    return {
+        "address": address,
+        "pid": pid,
+        "foreground": {"pid": pid, "name": "zsh", "argv": ["zsh", "-l"], "cwd": folder},
+    }
 
 
 def test_resume_types_the_command_into_the_restored_shell(tmp_path, monkeypatch):
@@ -53,7 +57,16 @@ def test_resume_types_the_command_into_the_restored_shell(tmp_path, monkeypatch)
     state_file = tmp_path / "sessions.json"
     save(
         state_file,
-        {"t1": SavedSession(boot=current_boot(), shell_pid=100, session="ses_a", folder=str(repo), command="opencode")},
+        {
+            "t1": SavedSession(
+                boot=current_boot(),
+                shell_pid=100,
+                opencode_pid=101,
+                session="ses_a",
+                folder=str(repo),
+                command="opencode",
+            )
+        },
     )
 
     result = CliRunner().invoke(main, ["--state-file", str(state_file), "resume", "--json"])
@@ -72,7 +85,16 @@ def test_status_reports_without_typing_anything(tmp_path, monkeypatch):
     state_file = tmp_path / "sessions.json"
     save(
         state_file,
-        {"t1": SavedSession(boot=current_boot(), shell_pid=100, session="ses_a", folder=str(repo), command="opencode")},
+        {
+            "t1": SavedSession(
+                boot=current_boot(),
+                shell_pid=100,
+                opencode_pid=101,
+                session="ses_a",
+                folder=str(repo),
+                command="opencode",
+            )
+        },
     )
 
     result = CliRunner().invoke(main, ["--state-file", str(state_file), "status"])
@@ -88,7 +110,7 @@ def test_a_turn_seen_only_in_events_still_saves_its_session(tmp_path, monkeypatc
         "address": "t1",
         "pid": 100,
         "agent": "opencode",
-        "foreground": {"name": "opencode.exe", "argv": ["opencode"], "cwd": "/repo"},
+        "foreground": {"pid": 101, "name": "opencode.exe", "argv": ["opencode"], "cwd": "/repo"},
         "records": {},
     }
     install_fake_hc(tmp_path, monkeypatch, [idle_opencode])
@@ -105,7 +127,9 @@ def test_a_turn_seen_only_in_events_still_saves_its_session(tmp_path, monkeypatc
     live = with_reported_sessions(live, reported)
 
     assert track({}, live, finished, "boot-1") == {
-        "t1": SavedSession(boot="boot-1", shell_pid=100, session="ses_a", folder="/repo", command="opencode")
+        "t1": SavedSession(
+            boot="boot-1", shell_pid=100, opencode_pid=101, session="ses_a", folder="/repo", command="opencode"
+        )
     }
 
 
@@ -121,10 +145,20 @@ def test_a_terminal_that_cannot_be_typed_into_does_not_stop_the_others(tmp_path,
         state_file,
         {
             "t1": SavedSession(
-                boot=current_boot(), shell_pid=100, session="ses_a", folder=str(repo), command="opencode"
+                boot=current_boot(),
+                shell_pid=100,
+                opencode_pid=101,
+                session="ses_a",
+                folder=str(repo),
+                command="opencode",
             ),
             "t2": SavedSession(
-                boot=current_boot(), shell_pid=101, session="ses_b", folder=str(repo), command="opencode"
+                boot=current_boot(),
+                shell_pid=101,
+                opencode_pid=102,
+                session="ses_b",
+                folder=str(repo),
+                command="opencode",
             ),
         },
     )

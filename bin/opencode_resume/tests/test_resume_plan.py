@@ -3,12 +3,14 @@ from opencode_resume.sessions import SavedSession
 
 
 def saved_session(shell_pid=100, session="ses_a", folder="/repo", command="opencode"):
-    return SavedSession(boot="boot-1", shell_pid=shell_pid, session=session, folder=folder, command=command)
+    return SavedSession(
+        boot="boot-1", shell_pid=shell_pid, opencode_pid=shell_pid + 1, session=session, folder=folder, command=command
+    )
 
 
 def outcomes(saved, *terminals, folders=("/repo", "/other"), boot="boot-1"):
     live = {terminal.address: terminal for terminal in terminals}
-    return plan(saved, live, boot, folder_exists=folders.__contains__)
+    return plan(saved, live, boot, set(folders))
 
 
 def test_restored_shell_gets_opencode_back_on_its_session_and_folder(shell):
@@ -63,4 +65,12 @@ def test_session_open_in_another_terminal_is_not_opened_twice(opencode, shell):
     assert second.reason == "session already open in another terminal"
 
     [outcome] = outcomes({"t1": saved_session()}, shell("t1", 200), opencode("t9", 300, reported=["ses_a"]))
+    assert outcome.reason == "session already open in another terminal"
+
+
+def test_session_open_in_an_idle_opencode_elsewhere_is_not_opened_twice(opencode, shell):
+    saved = {"t1": saved_session(), "t9": saved_session(shell_pid=300)}
+
+    [outcome] = outcomes(saved, shell("t1", 200), opencode("t9", 300))
+
     assert outcome.reason == "session already open in another terminal"

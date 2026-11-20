@@ -22,6 +22,7 @@ class HcError(RuntimeError):
 class Foreground:
     """The program a terminal's shell is running in front, or the shell itself when idle."""
 
+    pid: int
     name: str
     argv: tuple[str, ...]
     folder: str
@@ -61,11 +62,6 @@ class Terminal:
     def runs_opencode(self) -> bool:
         return self.foreground is not None and self.foreground.is_opencode
 
-    def has_session_open(self, session: str) -> bool:
-        if not self.runs_opencode or self.foreground is None:
-            return False
-        return session in self.reported_sessions or self.foreground.session_argument == session
-
     @classmethod
     def from_hc(cls, data: dict[str, Any]) -> Terminal:
         foreground = data.get("foreground")
@@ -73,6 +69,7 @@ class Terminal:
             address=data["address"],
             shell_pid=data["pid"],
             foreground=Foreground(
+                pid=foreground["pid"],
                 name=foreground.get("name") or "",
                 argv=tuple(foreground.get("argv") or ()),
                 folder=foreground.get("cwd") or "",
@@ -126,7 +123,8 @@ def follow_reported_sessions(on_report: Callable[[str, tuple[str, ...]], None]) 
 
     OpenCode reports a session only while it works on a turn, which can last under a second, so
     polling `hc get` misses short turns; `hc events` streams every report. Returns when the stream
-    ends (herdr-core stopped); raises HcError when it can't start.
+    ends (herdr-core stopped); raises HcError when it can't start. Stops `hc events` however it
+    returns, including a SIGTERM raised as SystemExit while it reads.
     """
     try:
         events = subprocess.Popen([hc_executable(), "events", "--json"], stdout=subprocess.PIPE, text=True)
@@ -134,14 +132,17 @@ def follow_reported_sessions(on_report: Callable[[str, tuple[str, ...]], None]) 
         raise HcError(f"hc events: {error}") from error
     assert events.stdout is not None
     with events:
-        for line in events.stdout:
-            event = json.loads(line).get("params") or {}
-            address = event.get("terminal") or ""
-            if event.get("type") != "status" or "/" in address:
-                continue
-            sessions = opencode_sessions((event.get("data") or {}).get("records"))
-            if sessions:
-                on_report(address, sessions)
+        try:
+            for line in events.stdout:
+                event = json.loads(line).get("params") or {}
+                address = event.get("terminal") or ""
+                if event.get("type") != "status" or "/" in address:
+                    continue
+                sessions = opencode_sessions((event.get("data") or {}).get("records"))
+                if sessions:
+                    on_report(address, sessions)
+        finally:
+            events.terminate()
 
 
 def with_reported_sessions(live: dict[str, Terminal], reported: dict[str, tuple[str, ...]]) -> dict[str, Terminal]:
