@@ -2,6 +2,7 @@
 
 import os
 import re
+import shlex
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -9,8 +10,6 @@ from opencode_resume.sessions import SavedSession, is_restored
 from opencode_resume.terminals import Terminal
 
 SESSION_ID = re.compile(r"ses_[A-Za-z0-9]+")
-# The command is typed into the shell unquoted, so only plain program names and paths.
-COMMAND = re.compile(r"[A-Za-z0-9_./+-]+")
 
 
 @dataclass(frozen=True)
@@ -41,7 +40,8 @@ def plan(
         command = None
         if reason is None:
             resuming.add(saved_session.session)
-            command = f"cd '{saved_session.folder}' && {saved_session.command} --session {saved_session.session}"
+            folder, program = shlex.quote(saved_session.folder), shlex.quote(saved_session.command)
+            command = f"cd {folder} && {program} --session {saved_session.session}"
         outcomes.append(Outcome(address, saved_session.session, saved_session.folder, command, reason))
     return outcomes
 
@@ -58,10 +58,9 @@ def _skip_reason(
         return f"busy running {running}"
     if not SESSION_ID.fullmatch(saved.session):
         return f"unexpected session id {saved.session!r}"
-    if not COMMAND.fullmatch(saved.command):
-        return f"can't type the command {saved.command!r}"
-    if "'" in saved.folder or any(ord(character) < 32 for character in saved.folder):
-        return "folder name can't be typed safely"
+    # A newline would press Enter in the middle of the typed command.
+    if any(ord(character) < 32 for character in saved.folder + saved.command):
+        return "folder or command can't be typed safely"
     if not folder_exists(saved.folder):
         return "folder no longer exists"
     if saved.session in resuming or any(other.has_session_open(saved.session) for other in live.values()):

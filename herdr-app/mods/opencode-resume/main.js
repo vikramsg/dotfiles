@@ -9,11 +9,19 @@ import { checking, closeOverlay, exec, machines, notify, props } from "herdr";
 async function resumeOn(machine) {
   const where = machine ?? "this computer";
   const r = await exec("zsh", ["-lc", "opencode-resume resume --json"], { on: machine }).catch((e) => ({ code: -1, stderr: String(e?.message ?? e) }));
-  if (r.code !== 0) return { resumed: 0, lines: [`${where}: ${(r.stderr || `exit ${r.code}`).trim()}`] };
-  const outcomes = JSON.parse(r.stdout || "[]");
+  const failed = (why) => ({ resumed: 0, ok: false, lines: [`${where}: ${why}`] });
+  if (r.code !== 0) return failed((r.stderr || `exit ${r.code}`).trim());
+  let outcomes;
+  try {
+    // The last line: a login shell can print to stdout before the command runs.
+    outcomes = JSON.parse(r.stdout.trim().split("\n").at(-1) || "[]");
+  } catch {
+    return failed(`unexpected output: ${r.stdout.trim().slice(0, 200)}`);
+  }
   const address = (o) => (machine ? `${machine}/${o.address}` : o.address);
   return {
     resumed: outcomes.filter((o) => o.command).length,
+    ok: outcomes.every((o) => o.command),
     lines: outcomes.map((o) => `${address(o)} ${o.folder}: ${o.reason ?? "resumed"}`),
   };
 }
@@ -31,7 +39,7 @@ export default class OpencodeResume extends View {
         notify({
           title: resumed ? `Resumed ${resumed} OpenCode session${resumed === 1 ? "" : "s"}` : "No OpenCode sessions resumed",
           body: lines.join("\n") || "Nothing was waiting to resume.",
-          level: lines.some((l) => !l.endsWith("resumed")) ? "warning" : "success",
+          level: results.every((r) => r.ok) ? "success" : "warning",
         });
       } finally {
         closeOverlay(overlay);

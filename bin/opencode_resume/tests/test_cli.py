@@ -5,10 +5,10 @@ from click.testing import CliRunner
 
 from opencode_resume.cli import main
 from opencode_resume.sessions import SavedSession, current_boot, save, track
-from opencode_resume.terminals import follow_reported_sessions, live_terminals, with_reported_sessions
+from opencode_resume.terminals import follow_reported_sessions, read_terminals, with_reported_sessions
 
-# A stand-in for herdr-core's `hc`: answers `ls` and `get` from terminals.json and appends
-# every `send` to sent.jsonl.
+# A stand-in for herdr-core's `hc`: answers `ls` and `get` from terminals.json, appends every
+# `send` to sent.jsonl, and fails sends to the terminals listed in unreachable.json.
 FAKE_HC = """#!/usr/bin/env python3
 import json, pathlib, sys
 here = pathlib.Path(__file__).parent
@@ -23,6 +23,9 @@ elif command == "get":
 elif command == "events":
     print((here / "events.jsonl").read_text(), end="")
 elif command == "send":
+    unreachable = here / "unreachable.json"
+    if unreachable.exists() and rest[0] in json.loads(unreachable.read_text()):
+        sys.exit("terminal not found")
     with open(here / "sent.jsonl", "a") as sent:
         sent.write(json.dumps(rest) + "\\n")
 """
@@ -57,7 +60,7 @@ def test_resume_types_the_command_into_the_restored_shell(tmp_path, monkeypatch)
 
     assert result.exit_code == 0, result.output
     assert [json.loads(line) for line in sent.read_text().splitlines()] == [
-        ["t1", f"cd '{repo}' && opencode --session ses_a"]
+        ["t1", f"cd {repo} && opencode --session ses_a"]
     ]
     assert json.loads(result.output)[0]["address"] == "t1"
 
@@ -98,8 +101,38 @@ def test_a_turn_seen_only_in_events_still_saves_its_session(tmp_path, monkeypatc
     reported = {}
 
     follow_reported_sessions(lambda address, sessions: reported.update({address: sessions}))
-    live = with_reported_sessions(live_terminals(include=set()), reported)
+    live, finished = read_terminals(include=set())
+    live = with_reported_sessions(live, reported)
 
-    assert track({}, live, "boot-1") == {
+    assert track({}, live, finished, "boot-1") == {
         "t1": SavedSession(boot="boot-1", shell_pid=100, session="ses_a", folder="/repo", command="opencode")
     }
+
+
+def test_a_terminal_that_cannot_be_typed_into_does_not_stop_the_others(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    sent = install_fake_hc(
+        tmp_path, monkeypatch, [restored_shell("t1", 200, str(repo)), restored_shell("t2", 201, str(repo))]
+    )
+    (tmp_path / "bin" / "unreachable.json").write_text(json.dumps(["t1"]))
+    state_file = tmp_path / "sessions.json"
+    save(
+        state_file,
+        {
+            "t1": SavedSession(
+                boot=current_boot(), shell_pid=100, session="ses_a", folder=str(repo), command="opencode"
+            ),
+            "t2": SavedSession(
+                boot=current_boot(), shell_pid=101, session="ses_b", folder=str(repo), command="opencode"
+            ),
+        },
+    )
+
+    result = CliRunner().invoke(main, ["--state-file", str(state_file), "resume", "--json"])
+
+    assert result.exit_code == 0, result.output
+    first, second = json.loads(result.output)
+    assert first["reason"].startswith("typing failed")
+    assert second["reason"] is None
+    assert [json.loads(line)[0] for line in sent.read_text().splitlines()] == ["t2"]

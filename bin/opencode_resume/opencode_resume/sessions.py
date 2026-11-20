@@ -55,12 +55,18 @@ def load(path: Path) -> dict[str, SavedSession]:
 def save(path: Path, saved: dict[str, SavedSession]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     partial = path.with_suffix(".tmp")
-    partial.write_text(json.dumps({"terminals": {address: asdict(s) for address, s in saved.items()}}, indent=2))
+    with partial.open("w") as file:
+        json.dump({"terminals": {address: asdict(s) for address, s in saved.items()}}, file, indent=2)
+        # Written right before a reboot, an unsynced file can come back empty.
+        file.flush()
+        os.fsync(file.fileno())
     partial.replace(path)
 
 
-def track(saved: dict[str, SavedSession], live: dict[str, Terminal], boot: str) -> dict[str, SavedSession]:
-    """The sessions to keep after one look at the live terminals.
+def track(
+    saved: dict[str, SavedSession], live: dict[str, Terminal], finished: set[str], boot: str
+) -> dict[str, SavedSession]:
+    """The sessions to keep after one look at the terminals, live and `finished`.
 
     | Terminal now                                  | Kept                                  |
     | --------------------------------------------- | ------------------------------------- |
@@ -68,9 +74,13 @@ def track(saved: dict[str, SavedSession], live: dict[str, Terminal], boot: str) 
     | runs OpenCode, session not known yet          | nothing (a new OpenCode replaces it)  |
     | restored after a restart (new shell or boot)  | the saved session, waiting to resume  |
     | same shell, OpenCode gone                     | nothing: the user quit OpenCode       |
-    | finished or gone                              | nothing                               |
+    | finished                                      | nothing                               |
+    | not listed                                    | the saved session                     |
+
+    A terminal not listed at all is kept: right after a reboot herdr-core may not have
+    restored it yet. herdr-core never reuses an address, so it can't turn into another one.
     """
-    tracked = {}
+    tracked = {address: previous for address, previous in saved.items() if address not in live.keys() | finished}
     for address, terminal in live.items():
         previous = saved.get(address)
         if terminal.runs_opencode and terminal.foreground is not None:
@@ -96,9 +106,10 @@ def _open_session(terminal: Terminal, previous: SavedSession | None, boot: str) 
     # one already saved if it is among them.
     if previous and previous.session in reported:
         return previous.session
-    if terminal.foreground is not None and terminal.foreground.session_argument:
-        return terminal.foreground.session_argument
-    # Idle OpenCode reports nothing; the session saved under this same shell is still open.
+    # Idle OpenCode reports nothing; the session saved under this same shell is still open. This
+    # comes before the argv: an OpenCode started with `--session` may since have switched.
     if previous and not is_restored(previous, terminal, boot):
         return previous.session
+    if terminal.foreground is not None:
+        return terminal.foreground.session_argument
     return None

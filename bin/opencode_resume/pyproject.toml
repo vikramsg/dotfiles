@@ -18,7 +18,6 @@ dev = ["pytest", "ruff", "ty"]
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 testpaths = ["tests"]
-pythonpath = ["tests"]
 
 [tool.ruff]
 target-version = "py314"

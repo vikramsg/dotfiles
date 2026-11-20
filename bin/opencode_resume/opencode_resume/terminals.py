@@ -1,6 +1,7 @@
 """This machine's herdr-core terminals, read and typed into through the `hc` CLI."""
 
 import json
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 SHELLS = frozenset({"zsh", "bash", "sh", "fish", "dash", "ksh"})
+# `opencode` and versioned installs like `opencode2`, but not wrappers such as `opencode-resume`.
+OPENCODE = re.compile(r"opencode\d*(\.exe)?")
 
 
 class HcError(RuntimeError):
@@ -25,8 +28,7 @@ class Foreground:
 
     @property
     def is_opencode(self) -> bool:
-        program = Path(self.argv[0]).name if self.argv else self.name
-        return program.startswith("opencode")
+        return bool(OPENCODE.fullmatch(Path(self.argv[0]).name if self.argv else self.name))
 
     @property
     def is_shell(self) -> bool:
@@ -101,25 +103,22 @@ def run_hc(*arguments: str) -> str:
     return result.stdout
 
 
-def live_terminals(include: set[str]) -> dict[str, Terminal]:
-    """This machine's live terminals running OpenCode, plus the live ones among `include`.
+def read_terminals(include: set[str]) -> tuple[dict[str, Terminal], set[str]]:
+    """This machine's live terminals running OpenCode or among `include`, and its finished ones.
 
     `hc ls` also lists other machines' terminals (`vm-us/t3`); each machine's own copy of this
     tool handles those.
     """
-    listed = json.loads(run_hc("ls", "--json"))["terminals"]
-    wanted = [
-        entry["address"]
-        for entry in listed
-        if "/" not in entry["address"]
-        and entry.get("state") == "live"
-        and (entry.get("agent") == "opencode" or entry["address"] in include)
+    listed = [
+        entry for entry in json.loads(run_hc("ls", "--all", "--json"))["terminals"] if "/" not in entry["address"]
     ]
-    terminals = {}
-    for address in wanted:
-        terminal = Terminal.from_hc(json.loads(run_hc("get", address, "--json")))
-        terminals[terminal.address] = terminal
-    return terminals
+    finished = {entry["address"] for entry in listed if entry.get("state") != "live"}
+    live = {}
+    for entry in listed:
+        address = entry["address"]
+        if address not in finished and (entry.get("agent") == "opencode" or address in include):
+            live[address] = Terminal.from_hc(json.loads(run_hc("get", address, "--json")))
+    return live, finished
 
 
 def follow_reported_sessions(on_report: Callable[[str, tuple[str, ...]], None]) -> None:

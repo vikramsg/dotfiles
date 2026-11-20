@@ -24,10 +24,11 @@ herdr-core lists OpenCode's session in a terminal's `records` only while OpenCod
 | ------------------------------------------ | ------------------------------------- |
 | Same shell and boot, OpenCode gone         | Forgotten: OpenCode was quit          |
 | New shell pid or boot (restored)           | Kept, waiting for `resume`            |
-| Finished or gone                           | Forgotten                             |
+| Finished                                   | Forgotten                             |
+| Not listed by `hc ls` (yet, after a boot)  | Kept                                  |
 | Running a new OpenCode, session not known  | Forgotten: the new OpenCode replaces it |
 
-`resume` types `cd '<folder>' && <command> --session <id>` into each restored terminal with `hc send`. It skips a terminal that is running something other than a shell, a folder that no longer exists or can't be typed safely (a quote or control character), and a session already open in another terminal.
+`resume` types `cd '<folder>' && <command> --session <id>` into each restored terminal with `hc send`. The folder and command are shell-quoted. It skips a terminal that is running something other than a shell, a folder that no longer exists, a folder or command with a control character (a newline would press Enter mid-command), and a session already open in another terminal. A terminal that can't be typed into is reported and the others still resume.
 
 Only this machine's terminals are handled; `hc ls` also lists other machines' (`vm-us/t3`), which their own service and `resume` handle.
 
@@ -35,4 +36,5 @@ Only this machine's terminals are handled; `hc ls` also lists other machines' (`
 
 - An OpenCode that never worked on a turn since it opened (and wasn't started with `--session`) has no session to save.
 - Only the program is kept, not OpenCode's other arguments.
+- A session switched to inside OpenCode (`/new`, `/sessions`) is learned on its first turn.
 - When OpenCode reports more than one session at once there is no way to tell which one the TUI shows; the one already saved is kept if it is among them, otherwise nothing new is learned from that report.

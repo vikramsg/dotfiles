@@ -4,7 +4,7 @@ import json
 import sys
 import threading
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import click
@@ -52,15 +52,15 @@ def watch(state_file: Path, interval: float) -> None:
     threading.Thread(target=follow, daemon=True).start()
     while True:
         try:
-            live = terminals.live_terminals(include=set(saved))
+            live, finished = terminals.read_terminals(include=set(saved))
         except terminals.HcError as error:
-            # Keep what is saved: herdr-core may not be up yet after a reboot.
+            # Keep what is saved: herdr-core may not be reachable yet after a reboot.
             print(error, file=sys.stderr, flush=True)
         else:
             with lock:
                 live = terminals.with_reported_sessions(live, reported)
                 reported.clear()
-            tracked = sessions.track(saved, live, boot)
+            tracked = sessions.track(saved, live, finished, boot)
             if tracked != saved:
                 sessions.save(state_file, tracked)
                 saved = tracked
@@ -80,17 +80,21 @@ def status(state_file: Path, as_json: bool) -> None:
 @click.pass_obj
 def resume(state_file: Path, as_json: bool) -> None:
     """Type the resume command into each restored terminal that had OpenCode open."""
-    outcomes = _plan(state_file)
-    for outcome in outcomes:
+    outcomes = []
+    for outcome in _plan(state_file):
         if outcome.command:
-            terminals.send(outcome.address, outcome.command)
+            try:
+                terminals.send(outcome.address, outcome.command)
+            except terminals.HcError as error:
+                outcome = replace(outcome, command=None, reason=f"typing failed: {error}")
+        outcomes.append(outcome)
     _report(outcomes, as_json, done="resumed")
 
 
 def _plan(state_file: Path) -> list[resume_plan.Outcome]:
     saved = sessions.load(state_file)
     try:
-        live = terminals.live_terminals(include=set(saved))
+        live, _finished = terminals.read_terminals(include=set(saved))
     except terminals.HcError as error:
         raise click.ClickException(str(error)) from error
     return resume_plan.plan(saved, live, sessions.current_boot())
