@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Runs the `principles` gem on mise's ruby@3.4 from a dedicated GEM_HOME outside mise's Ruby
+# bin dir so mise doesn't generate a `principles` shim that shadows this wrapper.
+
+if ! command -v mise >/dev/null 2>&1; then
+    printf '%s\n' "Error: mise is not installed; required to run principles on Ruby 3.4." >&2
+    exit 1
+fi
+
+RUBY_PREFIX="$(mise where ruby@3.4 2>/dev/null || true)"
+if [ -z "$RUBY_PREFIX" ] || [ ! -x "$RUBY_PREFIX/bin/ruby" ]; then
+    printf '%s\n' "Error: mise ruby@3.4 is not installed. Run 'just principles' from dotfiles." >&2
+    exit 1
+fi
+
+GEM_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/principles-gem"
+PRINCIPLES_BIN="$GEM_DIR/bin/principles"
+if [ ! -x "$PRINCIPLES_BIN" ]; then
+    printf '%s\n' "Error: principles gem is not installed at $GEM_DIR. Run 'just principles' from dotfiles." >&2
+    exit 1
+fi
+
+# Prepend GEM_DIR/bin so principles sees itself first on PATH and prints bare `principles ...` next_action commands.
+exec env -u GEM_PATH -u RUBYOPT -u RUBYLIB -u BUNDLE_GEMFILE \
+    GEM_HOME="$GEM_DIR" \
+    PATH="$GEM_DIR/bin:$PATH" \
+    "$RUBY_PREFIX/bin/ruby" "$PRINCIPLES_BIN" "$@"
