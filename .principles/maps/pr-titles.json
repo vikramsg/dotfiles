@@ -1,0 +1,24 @@
+{
+  "description": "PR titles must follow single-line 'scope: summary' format with an explicit allowed scope, and all changes must go through pull requests.",
+  "members": [
+    {
+      "path": ".github/workflows/pr-title.yml",
+      "role": "enforces PR title validation in CI on pull request events"
+    },
+    {
+      "path": "AGENTS.md",
+      "section": "Pull Request Titles",
+      "role": "states the allowed PR title scopes, single-line format, and PR-only rule"
+    },
+    {
+      "path": "scripts/validate_pr_title.py",
+      "role": "validates PR title formatting and explicit scope list"
+    },
+    {
+      "path": "tests/unit/scripts/test_validate_pr_title.py",
+      "role": "tests the exact PR title scope allowlist, formatting validation, and CI workflow wiring",
+      "check": "uv run pytest tests/unit/scripts/test_validate_pr_title.py"
+    }
+  ],
+  "format": 2
+}

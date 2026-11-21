@@ -1,0 +1,93 @@
+{
+  "format": 1,
+  "format_first_release": "0.0.4",
+  "principle_id": "docs-and-comments",
+  "status": "completed",
+  "map_version": "60bb226a6e3119e2a1f8daa445dbe990650eb2a75e86fc723ad623b5c019339b",
+  "base_commit": "f1f8bd5dce4c25ef262a8f243c51f9f8ea8e779b",
+  "audited_at": "2026-11-21T12:49:16Z",
+  "members": {
+    "REVIEW.md#Review focus@- Writing:": {
+      "sha256": "23d2ef581d513e8fc14aa8340907f17b82f3e36bd050084d9f8128d6e645df59",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:16Z",
+        "assessment": "Concise 1-line review check requiring comments, docs, and PR descriptions to be understandable from the text and its links alone. Loaded on demand during review. Shares line 12 compatibly with pr-descriptions and sits within code-review's REVIEW.md#Review focus.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "REVIEW.md",
+            "heading": "Review focus",
+            "starting_at": "- Writing:"
+          }
+        ],
+        "evidence_sha256": [
+          "23d2ef581d513e8fc14aa8340907f17b82f3e36bd050084d9f8128d6e645df59"
+        ],
+        "entry_sha256": "6d3ffd7c3817e18abeccf4f43352a393e061b46204db3cf4afd30d439c4b35be",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "bin/macflow/AGENTS.md#Testing and Dcoumentation hygiene@- Documentation should be short": {
+      "sha256": "21edac06e616f989b3086f610b23457639fde61da5bb34072dc89bc8a4b21a6f",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:16Z",
+        "assessment": "Clear 1-line macflow rule requiring short, clear documentation with examples. Low context cost and loaded only in macflow work.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "bin/macflow/AGENTS.md",
+            "heading": "Testing and Dcoumentation hygiene",
+            "starting_at": "- Documentation should be short"
+          }
+        ],
+        "evidence_sha256": [
+          "21edac06e616f989b3086f610b23457639fde61da5bb34072dc89bc8a4b21a6f"
+        ],
+        "entry_sha256": "7094edaf75c50bf836af5c451044b18eccb177f1538055c259babc934bf3ae10",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "bin/macflow/AGENTS.md#Testing and Dcoumentation hygiene@- Tests and documentation are not implementation notes.": {
+      "sha256": "0be18390d2b171a2d3b00a7cd9bd01d35af7665eb117a88362b90d54ec95b7dc",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:16Z",
+        "assessment": "Clear 1-line macflow rule separating documentation from implementation notes. Shares line 62 compatibly with behavioural-tests, which covers the tests half of the same bullet.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "bin/macflow/AGENTS.md",
+            "heading": "Testing and Dcoumentation hygiene",
+            "starting_at": "- Tests and documentation are not implementation notes."
+          }
+        ],
+        "evidence_sha256": [
+          "0be18390d2b171a2d3b00a7cd9bd01d35af7665eb117a88362b90d54ec95b7dc"
+        ],
+        "entry_sha256": "0bc30f6df2e1f8e6c4750688c365e889045694bf02bf00449613ec089f765fec",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "opencode/commands/next.md#Reply right now@5. How will you maintain code comments": {
+      "sha256": "f02d89c5e0d9e39d31a32e3235ed11cc132fd5a495671509f104c6a675f21076",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:16Z",
+        "assessment": "On-demand checklist prompt asking the agent to explain how it will maintain code comments, documentation, and naming hygiene when /next is invoked. Zero always-on context cost.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "opencode/commands/next.md",
+            "heading": "Reply right now",
+            "starting_at": "5. How will you maintain code comments"
+          }
+        ],
+        "evidence_sha256": [
+          "f02d89c5e0d9e39d31a32e3235ed11cc132fd5a495671509f104c6a675f21076"
+        ],
+        "entry_sha256": "9ba7481450433aba16315f840bb9136482ef75b272f56d9cc13dbe7e826da905",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    }
+  },
+  "findings": [],
+  "judged_against": "d7321add3640a05733250f28d29a879cd3662749415879d5eb2347448a4c9604"
+}

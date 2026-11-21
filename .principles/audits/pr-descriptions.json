@@ -1,0 +1,71 @@
+{
+  "format": 1,
+  "format_first_release": "0.0.4",
+  "principle_id": "pr-descriptions",
+  "status": "completed",
+  "map_version": "337e7c0ddd6fbabfae7975a1c633cc0b2ee6a63f56bf63c9399d8bc99954db37",
+  "base_commit": "f1f8bd5dce4c25ef262a8f243c51f9f8ea8e779b",
+  "audited_at": "2026-11-21T12:49:14Z",
+  "members": {
+    "REVIEW.md#Review focus@- Writing:": {
+      "sha256": "23d2ef581d513e8fc14aa8340907f17b82f3e36bd050084d9f8128d6e645df59",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:14Z",
+        "assessment": "Concise 1-line review check asking whether a reader with only the PR description, comments, or docs and their links can follow it. Zero always-on context cost. Compatible with code-review and docs-and-comments.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "REVIEW.md",
+            "heading": "Review focus",
+            "starting_at": "- Writing:"
+          }
+        ],
+        "evidence_sha256": [
+          "23d2ef581d513e8fc14aa8340907f17b82f3e36bd050084d9f8128d6e645df59"
+        ],
+        "entry_sha256": "582876c74cd2b0aa84151fe9006d1af668880d59af37af71afeb6e0ed3156ff8",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "bin/macflow/AGENTS.md#PR description": {
+      "sha256": "90a9fd06303f75b558d73e1bdc759bde9219908ed138e9948c61559b5d1a2d4c",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:14Z",
+        "assessment": "Clear 2-bullet macflow instruction requiring concise PR descriptions noting only the main change without test or implementation notes. Scoped to bin/macflow/ with minimal context cost.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "bin/macflow/AGENTS.md",
+            "heading": "PR description"
+          }
+        ],
+        "evidence_sha256": [
+          "90a9fd06303f75b558d73e1bdc759bde9219908ed138e9948c61559b5d1a2d4c"
+        ],
+        "entry_sha256": "764e418f77b4256072a4296609f432bf9f8fdb74ef1c1f637533e23f7e269ef2",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "opencode/commands/next.md#PR description": {
+      "sha256": "d7ee8315c4ae3d5f3831fc48e5e4dfce6453928a10ea774b6377946ae8c312d2",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:14Z",
+        "assessment": "Actionable command template giving bullet-point PR summary rules plus a concrete counter-example of a forbidden Verification block. On-demand only (invoked via /next), so zero always-on context cost.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "opencode/commands/next.md",
+            "heading": "PR description"
+          }
+        ],
+        "evidence_sha256": [
+          "d7ee8315c4ae3d5f3831fc48e5e4dfce6453928a10ea774b6377946ae8c312d2"
+        ],
+        "entry_sha256": "fbca397dc48b86c0617b7cb34bdf8b5093247c93b9ef4fac0d7ff83dca8ecf9f",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    }
+  },
+  "findings": [],
+  "judged_against": "33ca964be3fef56c5d0d712bfd5ba13905f85408d43bb94fe9c94fd6f762167c"
+}

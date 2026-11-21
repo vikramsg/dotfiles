@@ -1,0 +1,23 @@
+{
+  "description": "Tests must verify meaningful behavior and invariants rather than acting as change-detection tests or implementation notes.",
+  "members": [
+    {
+      "path": "AGENTS.md",
+      "section": "Testing",
+      "role": "states the repository-wide rule against change-detection tests"
+    },
+    {
+      "path": "REVIEW.md",
+      "section": "Review focus",
+      "starting_at": "- Tests:",
+      "role": "checks during review that tests verify behaviour rather than recently changed text"
+    },
+    {
+      "path": "bin/macflow/AGENTS.md",
+      "section": "Testing and Dcoumentation hygiene",
+      "starting_at": "- Tests and documentation are not implementation notes.",
+      "ending_at": "They should test behaviour.",
+      "role": "states macflow's rule that tests verify behaviour rather than change detection or implementation notes"
+    }
+  ]
+}

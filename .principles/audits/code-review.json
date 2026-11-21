@@ -1,0 +1,93 @@
+{
+  "format": 1,
+  "format_first_release": "0.0.4",
+  "principle_id": "code-review",
+  "status": "completed",
+  "map_version": "c5b7c2a6112f8dd4b6bf09f4561c9d62bb05965af9041359126443d31acd305f",
+  "base_commit": "4fcf82144920c50fb638041f0033d39cc4586569",
+  "audited_at": "2026-11-21T13:08:49Z",
+  "members": {
+    ".opencode/agents/reviewer.md": {
+      "sha256": "009c28a9110c662a6dcd0ee27024f3eec56df633fb2a33acc3e0f562db370167",
+      "assessment": {
+        "assessed_at": "2026-11-21T13:08:49Z",
+        "observed_at": "2026-11-21T13:08:49Z",
+        "assessment": "Read-only subagent definition with explicit tool/git denials, unbiased input handling, concrete steps requiring reading REVIEW.md and every file it links, and structured reporting. Zero always-on context cost.",
+        "delivery": "observed",
+        "observation": "Launched background reviewer subagent on origin/main..wt2 in this session: it followed REVIEW.md and its linked stick-to-your-principles.md guide, applied the checklist independently, and returned a structured verdict and findings.",
+        "evidence": [
+          {
+            "path": ".opencode/agents/reviewer.md"
+          }
+        ],
+        "evidence_sha256": [
+          "009c28a9110c662a6dcd0ee27024f3eec56df633fb2a33acc3e0f562db370167"
+        ],
+        "entry_sha256": "1feebfb0902caf019f83c6c34f379a4623769d5f52ef5703a75a5e409e5f234a",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    ".opencode/opencode.jsonc": {
+      "sha256": "b57a77f0a436d676f158ede541e341db14b9752f73aa90b04a61921c2977f469",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:16Z",
+        "observed_at": "2026-11-21T12:49:16Z",
+        "assessment": "Minimal 5-line OpenCode config wiring .opencode/rules.md into session instructions. Zero unnecessary context cost.",
+        "delivery": "observed",
+        "observation": "Verified .opencode/rules.md appeared in this session's system instructions via .opencode/opencode.jsonc.",
+        "evidence": [
+          {
+            "path": ".opencode/opencode.jsonc"
+          }
+        ],
+        "evidence_sha256": [
+          "b57a77f0a436d676f158ede541e341db14b9752f73aa90b04a61921c2977f469"
+        ],
+        "entry_sha256": "5515964a8ea6f7ab17b0b6ad625ebcd197c37d51e9a76651158cc6ea4221730e",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    ".opencode/rules.md#Review": {
+      "sha256": "1b002812ba4ab153c9dab0d577c78b195f70b0d83f37612282df8b2286e3aba0",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:16Z",
+        "observed_at": "2026-11-21T12:49:16Z",
+        "assessment": "Concise 12-line always-loaded instruction telling agents to run the reviewer subagent in the background with only scope and prior verifications, withholding rationale, plans, and implementation notes, and declining over-defensive findings with one-line reasons. Earns its small context cost.",
+        "delivery": "observed",
+        "observation": "Delivered into this OpenCode session's prompt via .opencode/opencode.jsonc; launching and handling a reviewer run has not occurred yet in this session.",
+        "evidence": [
+          {
+            "path": ".opencode/rules.md",
+            "heading": "Review"
+          }
+        ],
+        "evidence_sha256": [
+          "1b002812ba4ab153c9dab0d577c78b195f70b0d83f37612282df8b2286e3aba0"
+        ],
+        "entry_sha256": "ccbeff90c5b906355ac1338f4696abe7d9ad13b388f435a5271ed91d00e55c40",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "REVIEW.md#Review focus": {
+      "sha256": "19ae73cffa3fb5dbd057a2e32559f2c5dace7424eac16c2a1a6384f4a84fb3ee",
+      "assessment": {
+        "assessed_at": "2026-11-21T13:08:49Z",
+        "assessment": "Tight 9-bullet review checklist now including a compliance-only Principles bullet linking to skills/principles/references/stick-to-your-principles.md, keeping code review focused on whether a change obeys applicable mapped principles rather than auditing guidance drift. Loaded on demand by the reviewer (zero always-on cost). Compatibly encompasses the individual checklist bullets mapped by behavioural-tests, pr-descriptions, docs-and-comments, and tidy-first.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "REVIEW.md",
+            "heading": "Review focus"
+          }
+        ],
+        "evidence_sha256": [
+          "19ae73cffa3fb5dbd057a2e32559f2c5dace7424eac16c2a1a6384f4a84fb3ee"
+        ],
+        "entry_sha256": "38c69aca7093dd1a6718ff708bc4b2dce8e070a1a63ce2d30d5c7c43bfc2d95f",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    }
+  },
+  "findings": [],
+  "judged_against": "535597bbf282a048521622efed95af5d9b50ca21b17fa04d245159b5d8e6b4a6"
+}

@@ -1,0 +1,23 @@
+{
+  "description": "Review changes independently in the background after verification, judging from the code and repo rules in REVIEW.md rather than the author's narrative.",
+  "members": [
+    {
+      "path": ".opencode/agents/reviewer.md",
+      "role": "defines the read-only reviewer subagent, unbiased input rules, steps, and reporting format"
+    },
+    {
+      "path": ".opencode/opencode.jsonc",
+      "role": "loads .opencode/rules.md into OpenCode sessions"
+    },
+    {
+      "path": ".opencode/rules.md",
+      "section": "Review",
+      "role": "states how to launch the background reviewer with only scope and prior verifications and how to handle findings"
+    },
+    {
+      "path": "REVIEW.md",
+      "section": "Review focus",
+      "role": "defines the full repository review checklist evaluated by the reviewer (also linked by topic-specific principles)"
+    }
+  ]
+}
