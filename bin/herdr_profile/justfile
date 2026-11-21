@@ -1,0 +1,16 @@
+root := "../.."
+
+default:
+    @just --list
+
+# Editable, so the installed command finds herdr-app/ in this repository.
+install:
+    uv tool install --editable "{{justfile_directory()}}" --force --no-cache
+
+test:
+    uv run --directory "{{root}}" --package herdr-profile --frozen pytest -c bin/herdr_profile/pyproject.toml bin/herdr_profile/tests
+
+check:
+    uv run --directory "{{root}}" --package herdr-profile --frozen ruff check bin/herdr_profile
+    uv run --directory "{{root}}" --package herdr-profile --frozen ruff format --check bin/herdr_profile
+    uv run --directory "{{root}}" --package herdr-profile --frozen ty check --project bin/herdr_profile
