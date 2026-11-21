@@ -14,6 +14,9 @@ export PATH="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims:$PATH"
 # Ziggity has no global config path of its own; see ziggity/config.ini.
 export ZIGGITY_CONFIG="$HOME/.config/ziggity/config.ini"
 
+# Keep OpenCode from automatically importing Claude's skills.
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1
+
 export EDITOR="nvim"
 export VISUAL="nvim"
 

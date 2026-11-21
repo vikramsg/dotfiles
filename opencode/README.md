@@ -326,6 +326,20 @@ Then run `/connect` in the TUI, select **Claude Agent** and choose **Claude Code
 - `claude update` may warn about multiple installations in `~/.local/bin`. Check `type -a claude` if the version does not change after updating.
 - **Claude Agent** showing "Sign in required" while `claude auth status` reports a valid login usually means the OpenCode service is running an older `claude` that rejects its flags, such as `unknown option '--thinking=adaptive'`. The service uses its own `PATH`, where `/usr/local/bin` comes before `~/.local/bin`. Remove the stale install, then run `opencode service restart`. The exact error is in the connection status from `opencode api get /api/integration/claude-agent`.
 
+## Disable Claude skill discovery
+
+OpenCode automatically scans `~/.claude/skills`, including `~/.claude/skills/synced`. This repo's `.zshenv` exports `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1`, but the shared server only gets that export if the process that launches it has loaded the updated `.zshenv`. An already-open client can relaunch the server without it.
+
+Set the flag in the shared service environment on each machine. OpenCode saves it in `~/.config/opencode/service.json`, not `opencode.json`. The first command stops the shared server, so run it when active sessions can be interrupted.
+
+```bash
+opencode service set env OPENCODE_DISABLE_CLAUDE_CODE_SKILLS 1
+opencode service start
+opencode api get /api/skill | jq '[.data[] | select(.path | contains("/.claude/skills/")) | .id]'
+```
+
+The last command should print `[]`. This only disables OpenCode's discovery of Claude skills; it doesn't change skills in Claude itself, OpenCode's own skill directories, or Claude Agent sign-in.
+
 ## Ref
 
 - [OpenCode Github](https://github.com/anomalyco/opencode)
