@@ -8,4 +8,4 @@ Run this in the current session's shell:
 opencode-split
 ```
 
-Copy the literal `ses_…` ID from the script output in backticks, not a session link or title. Report any error the script prints, then stop.
+Copy the literal `ses_…` ID from the script output in backticks, not a session link or title. Include the pane placement note and any error the script prints, then stop.
