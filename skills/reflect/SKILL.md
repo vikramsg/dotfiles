@@ -1,6 +1,6 @@
 ---
 name: reflect
-description: Diagnose why an agent—either yourself or another OpenCode session/subagent—made a mistake, missed something, or took an unexpected decision. Use when asked to reflect on why something happened or to ask a finished subagent or session why it acted the way it did. Strictly diagnostic; does not apologize or fix files.
+description: Diagnose why an agent—either yourself or another OpenCode session/subagent—made a mistake, missed something, or took an unexpected decision. Use when asked to reflect on why something happened or to ask a finished subagent or session why it acted the way it did. 
 ---
 
 # Reflect
