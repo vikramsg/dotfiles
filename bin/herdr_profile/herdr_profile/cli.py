@@ -52,6 +52,13 @@ def open_(name: Name) -> None:
     profiles.open_profile(Profile(name, _config_root()), _sources())
 
 
+@app.command("list")
+def list_() -> None:
+    """Show the profiles, the ones `refresh` sets up again."""
+    for profile in profiles.discover_profiles(_config_root()):
+        print(profile.name)
+
+
 @app.command()
 def refresh() -> None:
     """Set up every profile again, with machines, after the main window's setup changed."""

@@ -149,6 +149,7 @@ A profile is a second Herdr window whose spaces, tabs and terminals are kept apa
 herdr-profile setup work --local   # set up without the main window's machines
 herdr-profile setup work           # set up or refresh, with the machines
 herdr-profile open work            # open (or bring forward) the "work" window; sets up a missing profile, with machines
+herdr-profile list                 # show the profiles
 herdr-profile refresh              # set up every profile again, with machines
 herdr-profile remove work          # delete its home; close its window first
 ```
