@@ -227,6 +227,7 @@ opencode: npm-global-bin
     ln -sfn {{justfile_directory()}}/opencode/AGENTS.md ~/.config/opencode/AGENTS.md
     ln -sfn {{justfile_directory()}}/opencode/agents ~/.config/opencode/agents
     ln -sfn {{justfile_directory()}}/opencode/commands ~/.config/opencode/commands
+    just --justfile "{{justfile_directory()}}/bin/opencode_split/justfile" install
     ln -sfn {{justfile_directory()}}/skills/show-me ~/.config/opencode/skills/show-me
     ln -sfn {{justfile_directory()}}/skills/herdr ~/.config/opencode/skills/herdr
     ln -sfn {{justfile_directory()}}/skills/browse ~/.config/opencode/skills/browse

@@ -2,6 +2,12 @@
 
 The root `just opencode` recipe links this directory to `~/.config/opencode/commands/`. OpenCode discovers `.md` files as slash commands and reloads them automatically. This README and the reference files deliberately have no `.md` suffix, so they do not become commands.
 
+## /split
+
+Install with `just opencode`, then run `/split` in an OpenCode session inside a Herdr tab. It forks the current conversation in the same working directory, reports the new session ID, and tells the fork to wait for instructions.
+
+The Herdr app adds the fork to the right of the last pane in the same tab, not necessarily beside the pane where you ran `/split`. The command uses `uv`, `opencode` with its shared local service, and `hc` on the machine running OpenCode. No desktop socket forwarding is needed.
+
 ## /retro
 
 Run `/retro` to review the current coding session, or `/retro <session log or focus>` to specify another session or a focus. It proposes improvements to the agent's environment, ordered by severity, and waits for your selection before changing anything. It runs in the current session so it can use the conversation history.
