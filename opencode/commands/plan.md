@@ -1,6 +1,6 @@
 ---
 description: Plan out the feature
-model: azure/gpt-6-astra
+model: azure/gpt-6-astra#high
 ---
 $ARGUMENTS
 
