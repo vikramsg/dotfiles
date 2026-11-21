@@ -1,0 +1,75 @@
+{
+  "format": 1,
+  "format_first_release": "0.0.4",
+  "principle_id": "behavioural-tests",
+  "status": "completed",
+  "map_version": "9cb9eeef1288af46c86b80010f9b7e56511b6b272efc0b8a08fa0c01b83a62a6",
+  "base_commit": "f1f8bd5dce4c25ef262a8f243c51f9f8ea8e779b",
+  "audited_at": "2026-11-21T12:49:13Z",
+  "members": {
+    "AGENTS.md#Testing": {
+      "sha256": "158b55c9ef3e5cb24204404625d472924f860925cd126ad2c923443985d02f85",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:13Z",
+        "observed_at": "2026-11-21T12:49:13Z",
+        "assessment": "Actionable and concise (7 lines) always-loaded instruction forbidding change-detection tests and clarifying when no new test is acceptable for copy-only changes. Low context cost and well-scoped for the whole repo.",
+        "delivery": "observed",
+        "observation": "Delivered into the active OpenCode session prompt as repository instructions from AGENTS.md; not observed influencing a test-writing edit in this session.",
+        "evidence": [
+          {
+            "path": "AGENTS.md",
+            "heading": "Testing"
+          }
+        ],
+        "evidence_sha256": [
+          "158b55c9ef3e5cb24204404625d472924f860925cd126ad2c923443985d02f85"
+        ],
+        "entry_sha256": "366398cad5ed7ac37c32ab07c565480276919de6e55ab385acd3d5bb6902f777",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "REVIEW.md#Review focus@- Tests:": {
+      "sha256": "23df16292194d0f03bb81fbaf78cd20595cf257e57be764718b92c8eb0bc8f0d",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:13Z",
+        "assessment": "Concise 1-line review checklist item linking directly to AGENTS.md. Zero always-on context cost (loaded during review). Compatible with code-review's REVIEW.md#Review focus member that encompasses it.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "REVIEW.md",
+            "heading": "Review focus",
+            "starting_at": "- Tests:"
+          }
+        ],
+        "evidence_sha256": [
+          "23df16292194d0f03bb81fbaf78cd20595cf257e57be764718b92c8eb0bc8f0d"
+        ],
+        "entry_sha256": "f638e579066b3d2a27332de9fe4c893e709ef680af0904fa7e1c29d04767ffc5",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "bin/macflow/AGENTS.md#Testing and Dcoumentation hygiene@- Tests and documentation are not implementation notes.": {
+      "sha256": "c8492695b47a550e2885ce40057824661e953d79dde25bbefc32491672797bcc",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:13Z",
+        "assessment": "Clear 2-line macflow-scoped instruction aligning with AGENTS.md by stating tests are not implementation notes and must test behaviour rather than change detection. Loaded only in macflow work. Compatible with docs-and-comments' shared line 62.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "bin/macflow/AGENTS.md",
+            "heading": "Testing and Dcoumentation hygiene",
+            "starting_at": "- Tests and documentation are not implementation notes.",
+            "ending_at": "They should test behaviour."
+          }
+        ],
+        "evidence_sha256": [
+          "c8492695b47a550e2885ce40057824661e953d79dde25bbefc32491672797bcc"
+        ],
+        "entry_sha256": "fe2b299aa2e7b0a9f02dbe10141641ccfb863475ac085e51724f6a34904ba3c5",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    }
+  },
+  "findings": [],
+  "judged_against": "59a441f1d42c974fbc7c2fc921312c282e393fd97907108a85e902bf31162a72"
+}

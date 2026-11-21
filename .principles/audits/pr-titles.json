@@ -1,0 +1,97 @@
+{
+  "format": 1,
+  "format_first_release": "0.0.4",
+  "principle_id": "pr-titles",
+  "status": "completed",
+  "map_version": "31f332a40be50e95b74968ac382a5e7851992566e2c8fba1b687bcde9e53dd62",
+  "base_commit": "f1f8bd5dce4c25ef262a8f243c51f9f8ea8e779b",
+  "audited_at": "2026-11-21T12:49:14Z",
+  "members": {
+    ".github/workflows/pr-title.yml": {
+      "sha256": "dc2a36aeb4555cc2c352ce6619ca212717b60a04bf6eebc475650173c55da0be",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:14Z",
+        "assessment": "Well-structured GitHub Actions workflow triggering on PR open/edit/reopen/ready_for_review/synchronize, pulling the trusted validator from BASE_SHA with a bootstrap fallback. Zero agent context cost. CI execution itself was not observed locally.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": ".github/workflows/pr-title.yml"
+          }
+        ],
+        "evidence_sha256": [
+          "dc2a36aeb4555cc2c352ce6619ca212717b60a04bf6eebc475650173c55da0be"
+        ],
+        "entry_sha256": "c23d98d1fe2b2883b7683515031328bb6caa1c5f2bdc6f4dab8a0ea4a92caf79",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "AGENTS.md#Pull Request Titles": {
+      "sha256": "78f1085ce20d52d959a17f79fb4eb9deed27c38744fc035b552f430049914e26",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:14Z",
+        "observed_at": "2026-11-21T12:49:14Z",
+        "assessment": "Actionable always-loaded section listing all 12 allowed scopes, single-line trimmed summary format, and the PR-only policy. Earns its ~20-line context cost because every PR creation depends on the exact scope list.",
+        "delivery": "observed",
+        "observation": "Delivered into the active OpenCode session prompt from AGENTS.md and used to choose the 'chore:' scope for commit f1f8bd5; PR creation itself has not run yet.",
+        "evidence": [
+          {
+            "path": "AGENTS.md",
+            "heading": "Pull Request Titles"
+          }
+        ],
+        "evidence_sha256": [
+          "78f1085ce20d52d959a17f79fb4eb9deed27c38744fc035b552f430049914e26"
+        ],
+        "entry_sha256": "e35431c8b366d92debe9dd0e6edd91e0b212449f8b81caf081bd8c8f0109becd",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "scripts/validate_pr_title.py": {
+      "sha256": "325e2db44d140fe122ed83a0634ee403b0e331c1d68fd78f3933d490fbd7cf90",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:14Z",
+        "observed_at": "2026-11-21T12:49:14Z",
+        "assessment": "Small, self-contained Python validator enforcing the exact 12 scopes from AGENTS.md plus single-line, trimmed, non-empty 'scope: summary' formatting. Zero always-on context cost.",
+        "delivery": "observed",
+        "observation": "Ran python3 scripts/validate_pr_title.py locally: exited 0 on valid title 'chore: map principles' and exited 1 with scope error on invalid title 'invalid: bad scope'.",
+        "evidence": [
+          {
+            "path": "scripts/validate_pr_title.py"
+          }
+        ],
+        "evidence_sha256": [
+          "325e2db44d140fe122ed83a0634ee403b0e331c1d68fd78f3933d490fbd7cf90"
+        ],
+        "entry_sha256": "e8df82cfed1827cb625a8e5fd6622e83b09525c4f6702cf710674bca4768d026",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "tests/unit/scripts/test_validate_pr_title.py": {
+      "sha256": "4f705118f6ad63118185bafb1368730e7861d2c89dd9108450c0a66de7eb2139",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:14Z",
+        "observed_at": "2026-11-21T12:49:14Z",
+        "assessment": "Fast pytest suite (22 tests, 0.04s) asserting exact SCOPES allowlist parity, valid/invalid title handling, shell-metacharacter safety, and CI workflow wiring. Zero always-on context cost.",
+        "delivery": "observed",
+        "observation": "Executed uv run pytest tests/unit/scripts/test_validate_pr_title.py on HEAD f1f8bd5: all 22 tests passed (exit 0); did not observe a failing run on mutated scopes.",
+        "evidence": [
+          {
+            "path": "tests/unit/scripts/test_validate_pr_title.py"
+          }
+        ],
+        "evidence_sha256": [
+          "4f705118f6ad63118185bafb1368730e7861d2c89dd9108450c0a66de7eb2139"
+        ],
+        "entry_sha256": "bfbf28d43ccbfdd564fd0c7e13deb7cacdb68cdd5e75a8879a1645c840375918",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      },
+      "check_result": {
+        "command": "uv run pytest tests/unit/scripts/test_validate_pr_title.py",
+        "exit_status": 0,
+        "review_basis": "Self-reviewed by the agent: inspected tests/unit/scripts/test_validate_pr_title.py and pyproject.toml; read-only pytest suite importing scripts/validate_pr_title.py and reading .github/workflows/pr-title.yml"
+      }
+    }
+  },
+  "findings": [],
+  "judged_against": "45f543b97f4306e8760589dc3e5a8d8b93644565a41123ad049730465fbf7b25"
+}
