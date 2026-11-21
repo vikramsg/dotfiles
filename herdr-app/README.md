@@ -155,7 +155,7 @@ just -f herdr-app/justfile remove-profile work    # remove app configuration aft
 
 Run the `just -f` commands from the dotfiles repository. `--local` only skips adding machines on that run. It doesn't remove machines a profile already has or save a preference. Running `profile` without `--local`, or running `profiles`, adds the main window's machines.
 
-`herdr_profile` sets up a missing profile automatically, including machines. To start local-only, run `profile <name> --local` before opening the window. You can add machines later with `hc machine add` inside that window; they belong to that profile.
+`herdr_profile` sets up a missing profile automatically, including machines. To start local-only, run `profile <name> --local` before opening the window. To add a machine to it later, run `hc machine add vm-us --session <name>` in that window: the window's `HC_SESSION` keeps the machine in this profile, and `--session` keeps its terminals on the VM apart from the main window's, which are in the VM's default session.
 
 `remove-profile` deletes `~/.config/herdr-app-<name>`; close that profile's window first. Linked repository files, the main app's configuration, and local and remote core sessions (including running terminals) are left intact. Opening the same name again recreates its app configuration and reconnects to its existing core session. Removal refuses profiles containing `.sqlite` or `.db` files.
 
