@@ -146,9 +146,18 @@ symlink with a file while doing so. `just herdr-app` copies that file back to
 A profile is a second Herdr window whose spaces, tabs and terminals are kept apart from the main window's, with the same setup:
 
 ```sh
-herdr_profile work            # open (or bring forward) the "work" window; --help explains it
-just herdr-app-profile work   # set up or refresh its home without opening it
+just -f herdr-app/justfile profile work --local   # set up without adding the main window's machines
+herdr_profile work                              # open (or bring forward) the "work" window
+just -f herdr-app/justfile profile work           # set up or refresh, including machines
+just -f herdr-app/justfile profiles               # refresh all profiles, including machines
+just -f herdr-app/justfile remove-profile work    # remove app configuration after closing its window
 ```
+
+Run the `just -f` commands from the dotfiles repository. `--local` only skips adding machines on that run. It doesn't remove machines a profile already has or save a preference. Running `profile` without `--local`, or running `profiles`, adds the main window's machines.
+
+`herdr_profile` sets up a missing profile automatically, including machines. To start local-only, run `profile <name> --local` before opening the window. You can add machines later with `hc machine add` inside that window; they belong to that profile.
+
+`remove-profile` deletes `~/.config/herdr-app-<name>`; close that profile's window first. Linked repository files, the main app's configuration, and local and remote core sessions (including running terminals) are left intact. Opening the same name again recreates its app configuration and reconnects to its existing core session. Removal refuses profiles containing `.sqlite` or `.db` files.
 
 `herdr_profile` is defined in `zsh/.zshenv`. It starts the app with two variables, as Herdr's own `scripts/sandbox` does to run a second app:
 
@@ -165,7 +174,7 @@ The profile's home gets the main home's setup:
 | `shared.json` (mod state and the window's layout), `view.json`, `window.json`, `data/` | the window's own; a new profile starts on `main-copy` |
 | Machines (`hc machine ls` in the profile's session) | the main session's machines, each reached in a session of the profile's name there, so the profile's VM spaces are apart from the main window's |
 
-`just herdr-app` refreshes every `~/.config/herdr-app-*` home after the main one. A refresh copies `main-copy` again, so a sidebar width dragged in a profile's window goes back to the main window's.
+`just herdr-app` sets up only the main app. Refresh profiles explicitly with `just -f herdr-app/justfile profiles`. A refresh copies `main-copy` again, so a sidebar width dragged in a profile's window goes back to the main window's.
 
 ## Not carried over
 

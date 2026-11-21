@@ -14,7 +14,7 @@ The user works in the main window (`~/.config/herdr-app`, herdr-core session `de
 1. Create or refresh the profile; it copies the main home's third-party mods and `main-copy`, links the repo's settings, keys, themes and own mods, and points every machine at a session of the profile's name:
 
    ```sh
-   just herdr-app-profile agent-test
+   just -f herdr-app/justfile profile agent-test
    ```
 
 2. Open its window:

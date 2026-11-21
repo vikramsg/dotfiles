@@ -92,7 +92,9 @@ filetree:
     echo "filetree: shown in the panel's Files tab in main-copy"
 
 # Give a profile's home (~/.config/herdr-app-<name>, opened by herdr_profile) the main home's setup.
-profile name:
+# --local leaves out the main session's machines on this run; `profiles` adds them on its next run.
+[positional-arguments]
+profile name local="":
     #!/usr/bin/env bash
     # Spaces, tabs and panes are not in a home but in the profile's herdr-core session, so they stay apart.
     # - Repo files (settings, keys, themes, own mods) are linked, as in the main home.
@@ -101,9 +103,12 @@ profile name:
     # - main-copy is copied with the sidebar block hidden and empty: the sidebar writes the address of
     #   the terminal it shows into the layout, and that terminal is in the main window's session.
     set -euo pipefail
-    [[ "{{name}}" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "profile: name may use letters, digits, - and _"; exit 1; }
+    name="$1"
+    option="$2"
+    [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "profile: name may use letters, digits, - and _"; exit 1; }
+    case "$option" in "" | --local) ;; *) echo "profile: unknown option $option; usage: profile <name> [--local]"; exit 1 ;; esac
     main="$HOME/.config/herdr-app"
-    home="$HOME/.config/herdr-app-{{name}}"
+    home="$HOME/.config/herdr-app-$name"
     repo="{{justfile_directory()}}"
     [ -f "$main/layouts/main-copy.json" ] || { echo "profile: run just herdr-app first"; exit 1; }
     mkdir -p "$home/mods" "$home/themes" "$home/layouts"
@@ -126,6 +131,10 @@ profile name:
     mv "$home/layouts/main-copy.json.tmp" "$home/layouts/main-copy.json"
     # The window's layout is kept in its shared.json; a new profile starts on main-copy.
     [ -f "$home/shared.json" ] || echo '{"layout": "main-copy"}' > "$home/shared.json"
+    if [ "$option" = --local ]; then
+        echo "profile $name: $home has the main setup; the main session's machines were not added"
+        exit 0
+    fi
     # The main session's machines, each reached in a session of the profile's name there, so the
     # profile's spaces on the VM stay apart too. A machine entry names the session it reaches
     # (null: that machine's default, the main window's); one pointing elsewhere is re-added, which
@@ -133,13 +142,13 @@ profile name:
     env -u HC_SESSION herdr-core machine ls --json | jq -c '.machines[] | select(.via | not)' | while read -r machine; do
         machine_name="$(jq -r .name <<< "$machine")"
         target="$(jq -r .target <<< "$machine")"
-        current="$(HC_SESSION="{{name}}" herdr-core machine ls --json | jq -r --arg n "$machine_name" '.machines[] | select(.name == $n) | .session // "default"')"
-        [ "$current" = "{{name}}" ] && continue
-        [ -n "$current" ] && HC_SESSION="{{name}}" herdr-core machine rm "$machine_name" > /dev/null
-        HC_SESSION="{{name}}" herdr-core machine add "$target" --name "$machine_name" --session "{{name}}" > /dev/null
-        echo "profile {{name}}: $machine_name reached in its {{name}} session"
+        current="$(HC_SESSION="$name" herdr-core machine ls --json | jq -r --arg n "$machine_name" '.machines[] | select(.name == $n) | .session // "default"')"
+        [ "$current" = "$name" ] && continue
+        [ -n "$current" ] && HC_SESSION="$name" herdr-core machine rm "$machine_name" > /dev/null
+        HC_SESSION="$name" herdr-core machine add "$target" --name "$machine_name" --session "$name" > /dev/null
+        echo "profile $name: $machine_name reached in its $name session"
     done
-    echo "profile {{name}}: $home has the main setup"
+    echo "profile $name: $home has the main setup"
 
 # Refresh every profile's home after the main one changed.
 profiles:
@@ -153,6 +162,20 @@ profiles:
         if [[ ! "$name" =~ ^[A-Za-z0-9_-]+$ ]]; then echo "profiles: skipping $home"; continue; fi
         just --justfile "{{justfile()}}" profile "$name"
     done
+
+# Remove a closed profile's app configuration; its core sessions and terminals remain.
+[positional-arguments]
+remove-profile name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name="$1"
+    [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "remove-profile: name may use letters, digits, - and _"; exit 1; }
+    home="$HOME/.config/herdr-app-$name"
+    [ -e "$home" ] || { echo "remove-profile: no profile named $name"; exit 1; }
+    databases="$(find "$home" \( -name '*.sqlite' -o -name '*.db' \) -print)"
+    [ -z "$databases" ] || { echo "remove-profile: cannot remove a profile containing .sqlite or .db files"; exit 1; }
+    rm -rf -- "$home"
+    echo "profile $name: app configuration removed; core sessions and terminals remain"
 
 # Copy usage-limits (Claude Code and Codex limits, OpenCode's tokens) into the app, and
 # split main-copy's status bar into Herdr's status, the limits and an empty third.

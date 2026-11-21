@@ -38,8 +38,13 @@ and terminals are apart from the main window's and other profiles'.
   third-party mods and the main-copy layout copied from ~/.config/herdr-app.
 - On the VM (each machine of the main window), its spaces and terminals are in
   that machine's <name> session, apart from the main window's there too.
-- The first run sets the home up (`just herdr-app-profile <name>`), and
-  `just herdr-app` refreshes every profile's home.
+- The first run sets the home up using herdr-app/justfile. For a profile
+  without the VM, run `just -f herdr-app/justfile profile <name> --local`
+  from the dotfiles repo before opening it.
+- `just herdr-app` only sets up the main app. To refresh all profiles, run
+  `just -f herdr-app/justfile profiles`; this also adds the main window's machines.
+- To remove a profile's app configuration, close its window and run
+  `just -f herdr-app/justfile remove-profile <name>`. Its core sessions remain.
 - Running it again brings that profile's window to the front.
 EOF
                 [ -n "$1" ]
@@ -48,7 +53,7 @@ EOF
         if [ ! -d "$HOME/.config/herdr-app-$1" ]; then
             local dotfiles
             dotfiles="$(dirname "$(dirname "$(readlink "$HOME/.zshenv")")")"
-            just --justfile "$dotfiles/justfile" herdr-app-profile "$1" || return
+            just --justfile "$dotfiles/herdr-app/justfile" profile "$1" || return
         fi
         open -n -a /Applications/Herdr.app --env HERDR_APP_HOME="$HOME/.config/herdr-app-$1" --env HC_SESSION="$1"
     }
