@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "globs": [
+    ".github/workflows/*",
+    ".opencode/**",
+    ".opencode/agents/*.md",
+    "REVIEW.md",
+    "opencode/commands/*.md"
+  ]
+}

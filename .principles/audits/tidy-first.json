@@ -1,0 +1,52 @@
+{
+  "format": 1,
+  "format_first_release": "0.0.4",
+  "principle_id": "tidy-first",
+  "status": "completed",
+  "map_version": "c58949f82372082cfd57e1176f02454aa2236922efdda7e3792b4c5bea414ae7",
+  "base_commit": "f1f8bd5dce4c25ef262a8f243c51f9f8ea8e779b",
+  "audited_at": "2026-11-21T12:49:15Z",
+  "members": {
+    "REVIEW.md#Review focus@- Simplicity:": {
+      "sha256": "4ad463d2d834bda72e11167f6989cba3c0f6271bb03e14eda5de435344d9cced",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:15Z",
+        "assessment": "Sharp 1-line review check asking whether a change reuses or refactors existing code instead of adding more and whether every abstraction is needed now. Loaded on demand during review (zero always-on cost). Compatible with code-review's REVIEW.md#Review focus.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "REVIEW.md",
+            "heading": "Review focus",
+            "starting_at": "- Simplicity:"
+          }
+        ],
+        "evidence_sha256": [
+          "4ad463d2d834bda72e11167f6989cba3c0f6271bb03e14eda5de435344d9cced"
+        ],
+        "entry_sha256": "994c869b4a65ed0e381cbf1385ac355a5ee0408235afbad2f3ae010089e33080",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    },
+    "bin/macflow/AGENTS.md#Tidy, First": {
+      "sha256": "a12542d786e12597e879420088906a9bc5b6bac56fa5cca457251421e31878ed",
+      "assessment": {
+        "assessed_at": "2026-11-21T12:49:15Z",
+        "assessment": "Clear, actionable macflow guidance prioritizing refactoring and reuse over new code and prohibiting enterprise-style or over-defensive fallback code. Low context cost and loaded only for macflow work.",
+        "delivery": "not_observed",
+        "evidence": [
+          {
+            "path": "bin/macflow/AGENTS.md",
+            "heading": "Tidy, First"
+          }
+        ],
+        "evidence_sha256": [
+          "a12542d786e12597e879420088906a9bc5b6bac56fa5cca457251421e31878ed"
+        ],
+        "entry_sha256": "80fb1d2589814054a903ac2dbaeaebac7ae9f07bea6aa98f964bebd18090ee6a",
+        "loads_sha256": "46f6d1b671d3df14bd097b41f5481470a596ae50826e4a90657dc2874cc21e25"
+      }
+    }
+  },
+  "findings": [],
+  "judged_against": "22f6354fdb39586e6488c5b349b87869c154475eafa6e246baf8ab5e59696b31"
+}

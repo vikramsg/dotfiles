@@ -1,0 +1,16 @@
+{
+  "description": "Prefer reusing, simplifying, or refactoring existing code before adding new code, and avoid speculative shims or unnecessary complexity.",
+  "members": [
+    {
+      "path": "REVIEW.md",
+      "section": "Review focus",
+      "starting_at": "- Simplicity:",
+      "role": "checks during review whether code reuses or refactors existing code and justifies every added abstraction"
+    },
+    {
+      "path": "bin/macflow/AGENTS.md",
+      "section": "Tidy, First",
+      "role": "states macflow's Tidy, First rule favoring reuse and simplicity without enterprise bloat or over-defensive fallbacks"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "description": "Keep PR descriptions concise and focused on the main changes without verification logs or implementation notes.",
+  "members": [
+    {
+      "path": "REVIEW.md",
+      "section": "Review focus",
+      "starting_at": "- Writing:",
+      "role": "checks during review that PR descriptions, docs, and comments stand on their own for a reader"
+    },
+    {
+      "path": "bin/macflow/AGENTS.md",
+      "section": "PR description",
+      "role": "requires concise macflow PR descriptions noting only the main change without test or implementation notes"
+    },
+    {
+      "path": "opencode/commands/next.md",
+      "section": "PR description",
+      "role": "guides concise bullet-point PR summaries and explicitly forbids verification-style implementation notes"
+    }
+  ]
+}
