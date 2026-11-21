@@ -6,7 +6,8 @@ Use this guide to detect drift in mapped guidance files between audits and to wi
 
 - Run `principles list-member-problems --short`.
   - Exit `0`: every mapped member matches its audited baseline.
-  - Exit `3`: at least one member changed, broke, or has no completed audit — follow its printed `next_action` (see [changing-rules.md](changing-rules.md) and [auditing-principles.md](auditing-principles.md)).
+  - Exit `1`: refusal (for example, `broken_members` when a mapped file or section was renamed or deleted) — follow the `repair` and `repair_with` commands printed on stderr (`move-member` or `remove-member`).
+  - Exit `3`: at least one member changed or has no completed audit — follow the commands it prints (or drop `--short` for full JSON with `next_action`; see [changing-rules.md](changing-rules.md) and [auditing-principles.md](auditing-principles.md)).
 - Run `principles list-open-findings` to view deferred or accepted findings carried over from completed audits.
 
 ## Setting up the meta-principle (`sticking-to-your-principles`)
