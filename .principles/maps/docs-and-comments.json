@@ -1,0 +1,29 @@
+{
+  "description": "Keep docs and comments concise, operational, and clear to an unfamiliar reader, explaining why rather than repeating code or storing implementation notes.",
+  "members": [
+    {
+      "path": "REVIEW.md",
+      "section": "Review focus",
+      "starting_at": "- Writing:",
+      "role": "checks during review that comments and docs stand on their own for a reader (shared line with pr-descriptions)"
+    },
+    {
+      "path": "bin/macflow/AGENTS.md",
+      "section": "Testing and Dcoumentation hygiene",
+      "starting_at": "- Documentation should be short",
+      "role": "requires short, clear macflow documentation with examples"
+    },
+    {
+      "path": "bin/macflow/AGENTS.md",
+      "section": "Testing and Dcoumentation hygiene",
+      "starting_at": "- Tests and documentation are not implementation notes.",
+      "role": "forbids treating macflow documentation as implementation notes (shared line with behavioural-tests)"
+    },
+    {
+      "path": "opencode/commands/next.md",
+      "section": "Reply right now",
+      "starting_at": "5. How will you maintain code comments",
+      "role": "prompts the agent to state how it will maintain code comments, documentation, and naming hygiene"
+    }
+  ]
+}
