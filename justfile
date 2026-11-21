@@ -526,6 +526,28 @@ harlequin-if-configured:
         echo "Skipping Harlequin: create harlequin/config.toml from config.example.toml to enable it."; \
     fi
 
+# Install the principles CLI (on mise ruby@3.4), wrapper binary, and OpenCode skill
+principles:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v mise >/dev/null 2>&1; then
+        echo "ERROR: mise is required to install principles on Ruby 3.4." >&2
+        exit 1
+    fi
+    GEM_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/principles-gem"
+    echo "Ensuring Ruby 3.4 is installed via mise..."
+    mise install ruby@3.4
+    RUBY_PREFIX="$(mise where ruby@3.4)"
+    echo "Installing principles gem into $GEM_DIR..."
+    env -u GEM_PATH -u RUBYOPT -u RUBYLIB -u BUNDLE_GEMFILE \
+        GEM_HOME="$GEM_DIR" \
+        "$RUBY_PREFIX/bin/gem" install principles --no-document
+    mkdir -p "$HOME/.local/bin" "$HOME/.config/opencode/skills"
+    ln -sfn "{{justfile_directory()}}/bin/principles" "$HOME/.local/bin/principles"
+    ln -sfn "{{justfile_directory()}}/skills/principles" "$HOME/.config/opencode/skills/principles"
+    echo "principles wrapper symlinked at ~/.local/bin/principles -> {{justfile_directory()}}/bin/principles"
+    echo "OpenCode principles skill symlinked at ~/.config/opencode/skills/principles -> {{justfile_directory()}}/skills/principles"
+
 # Set up all symlinks
 all: npm-global-bin nvim tmux herdr herdr-core herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost opencode-resume bin zsh lazygit ziggity harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
