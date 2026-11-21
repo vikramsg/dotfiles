@@ -1,0 +1,3 @@
+install directory=(env("HOME") / ".local/bin"):
+    mkdir -p "{{directory}}"
+    ln -sfn "{{justfile_directory()}}/split.py" "{{directory}}/opencode-split"

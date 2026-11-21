@@ -2,6 +2,18 @@
 
 The root `just opencode` recipe links this directory to `~/.config/opencode/commands/`. OpenCode discovers `.md` files as slash commands and reloads them automatically. This README and the reference files deliberately have no `.md` suffix, so they do not become commands.
 
+## /split
+
+Install with `just opencode`, then run `/split` in an OpenCode session inside a Herdr pane. It forks the current conversation into a pane on the right, reports the new session ID, and tells the fork to wait for instructions. It leaves both sessions in the same working directory.
+
+Requires `uv`, `opencode` using its shared local service, `hc`, and a reachable Herdr app control socket. If OpenCode runs on the same machine as the app, the script uses `herdr-app.sock` in Herdr's app home (`$HERDR_APP_HOME`, or `herdr-app` under `${XDG_CONFIG_HOME:-~/.config}`). If OpenCode runs on a VM, forward the desktop's socket to a private path on the VM and export `HERDR_APP_SOCKET` in the VM's shell startup so both the original pane and the fork see it. For example, from the desktop:
+
+```sh
+ssh -N -o ExitOnForwardFailure=yes -R /absolute/private/path/herdr-app.sock:"$HOME/.config/herdr-app/herdr-app.sock" vm-us
+```
+
+Use a directory only your VM account can access: the socket can control the desktop window and launch programs. Use the socket for the Herdr app window that contains your pane.
+
 ## /retro
 
 Run `/retro` to review the current coding session, or `/retro <session log or focus>` to specify another session or a focus. It proposes improvements to the agent's environment, ordered by severity, and waits for your selection before changing anything. It runs in the current session so it can use the conversation history.
