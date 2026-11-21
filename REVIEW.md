@@ -10,3 +10,4 @@ Check these first when reviewing a change, your own or someone else's.
 - Resources: is every file, process, connection and stream released after success, failure and cancellation, by the code that opened it? Is every added limit, timeout, cache, retry or wrapper backed by a stated requirement?
 - Tests: do they check behaviour, not that recently changed text is present? See [AGENTS.md](AGENTS.md).
 - Writing: can a reader who has only the comment, doc or PR description and its links follow it?
+- Principles: follow [stick-to-your-principles](skills/principles/references/stick-to-your-principles.md) to verify the change complies with the repo's mapped principles and `principles list-member-problems --short` exits 0.
