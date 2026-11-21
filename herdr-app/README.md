@@ -153,11 +153,9 @@ just -f herdr-app/justfile profiles               # refresh all profiles, includ
 just -f herdr-app/justfile remove-profile work    # remove app configuration after closing its window
 ```
 
-Run the `just -f` commands from the dotfiles repository. `--local` only skips adding machines on that run. It doesn't remove machines a profile already has or save a preference. Running `profile` without `--local`, or running `profiles`, adds the main window's machines.
-
-`herdr_profile` sets up a missing profile automatically, including machines. To start local-only, run `profile <name> --local` before opening the window. To add a machine to it later, run `hc machine add vm-us --session <name>` in that window: the window's `HC_SESSION` keeps the machine in this profile, and `--session` keeps its terminals on the VM apart from the main window's, which are in the VM's default session.
-
-`remove-profile` deletes `~/.config/herdr-app-<name>`; close that profile's window first. Linked repository files, the main app's configuration, and local and remote core sessions (including running terminals) are left intact. Opening the same name again recreates its app configuration and reconnects to its existing core session. Removal refuses profiles containing `.sqlite` or `.db` files.
+- `--local` skips the machines on that run only; a later `profile` or `profiles` without it adds them.
+- To add the VM to a local profile later, run `hc machine add vm-us --session <name>` in its window. Without `--session`, its VM terminals share the main window's session there.
+- `remove-profile` deletes `~/.config/herdr-app-<name>`. Its terminals keep running in its herdr-core session, and opening the name again picks them up.
 
 `herdr_profile` is defined in `zsh/.zshenv`. It starts the app with two variables, as Herdr's own `scripts/sandbox` does to run a second app:
 
