@@ -208,12 +208,7 @@ herdr-app:
     if [ -f "$TARGET" ] && [ ! -L "$TARGET" ]; then \
         cp "$TARGET" "$SOURCE" && rm "$TARGET" && ln -s "$SOURCE" "$TARGET"; \
         echo "Herdr app keys.json: kept the installers' keys in $SOURCE and relinked it"; \
-    fi; \
-    just --justfile "{{justfile_directory()}}/herdr-app/justfile" profiles
-
-# Give a Herdr app profile (herdr_profile <name>) the main window's setup
-herdr-app-profile name:
-    @just --justfile "{{justfile_directory()}}/herdr-app/justfile" profile "{{name}}"
+    fi
 
 # Set up Opencode symlink
 opencode: npm-global-bin
@@ -251,6 +246,10 @@ gh-stats:
 # Install standalone OpenCode API cost reporting
 ocost:
     just --justfile "{{justfile_directory()}}/bin/ocost/justfile" install
+
+# Install herdr-profile, which sets up, opens and removes Herdr app profiles
+herdr-profile:
+    just --justfile "{{justfile_directory()}}/bin/herdr_profile/justfile" install
 
 # Install opencode-resume and its lch service, which saves each Herdr terminal's OpenCode session
 opencode-resume: lch
@@ -552,7 +551,7 @@ principles:
     echo "OpenCode principles skill symlinked at ~/.config/opencode/skills/principles -> {{justfile_directory()}}/skills/principles"
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr herdr-core herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost opencode-resume bin zsh lazygit ziggity harlequin-if-configured
+all: npm-global-bin nvim tmux herdr herdr-core herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost opencode-resume herdr-profile bin zsh lazygit ziggity harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests

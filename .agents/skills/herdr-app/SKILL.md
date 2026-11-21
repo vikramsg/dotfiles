@@ -14,13 +14,13 @@ The user works in the main window (`~/.config/herdr-app`, herdr-core session `de
 1. Create or refresh the profile; it copies the main home's third-party mods and `main-copy`, links the repo's settings, keys, themes and own mods, and points every machine at a session of the profile's name:
 
    ```sh
-   just herdr-app-profile agent-test
+   herdr-profile setup agent-test
    ```
 
 2. Open its window:
 
    ```sh
-   open -n -a /Applications/Herdr.app --env HERDR_APP_HOME="$HOME/.config/herdr-app-agent-test" --env HC_SESSION=agent-test
+   herdr-profile open agent-test
    ```
 
 3. Drive and inspect that window only, by giving every command the profile's home and session:
@@ -42,7 +42,8 @@ The user works in the main window (`~/.config/herdr-app`, herdr-core session `de
    # quit the window (its process has HERDR_APP_HOME=~/.config/herdr-app-agent-test in its environment)
    HC_SESSION=agent-test herdr-core server stop
    ssh vm-us 'HC_SESSION=agent-test ~/.local/bin/herdr-core server stop; rm -rf ~/.local/state/herdr-core/agent-test'
-   rm -rf ~/.config/herdr-app-agent-test ~/.local/state/herdr-core/agent-test
+   herdr-profile remove agent-test
+   rm -rf ~/.local/state/herdr-core/agent-test
    ```
 
 Mods in `herdr-app/mods/` are linked into every home, the main one included, so editing them changes the user's window as well; keep such edits small and reload them in the profile to test.
