@@ -41,25 +41,28 @@ async function git(cwd, args, on, timeout) {
   return { ok: r.code === 0, out: (r.stdout ?? "").trim(), err: (r.stderr ?? r.stdout ?? "").trim() };
 }
 
-// The repo a folder belongs to: its top, main checkout and name. null outside git.
+// The repo a folder belongs to: its main checkout and name. null outside git.
 async function repoOf(folder, on) {
-  const top = await git(folder, ["rev-parse", "--show-toplevel"], on);
   const common = await git(folder, ["rev-parse", "--path-format=absolute", "--git-common-dir"], on);
-  if (!top.ok || !common.ok) return null;
+  if (!common.ok) return null;
   const main = common.out.endsWith("/.git") ? common.out.slice(0, -5) : common.out;
-  return { top: top.out, main, name: main.split("/").pop() };
+  return { main, name: main.split("/").pop() };
 }
 
 // origin's default branch (origin/HEAD, else main), fetched now: origin/<branch>
 // only moves on a fetch, so without one a new branch could start from a stale commit.
+// The refspec names the destination, so a single-branch clone of another branch
+// updates origin/<branch> too. `oid` is what the dialog shows and what new branches start from.
 async function base(repo, on) {
   const head = await git(repo.main, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], on);
   const branch = head.ok ? head.out.replace(/^origin\//, "") : "main";
-  const fetched = await git(repo.main, ["fetch", "--quiet", "origin", branch], on, 120_000);
+  const ref = `refs/remotes/origin/${branch}`;
+  const fetched = await git(repo.main, ["fetch", "--quiet", "origin", `+refs/heads/${branch}:${ref}`], on, 120_000);
   if (!fetched.ok) throw new Error(`Couldn't fetch origin ${branch}: ${fetched.err || "git fetch failed."}`);
-  const commit = await git(repo.main, ["log", "-1", "--format=%h %s", `origin/${branch}`], on);
+  const commit = await git(repo.main, ["log", "-1", "--format=%H%x09%h %s", ref], on);
   if (!commit.ok) throw new Error(commit.err || `origin/${branch} not found.`);
-  return { ref: `origin/${branch}`, commit: commit.out };
+  const [oid, label] = commit.out.split("\t");
+  return { name: `origin/${branch}`, oid, label };
 }
 
 export default class WorktreeMain extends View {
@@ -80,7 +83,7 @@ export default class WorktreeMain extends View {
     this.error = ""; // the last Enter's failure; typing clears it
     this.failed = ""; // loading's failure; it stays, and Enter stays off
     this.repo = undefined; // undefined: looking, null: not in git
-    this.base = undefined; // { ref, commit } once fetched
+    this.base = undefined; // { name, oid, label } once fetched
     cx.spawn(async (cx) => {
       try {
         if (this.on) {
@@ -127,7 +130,7 @@ export default class WorktreeMain extends View {
     const path = `${this.root}/${this.repo.name}/${slug(branch)}`;
     const exists = (await git(this.repo.main, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], this.on)).ok;
     // --no-track: a branch made from origin/main would otherwise have main as its upstream.
-    const add = exists ? ["worktree", "add", path, branch] : ["worktree", "add", "--no-track", "-b", branch, path, this.base.ref];
+    const add = exists ? ["worktree", "add", path, branch] : ["worktree", "add", "--no-track", "-b", branch, path, this.base.oid];
     const r = await git(this.repo.main, add, this.on, 600_000);
     if (!r.ok) return r.err || "git worktree add failed.";
     // Leave spaces unnamed so they follow the checkout folder and nest under the repo.
@@ -150,7 +153,7 @@ export default class WorktreeMain extends View {
         : r === null
           ? `${this.folder ? tilde(this.folder, this.userHome) : "This folder"} is not in a git repository.`
           : `A new space on a checkout in ${tilde(this.root, this.userHome)}/${r.name}/. A branch that exists is checked out as it is.`;
-    const from = r && !b && !this.failed ? "Fetching origin…" : b ? `New branches start from ${b.ref}: ${b.commit}` : "";
+    const from = r && !b && !this.failed ? "Fetching origin…" : b ? `New branches start from ${b.name}: ${b.label}` : "";
     const ready = Boolean(r && b);
     return v_flex()
       .id("worktree-main")
