@@ -91,8 +91,14 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
 - `files-panel`: the Files panel on a key, as the tab bar's Files button does.
 - `fullscreen`: macOS full screen on a key; the app's own commands only maximize the window.
 - `opencode-resume`: after a reboot or a lost herdr-core, reopens the OpenCode session each restored terminal had open, on this Mac and every connected machine, through `opencode-resume resume` (see `bin/opencode_resume/README.md`).
-- `worktree-new`, `worktree-open`: Herdr's New and Open worktree dialogs on a
-  key, for the focused space, as its space menu opens them.
+- `worktree-new`, `worktree-open`: the New and Open worktree dialogs on a
+  key, for the focused space, as its space menu opens them. New opens
+  `worktree-main` instead of Herdr's own dialog.
+- `worktree-main`: Herdr's New worktree dialog, except that new branches start
+  from `origin`'s default branch, fetched when the dialog opens, and the dialog
+  shows that commit. Herdr's dialog starts them from whatever the focused
+  checkout has checked out. The space menu's and the + menu's New worktree still
+  open Herdr's dialog.
 
 `herdr-app/justfile` installs four others at pinned versions:
 
