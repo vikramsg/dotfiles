@@ -17,10 +17,10 @@ The user works in the main window (`~/.config/herdr-app`, herdr-core session `de
    herdr-profile setup agent-test
    ```
 
-2. Open its window:
+2. Open its window in the background. `herdr-profile open agent-test` brings it to the front, and the user's typing then goes into the test window:
 
    ```sh
-   herdr-profile open agent-test
+   open -g -n -a /Applications/Herdr.app --env HERDR_APP_HOME="$HOME/.config/herdr-app-agent-test" --env HC_SESSION=agent-test
    ```
 
 3. Drive and inspect that window only, by giving every command the profile's home and session:
@@ -54,4 +54,6 @@ Mods in `herdr-app/mods/` are linked into every home, the main one included, so 
 - Mods that ship icons, or that draw blank when linked, are copied, not linked (see the README).
 - Installers such as gitview's replace the `keys.json` symlink with a plain file; `just herdr-app` copies it back into the repo and relinks it.
 - `herdr-app status` lists errors, but a mod's toast is only visible in `herdr-app shot`.
+- A background window on another macOS Space doesn't redraw, and terminals only take a new pane size on a redraw (`hc get <t> --json` rows stay put). While a test depends on sizes, keep the window drawing with `herdr-app shot` every 250 ms.
+- Synthetic mouse and key events are dropped (no Accessibility permission). Drive the window with `herdr-app do`; a dialog that needs input gets it through its props, from a test-only launcher mod in the profile's `mods/`.
 - The app runs with a bare `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`): commands it runs need full paths or `zsh -lc`.

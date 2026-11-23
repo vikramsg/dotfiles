@@ -20,6 +20,7 @@ Only interact with their default locations to debug if the config is not correct
 - Keep user-editable configuration and user-facing configuration docs in `<tool>/` at the repository root.
 - Declare persistent service lifecycle in `lch/config.toml`.
 - Keep the root `justfile` limited to linking tool configuration and delegating build and installation to `bin/<tool>/justfile`.
+- `skills/` holds global OpenCode skills, linked into `~/.config/opencode/skills/` and used from any repository: keep them free of this repository's paths, tools and workflows. Skills for working on this repository go in `.agents/skills/`.
 - Run every Python script through uv: a standalone script starts with `#!/usr/bin/env -S uv run --no-project --script` and inline `# /// script` metadata (see `bin/opencode_split/split.py`); never `#!/usr/bin/env python3`.
 
 ## Testing
