@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""Make a git worktree and open it as a Herdr app space, from the machine it lives on.
+
+Usage: new-worktree <branch> [--repo PATH] [--session NAME]
+
+- The worktree goes to ~/.herdr/worktrees/<repo>/<branch>, where the app's New
+  worktree dialog puts it. A new branch starts from origin's default branch,
+  fetched now, with no upstream; a branch that exists is checked out as it is.
+- Its space has one tab: OpenCode (opencode2) on top at 70% of the height and
+  this machine's shell below it, both started with `hc run`.
+- The space is added to the app's `herdr-app` document in herdr-core, which
+  every window on that session shows at once. That document is the app's own
+  format, not a public API: the script stops if its shape is not the one known.
+"""
+
+import argparse
+import json
+import os
+import re
+import secrets
+import subprocess
+import sys
+from pathlib import Path
+
+HC = os.environ.get("HC_BIN") or "hc"
+DOC = "herdr-app"
+
+
+def fail(message: str) -> None:
+    print(f"new-worktree: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def run(*argv: str, cwd: str | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+
+
+def git(repo: str, *args: str) -> str:
+    r = run("git", "-C", repo, *args)
+    if r.returncode != 0:
+        fail(f"git {' '.join(args)}: {r.stderr.strip() or r.stdout.strip()}")
+    return r.stdout.strip()
+
+
+# The app dialog's folder name for a branch, so both put a branch in the same place.
+def slug(branch: str) -> str:
+    return re.sub(r"[^\w.-]+", "-", branch).strip("-") or "branch"
+
+
+def rpc(method: str, params: dict) -> dict:
+    """One JSON-RPC call through `hc connect`, after its hello."""
+    calls = [
+        {"jsonrpc": "2.0", "id": 0, "method": "hello", "params": {}},
+        {"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+    ]
+    r = subprocess.run(
+        [HC, "connect"], input="".join(json.dumps(c) + "\n" for c in calls), capture_output=True, text=True, timeout=30
+    )
+    replies = {m.get("id"): m for m in map(json.loads, filter(str.strip, r.stdout.splitlines()))}
+    reply = replies.get(1)
+    if reply is None:
+        fail(f"hc connect gave no reply to {method}: {r.stderr.strip()}")
+    return reply
+
+
+def start(path: str, *argv: str) -> str:
+    # --no-parent: started from an agent's terminal, they must outlive it.
+    r = run(HC, "run", "--json", "--bg", "--no-parent", "--cwd", path, "--", *argv)
+    if r.returncode != 0:
+        fail(f"hc run {' '.join(argv) or '(shell)'}: {r.stderr.strip()}")
+    return json.loads(r.stdout)["address"]
+
+
+def space(path: str, top: str, bottom: str) -> dict:
+    new = lambda prefix: prefix + secrets.token_hex(16)
+    tab = new("tb")
+    column = [
+        {"id": new("p"), "type": "block", "content": {"terminal": top}, "size": {"weight": 1.4}},
+        {"id": new("p"), "type": "block", "content": {"terminal": bottom}, "size": {"weight": 0.6}},
+    ]
+    root = {"id": tab, "type": "row", "children": [{"id": new("s"), "type": "column", "size": {"weight": 1.0}, "children": column}]}
+    # An empty name: the space is called after its folder and nests under its repo.
+    return {"folder": path, "id": new("sp"), "name": "", "tabs": [{"id": tab, "name": "", "root": root}]}
+
+
+def add_space(entry: dict) -> None:
+    """Appends the space, retrying when the app writes the document in between."""
+    for _ in range(5):
+        got = rpc("doc.get", {"name": DOC})
+        if "error" in got:
+            fail(f"doc.get {DOC}: {got['error']}")
+        value, version = got["result"]["value"], got["result"]["version"]
+        if value is None:
+            value = {"spaces": []}
+        if not isinstance(value, dict) or not isinstance(value.get("spaces"), list):
+            fail(f"the {DOC} document has a shape this script doesn't know; the app's format may have changed")
+        value["spaces"].append(entry)
+        put = rpc("doc.set", {"name": DOC, "value": value, "version": version})
+        if "result" in put:
+            return
+    fail(f"doc.set {DOC} kept losing to other writes: {put.get('error')}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("branch")
+    parser.add_argument("--repo", default=".", help="a checkout of the repository (default: here)")
+    parser.add_argument("--session", help="herdr-core session of the window to show it in (default: $HC_SESSION, else default)")
+    args = parser.parse_args()
+    os.environ["HC_SESSION"] = args.session or os.environ.get("HC_SESSION") or "default"
+
+    common = Path(git(args.repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+    main_checkout = str(common.parent if common.name == ".git" else common)
+    path = str(Path.home() / ".herdr" / "worktrees" / Path(main_checkout).name / slug(args.branch))
+    if Path(path).exists():
+        fail(f"{path} already exists")
+
+    if run("git", "-C", main_checkout, "show-ref", "--verify", "--quiet", f"refs/heads/{args.branch}").returncode == 0:
+        git(main_checkout, "worktree", "add", "--quiet", path, args.branch)
+        start_point = f"existing branch {args.branch}"
+    else:
+        head = run("git", "-C", main_checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+        default = head.stdout.strip().removeprefix("origin/") if head.returncode == 0 else "main"
+        # origin/<default> only moves on a fetch; the refspec names it for single-branch clones too.
+        git(main_checkout, "fetch", "--quiet", "origin", f"+refs/heads/{default}:refs/remotes/origin/{default}")
+        oid = git(main_checkout, "rev-parse", f"refs/remotes/origin/{default}")
+        git(main_checkout, "worktree", "add", "--quiet", "--no-track", "-b", args.branch, path, oid)
+        start_point = f"origin/{default} {oid[:7]}"
+
+    top = start(path, "opencode2")
+    bottom = start(path)
+    try:
+        add_space(space(path, top, bottom))
+    except SystemExit:
+        run(HC, "kill", top)
+        run(HC, "kill", bottom)
+        print(f"new-worktree: the worktree {path} is kept; its terminals were ended", file=sys.stderr)
+        raise
+    print(json.dumps({"path": path, "from": start_point, "session": os.environ["HC_SESSION"], "opencode": top, "shell": bottom}))
+
+
+if __name__ == "__main__":
+    main()
