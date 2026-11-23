@@ -33,10 +33,6 @@ herdr-app --skill       # (Mac) driving the window
 herdr-app commands      # (Mac) every window command and its arguments
 ```
 
-`~/.config/herdr-app/AGENTS.md` and the `.d.ts` files beside it describe
-settings, layouts and mods. For changes to this repo's `herdr-app/` setup, use
-the `herdr-app` skill in `.agents/skills/`.
-
 ## Run commands and agents in other terminals
 
 Use `hc`, from either machine:
@@ -87,7 +83,7 @@ the VM.
 herdr-profile setup agent-test
 open -g -n -a /Applications/Herdr.app --env HERDR_APP_HOME="$HOME/.config/herdr-app-agent-test" --env HC_SESSION=agent-test
 export HERDR_APP_HOME="$HOME/.config/herdr-app-agent-test" HC_SESSION=agent-test
-herdr-app do space.new '{"name":"t","machine":"vm-us","folder":"/home/vikram_orbio_earth/personal/dotfiles"}'
+herdr-app do space.new '{"name":"t","machine":"vm-us"}'   # starts in that machine's home
 herdr-app shot /tmp/agent-test.png    # then look at it
 ```
 
