@@ -91,8 +91,32 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
 - `files-panel`: the Files panel on a key, as the tab bar's Files button does.
 - `fullscreen`: macOS full screen on a key; the app's own commands only maximize the window.
 - `opencode-resume`: after a reboot or a lost herdr-core, reopens the OpenCode session each restored terminal had open, on this Mac and every connected machine, through `opencode-resume resume` (see `bin/opencode_resume/README.md`).
-- `worktree-new`, `worktree-open`: Herdr's New and Open worktree dialogs on a
-  key, for the focused space, as its space menu opens them.
+- `worktree-new`: the New worktree dialog on `prefix+n`, for the focused space,
+  in the focused pane's folder. Unlike Herdr's own, new branches start from
+  `origin`'s default branch, fetched when the dialog opens, and the dialog shows
+  that commit; Herdr's starts them from whatever the focused checkout has
+  checked out. The space menu's and the + menu's New worktree still open
+  Herdr's dialog.
+
+  It is a copy of Herdr's shipped `worktree` mod
+  (`~/.config/herdr-app/mods/worktree/main.js` as installed on 2026-11-19,
+  SHA-256 `42af23c34956…`). When a Herdr update changes that file, compare it
+  with this list:
+
+  - Copied as is: `place`, `slug` (so both dialogs put a branch in the same
+    folder), `git`, the `worktree add` call for a branch that exists, the
+    `space.new` call, and the New dialog's layout.
+  - Copied and trimmed: `root` (no Windows paths), `repoOf` (main checkout and
+    name only), the remote home lookup (no PowerShell fallback), the
+    `{ branch }` prop that creates at once.
+  - Ours: `base()` fetches `origin`'s default branch into
+    `refs/remotes/origin/<branch>` and new branches start from that exact commit
+    with `--no-track`; the dialog shows the commit; a failed fetch blocks Enter;
+    the space and folder come from the focus when the dialog opens.
+  - Dropped: the Open and Remove actions, submodule checks, and the `tab` and
+    `argv` props.
+- `worktree-open`: Herdr's Open worktree dialog on a key, for the focused space,
+  as its space menu opens it.
 
 `herdr-app/justfile` installs four others at pinned versions:
 
