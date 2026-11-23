@@ -3,8 +3,7 @@
 // fetched origin/<default branch>, not from whatever the focused checkout has
 // checked out. A trimmed copy of Herdr's shipped `worktree` mod (new only);
 // herdr-app/README.md lists what was copied, changed and dropped.
-// Opened with props, { space, folder } replace the focused ones and { branch }
-// makes it at once, as the shipped one does.
+// Opened with props, { branch } makes it at once, as the shipped one does.
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -71,8 +70,8 @@ export default class WorktreeNew extends View {
   init(_props, cx) {
     // Read once: the focus can move while the dialog is open.
     const f = focused();
-    this.spaceId = props()?.space ?? f?.space;
-    this.startFolder = props()?.folder ?? panes().find((p) => p.focused)?.cwd ?? f?.cwd ?? undefined;
+    this.spaceId = f?.space;
+    this.startFolder = panes().find((p) => p.focused)?.cwd ?? f?.cwd ?? undefined;
     this.on = this.space()?.machine;
     this.userHome = this.on ? null : home();
     this.text = props()?.branch ?? "";
