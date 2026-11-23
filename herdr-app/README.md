@@ -95,7 +95,11 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
   in the focused pane's folder. Unlike Herdr's own, new branches start from
   `origin`'s default branch, fetched when the dialog opens, and the dialog shows
   that commit; Herdr's starts them from whatever the focused checkout has
-  checked out. The space menu's and the + menu's New worktree still open
+  checked out. The new space's tab opens with OpenCode (`opencode2`) on top at
+  70% of the height, a shell below it, and reviewr in the `app-sidebar`, with the
+  keyboard on OpenCode. If that layout can't be made (the window must be drawn
+  for terminals to take their new sizes), the worktree and space are kept and a
+  warning says why. The space menu's and the + menu's New worktree still open
   Herdr's dialog.
 
   It is a copy of Herdr's shipped `worktree` mod
@@ -104,15 +108,16 @@ Mods of this repository, in `mods/`, linked into the app by `just herdr-app`:
   with this list:
 
   - Copied as is: `place`, `slug` (so both dialogs put a branch in the same
-    folder), `git`, the `worktree add` call for a branch that exists, the
-    `space.new` call, and the New dialog's layout.
+    folder), `git`, the `worktree add` call for a branch that exists, and the
+    New dialog's layout.
   - Copied and trimmed: `root` (no Windows paths), `repoOf` (main checkout and
     name only), the remote home lookup (no PowerShell fallback), the
     `{ branch }` prop that creates at once.
   - Ours: `base()` fetches `origin`'s default branch into
     `refs/remotes/origin/<branch>` and new branches start from that exact commit
     with `--no-track`; the dialog shows the commit; a failed fetch blocks Enter;
-    the space and folder come from the focus when the dialog opens.
+    the space and folder come from the focus when the dialog opens; `space.new`
+    starts `opencode2` and `arrange()` splits, sizes and opens reviewr.
   - Dropped: the Open and Remove actions, submodule checks, and the `tab` and
     `argv` props.
 - `worktree-open`: Herdr's Open worktree dialog on a key, for the focused space,
