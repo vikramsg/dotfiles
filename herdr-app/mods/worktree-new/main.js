@@ -1,13 +1,15 @@
 // New worktree dialog on prefix+n (`mod.open:worktree-new`), for the focused
 // space, in the focused pane's folder. New branches start from a freshly
 // fetched origin/<default branch>, not from whatever the focused checkout has
-// checked out. A trimmed copy of Herdr's shipped `worktree` mod (new only);
+// checked out. The new space's tab gets OpenCode on top, a shell below and
+// reviewr in the app-sidebar (see `arrange`). A trimmed copy of Herdr's
+// shipped `worktree` mod (new only);
 // herdr-app/README.md lists what was copied, changed and dropped.
 // Opened with props, { branch } makes it at once, as the shipped one does.
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { run, props, closeOverlay, theme, spaces, panes, focused, exec, home, appHome, readTextFile } from "herdr";
+import { run, props, closeOverlay, theme, spaces, panes, terminals, focused, layout, notify, exec, hc, home, appHome, readTextFile } from "herdr";
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 function place(s, all = panes()) {
@@ -64,6 +66,77 @@ async function base(repo, on) {
   if (!commit.ok) throw new Error(commit.err || `origin/${branch} not found.`);
   const [oid, label] = commit.out.split("\t");
   return { name: `origin/${branch}`, oid, label };
+}
+
+// Polls until `find` returns something, every 100 ms for up to 15 s.
+async function until(cx, what, find) {
+  for (let waited = 0; waited < 15_000; waited += 100) {
+    const hit = find();
+    if (hit) return hit;
+    await cx.sleep(100);
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
+const rowsOf = async (address) => {
+  const r = await hc(["get", address, "--json"]);
+  if (r.code !== 0) throw new Error(r.stderr.trim() || `hc get ${address} failed`);
+  return JSON.parse(r.stdout).rows;
+};
+
+// Terminals report a new size a moment after their pane changes, so a size is
+// read once `done(rows)` holds for two reads 300 ms apart.
+async function rowsWhen(cx, what, read, done) {
+  let last = null;
+  for (let waited = 0; waited < 10_000; waited += 300) {
+    const now = await read();
+    if (done(now) && JSON.stringify(now) === JSON.stringify(last)) return now;
+    last = now;
+    await cx.sleep(300);
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
+// A new worktree's first tab: OpenCode (space.new's argv) on top at 70% of the
+// height, a shell below it, reviewr in the app-sidebar on the right, and the
+// keyboard on OpenCode. `before`: the space ids from before space.new, so an
+// older space on the same folder is left alone.
+async function arrange(path, machine, before, cx) {
+  const top = await until(cx, "the new space", () => {
+    const s = spaces().find((s) => !before.has(s.id) && (s.machine ?? null) === machine && s.folder === path);
+    const tab = s?.tabs?.[0]?.id;
+    return tab && panes().find((p) => p.tab === tab && p.terminal);
+  });
+  run("pane.split", { direction: "down", pane: top.pane });
+  const bottom = await until(cx, "the shell pane", () => panes().find((p) => p.tab === top.tab && p.pane !== top.pane && p.terminal));
+
+  // pane.resize moves a border by pixels; terminals report rows. The split is
+  // even, so its sizes are in once both halves agree. Then move the border, see
+  // how many rows that was, and correct with the measured row height.
+  const [half, other] = await rowsWhen(cx, "the split", async () => [await rowsOf(top.terminal), await rowsOf(bottom.terminal)], ([a, b]) => Math.abs(a - b) <= 1);
+  const want = Math.round((half + other) * 0.7);
+  let now = half;
+  let rowPx = 18;
+  for (let i = 0; i < 5 && Math.abs(want - now) > 1; i++) {
+    const off = want - now;
+    const px = Math.round(Math.abs(off) * rowPx);
+    run("pane.resize", { pane: top.pane, direction: off > 0 ? "down" : "up", px });
+    const before = now;
+    now = await rowsWhen(cx, "the resize", () => rowsOf(top.terminal), (rows) => rows !== before);
+    rowPx = px / Math.abs(now - before);
+  }
+
+  // The sidebar starts reviewr for the focused tab, in its focused pane's folder.
+  run("pane.focus", { pane: top.pane });
+  run("app-sidebar.toggle:reviewr");
+  const reviewr = await until(cx, "reviewr", () =>
+    terminals().find((t) => t.state === "live" && t.labels?.["app-sidebar.tab"] === top.tab && t.labels?.["app-sidebar.app"] === "reviewr"),
+  );
+  // The sidebar focuses reviewr once it shows it; take the keyboard back after that.
+  const shown = (node) => node?.id === "app-sidebar" ? !node.hidden && node.content?.terminal === reviewr.address : (node?.children ?? []).some(shown);
+  await until(cx, "the sidebar to show reviewr", () => shown(layout()));
+  await cx.sleep(200);
+  run("pane.focus", { pane: top.pane });
 }
 
 export default class WorktreeNew extends View {
@@ -127,14 +200,14 @@ export default class WorktreeNew extends View {
       this.busy = true;
       this.error = "";
       cx.notify();
-      try { this.error = await this.create(); } catch (error) { this.error = String(error); }
+      try { this.error = await this.create(cx); } catch (error) { this.error = String(error); }
       this.busy = false;
       if (!this.error) this.close();
       cx.notify();
     });
   }
 
-  async create() {
+  async create(cx) {
     const branch = this.text.trim();
     if (!branch) return "Type a branch name.";
     const path = `${this.root}/${this.repo.name}/${slug(branch)}`;
@@ -144,7 +217,11 @@ export default class WorktreeNew extends View {
     const r = await git(this.repo.main, add, this.on, 600_000);
     if (!r.ok) return r.err || "git worktree add failed.";
     // Leave spaces unnamed so they follow the checkout folder and nest under the repo.
-    run("space.new", { folder: path, machine: this.on ?? "" });
+    const before = new Set(spaces().map((s) => s.id));
+    run("space.new", { folder: path, machine: this.on ?? "", argv: ["opencode2"] });
+    // The worktree and its space exist by now: a layout that goes wrong is a warning, not a failure.
+    try { await arrange(path, this.on ?? null, before, cx); }
+    catch (error) { notify({ title: "New worktree", body: `Created; its layout: ${error?.message ?? error}`, level: "warning" }); }
     return "";
   }
 
