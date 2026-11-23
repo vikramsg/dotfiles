@@ -116,7 +116,8 @@ Otherwise, it mysteriously refuses to start `ruff` even though it maybe globally
 2. Clipboard / Copy-Paste
 
 If copy-paste stops working on a remote VM (e.g., after SSH changes that break X11 forwarding), Neovim might try to use `xclip` and fail.
-The config is set to use **OSC 52** by default when `$SSH_CONNECTION` or `$TMUX` is detected. This allows the terminal to handle the clipboard directly.
+The config is set to use **OSC 52** by default when `$SSH_CONNECTION`, `$TMUX`, `$HERDR_ENV` or `$HC_TERMINAL_ID` (Herdr app terminals) is set, and on any Linux host without `$DISPLAY` or `$WAYLAND_DISPLAY`. This allows the terminal to handle the clipboard directly.
+If no clipboard provider is found at all, Neovim warns at startup that yanks stay inside Neovim.
 
 If you experience issues:
 - Ensure your terminal emulator supports OSC 52.

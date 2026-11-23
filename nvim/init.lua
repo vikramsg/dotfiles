@@ -94,9 +94,13 @@ vim.schedule(function()
 	-- Herdr panes are spawned by the long-lived Herdr server, so they may not
 	-- carry SSH_CONNECTION from the current SSH client. Treat HERDR_ENV as its
 	-- own trigger, otherwise Neovim falls back to the host's pbcopy and the
-	-- yank never reaches the terminal's clipboard.
-	local in_herdr = vim.env.HERDR_ENV == "1"
-	if vim.fn.exists("$SSH_CONNECTION") == 1 or vim.fn.exists("$TMUX") == 1 or in_herdr then
+	-- yank never reaches the terminal's clipboard. The Herdr app's herdr-core
+	-- terminals set HC_TERMINAL_ID instead of HERDR_ENV.
+	local in_herdr = vim.env.HERDR_ENV == "1" or vim.env.HC_TERMINAL_ID ~= nil
+	-- Without an X11 or Wayland display, xclip and wl-copy fail on every yank,
+	-- so a headless Linux host always uses OSC 52 even when no variable above is set.
+	local headless_linux = vim.fn.has("linux") == 1 and vim.env.DISPLAY == nil and vim.env.WAYLAND_DISPLAY == nil
+	if vim.fn.exists("$SSH_CONNECTION") == 1 or vim.fn.exists("$TMUX") == 1 or in_herdr or headless_linux then
 		local osc52 = require("vim.ui.clipboard.osc52")
 		local clipboard = {
 			name = "OSC 52",
@@ -110,8 +114,9 @@ vim.schedule(function()
 			},
 		}
 
-		if in_herdr then
-			-- Herdr forwards OSC 52 writes but not clipboard-read responses.
+		if in_herdr or headless_linux then
+			-- Herdr forwards OSC 52 writes but not clipboard-read responses, and an
+			-- unknown terminal on a headless host may not answer them either.
 			-- Use terminal paste for external content and the local register for `p`.
 			local function paste_from_nvim()
 				return {
@@ -127,6 +132,9 @@ vim.schedule(function()
 		end
 
 		vim.g.clipboard = clipboard
+	elseif vim.fn["provider#clipboard#Executable"]() == "" then
+		-- Neovim only reports a missing provider when a yank needs it; say so once at startup.
+		vim.notify("No clipboard provider; yanks stay in Neovim", vim.log.levels.WARN)
 	end
 end)
 
