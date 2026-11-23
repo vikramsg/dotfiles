@@ -1,233 +1,111 @@
 ---
 name: herdr
-description: "Control Herdr, the terminal multiplexer agents here run in: panes, workspaces, tabs and agents. Requires HERDR_ENV=1. Use when a user reports that a terminal app, Herdr popup or keybinding misbehaves and it needs reproducing; when validating real TTY rendering, ANSI styling, wrapping, interactive output or progress displays; or when running long commands or other agents in sibling panes."
+description: "Work in the Herdr app and its herdr-core (`hc`) terminals, where agents here run on the Mac and the VM. Use to run commands or other agents in sibling terminals, read and drive a terminal app to reproduce a bug, show something in the person's window, or open a new git worktree as a Herdr space from the VM."
 ---
 
 # Herdr
 
-Herdr organizes terminals into workspaces, tabs, and panes, recognizes coding agents running inside panes, and exposes the current session through the `herdr` CLI.
+The person works in the Herdr desktop app on the Mac. Its terminals are run by
+herdr-core (`hc`): on the Mac for local spaces, and on the VM (`vm-us`) for
+spaces there. Each terminal keeps running when the window closes.
 
-Before issuing any control command, verify that this agent is running inside a Herdr-managed pane:
+- `hc` is on both machines. It starts, reads, talks to and waits on terminals.
+- `herdr-app` is only on the Mac. It changes what the window shows.
 
-```bash
-test "${HERDR_ENV:-}" = 1
+Check that you are in an hc terminal:
+
+```sh
+test -n "${HC_TERMINAL_ID:-}"   # your own address, e.g. t7; it is not a pane ID
+echo "$HC_SESSION"              # the session; each window has its own
 ```
 
-If the check fails, say that you are not running inside Herdr and stop. Only if the user confirms that its ok to inspect the session, go ahead.
+If the check fails, say so and ask before touching any Herdr session.
 
-When the check passes, the `herdr` binary in `PATH` talks to the current session. Use it to inspect neighboring work, create terminal layout, start agents and commands, read output, and wait for state changes.
+## Learn the installed tools
 
-## Learn the current CLI
+The installed manuals are the authority; read the part you need before using a
+command you haven't used:
 
-The installed binary is the authority for command syntax. Start with:
-
-```bash
-herdr --help
+```sh
+hc --skill              # running, reading, waiting on and talking to terminals and agents
+hc <command> --help
+herdr-app --skill       # (Mac) driving the window
+herdr-app commands      # (Mac) every window command and its arguments
 ```
 
-Then print the relevant command group by running the group without a subcommand:
+## Run commands and agents in other terminals
 
-```bash
-herdr agent
-herdr pane
-herdr workspace
-herdr tab
-herdr worktree
-herdr terminal
-herdr notification
-herdr integration
-herdr session
+Use `hc`, from either machine:
+
+```sh
+hc run --bg --name tests --cwd "$PWD" -- just test
+hc wait tests                      # never sleep or poll: wait on it
+hc read tests --lines 120
+hc kill tests; hc rm tests         # clean up what you started
 ```
 
-Do not run bare `herdr` for discovery; it launches or attaches the TUI. Do not probe a mutating nested command by omitting arguments. Commands such as `herdr workspace create` are valid with defaults and will execute.
+Terminals you start are your children: they end when you end, unless started
+with `--outlive-parent` or `--no-parent`. They stay out of the window unless
+labelled `herdr.space=<id>` (and `herdr.tab=<id>` for a tab), as
+`herdr-app --skill` describes. Don't label background work.
 
-Most control commands return JSON. Read identifiers and state from those responses instead of predicting them.
+## Reproduce a terminal app bug
 
-## Understand layout, panes, and agents
+When an interactive app misbehaves, drive it yourself and read its screen
+instead of asking what the person saw:
 
-Choose the primitive that matches the job:
-
-- Workspace, tab, and pane topology organize terminal locations.
-- Pane commands control raw terminals, shells, tests, servers, input, and output.
-- Agent commands control the recognized coding agent currently occupying a pane.
-
-A pane exists whether or not it contains an agent. `agent start` requires an existing available shell pane and never creates, splits, or moves layout. Use pane commands for ordinary processes. Use agent commands when Herdr must validate agent identity or interpret `idle`, `working`, `blocked`, `done`, and `unknown` lifecycle states.
-
-Agent commands accept either a unique live agent name or the pane ID currently hosting that agent. They do not accept terminal IDs or bare agent-kind labels. Names must match `[a-z][a-z0-9_-]{0,31}` and be unique among live agents. A name follows the current pane occupant and is cleared when that agent exits, is released, or is replaced.
-
-`idle` means the agent is ready for input and its tab has been seen in the focused Herdr UI. `done` is the same underlying idle state after unseen background work finishes. Focusing the tab or targeting the pane or agent with a focus command marks it seen. CLI reads do not mark it seen. `blocked` means Herdr recognized an approval or question UI. `unknown` means an agent is present but Herdr cannot classify it confidently; it does not prove completion.
-
-## Use IDs and caller context
-
-Public IDs are opaque stable handles:
-
-- workspace: `w1`
-- tab: `w1:t1`
-- pane: `w1:p1`
-
-Closed tab and pane IDs are not reused. A pane moved into another workspace receives a new workspace-qualified pane ID. After `pane move`, continue with `.result.move_result.pane.pane_id` or the live agent name. The old value is reported as `.result.move_result.previous_pane_id`; only the moved process's inherited caller context keeps resolving that old ID, so do not use it as a general agent target.
-
-Herdr injects the caller's context into each managed pane:
-
-```bash
-printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_TAB_ID" "$HERDR_PANE_ID"
+```sh
+hc run --bg --name app-test --cwd "$PWD" -- <app>
+hc keys app-test down enter        # key names: enter, esc, tab, up, ctrl+c, shift+z, a…
+hc send app-test "some text"       # pastes the text, then Enter
+hc read app-test --lines 0         # the visible screen
+hc kill app-test; hc rm app-test
 ```
 
-Prefer `--current` when a pane command should target the calling pane. Omitting a target may use the UI-focused pane, which can belong to the user or another client.
+Characters such as `:` are not key names; type them with `hc send`. A
+full-screen app takes `hc send` as a paste: in Neovim normal mode it inserts
+the text, so send `:` commands while the app is in a mode that takes them.
 
-Discover live state with:
+When the last step would reach outside the machine (opening a browser,
+pushing, posting), put a stub first on that terminal's `PATH` so the test
+records what the app tried to run instead.
 
-```bash
-herdr workspace list
-herdr tab list --workspace "$HERDR_WORKSPACE_ID"
-herdr pane current --current
-herdr pane list --workspace "$HERDR_WORKSPACE_ID"
-herdr agent list
+## Show something in the window (Mac)
+
+New spaces and tabs are shown at once: only make them in the person's window
+when asked, and pass `--focus false` to keep their place.
+
+## Open a new worktree as a space from the VM
+
+The VM has no window commands. From a terminal there, `scripts/new-worktree`
+in this skill's folder makes a worktree and opens it as a space with `hc`:
+
+```sh
+<skill folder>/scripts/new-worktree <branch>                  # from inside the repository
+<skill folder>/scripts/new-worktree <branch> --repo ~/projects/app --session friday
 ```
 
-Creation responses expose the IDs to use next. `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`. `tab create` returns `.result.tab` and `.result.root_pane`. `pane split` returns the new pane as `.result.pane`.
+- The worktree goes to `~/.herdr/worktrees/<repo>/<branch>`, the app's default
+  worktree folder. A new branch starts from origin's default branch, fetched now, with
+  no upstream; a branch that exists is checked out as it is.
+- The space has one tab: OpenCode (`opencode2`) on top at 70% of the height,
+  the shell below. Both are started with `hc run --no-parent`, so they outlive
+  the terminal that ran the script.
+- It shows at once in the window on that session (default: `$HC_SESSION`, so
+  the window this terminal is in).
+- It prints the path, the start point and the two terminal addresses as JSON.
 
-## Start and coordinate an agent
+The script adds the space to the app's `herdr-app` document in herdr-core
+(`hc connect`, `doc.get` / `doc.set`). That document is the app's own format,
+not a public API. If its shape isn't the one the script knows, the script
+stops, keeps the worktree and ends the two terminals it started. Then a Herdr
+update has changed the format: compare `doc.get herdr-app` with the script
+before changing it.
 
-Default to a sibling pane in the current tab and the current working directory. Do not create a workspace, tab, worktree, or different cwd unless the user explicitly requests that topology or location.
+## Safety
 
-Honor a direction requested by the user. Otherwise inspect the caller pane:
-
-```bash
-herdr pane layout --pane "$HERDR_PANE_ID"
-```
-
-Split a wide pane to the right and a narrow or tall pane down. Avoid repeated same-direction splits that create unusably narrow columns or short rows. Keep the user's focus in the calling pane and explicitly preserve the caller's working directory:
-
-```bash
-herdr pane split --current --direction right --cwd "$PWD" --no-focus
-```
-
-Replace `right` with `down` when appropriate. Read the new pane ID from `.result.pane.pane_id`.
-
-An available shell pane must be at its interactive prompt, with the shell itself in the foreground and no foreground command, editor, or agent running. Start a supported agent in that pane with a useful unique name:
-
-```bash
-herdr agent start <unique-agent-name> --kind <agent-kind> --pane <returned-pane-id>
-```
-
-Use the kind requested by the user. Run `herdr agent` to inspect the installed kind list and options. Pass native agent arguments only after `--`:
-
-```bash
-herdr agent start <unique-agent-name> --kind <agent-kind> --pane <returned-pane-id> -- <agent-args...>
-```
-
-A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Wait until the agent becomes idle before prompting it. Startup defaults to a 30-second timeout.
-
-Submit work through the agent surface:
-
-```bash
-herdr agent prompt <unique-agent-name> "<task>" --wait
-```
-
-`agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter after a short delay. It rejects an agent already waiting at an approval or question dialog with `agent_blocked` before sending any input. Inspect the blocked UI and ask the user before answering it. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`.
-
-A prompt sent from a non-working state must produce an observed lifecycle change within five seconds. Otherwise Herdr returns `agent_prompt_stalled` instead of waiting indefinitely. This wait tracks lifecycle state, not an individual turn; if the agent is already working, completion of the active turn may satisfy it.
-
-Use `--until` only for a state-specific workflow, such as waiting for an already-running agent to request input:
-
-```bash
-herdr agent wait <unique-agent-name> --until blocked
-```
-
-Without `--until`, standalone `agent wait` uses the same settled-state defaults as `agent prompt --wait`.
-
-Use logical keys for interactive agent UI controls:
-
-```bash
-herdr agent send-keys <unique-agent-name> esc
-herdr agent send-keys <unique-agent-name> ctrl+c
-```
-
-Herdr validates all keys before writing any bytes. Read the result through the resolved agent:
-
-```bash
-herdr agent get <unique-agent-name>
-herdr agent read <unique-agent-name> --source recent-unwrapped
-```
-
-If a wait fails or returns `blocked`, inspect `agent get` and `agent read` before deciding what input to send. Use the pane surface only when raw terminal control is intentional.
-
-## Run an ordinary command in another pane
-
-Create a sibling pane with the same geometry rule, preserve the caller's working directory, and keep user focus unchanged:
-
-```bash
-herdr pane split --current --direction right --cwd "$PWD" --no-focus
-```
-
-Read the new pane ID from `.result.pane.pane_id`, then run and inspect the command:
-
-```bash
-herdr pane run <returned-pane-id> "just test"
-herdr pane wait-output <returned-pane-id> --match "test result" --timeout 120000
-herdr pane read <returned-pane-id> --source recent-unwrapped --lines 120
-```
-
-`pane run` atomically sends command text and Enter. `pane wait-output` searches the selected snapshot immediately, so output that already exists can match. Use `--match <text>` for a literal substring or `--regex <pattern>` for a Rust regular expression. Omitting `--timeout` allows an indefinite wait.
-
-Use the read source that matches the task:
-
-- `visible`: the currently rendered viewport.
-- `recent`: recent rendered output, including soft wraps.
-- `recent-unwrapped`: recent output with soft wraps joined; prefer it for logs and transcripts.
-- `detection`: the plain-text bottom-buffer snapshot used for agent detection.
-
-Use `--format ansi` when colors and terminal styling are evidence. Otherwise use text.
-
-`--lines` asks Herdr for more rows from the pane's available screen and host scrollback. If increasing it does not reveal more of a completed response, the pane is probably running the agent on the terminal's alternate screen. Rows that leave the alternate screen do not enter Herdr's host scrollback, so a larger line count cannot recover them.
-
-After that failed read, ask the agent to write its complete response as Markdown in a temporary directory and reply only with the file path, then read the file directly. Use this only as a fallback; do not request file output in the initial prompt.
-
-## Reproduce a TUI bug
-
-When the user reports that an interactive terminal app misbehaves (keys do nothing, a panel is wrong, an action fails), drive it yourself and read the screen instead of asking what they saw:
-
-1. Create a test tab in the current workspace and the user's repository, without taking focus, and start the app in its root pane. A tab gives the app full width and leaves the user's layout untouched:
-   ```bash
-   response=$(herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label <app>-test --no-focus)
-   test_tab=$(printf '%s\n' "$response" | jq -r '.result.tab.tab_id')
-   test_pane=$(printf '%s\n' "$response" | jq -r '.result.root_pane.pane_id')
-   herdr pane run "$test_pane" "<app>"
-   ```
-2. Send the user's key sequence with `herdr pane send-keys "$test_pane" <key>...`, one logical key per argument (`4`, `G`, `tab`, `ctrl+d`).
-3. Read the result with `herdr pane read "$test_pane" --source visible`. Status lines, footers and error messages are evidence; repeat steps 2 and 3 until the failure shows or the behavior is confirmed working. A footer message can linger from an earlier key, so confirm the action through its effect too.
-4. Quit the app and close the tab with `herdr tab close "$test_tab"`.
-
-When the last step would reach outside the machine (opening a browser through `xdg-open`, pushing, posting), stub that command for the test tab only. The log then shows exactly what the app tried to run:
-
-```bash
-stub_dir=$(mktemp -d)
-printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/calls.log"\n' "$stub_dir" > "$stub_dir/xdg-open"
-chmod +x "$stub_dir/xdg-open"
-herdr pane run "$test_pane" "PATH=$stub_dir:\$PATH <app>"
-```
-
-Herdr popups and other custom commands run through `/bin/sh -c` with the Herdr server's environment, not the calling pane's. To reproduce a popup failure, run its command with the server's `PATH`. Write the command from `herdr/config.toml` to a script first, so its own quotes survive:
-
-```bash
-server_pid=$(pgrep -xf ".*/herdr --session ${HERDR_SESSION:-default} server" | head -1)
-server_path=$(tr '\0' '\n' < "/proc/$server_pid/environ" | sed -n 's/^PATH=//p')
-popup_script=$(mktemp)
-cat > "$popup_script" <<'EOF'
-<popup command>
-EOF
-herdr pane run "$test_pane" "env PATH='$server_path' /bin/sh $popup_script"
-```
-
-A command that works in your shell but fails this way points at the server's environment, which only a server restart refreshes.
-
-## Safety and coordination rules
-
-- Use `--no-focus` for background work unless the user asked to switch context.
-- Use `--current`, an explicit pane ID, or a unique agent name. Do not rely on another client's focused pane.
-- Parse IDs from JSON responses. Do not derive them from sidebar order or examples.
-- Do not close workspaces, tabs, panes, or sessions you did not create unless the user explicitly asked.
-- Never run `herdr server stop` from an active session unless the user explicitly intends to stop the server and its pane processes.
-- Never kill the main Herdr process. Use named test sessions for experiments that need an isolated server.
-- CLI server errors are JSON on stderr with exit status 1. CLI syntax errors exit with status 2.
+- Use addresses from `hc ls` / `herdr-app ls`; never act on a guessed or
+  focused pane that may be the person's.
+- Don't kill, close or stop terminals, spaces, windows or sessions you didn't
+  start. Never stop the person's herdr-core or quit their app.
+- Ask before creating or restarting Herdr servers and sessions.
