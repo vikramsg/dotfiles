@@ -68,9 +68,9 @@ async function base(repo, on) {
   return { name: `origin/${branch}`, oid, label };
 }
 
-// Polls until `find` returns something, every 100 ms for up to `ms`.
-async function until(cx, what, find, ms = 15_000) {
-  for (let waited = 0; waited < ms; waited += 100) {
+// Polls until `find` returns something, every 100 ms for up to 15 s.
+async function until(cx, what, find) {
+  for (let waited = 0; waited < 15_000; waited += 100) {
     const hit = find();
     if (hit) return hit;
     await cx.sleep(100);
@@ -99,10 +99,11 @@ async function rowsWhen(cx, what, read, done) {
 
 // A new worktree's first tab: OpenCode (space.new's argv) on top at 70% of the
 // height, a shell below it, reviewr in the app-sidebar on the right, and the
-// keyboard on OpenCode.
-async function arrange(path, machine, cx) {
+// keyboard on OpenCode. `before`: the space ids from before space.new, so an
+// older space on the same folder is left alone.
+async function arrange(path, machine, before, cx) {
   const top = await until(cx, "the new space", () => {
-    const s = spaces().find((s) => (s.machine ?? null) === machine && s.folder === path);
+    const s = spaces().find((s) => !before.has(s.id) && (s.machine ?? null) === machine && s.folder === path);
     const tab = s?.tabs?.[0]?.id;
     return tab && panes().find((p) => p.tab === tab && p.terminal);
   });
@@ -216,9 +217,10 @@ export default class WorktreeNew extends View {
     const r = await git(this.repo.main, add, this.on, 600_000);
     if (!r.ok) return r.err || "git worktree add failed.";
     // Leave spaces unnamed so they follow the checkout folder and nest under the repo.
+    const before = new Set(spaces().map((s) => s.id));
     run("space.new", { folder: path, machine: this.on ?? "", argv: ["opencode2"] });
     // The worktree and its space exist by now: a layout that goes wrong is a warning, not a failure.
-    try { await arrange(path, this.on ?? null, cx); }
+    try { await arrange(path, this.on ?? null, before, cx); }
     catch (error) { notify({ title: "New worktree", body: `Created; its layout: ${error?.message ?? error}`, level: "warning" }); }
     return "";
   }
