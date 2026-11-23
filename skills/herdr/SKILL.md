@@ -11,7 +11,6 @@ spaces there. Each terminal keeps running when the window closes.
 
 - `hc` is on both machines. It starts, reads, talks to and waits on terminals.
 - `herdr-app` is only on the Mac. It changes what the window shows.
-- `herdr` (the older terminal multiplexer, `HERDR_ENV=1`) is not this.
 
 Check that you are in an hc terminal:
 
