@@ -88,10 +88,10 @@ def place_right(value, terminal_id, new_terminal_id):
     }
     if parent.get("type") == "row":
         # Already side by side: the new pane takes half of the calling pane's width.
-        if "size" in block:
-            weight = block["size"]["weight"] / 2
-            block["size"] = {"weight": weight}
-            new_block["size"] = {"weight": weight}
+        # A pane without a size has the default weight of 1.
+        weight = block.get("size", {}).get("weight", 1.0) / 2
+        block["size"] = {"weight": weight}
+        new_block["size"] = {"weight": weight}
         siblings = parent["children"]
         siblings.insert(siblings.index(block) + 1, new_block)
     else:
@@ -118,6 +118,8 @@ def show_right_of(terminal_id, new_terminal_id):
         put = rpc("doc.set", {"name": DOC, "value": value, "version": version})
         if "result" in put:
             return
+        if (put["error"].get("data") or {}).get("kind") != "conflict":
+            raise RuntimeError(f"doc.set {DOC}: {put['error']}")
     raise RuntimeError(f"doc.set {DOC} kept losing to other writes: {put.get('error')}")
 
 
@@ -154,16 +156,11 @@ def split():
         "--session",
         fork_id,
     )["address"]
+    # A terminal the layout doesn't show would keep running hidden, so end it
+    # on any failure, including Ctrl-C.
     try:
         show_right_of(terminal_id, new_terminal_id)
-    except (
-        RuntimeError,
-        OSError,
-        TypeError,
-        ValueError,
-        KeyError,
-        subprocess.TimeoutExpired,
-    ):
+    except BaseException:
         for action in ("kill", "rm"):
             subprocess.run(
                 ["hc", action, new_terminal_id], capture_output=True, check=False
