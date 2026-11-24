@@ -166,6 +166,13 @@ def split():
                 ["hc", action, new_terminal_id], capture_output=True, check=False
             )
         raise
+    # OpenCode gives the shell HC_TERMINAL_ID from one of the windows showing
+    # this session, not necessarily the one in view, so say where the pane went.
+    # The app names the space and tab in the `where` label of the panes it shows.
+    where = run_json("hc", "get", "--json", terminal_id)["labels"].get("where")
+    print(
+        f"Placed {new_terminal_id} right of {terminal_id} in {where or 'an unlabelled tab'}"
+    )
 
 
 if __name__ == "__main__":
