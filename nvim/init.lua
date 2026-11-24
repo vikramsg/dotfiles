@@ -86,6 +86,7 @@ vim.o.swapfile = false
 vim.o.writebackup = false
 vim.o.undofile = true
 vim.o.cmdheight = 0 -- Remove gap between statusline and tmux
+vim.o.exrc = true -- Load project-local .nvim.lua/.nvimrc/.exrc (trusted via :trust)
 -- Sync clipboard between OS and Neovim.
 -- Use OSC 52 for remote clipboard support (works over SSH/Tmux)
 -- This avoids issues with broken xclip/x11 forwarding
