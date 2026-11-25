@@ -1,0 +1,18 @@
+# Pax itself is installed by mise (mise/config.toml); these recipes set it up.
+
+# The interpreter of the Pax mise installed, so scripts write the settings schema it reads.
+pax_python := `mise where pypi:pydantic-ai-pax`/"pydantic-ai-pax/bin/python"
+
+# The default model; CLAI_MODEL in zsh/.zshenv selects it.
+model := "openai-codex:gpt-6.2-sol"
+
+default:
+    @just --list
+
+# Turn off Pax's Herdr integration and desktop notifications, and run the default model at high effort.
+configure:
+    uv run --no-project --python "{{pax_python}}" "{{justfile_directory()}}/configure.py" --disable herdr notifications --effort "{{model}}" high
+    mise exec -- pax plugins list
+
+test:
+    uv run --no-project --python "{{pax_python}}" --with pytest pytest "{{justfile_directory()}}/tests"

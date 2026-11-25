@@ -373,6 +373,10 @@ lazygit:
         echo "lazygit symlink created at ~/Library/Application Support/lazygit/config.yml"; \
     fi
 
+# Install Pax with mise, turn off its Herdr integration and notifications, and set high effort
+pax: mise
+    just --justfile "{{justfile_directory()}}/bin/pax/justfile" configure
+
 # Set up the Ziggity config symlink that ZIGGITY_CONFIG points at
 ziggity:
     mkdir -p ~/.config/ziggity
@@ -551,7 +555,7 @@ principles:
     echo "OpenCode principles skill symlinked at ~/.config/opencode/skills/principles -> {{justfile_directory()}}/skills/principles"
 
 # Set up all symlinks
-all: npm-global-bin nvim tmux herdr herdr-core herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost opencode-resume herdr-profile bin zsh lazygit ziggity harlequin-if-configured
+all: npm-global-bin nvim tmux herdr herdr-core herdr-app opencode ghostty zed screenshot lch macflow opener-tunnel-if-supported gh-stats ocost opencode-resume herdr-profile bin zsh lazygit ziggity pax harlequin-if-configured
     @echo "All dotfiles symlinked successfully!"
 
 # Run Python tests
