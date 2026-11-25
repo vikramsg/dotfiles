@@ -1,0 +1,15 @@
+# Pax itself is installed by mise (mise/config.toml); these recipes set it up.
+
+# The interpreter of the Pax mise installed, so scripts write the settings schema it reads.
+pax_python := `mise where pypi:pydantic-ai-pax`/"pydantic-ai-pax/bin/python"
+
+default:
+    @just --list
+
+# Turn off Pax's built-in Herdr integration and desktop notifications.
+configure:
+    uv run --no-project --python "{{pax_python}}" "{{justfile_directory()}}/disable_plugins.py" herdr notifications
+    pax plugins list
+
+test:
+    uv run --no-project --python "{{pax_python}}" --with pytest pytest "{{justfile_directory()}}/tests"

@@ -93,3 +93,11 @@ Runs the `principles` gem (installed in a dedicated gem dir on `mise`'s Ruby 3.4
 
 - Install: `just principles`
 - Skill: `skills/principles/SKILL.md` (linked into `~/.config/opencode/skills/principles`)
+
+## pax
+
+Sets up Pax, which mise installs: `disable_plugins.py` turns off built-in plugins through Pax's own settings store, run with the installed Pax's interpreter.
+
+- Install and configure: `just pax`
+- Test: `just --justfile bin/pax/justfile test`
+- Docs: `pax/README.md`

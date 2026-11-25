@@ -17,5 +17,9 @@ export ZIGGITY_CONFIG="$HOME/.config/ziggity/config.ini"
 # Keep OpenCode from automatically importing Claude's skills.
 export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1
 
+# Pax's default model, on the ChatGPT sign-in (`/login openai-codex`); see pax/README.md.
+# `pax config set` refuses to change the model, so its default lives here.
+export CLAI_MODEL="openai-codex:gpt-6.2-sol"
+
 export EDITOR="nvim"
 export VISUAL="nvim"
