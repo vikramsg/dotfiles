@@ -8,14 +8,16 @@ just pax
 ```
 
 That runs `just mise`, which installs the version pinned in
-`mise/config.toml`, then turns off two built-in plugins:
+`mise/config.toml`, then turns off two built-in plugins and sets the default
+model's reasoning effort to `high` (Pax's default for GPT-6 models is
+`medium`):
 
 - `herdr`: Pax reports its status to Herdr. It is off, so Pax never shows in
   Herdr's agents list.
 - `notifications`: desktop alerts when a turn finishes.
 
-`pax plugins list` shows both as disabled. Running `just pax` again changes
-nothing.
+`pax plugins list` shows both as disabled, and `/effort` in a session shows
+`high`. Running `just pax` again changes nothing.
 
 ## Model and sign-in
 
@@ -32,7 +34,8 @@ browser's address bar after it fails and paste it at Pax's prompt.
 The default model is `openai-codex:gpt-6.2-sol`, set by `CLAI_MODEL` in
 `zsh/.zshenv`. `pax config set` refuses to change the model from a shell, so
 the default can't live in Pax's settings. `/model` still switches models
-within a session, and `-m` picks one for a single run.
+within a session, and `-m` picks one for a single run. If you change the
+default, change `model` in `bin/pax/justfile` too, so its effort is set.
 
 ## Settings
 

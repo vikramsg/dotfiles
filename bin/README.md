@@ -96,7 +96,7 @@ Runs the `principles` gem (installed in a dedicated gem dir on `mise`'s Ruby 3.4
 
 ## pax
 
-Sets up Pax, which mise installs: `disable_plugins.py` turns off built-in plugins through Pax's own settings store, run with the installed Pax's interpreter.
+Sets up Pax, which mise installs: `configure.py` turns off built-in plugins and sets the default model's reasoning effort through Pax's own settings store, run with the installed Pax's interpreter.
 
 - Install and configure: `just pax`
 - Test: `just --justfile bin/pax/justfile test`

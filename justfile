@@ -373,7 +373,7 @@ lazygit:
         echo "lazygit symlink created at ~/Library/Application Support/lazygit/config.yml"; \
     fi
 
-# Install Pax with mise and turn off its Herdr integration and desktop notifications
+# Install Pax with mise, turn off its Herdr integration and notifications, and set high effort
 pax: mise
     just --justfile "{{justfile_directory()}}/bin/pax/justfile" configure
 
