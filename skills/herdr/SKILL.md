@@ -1,6 +1,6 @@
 ---
 name: herdr
-description: "Work in the Herdr app and its herdr-core (`hc`) terminals, where agents here run on the Mac and the VM. Use to run commands or other agents in sibling terminals, read and drive a terminal app to reproduce a bug, show something in the person's window, or open a new git worktree as a Herdr space from the VM."
+description: "Work in the Herdr app and its herdr-core (`hc`) terminals, where agents here run on the Mac and the VM. Use to run commands or other agents in sibling terminals, read and drive a terminal app to reproduce a bug, show something in the person's window, or open or remove a git worktree as a Herdr space from the VM."
 ---
 
 # Herdr
@@ -75,18 +75,24 @@ records what the app tried to run instead.
 New spaces and tabs are shown at once: only make them in the person's window
 when asked, and pass `--focus false` to keep their place.
 
-## Open a new worktree as a space from the VM
+## Open or remove a worktree as a space from the VM
 
-The VM has no window commands. From a terminal there, `scripts/new-worktree`
-in this skill's folder makes a worktree and opens it as a space with `hc`:
+The VM has no window commands. From a terminal there, `scripts/worktree` in
+this skill's folder does what the app's New worktree and Remove worktree do,
+with `hc`:
 
 ```sh
-<skill folder>/scripts/new-worktree <branch>                  # from inside the repository
-<skill folder>/scripts/new-worktree <branch> --repo ~/projects/app --session friday
+<skill folder>/scripts/worktree new <branch>                  # from inside the repository
+<skill folder>/scripts/worktree new <branch> --repo ~/projects/app --session friday
+<skill folder>/scripts/worktree remove <branch> [--force]     # same options as new
 ```
 
-- The worktree goes to `~/.herdr/worktrees/<repo>/<branch>`, the app's default
-  worktree folder. A new branch starts from origin's default branch, fetched now, with
+The worktree is `~/.herdr/worktrees/<repo>/<branch>`, the app's default
+worktree folder.
+
+`new`:
+
+- A new branch starts from origin's default branch, fetched now, with
   no upstream; a branch that exists is checked out as it is.
 - The space has one tab: OpenCode (`opencode2`) on top at 70% of the height,
   the shell below. Both are started with `hc run --no-parent`, so they outlive
@@ -95,12 +101,25 @@ in this skill's folder makes a worktree and opens it as a space with `hc`:
   the window this terminal is in).
 - It prints the path, the start point and the two terminal addresses as JSON.
 
-The script adds the space to the app's `herdr-app` document in herdr-core
-(`hc connect`, `doc.get` / `doc.set`). That document is the app's own format,
-not a public API. If its shape isn't the one the script knows, the script
-stops, keeps the worktree and ends the two terminals it started. Then a Herdr
-update has changed the format: compare `doc.get herdr-app` with the script
-before changing it.
+`remove`:
+
+- Removes the git worktree; git refuses one with changes or untracked files
+  unless `--force`. When the folder is already gone (the space shows
+  `(deleted)`), it skips git and still removes the space.
+- Removes every space showing that folder, then ends and removes the terminals
+  in their tabs. A terminal another space also shows is left alone.
+- Never deletes the branch: that is up to you.
+- Refuses to run from a terminal in that space or from inside the worktree;
+  run it from the main checkout or pass `--repo`.
+- It prints the path, whether the git worktree was removed, the removed space
+  IDs and terminal addresses as JSON.
+
+The script reads and writes the spaces in the app's `herdr-app` document in
+herdr-core (`hc connect`, `doc.get` / `doc.set`). That document is the app's
+own format, not a public API. If its shape isn't the one the script knows, the
+script stops before changing it: `new` keeps the worktree and ends the two
+terminals it started; `remove` changes nothing. Then a Herdr update has changed
+the format: compare `doc.get herdr-app` with the script before changing it.
 
 ## Safety
 
