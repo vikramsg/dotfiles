@@ -7,8 +7,7 @@ for the terminal. This repository installs it on the Mac and on `vm-us`:
 just pax
 ```
 
-That runs `just mise`, which installs the version pinned in
-`mise/config.toml`, then turns off two built-in plugins and sets the default
+That runs `just mise`, which installs Pax from `mise/config.toml`, then turns off two built-in plugins and sets the default
 model's reasoning effort to `high` (Pax's default for GPT-6 models is
 `medium`):
 
@@ -45,7 +44,11 @@ database, not a file this repository can link. Change them with `/set` or
 
 ## Updating
 
-Bump the version in `mise/config.toml` and run `just pax`. Don't use Pax's own
-`/update now`: it installs a copy outside mise. mise doesn't offer a release
-until it is older than its `minimum_release_age`, so the newest version may
-not appear for a day.
+`mise/config.toml` asks for the latest Pax with `auto_update`, so mise updates
+it on its own: when `pax` starts, or at a shell prompt, it installs a newer
+release once one is at least a day old (mise's `minimum_release_age`). `mise
+upgrade pypi:pydantic-ai-pax` checks now. Don't use Pax's own `/update now`: it
+installs a copy outside mise.
+
+`just pax` turns plugins off through Pax's settings code, so a new Pax can break
+it. If it does, `just --justfile bin/pax/justfile test` shows where.

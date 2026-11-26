@@ -1,4 +1,4 @@
 [tools]
 "github:herdrdev/herdr" = "0.9.5"
 "github:simoarpe/ziggity" = "0.66.0"
-"pypi:pydantic-ai-pax" = "0.73.0"
+"pypi:pydantic-ai-pax" = { version = "latest", auto_update = true }
