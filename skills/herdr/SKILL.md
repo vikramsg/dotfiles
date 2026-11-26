@@ -105,7 +105,10 @@ worktree folder.
 
 - Removes the git worktree; git refuses one with changes or untracked files
   unless `--force`. When the folder is already gone (the space shows
-  `(deleted)`), it skips git and still removes the space.
+  `(deleted)`), it drops git's record of it, if any, and still removes the
+  space.
+- Refuses when that folder holds another branch, e.g. `feature/x` when asked
+  for `feature-x`: both get the same folder name.
 - Removes every space showing that folder, then ends and removes the terminals
   in their tabs. A terminal another space also shows is left alone.
 - Never deletes the branch: that is up to you.

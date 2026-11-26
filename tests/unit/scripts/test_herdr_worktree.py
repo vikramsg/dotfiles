@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -135,8 +136,8 @@ class Env:
     def worktree(self, *args: str, cwd: Path | None = None, **env: str) -> subprocess.CompletedProcess:
         return subprocess.run([str(SCRIPT), *args], cwd=cwd or self.repo, env={**self.env, **env}, capture_output=True, text=True, check=False)
 
-    def add_worktree(self, branch: str) -> Path:
-        path = self.worktrees / branch
+    def add_worktree(self, branch: str, folder: str | None = None) -> Path:
+        path = self.worktrees / (folder or branch)
         self.git(self.repo, "worktree", "add", "--quiet", "-b", branch, str(path))
         return path
 
@@ -201,6 +202,47 @@ def test_dirty_worktree_is_refused_without_force(env: Env) -> None:
     assert not path.exists()
     assert json.loads(forced.stdout)["terminals"] == ["t1"]
     assert env.state()["doc"] == {"spaces": []}
+
+
+def test_deleted_registered_folder_is_unregistered_so_new_works_again(env: Env) -> None:
+    path = env.add_worktree("vanished")
+    shutil.rmtree(path)
+    env.write_state({"spaces": [make_space("sp-vanished", str(path), ["t1"])]}, terminals={"t1": "live"})
+
+    r = env.worktree("remove", "vanished")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["git_worktree_removed"] is True
+    assert str(path) not in env.git(env.repo, "worktree", "list")
+    assert env.state()["doc"] == {"spaces": []}
+
+    again = env.worktree("new", "vanished")
+    assert again.returncode == 0, again.stderr
+    assert path.is_dir()
+
+
+def test_folder_holding_another_branch_is_refused(env: Env) -> None:
+    path = env.add_worktree("feature/x", folder="feature-x")
+    doc = {"spaces": [make_space("sp-x", str(path), ["t1"])]}
+    env.write_state(doc, terminals={"t1": "live"})
+
+    r = env.worktree("remove", "feature-x", "--force")
+    assert r.returncode == 1
+    assert "feature/x checked out" in r.stderr
+    assert path.is_dir()
+    state = env.state()
+    assert state["doc"] == doc and state["version"] == 7
+    assert mutating_calls(state) == []
+
+
+def test_folder_that_is_not_a_worktree_is_refused(env: Env) -> None:
+    path = env.worktrees / "stray"
+    path.mkdir(parents=True)
+    env.write_state({"spaces": []})
+
+    r = env.worktree("remove", "stray")
+    assert r.returncode == 1
+    assert "not a worktree" in r.stderr
+    assert path.is_dir()
 
 
 def test_deleted_folder_still_removes_space_and_terminals(env: Env) -> None:
@@ -289,6 +331,19 @@ def test_refuses_from_a_terminal_in_the_space(env: Env) -> None:
     assert mutating_calls(env.state()) == []
 
 
+def test_caller_added_to_the_space_during_a_retry_is_refused(env: Env) -> None:
+    path = env.add_worktree("race")
+    joined = make_space("sp-race-2", str(path), ["t5"])
+    env.write_state({"spaces": [make_space("sp-race", str(path), ["t1"])]}, terminals={"t1": "live", "t5": "live"}, conflicts=1, other_write=joined)
+
+    r = env.worktree("remove", "race", HC_TERMINAL_ID="t5")
+    assert r.returncode == 1
+    assert "t5" in r.stderr
+    state = env.state()
+    assert [s["id"] for s in state["doc"]["spaces"]] == ["sp-race", "sp-race-2"]
+    assert state["terminals"] == {"t1": "live", "t5": "live"}
+
+
 def test_refuses_from_inside_the_worktree(env: Env) -> None:
     path = env.add_worktree("here")
     (path / "sub").mkdir()
@@ -304,4 +359,4 @@ def test_refuses_from_inside_the_worktree(env: Env) -> None:
 def test_nothing_to_remove(env: Env) -> None:
     r = env.worktree("remove", "never")
     assert r.returncode == 1
-    assert "no worktree folder or space" in r.stderr
+    assert "no worktree or space" in r.stderr

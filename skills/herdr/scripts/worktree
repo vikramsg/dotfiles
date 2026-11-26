@@ -14,9 +14,10 @@ Usage: worktree new <branch> [--repo PATH] [--session NAME]
   upstream; a branch that exists is checked out as it is. Its space has one
   tab: OpenCode (opencode2) on top at 70% of the height and this machine's
   shell below it, both started with `hc run`.
-- remove: removes the git worktree (git refuses a dirty one unless --force;
-  skipped when the folder is already gone), the spaces showing that folder, and
-  the terminals only those spaces show. The branch is kept.
+- remove: removes the branch's git worktree (git refuses a dirty one unless
+  --force; a folder already gone only drops git's record of it), the spaces
+  showing that folder, and the terminals only those spaces show. The branch is
+  kept.
 - Spaces live in the app's `herdr-app` document in herdr-core, which every
   window on that session shows at once. That document is the app's own format,
   not a public API: the script stops if its shape is not the one known.
@@ -167,6 +168,12 @@ def split(value: dict | None, path: str) -> tuple[list[tuple[dict, list[str]]], 
     return target, staying
 
 
+def check_caller(target: list[tuple[dict, list[str]]]) -> None:
+    me = os.environ.get("HC_TERMINAL_ID")
+    if me and any(me in terminals for _, terminals in target):
+        fail(f"this terminal ({me}) is in the space being removed; run it from another one")
+
+
 def drop_spaces(path: str) -> tuple[list[str], list[str]]:
     """Removes the folder's spaces, retrying when the app writes the document in between.
 
@@ -174,6 +181,7 @@ def drop_spaces(path: str) -> tuple[list[str], list[str]]:
     for _ in range(5):
         value, version = get_doc()
         target, staying = split(value, path)
+        check_caller(target)
         if not target:
             return [], []
         ids = {s["id"] for s, _ in target}
@@ -196,6 +204,15 @@ def hc_quiet(*argv: str) -> str | None:
     except (ValueError, KeyError, TypeError):
         pass
     return f"hc {' '.join(argv)}: {r.stderr.strip() or r.stdout.strip()}"
+
+
+def registration(main_checkout: str, path: str) -> dict | None:
+    """Git's record of the worktree at the path, also when its folder is gone: its `branch`, or `detached`."""
+    for record in git(main_checkout, "worktree", "list", "--porcelain", "-z").split("\0\0"):
+        fields = dict(f.partition(" ")[::2] for f in record.split("\0") if f)
+        if os.path.normpath(fields.get("worktree", "")) == path:
+            return fields
+    return None
 
 
 def inside(child: str, parent: str) -> bool:
@@ -236,30 +253,35 @@ def remove_worktree(args: argparse.Namespace) -> None:
 
     # Everything is checked before anything changes.
     target, _ = split(get_doc()[0], path)
-    me = os.environ.get("HC_TERMINAL_ID")
-    if me and any(me in terminals for _, terminals in target):
-        fail(f"this terminal ({me}) is in the space being removed; run it from another one")
+    check_caller(target)
     try:
         cwd = os.getcwd()
     except FileNotFoundError:  # the folder this runs in was deleted
         cwd = os.environ.get("PWD", "/")
     if inside(os.path.normpath(cwd), path):
         fail(f"the current directory is inside {path}; run it from elsewhere")
-    on_disk = os.path.lexists(path)
-    if not target and not on_disk:
-        fail(f"no worktree folder or space for {path}")
+    # Another branch can slug to the same folder; only remove the worktree of the branch asked for.
+    worktree = registration(main_checkout, path)
+    if worktree is not None and worktree.get("branch") != f"refs/heads/{args.branch}":
+        held = worktree.get("branch", "a detached HEAD").removeprefix("refs/heads/")
+        fail(f"{path} has {held} checked out, not {args.branch}")
+    if worktree is None and os.path.lexists(path):
+        fail(f"{path} is not a worktree of {main_checkout}")
+    if worktree is None and not target:
+        fail(f"no worktree or space for {path}")
 
-    if on_disk:
+    # Git removes a registered worktree whose folder is already gone, too.
+    if worktree is not None:
         git(main_checkout, "worktree", "remove", *(["--force"] if args.force else []), path)
     try:
         ids, orphans = drop_spaces(path)
     except SystemExit:
-        if on_disk:
+        if worktree is not None:
             print(f"worktree: the worktree {path} was removed; its space and terminals are kept", file=sys.stderr)
         raise
 
     errors = [e for t in orphans for e in (hc_quiet("kill", t), hc_quiet("rm", t)) if e]
-    summary = {"path": path, "session": os.environ["HC_SESSION"], "git_worktree_removed": on_disk}
+    summary = {"path": path, "session": os.environ["HC_SESSION"], "git_worktree_removed": worktree is not None}
     print(json.dumps({**summary, "spaces": ids, "terminals": orphans, "errors": errors}))
     if errors:
         sys.exit(1)
