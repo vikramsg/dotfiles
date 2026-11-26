@@ -1,0 +1,305 @@
+#!/usr/bin/env -S uv run --no-project --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Open or remove a git worktree as a Herdr app space, from the machine it lives on.
+
+Usage: worktree new <branch> [--repo PATH] [--session NAME]
+       worktree remove <branch> [--repo PATH] [--session NAME] [--force]
+
+- The worktree is ~/.herdr/worktrees/<repo>/<branch>, where the app's New
+  worktree dialog puts it.
+- new: a new branch starts from origin's default branch, fetched now, with no
+  upstream; a branch that exists is checked out as it is. Its space has one
+  tab: OpenCode (opencode2) on top at 70% of the height and this machine's
+  shell below it, both started with `hc run`.
+- remove: removes the branch's git worktree (git refuses a dirty one unless
+  --force; a folder already gone only drops git's record of it), the spaces
+  showing that folder, and the terminals only those spaces show. The branch is
+  kept.
+- Spaces live in the app's `herdr-app` document in herdr-core, which every
+  window on that session shows at once. That document is the app's own format,
+  not a public API: the script stops if its shape is not the one known.
+"""
+
+import argparse
+import json
+import os
+import re
+import secrets
+import subprocess
+import sys
+from pathlib import Path
+
+HC = os.environ.get("HC_BIN") or "hc"
+DOC = "herdr-app"
+UNKNOWN_SHAPE = f"the {DOC} document has a shape this script doesn't know; the app's format may have changed"
+
+
+def fail(message: str) -> None:
+    print(f"worktree: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+class UnknownShape(Exception):
+    pass
+
+
+def run(*argv: str, cwd: str | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=False)
+
+
+def git(repo: str, *args: str) -> str:
+    r = run("git", "-C", repo, *args)
+    if r.returncode != 0:
+        fail(f"git {' '.join(args)}: {r.stderr.strip() or r.stdout.strip()}")
+    return r.stdout.strip()
+
+
+# The app dialog's folder name for a branch, so both put a branch in the same place.
+def slug(branch: str) -> str:
+    return re.sub(r"[^\w.-]+", "-", branch).strip("-") or "branch"
+
+
+def locate(repo: str, branch: str) -> tuple[str, str]:
+    """The main checkout of the repository and the branch's worktree folder."""
+    common = Path(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+    main_checkout = str(common.parent if common.name == ".git" else common)
+    path = os.path.normpath(Path.home() / ".herdr" / "worktrees" / Path(main_checkout).name / slug(branch))
+    return main_checkout, path
+
+
+def rpc(method: str, params: dict) -> dict:
+    """One JSON-RPC call through `hc connect`, after its hello."""
+    calls = [
+        {"jsonrpc": "2.0", "id": 0, "method": "hello", "params": {}},
+        {"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+    ]
+    r = subprocess.run(
+        [HC, "connect"], input="".join(json.dumps(c) + "\n" for c in calls), capture_output=True, text=True, timeout=30, check=False
+    )
+    replies = {m.get("id"): m for m in map(json.loads, filter(str.strip, r.stdout.splitlines()))}
+    reply = replies.get(1)
+    if reply is None:
+        fail(f"hc connect gave no reply to {method}: {r.stderr.strip()}")
+    return reply
+
+
+def get_doc() -> tuple[dict | None, object]:
+    got = rpc("doc.get", {"name": DOC})
+    if "error" in got:
+        fail(f"doc.get {DOC}: {got['error']}")
+    return got["result"]["value"], got["result"]["version"]
+
+
+def start(path: str, *argv: str) -> str:
+    # --no-parent: started from an agent's terminal, they must outlive it.
+    r = run(HC, "run", "--json", "--bg", "--no-parent", "--cwd", path, "--", *argv)
+    if r.returncode != 0:
+        fail(f"hc run {' '.join(argv) or '(shell)'}: {r.stderr.strip()}")
+    return json.loads(r.stdout)["address"]
+
+
+def space(path: str, top: str, bottom: str) -> dict:
+    new = lambda prefix: prefix + secrets.token_hex(16)
+    tab = new("tb")
+    column = [
+        {"id": new("p"), "type": "block", "content": {"terminal": top}, "size": {"weight": 1.4}},
+        {"id": new("p"), "type": "block", "content": {"terminal": bottom}, "size": {"weight": 0.6}},
+    ]
+    root = {"id": tab, "type": "row", "children": [{"id": new("s"), "type": "column", "size": {"weight": 1.0}, "children": column}]}
+    # An empty name: the space is called after its folder and nests under its repo.
+    return {"folder": path, "id": new("sp"), "name": "", "tabs": [{"id": tab, "name": "", "root": root}]}
+
+
+def add_space(entry: dict) -> None:
+    """Appends the space, retrying when the app writes the document in between."""
+    for _ in range(5):
+        value, version = get_doc()
+        if value is None:
+            value = {"spaces": []}
+        if not isinstance(value, dict) or not isinstance(value.get("spaces"), list):
+            fail(UNKNOWN_SHAPE)
+        value["spaces"].append(entry)
+        put = rpc("doc.set", {"name": DOC, "value": value, "version": version})
+        if "result" in put:
+            return
+    fail(f"doc.set {DOC} kept losing to other writes: {put.get('error')}")
+
+
+def node_terminals(node: object) -> list[str]:
+    if not isinstance(node, dict) or not isinstance(node.get("id"), str):
+        raise UnknownShape
+    if node.get("type") in ("row", "column") and isinstance(node.get("children"), list):
+        return [t for child in node["children"] for t in node_terminals(child)]
+    if node.get("type") == "block" and isinstance(node.get("content"), dict) and isinstance(node["content"].get("terminal"), str):
+        return [node["content"]["terminal"]]
+    raise UnknownShape
+
+
+def space_terminals(value: dict | None) -> list[tuple[dict, list[str]]]:
+    """Every space with the terminals its tabs show; stops on any shape it doesn't know."""
+    if value is None:
+        return []
+    try:
+        if not isinstance(value, dict) or not isinstance(value.get("spaces"), list):
+            raise UnknownShape
+        found = []
+        for s in value["spaces"]:
+            if not (isinstance(s, dict) and isinstance(s.get("id"), str) and isinstance(s.get("folder"), str) and isinstance(s.get("tabs"), list)):
+                raise UnknownShape
+            if not all(isinstance(tab, dict) and isinstance(tab.get("id"), str) for tab in s["tabs"]):
+                raise UnknownShape
+            found.append((s, [t for tab in s["tabs"] for t in node_terminals(tab.get("root"))]))
+        return found
+    except UnknownShape:
+        fail(UNKNOWN_SHAPE)
+
+
+def split(value: dict | None, path: str) -> tuple[list[tuple[dict, list[str]]], set[str]]:
+    """The spaces showing the folder, and the terminals shown by every other space."""
+    target, staying = [], set()
+    for s, terminals in space_terminals(value):
+        if os.path.normpath(s["folder"]) == path:
+            target.append((s, terminals))
+        else:
+            staying.update(terminals)
+    return target, staying
+
+
+def check_caller(target: list[tuple[dict, list[str]]]) -> None:
+    me = os.environ.get("HC_TERMINAL_ID")
+    if me and any(me in terminals for _, terminals in target):
+        fail(f"this terminal ({me}) is in the space being removed; run it from another one")
+
+
+def drop_spaces(path: str) -> tuple[list[str], list[str]]:
+    """Removes the folder's spaces, retrying when the app writes the document in between.
+
+    Returns the removed space IDs and the terminals no remaining space shows."""
+    for _ in range(5):
+        value, version = get_doc()
+        target, staying = split(value, path)
+        check_caller(target)
+        if not target:
+            return [], []
+        ids = {s["id"] for s, _ in target}
+        value["spaces"] = [s for s in value["spaces"] if s["id"] not in ids]
+        put = rpc("doc.set", {"name": DOC, "value": value, "version": version})
+        if "result" in put:
+            orphans = [t for _, terminals in target for t in terminals if t not in staying]
+            return [s["id"] for s, _ in target], list(dict.fromkeys(orphans))
+    fail(f"doc.set {DOC} kept losing to other writes: {put.get('error')}")
+
+
+def hc_quiet(*argv: str) -> str | None:
+    """Runs an hc command; a terminal that is already gone is not an error."""
+    r = run(HC, *argv)
+    if r.returncode == 0:
+        return None
+    try:
+        if json.loads(r.stderr)["error"]["kind"] == "not_found":
+            return None
+    except (ValueError, KeyError, TypeError):
+        pass
+    return f"hc {' '.join(argv)}: {r.stderr.strip() or r.stdout.strip()}"
+
+
+def registration(main_checkout: str, path: str) -> dict | None:
+    """Git's record of the worktree at the path, also when its folder is gone: its `branch`, or `detached`."""
+    for record in git(main_checkout, "worktree", "list", "--porcelain", "-z").split("\0\0"):
+        fields = dict(f.partition(" ")[::2] for f in record.split("\0") if f)
+        if os.path.normpath(fields.get("worktree", "")) == path:
+            return fields
+    return None
+
+
+def inside(child: str, parent: str) -> bool:
+    return os.path.commonpath([child, parent]) == parent
+
+
+def new_worktree(args: argparse.Namespace) -> None:
+    main_checkout, path = locate(args.repo, args.branch)
+    if Path(path).exists():
+        fail(f"{path} already exists")
+
+    if run("git", "-C", main_checkout, "show-ref", "--verify", "--quiet", f"refs/heads/{args.branch}").returncode == 0:
+        git(main_checkout, "worktree", "add", "--quiet", path, args.branch)
+        start_point = f"existing branch {args.branch}"
+    else:
+        head = run("git", "-C", main_checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+        default = head.stdout.strip().removeprefix("origin/") if head.returncode == 0 else "main"
+        # origin/<default> only moves on a fetch; the refspec names it for single-branch clones too.
+        git(main_checkout, "fetch", "--quiet", "origin", f"+refs/heads/{default}:refs/remotes/origin/{default}")
+        oid = git(main_checkout, "rev-parse", f"refs/remotes/origin/{default}")
+        git(main_checkout, "worktree", "add", "--quiet", "--no-track", "-b", args.branch, path, oid)
+        start_point = f"origin/{default} {oid[:7]}"
+
+    top = start(path, "opencode2")
+    bottom = start(path)
+    try:
+        add_space(space(path, top, bottom))
+    except SystemExit:
+        run(HC, "kill", top)
+        run(HC, "kill", bottom)
+        print(f"worktree: the worktree {path} is kept; its terminals were ended", file=sys.stderr)
+        raise
+    print(json.dumps({"path": path, "from": start_point, "session": os.environ["HC_SESSION"], "opencode": top, "shell": bottom}))
+
+
+def remove_worktree(args: argparse.Namespace) -> None:
+    main_checkout, path = locate(args.repo, args.branch)
+
+    # Everything is checked before anything changes.
+    target, _ = split(get_doc()[0], path)
+    check_caller(target)
+    try:
+        cwd = os.getcwd()
+    except FileNotFoundError:  # the folder this runs in was deleted
+        cwd = os.environ.get("PWD", "/")
+    if inside(os.path.normpath(cwd), path):
+        fail(f"the current directory is inside {path}; run it from elsewhere")
+    # Another branch can slug to the same folder; only remove the worktree of the branch asked for.
+    worktree = registration(main_checkout, path)
+    if worktree is not None and worktree.get("branch") != f"refs/heads/{args.branch}":
+        held = worktree.get("branch", "a detached HEAD").removeprefix("refs/heads/")
+        fail(f"{path} has {held} checked out, not {args.branch}")
+    if worktree is None and os.path.lexists(path):
+        fail(f"{path} is not a worktree of {main_checkout}")
+    if worktree is None and not target:
+        fail(f"no worktree or space for {path}")
+
+    # Git removes a registered worktree whose folder is already gone, too.
+    if worktree is not None:
+        git(main_checkout, "worktree", "remove", *(["--force"] if args.force else []), path)
+    try:
+        ids, orphans = drop_spaces(path)
+    except SystemExit:
+        if worktree is not None:
+            print(f"worktree: the worktree {path} was removed; its space and terminals are kept", file=sys.stderr)
+        raise
+
+    errors = [e for t in orphans for e in (hc_quiet("kill", t), hc_quiet("rm", t)) if e]
+    summary = {"path": path, "session": os.environ["HC_SESSION"], "git_worktree_removed": worktree is not None}
+    print(json.dumps({**summary, "spaces": ids, "terminals": orphans, "errors": errors}))
+    if errors:
+        sys.exit(1)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    commands = parser.add_subparsers(dest="command", required=True)
+    for name, help in (("new", "make the worktree and open it as a space"), ("remove", "remove the worktree, its spaces and their terminals")):
+        command = commands.add_parser(name, help=help)
+        command.add_argument("branch")
+        command.add_argument("--repo", default=".", help="a checkout of the repository (default: here)")
+        command.add_argument("--session", help="herdr-core session of the window (default: $HC_SESSION, else default)")
+    commands.choices["remove"].add_argument("--force", action="store_true", help="remove a worktree with changes or untracked files")
+    args = parser.parse_args()
+    os.environ["HC_SESSION"] = args.session or os.environ.get("HC_SESSION") or "default"
+    (new_worktree if args.command == "new" else remove_worktree)(args)
+
+
+if __name__ == "__main__":
+    main()
